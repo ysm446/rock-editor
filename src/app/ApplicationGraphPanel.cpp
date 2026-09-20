@@ -230,6 +230,14 @@ void Application::SyncMeshGraph() {
             m_meshGraphError = "岩メッシュを描画へ転送できませんでした";
         }
     }
+    std::vector<renderer::OverlayLineSet> guides;
+    if (m_meshGraphActive && m_meshGraphError.empty()) {
+        for (const auto& crack : evaluated.cracks) {
+            auto generated = renderer::MakeCrackGuides(crack.patch);
+            for (auto& guide : generated) guides.push_back(std::move(guide));
+        }
+    }
+    m_renderer.SetCrackGuides(std::move(guides));
     m_meshGraphRevision = m_graph.Revision();
     m_meshGraphPreviewNode = previewMeshNode;
 }
@@ -737,6 +745,7 @@ void Application::DrawGraphEditor() {
         };
         // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
         ImGui::TextDisabled("モデル");
+        addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂の範囲・深さをガイド表示");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — Box の母岩を生成");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
@@ -891,6 +900,32 @@ void Application::DrawGraphPanel() {
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
                      "ピンをドラッグして接続、Ctrl+C / Ctrl+V でコピー");
+    } else if (auto* crack = std::get_if<crack::CrackSettings>(&selected->settings)) {
+        auto edited = *crack;
+        const float zero[3] = {0, 0, 0};
+        bool changed = false;
+        if (ui::BeginPropertyTable("crackRows")) {
+            changed |= ui::PropertyBool("ガイド表示", &edited.showGuide, true);
+            changed |= ui::PropertyFloat3Input("中心 (m)", edited.center.data(), zero) != 0;
+            changed |= ui::PropertyFloat3Input("回転 (度)", edited.rotationDegrees.data(), zero) != 0;
+            changed |= ui::PropertyFloat("半幅 U (m)", &edited.extentU, 0.001f, 1000, 1.2f);
+            changed |= ui::PropertyFloat("半幅 V (m)", &edited.extentV, 0.001f, 1000, 1.2f);
+            changed |= ui::PropertyFloat("Depth (m)", &edited.depth, 0, 2000, 1.6f);
+            changed |= ui::PropertyFloat("Persistence", &edited.persistence, 0, 1, 0.6f);
+            changed |= ui::PropertyFloat("Aperture (m)", &edited.aperture, 0, 100, 0.02f);
+            crack::CrackPatch patch;
+            std::string error;
+            if (crack::BuildCrackPatch(edited, patch, error))
+                ui::PropertyValue("到達深さ (m)", "%.3f", patch.effectiveDepth);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("青: 有限範囲 / 橙: 到達範囲。内部を透視するガイドです。まだ岩は切断しません。");
+        ui::HintText("+V 端から -V へ、min(Depth, V 全幅) × Persistence だけ進みます。");
+        if (changed) {
+            *crack = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
     } else if (auto* rock = std::get_if<graph::BaseRockNodeSettings>(&selected->settings)) {
         bool changed = false;
         auto edited = *rock;

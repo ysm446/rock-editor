@@ -1,21 +1,33 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-20 22:20
+更新日時: 2026-09-20 22:34
 
 ## 現在地
 
-P0 の基盤確認と P1 の Base Rock（Box）を実装した。次は [計画](plan.md) の P2：有限亀裂パッチの可視化。
+P0/P1 の Box に加えて P2 の有限亀裂パッチ表示を実装した。次は [計画](plan.md) の P3：実際の部分切断と Rock Bridge。
 
 | 区分 | 現在の状態 |
 | --- | --- |
 | アプリ基盤 | DX12 / ImGui、モデル表示、グラフ編集、素材・アセット・保存基盤あり |
-| 岩生成 | Base Rock の Box、寸法 X/Y/Z、Seed の編集に対応。亀裂・破断は未実装 |
+| 岩生成 | Base Rock の Box、寸法 X/Y/Z、Seed の編集に対応。有限亀裂のガイド表示に対応。実際の切断・破断は未実装 |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。枝単位キャッシュは P6 |
-| 次の作業 | P2：中心・向き・有限範囲・深さ・persistence を持つパッチと半透明表示 |
+| 次の作業 | P3：Box に単一の有限切り込みを作り、閉包・連結性と Bridge を確認 |
 
 ## 完了
+
+### 2026-09-20 有限亀裂パッチの表示（P2）
+
+- `crack/CrackPatch` に中心・回転・U/V 半幅・Depth・Persistence・Aperture と座標系の生成・検証を追加。
+- `Base Rock → Crack → Mesh Output` で候補矩形（青）と到達矩形（橙）を半透明で透視表示する。母岩のトポロジーは変更しない。
+- 設定パネルで位置・回転・各パラメータを編集し、ガイドを非表示にできる。表示深さは `min(depth, 2 * extentV) * persistence`。これは P2 の可視化規約で、母岩表面との交差や未破断部の判定はまだ行わない。
+- 設定と表示フラグの保存/読込、Undo/Redo、連続した Crack、途中プレビューに対応。入力欠落・不正パラメータは診断し、古いガイドを消す。
+- Debug / Release ビルド、既存と新規の CTest が成功。パッチの回転・範囲・深さの境界、開口幅、透視用描画データ、母岩不変、表示切り替え、Undo/Redo を検証。
+- Release で通常の到達範囲、Persistence 0、全範囲到達、ガイド非表示を撮影して確認。実アプリの保存→読込→再保存で全パラメータと接続が一致。
+- 検証素材は `build/p2-validation/`、検証用 Release は `build/p2-release/`。既存 data/ は変更しない。
+- 位置・回転の編集は数値欄。パッチ専用のビューポート選択・ギズモ、およびマウス操作による通し検証は未対応/未実施。
+
 
 ### 2026-09-20 Base Rock の Box（P0/P1）
 
@@ -88,7 +100,7 @@ Debug ビルドとテスト（`rock_editor_tests`）が通り、アプリが起�
 
 ## 未完了
 
-- P2/P3 の有限亀裂と Rock Bridge、P4 の完全分割・Chunk 操作。
+- P3 の実際の有限切り込みと Rock Bridge、P4 の完全分割・Chunk 操作。
 - Box 以外の母岩、BaseNoise、Joint Set、枝単位キャッシュ、Chip、Triplanar、OBJ。
 - P1 の Box は無地表示。Surface 接続と岩用 UV/Triplanar は未対応。既存の Transform ノードはモデル専用のまま。
 - グラフからの寸法変更・Undo/Redo は自動テストで確認。実マウス操作による一連の編集操作は今回未検証。

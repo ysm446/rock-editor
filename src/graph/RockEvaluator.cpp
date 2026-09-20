@@ -23,11 +23,27 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             if (!geometry::InspectMesh(mesh, info) || !info.closed || info.components != 1 ||
                 info.volume <= 0) {
                 result.rocks.clear();
+                result.cracks.clear();
                 result.error =
                     "Base Rock #" + std::to_string(id) + ": 寸法は有限の 0.001～1000 m にしてください";
                 return result;
             }
             result.rocks.push_back({id, std::move(mesh)});
+        } else if (node->kind == NodeKind::Crack) {
+            const auto* settings = std::get_if<crack::CrackSettings>(&node->settings);
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            crack::CrackPatch patch;
+            std::string error;
+            if (!settings || !upstream || !crack::BuildCrackPatch(*settings, patch, error)) {
+                result.rocks.clear();
+                result.cracks.clear();
+                result.error = "Crack #" + std::to_string(id) + ": " +
+                               (!upstream ? "Mesh 入力を接続してください" : error);
+                return result;
+            }
+            if (settings->showGuide) result.cracks.push_back({id, patch});
+            pending.push_back(upstream->id);
         } else if (node->kind == NodeKind::Merge || node->kind == NodeKind::MeshOutput) {
             for (auto it = node->inputs.rbegin(); it != node->inputs.rend(); ++it)
                 if (const auto* upstream = graph.FindUpstreamNodeForPin(it->id))

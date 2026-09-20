@@ -11,7 +11,10 @@
 road-editor（旧 terrain-graph）のアプリ基盤を土台に、道路・地形に特化した実装を撤去した段階。
 **Base Rock の Box 生成に対応**。ノードグラフの右クリックから Base Rock と Mesh Output を追加し、
 Mesh ピンを接続すると母岩を表示する。寸法 X/Y/Z と Seed を編集でき、Undo・保存／読み込みに対応する。
-Box は原点中心で、Seed は形状に影響しない。Joint Set / Crack / Fracture / Chunk 編集は未実装。
+Box は原点中心で、Seed は形状に影響しない。
+`Base Rock → Crack → Mesh Output` で有限亀裂の候補範囲（青）・到達範囲（橙）を透視ガイド表示できる。
+Crack の中心・回転・半幅 U/V・Depth・Persistence・Aperture は設定パネルから編集する。
+現段階ではガイド表示のみで、母岩は切断しない。実際の部分亀裂・Joint Set・Fracture・Chunk 編集は未実装。
 
 土台として動いているもの:
 

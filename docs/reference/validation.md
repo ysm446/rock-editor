@@ -1,11 +1,11 @@
 # 岩生成の検証・受け入れ計画
 
 作成日時: 2026-09-20 22:06
-更新日時: 2026-09-20 22:20
+更新日時: 2026-09-20 22:34
 
 ## 実行方針
 
-[実装計画](../plan/plan.md) の各段階で、追加した実処理を呼ぶテストとビューポート確認を行う。P0/P1 では Debug ビルドと CTest、Release での Box 表示・保存復元を確認した。詳細と未検証事項は [進捗](../plan/progress.md) を参照。
+[実装計画](../plan/plan.md) の各段階で、追加した実処理を呼ぶテストとビューポート確認を行う。P0/P1 と P2 では Debug ビルドと CTest、Release での Box・有限パッチ表示と保存復元を確認した。詳細と未検証事項は [進捗](../plan/progress.md) を参照。
 
 ```powershell
 cmake --preset x64
@@ -35,8 +35,8 @@ UV やハードエッジで描画頂点が分かれていても、それだけ�
 ## 最初のプロトタイプ（P4、原仕様 §52）
 
 - [x] Windows 上で起動し、DX12 viewport に Box の母岩が出る（Release）。
-- [ ] Joint / Crack Plane を表示し、移動・回転できる。
-- [ ] finite extent、depth、persistence を変更して結果を確認できる。
+- [x] Crack Plane を表示し、数値欄から移動・回転できる（P2。Joint Set と専用ギズモは後続）。
+- [x] finite extent、depth、persistence の設定がパッチ表示へ反映される（P2。実形状の切断は未実装）。
 - [ ] 開口した部分亀裂があり、奥に Rock Bridge が残る。実際のメッシュが1連結体である。
 - [ ] Full Split へ切り替えると2つの閉じた Chunk になり、個別に選択・移動・回転できる。
 - [ ] Locked と Loose を区別し、設定が再読込後も維持される。

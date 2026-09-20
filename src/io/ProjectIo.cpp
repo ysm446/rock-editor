@@ -456,7 +456,12 @@ json WriteGraph(const graph::NodeGraph& graphData,
             outputs.push_back(pin.id);
         }
         item["outputs"] = std::move(outputs);
-        if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
+        if (const auto* crack = std::get_if<crack::CrackSettings>(&node.settings)) {
+            item["crack"] = {{"center", crack->center},     {"rotation", crack->rotationDegrees},
+                             {"extentU", crack->extentU},   {"extentV", crack->extentV},
+                             {"depth", crack->depth},       {"persistence", crack->persistence},
+                             {"aperture", crack->aperture}, {"showGuide", crack->showGuide}};
+        } else if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
             item["baseRock"] = {{"size", rock->size}, {"seed", rock->seed}};
         } else if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
             item["layer"] = WriteLayer(settings->layer, writeMaterial);
@@ -592,7 +597,22 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 }
             }
 
-            if (created.kind == graph::NodeKind::BaseRock) {
+            if (created.kind == graph::NodeKind::Crack) {
+                crack::CrackSettings settings;
+                if (const json* v = FindMember(item, "crack"); v && v->is_object()) {
+                    const auto center = ReadFloat3(*v, "center", {}),
+                               rotation = ReadFloat3(*v, "rotation", {});
+                    settings.center = {center.x, center.y, center.z};
+                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    settings.extentU = ReadFloat(*v, "extentU", settings.extentU);
+                    settings.extentV = ReadFloat(*v, "extentV", settings.extentV);
+                    settings.depth = ReadFloat(*v, "depth", settings.depth);
+                    settings.persistence = ReadFloat(*v, "persistence", settings.persistence);
+                    settings.aperture = ReadFloat(*v, "aperture", settings.aperture);
+                    settings.showGuide = ReadBool(*v, "showGuide", true);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::BaseRock) {
                 graph::BaseRockNodeSettings settings;
                 if (const json* values = FindMember(item, "baseRock"); values && values->is_object()) {
                     const auto size = ReadFloat3(*values, "size", {2, 2, 2});

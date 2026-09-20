@@ -8,7 +8,12 @@ struct GeneratedRock {
     GraphId source = 0;
     geometry::Mesh mesh;
 };
+struct GeneratedCrack {
+    GraphId source = 0;
+    crack::CrackPatch patch;
+};
 struct RockEvaluation {
+    std::vector<GeneratedCrack> cracks;
     std::vector<GeneratedRock> rocks;
     std::string error;
 };

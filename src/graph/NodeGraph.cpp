@@ -44,7 +44,10 @@ constexpr std::array<PinDefinition, 1> kMeshOutputPins = {{
 
 constexpr std::array<PinDefinition, 1> kBaseRockPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
 
-constexpr std::array<NodeDefinition, 6> kNodeDefinitions = {{
+constexpr std::array<PinDefinition, 2> kCrackPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<NodeDefinition, 7> kNodeDefinitions = {{
+    {NodeKind::Crack, "crack", "Crack", kCrackPins},
     {NodeKind::BaseRock, "baseRock", "Base Rock", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
     {NodeKind::Model, "model", "Model", kModelPins},
@@ -82,7 +85,7 @@ bool IsLayerNodeKind(NodeKind kind) {
 }
 
 bool IsMeshNodeKind(NodeKind kind) {
-    return kind == NodeKind::Merge || kind == NodeKind::BaseRock;
+    return kind == NodeKind::Merge || kind == NodeKind::BaseRock || kind == NodeKind::Crack;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -358,6 +361,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
     node.kind = kind;
     if (kind == NodeKind::BaseRock) {
         node.settings = BaseRockNodeSettings{};
+    } else if (kind == NodeKind::Crack) {
+        node.settings = crack::CrackSettings{};
     } else if (IsLayerNodeKind(kind)) {
         node.settings = LayerNodeSettings{};
     } else if (kind == NodeKind::Merge) {
@@ -506,13 +511,14 @@ std::vector<ModelPlacementPath> CollectOutputModels(const NodeGraph& graph, Grap
             transforms.push_back(node->id);
             if (!node->inputs.empty()) self(self, graph.FindUpstreamNodeForPin(node->inputs.front().id), depth + 1);
             transforms.pop_back();
-        } else if (node->kind == NodeKind::Merge) {
+        } else if (node->kind == NodeKind::Merge || node->kind == NodeKind::Crack) {
             for (const Pin& pin : node->inputs) self(self, graph.FindUpstreamNodeForPin(pin.id), depth + 1);
         }
     };
     if (const Node* preview = graph.FindNode(previewNodeId); preview != nullptr) {
         // モデルの系統か Merge ならその枝のモデル、ほかのノードならモデルは出さない。
-        if (IsModelNodeKind(preview->kind) || preview->kind == NodeKind::Merge) visit(visit, preview, 0);
+        if (IsModelNodeKind(preview->kind) || preview->kind == NodeKind::Merge || preview->kind == NodeKind::Crack)
+            visit(visit, preview, 0);
         if (IsModelNodeKind(preview->kind) || IsMeshNodeKind(preview->kind)) return result;
     }
     for (const auto& node : graph.Nodes()) {

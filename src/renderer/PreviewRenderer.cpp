@@ -584,6 +584,7 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& scen
 }
 
 void PreviewRenderer::ClearMeshScene(rhi::Device& device) {
+    m_crackGuides.clear();
     m_diagnostics.ResetScene(device);
     for (auto& mesh : m_sceneMeshes) mesh.Release(device);
     m_sceneMeshes.clear();
@@ -1576,7 +1577,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
 void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
                                        rhi::PipelineCache& pipelineCache,
                                        ID3D12GraphicsCommandList* commandList) {
-    if (!m_showReferenceGrid && m_overlayLines.empty()) {
+    if (!m_showReferenceGrid && m_overlayLines.empty() && m_crackGuides.empty()) {
         return;
     }
 
@@ -1626,7 +1627,15 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
         ++m_stats.drawCalls;
         m_stats.vertices += count;
     };
-    for (const OverlayLineSet& set : m_overlayLines) {
+    const auto drawGuide = [&](const OverlayLineSet& set) {
+        auto description = pipelineDesc;
+        description.lineTopology = !set.triangles;
+        description.depthTest = set.depthTest;
+        auto* guidePipeline = pipelineCache.GetGraphics(description);
+        if (!guidePipeline) return;
+        commandList->SetPipelineState(guidePipeline);
+        commandList->IASetPrimitiveTopology(set.triangles ? D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST
+                                                          : D3D_PRIMITIVE_TOPOLOGY_LINELIST);
         OverlayLineConstants constants = {};
         XMStoreFloat4x4(&constants.viewProjection,
                         XMMatrixMultiply(m_camera.ViewMatrix(), m_camera.ProjectionMatrix()));
@@ -1635,25 +1644,29 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
         constants.color[2] = set.color.z;
         constants.color[3] = set.color.w;
         uint32_t count = 0;
-        for (size_t i = 0; i + 1 < set.points.size(); i += 2) {
-            if (count + 2 > kOverlayLineMaxVertices) {
+        const size_t stride = set.triangles ? 3 : 2;
+        for (size_t i = 0; i + stride <= set.points.size(); i += stride) {
+            if (count + stride > kOverlayLineMaxVertices) {
                 submit(constants, count);
                 count = 0;
             }
-            const auto& a = set.points[i];
-            const auto& b = set.points[i + 1];
-            constants.positions[count++] = XMFLOAT4{a.x, a.y, a.z, 1.0f};
-            constants.positions[count++] = XMFLOAT4{b.x, b.y, b.z, 1.0f};
+            for (size_t k = 0; k < stride; ++k) {
+                const auto& p = set.points[i + k];
+                constants.positions[count++] = XMFLOAT4{p.x, p.y, p.z, 1.0f};
+            }
         }
         submit(constants, count);
-    }
+    };
+    for (const auto& set : m_overlayLines) drawGuide(set);
+    for (const auto& set : m_crackGuides) drawGuide(set);
+    commandList->SetPipelineState(pipeline);
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
     if (!m_showReferenceGrid) {
         PIXEndEvent(commandList);
         return;
     }
 
-    const rhi::UploadAllocation cb =
-        device.Upload().Allocate(sizeof(OverlayLineConstants), 256);
+    const rhi::UploadAllocation cb = device.Upload().Allocate(sizeof(OverlayLineConstants), 256);
     if (!cb.IsValid()) {
         PIXEndEvent(commandList);
         return;

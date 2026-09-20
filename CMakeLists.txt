@@ -103,6 +103,8 @@ set(rock_sources
     src/app/UndoHistory.h
     src/core/Log.cpp
     src/core/Log.h
+    src/crack/CrackPatch.cpp
+    src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
@@ -287,6 +289,7 @@ enable_testing()
 add_executable(rock_editor_tests
     tests/TestMain.cpp
     tests/RockTests.cpp
+    tests/CrackTests.cpp
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
     src/renderer/Camera.cpp
@@ -315,6 +318,8 @@ add_executable(rock_editor_tests
     src/core/FrameLimiter.h
     src/compositor/MaterialStack.cpp
     src/compositor/MaterialStack.h
+    src/crack/CrackPatch.cpp
+    src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
