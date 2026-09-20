@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 inline constexpr uint32_t kInvalidDescriptorIndex = 0xFFFFFFFFu;
 
@@ -45,4 +45,4 @@ private:
     bool m_shaderVisible = false;
 };
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

@@ -23,7 +23,7 @@ struct SphereConstants
     uint roughnessIndex;
     uint metallicIndex;
     uint aoIndex;
-    uint mapChannels;        // 4bit ずつ TG_CHANNEL_SLOT_* の順
+    uint mapChannels;        // 4bit ずつ ROCK_CHANNEL_SLOT_* の順
 
     float3 baseColorTint;
     float roughnessValue;
@@ -200,21 +200,21 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     float roughness = g_sphere.roughnessValue;
     if (g_sphere.roughnessIndex != kInvalidTextureIndex)
     {
-        roughness = SampleScalarMap(g_sphere.roughnessIndex, TG_CHANNEL_SLOT_ROUGHNESS, uv,
+        roughness = SampleScalarMap(g_sphere.roughnessIndex, ROCK_CHANNEL_SLOT_ROUGHNESS, uv,
                                     MapLod(g_sphere.roughnessIndex, deltaX, deltaY));
     }
 
     float metallic = g_sphere.metallicValue;
     if (g_sphere.metallicIndex != kInvalidTextureIndex)
     {
-        metallic = SampleScalarMap(g_sphere.metallicIndex, TG_CHANNEL_SLOT_METALLIC, uv,
+        metallic = SampleScalarMap(g_sphere.metallicIndex, ROCK_CHANNEL_SLOT_METALLIC, uv,
                                    MapLod(g_sphere.metallicIndex, deltaX, deltaY));
     }
 
     float ambientOcclusion = g_sphere.aoValue;
     if (g_sphere.aoIndex != kInvalidTextureIndex)
     {
-        ambientOcclusion = SampleScalarMap(g_sphere.aoIndex, TG_CHANNEL_SLOT_AO, uv,
+        ambientOcclusion = SampleScalarMap(g_sphere.aoIndex, ROCK_CHANNEL_SLOT_AO, uv,
                                            MapLod(g_sphere.aoIndex, deltaX, deltaY));
     }
 

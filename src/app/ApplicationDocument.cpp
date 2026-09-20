@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 compositor::TextureId Application::ValidTexture(compositor::TextureId id) const {
     return (m_textureLibrary.Find(id) != nullptr) ? id : compositor::kNoTexture;
@@ -176,4 +176,4 @@ void Application::MarkDocumentChanged() {
     m_renderer.InvalidateSceneMaterials();
 }
 
-}  // namespace tg
+}  // namespace rock

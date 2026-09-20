@@ -3,10 +3,10 @@
 #include "rhi/Common.h"
 #include "ui/UiStyle.h"
 
-namespace tg {
+namespace rock {
 
 // ImGui のレイアウト保存先。作業ディレクトリからの相対パス。
-inline constexpr const char* kImGuiIniFileName = "road_editor_imgui.ini";
+inline constexpr const char* kImGuiIniFileName = "rock_editor_imgui.ini";
 
 class Window;
 
@@ -75,4 +75,4 @@ private:
     bool m_initialized = false;
 };
 
-}  // namespace tg
+}  // namespace rock

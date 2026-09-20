@@ -8,7 +8,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 using rhi::DispatchCount;
@@ -206,4 +206,4 @@ void MaterialSphere::Render(rhi::Device& device, rhi::PipelineCache& pipelineCac
     PIXEndEvent(commandList);
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

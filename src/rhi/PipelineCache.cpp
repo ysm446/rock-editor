@@ -3,7 +3,7 @@
 #include "core/Log.h"
 #include "rhi/ShaderCompiler.h"
 
-namespace tg::rhi {
+namespace rock::rhi {
 namespace {
 
 D3D12_STATIC_SAMPLER_DESC MakeStaticSampler(UINT shaderRegister, D3D12_FILTER filter,
@@ -149,13 +149,13 @@ bool PipelineCache::CreateGlobalRootSignature() {
     const HRESULT hr = D3D12SerializeVersionedRootSignature(&desc, &blob, &errorBlob);
     if (FAILED(hr)) {
         if (errorBlob) {
-            TG_LOG_ERROR("ルートシグネチャのシリアライズに失敗: %s",
+            ROCK_LOG_ERROR("ルートシグネチャのシリアライズに失敗: %s",
                          static_cast<const char*>(errorBlob->GetBufferPointer()));
         }
         return false;
     }
 
-    if (!TG_CHECK_HR(m_device->CreateRootSignature(0, blob->GetBufferPointer(),
+    if (!ROCK_CHECK_HR(m_device->CreateRootSignature(0, blob->GetBufferPointer(),
                                                    blob->GetBufferSize(),
                                                    IID_PPV_ARGS(&m_rootSignature)))) {
         return false;
@@ -189,7 +189,7 @@ ID3D12PipelineState* PipelineCache::GetCompute(const std::wstring& relativePath,
     desc.CS.BytecodeLength = bytecode->GetBufferSize();
 
     ComPtr<ID3D12PipelineState> pipeline;
-    if (!TG_CHECK_HR(m_device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline)))) {
+    if (!ROCK_CHECK_HR(m_device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&pipeline)))) {
         m_computePipelines.emplace(key, nullptr);
         return nullptr;
     }
@@ -299,7 +299,7 @@ ID3D12PipelineState* PipelineCache::GetGraphics(const GraphicsPipelineDesc& desc
     if (desc.rtvFormat1 != DXGI_FORMAT_UNKNOWN) {
         // RTV1 を使うなら RTV0 も必須。歯抜けの MRT は E_INVALIDARG になる。
         if (desc.rtvFormat == DXGI_FORMAT_UNKNOWN) {
-            TG_LOG_ERROR("グラフィックス PSO: RTV0 が UNKNOWN のまま RTV1 は指定できません");
+            ROCK_LOG_ERROR("グラフィックス PSO: RTV0 が UNKNOWN のまま RTV1 は指定できません");
             m_graphicsPipelines.emplace(key, nullptr);
             return nullptr;
         }
@@ -312,7 +312,7 @@ ID3D12PipelineState* PipelineCache::GetGraphics(const GraphicsPipelineDesc& desc
     psoDesc.SampleDesc.Count = 1;
 
     ComPtr<ID3D12PipelineState> pipeline;
-    if (!TG_CHECK_HR(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipeline)))) {
+    if (!ROCK_CHECK_HR(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&pipeline)))) {
         m_graphicsPipelines.emplace(key, nullptr);
         return nullptr;
     }
@@ -343,4 +343,4 @@ void PipelineCache::InvalidateAll() {
     m_graphicsPipelines.clear();
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

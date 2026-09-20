@@ -1,6 +1,6 @@
-#ifndef TG_ATMOSPHERE_COMMON
-#define TG_ATMOSPHERE_COMMON
-// シーンの空（大気散乱）の共通部品。terrain-graph の AtmosphereCommon.hlsli から、雲・月・星空を除いたもの。
+#ifndef ROCK_ATMOSPHERE_COMMON
+#define ROCK_ATMOSPHERE_COMMON
+// シーンの空（大気散乱）の共通部品。rock-editor の AtmosphereCommon.hlsli から、雲・月・星空を除いたもの。
 #include "EnvCommon.hlsli"
 #include "AtmosphereScattering.hlsli"
 

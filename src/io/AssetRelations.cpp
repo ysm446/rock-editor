@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <functional>
 
-namespace tg::io {
+namespace rock::io {
 namespace fs = std::filesystem;
 namespace {
 
@@ -19,7 +19,7 @@ bool SamePath(const fs::path& a, const fs::path& b) {
 
 bool IsDocument(const fs::path& path) {
     const auto ext = path.extension().wstring();
-    for (const auto* value : {L".tgscene", L".tgmat", L".tgsky", L".tglayer", L".tgboundary", L".tgmodel", L".tgproj", L".mmproj", L".mmmat"})
+    for (const auto* value : {L".rockscene", L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".rockmodel", L".reproj", L".mmproj", L".mmmat"})
         if (_wcsicmp(ext.c_str(), value) == 0) return true;
     return false;
 }
@@ -35,7 +35,7 @@ AssetRelations InspectAssetRelations(ProjectWorkspace& workspace, const fs::path
     AssetRelations result;
     result.target = target;
     std::error_code error;
-    if (!workspace.Contains(target) || SamePath(target, workspace.Root() / L"project.tgproj") ||
+    if (!workspace.Contains(target) || SamePath(target, workspace.Root() / L"project.reproj") ||
         target.lexically_relative(workspace.Root()).wstring().starts_with(L".") ||
         fs::is_symlink(target, error) || !fs::is_regular_file(target, error)) return result;
     result.modified = fs::last_write_time(target, error);
@@ -96,7 +96,7 @@ AssetRelations InspectAssetRelations(ProjectWorkspace& workspace, const fs::path
         return hit;
     };
     if (header.is_object()) references(header, target, true);
-    if (_wcsicmp(target.extension().c_str(), L".tgscene") == 0) {
+    if (_wcsicmp(target.extension().c_str(), L".rockscene") == 0) {
         const auto thumbnail = SceneThumbnailPath(workspace, target);
         if (!thumbnail.empty() && fs::exists(thumbnail, error)) result.related.push_back(thumbnail);
     }
@@ -112,7 +112,7 @@ AssetRelations InspectAssetRelations(ProjectWorkspace& workspace, const fs::path
         nlohmann::json document;
         if (!ProjectWorkspace::ReadJson(path, document)) { result.complete = false; continue; }
         // ルートの目印ファイル（startupScene）は自動読み込みに使わないので参照元に数えない。
-        if (ProjectWorkspace::String(document, "format") == "terrain-graph.workspace") continue;
+        if (ProjectWorkspace::String(document, "format") == "rock-editor.workspace") continue;
         if (references(document, path, false)) result.referencers.push_back(path);
     }
     if (error) result.complete = false;
@@ -128,10 +128,10 @@ bool RetireAsset(ProjectWorkspace& workspace, const AssetRelations& approved) {
         current.size != approved.size || current.referencers != approved.referencers ||
         current.related != approved.related || current.companions != approved.companions ||
         current.companionVersions != approved.companionVersions) {
-        TG_LOG_WARN("削除対象または参照関係が変わりました。もう一度確認してください");
+        ROCK_LOG_WARN("削除対象または参照関係が変わりました。もう一度確認してください");
         return false;
     }
-    const auto directory = workspace.UniquePath(workspace.Root() / L".terrain-graph" / L"trash", "DeletedAsset", "");
+    const auto directory = workspace.UniquePath(workspace.Root() / L".rock-editor" / L"trash", "DeletedAsset", "");
     if (directory.empty() || !workspace.Contains(directory)) return false;
     std::error_code error;
     fs::create_directories(directory, error);
@@ -156,12 +156,12 @@ bool RetireAsset(ProjectWorkspace& workspace, const AssetRelations& approved) {
             --moved;
             std::error_code rollback;
             fs::rename(directory / files[moved].filename(), files[moved], rollback);
-            if (rollback) TG_LOG_ERROR("退避ファイルを元に戻せません: %s", ToUtf8Display(directory).c_str());
+            if (rollback) ROCK_LOG_ERROR("退避ファイルを元に戻せません: %s", ToUtf8Display(directory).c_str());
         }
         return false;
     }
     workspace.Scan();
-    TG_LOG_INFO("ファイルを退避しました: %s", ToUtf8Display(directory).c_str());
+    ROCK_LOG_INFO("ファイルを退避しました: %s", ToUtf8Display(directory).c_str());
     return true;
 }
 
@@ -171,17 +171,17 @@ namespace {
 fs::path RelocateAsset(ProjectWorkspace& workspace, const fs::path& target, const fs::path& destination) {
     std::error_code error;
     if (!workspace.Contains(target) || !workspace.Contains(destination) ||
-        SamePath(target, workspace.Root() / L"project.tgproj") ||
+        SamePath(target, workspace.Root() / L"project.reproj") ||
         target.lexically_relative(workspace.Root()).wstring().starts_with(L".") ||
         destination.filename().wstring().starts_with(L".") ||
         fs::is_symlink(target, error) || !fs::is_regular_file(target, error) ||
         !fs::is_directory(destination.parent_path(), error)) {
-        TG_LOG_WARN("名前を変更できないファイルです: %s", ToUtf8Display(target).c_str());
+        ROCK_LOG_WARN("名前を変更できないファイルです: %s", ToUtf8Display(target).c_str());
         return {};
     }
     if (SamePath(target, destination)) return target;
     if (fs::exists(destination, error) || error || fs::exists(destination.wstring() + L".meta", error) || error) {
-        TG_LOG_WARN("同じ名前のファイルがあります: %s", ToUtf8Display(destination).c_str());
+        ROCK_LOG_WARN("同じ名前のファイルがあります: %s", ToUtf8Display(destination).c_str());
         return {};
     }
     // 画像はまだ .meta が無ければ先に ID を確定し、古いパスを持つ参照からも追えるようにする。
@@ -195,12 +195,12 @@ fs::path RelocateAsset(ProjectWorkspace& workspace, const fs::path& target, cons
         if (error) break;
     }
     if (error) {
-        TG_LOG_ERROR("名前を変更できませんでした: %s", ToUtf8Display(files[moved].first).c_str());
+        ROCK_LOG_ERROR("名前を変更できませんでした: %s", ToUtf8Display(files[moved].first).c_str());
         while (moved > 0) {
             --moved;
             std::error_code rollback;
             fs::rename(files[moved].second, files[moved].first, rollback);
-            if (rollback) TG_LOG_ERROR("改名したファイルを元に戻せません: %s", ToUtf8Display(files[moved].first).c_str());
+            if (rollback) ROCK_LOG_ERROR("改名したファイルを元に戻せません: %s", ToUtf8Display(files[moved].first).c_str());
         }
         return {};
     }
@@ -214,7 +214,7 @@ fs::path RenameAsset(ProjectWorkspace& workspace, const fs::path& target, const 
     const fs::path name = FromUtf8(newName);
     if (name.empty() || name.has_parent_path() || name.wstring().starts_with(L".") ||
         name.wstring().find_first_of(L"<>:\"/\\|?*") != std::wstring::npos) {
-        TG_LOG_WARN("使えない名前です: %s", newName.c_str());
+        ROCK_LOG_WARN("使えない名前です: %s", newName.c_str());
         return {};
     }
     const auto destination = target.parent_path() / name;
@@ -222,17 +222,17 @@ fs::path RenameAsset(ProjectWorkspace& workspace, const fs::path& target, const 
     if (fs::is_directory(target, error) && !fs::is_symlink(target, error)) {
         if (!workspace.Contains(target) || !workspace.Contains(destination) || SamePath(target, workspace.Root()) ||
             target.lexically_relative(workspace.Root()).wstring().starts_with(L".")) {
-            TG_LOG_WARN("このフォルダは改名できません");
+            ROCK_LOG_WARN("このフォルダは改名できません");
             return {};
         }
         if (SamePath(target, destination)) return target;
         if (fs::exists(destination, error)) {
-            TG_LOG_WARN("同じ名前のフォルダがあります: %s", ToUtf8Display(destination).c_str());
+            ROCK_LOG_WARN("同じ名前のフォルダがあります: %s", ToUtf8Display(destination).c_str());
             return {};
         }
         fs::rename(target, destination, error);
         if (error) {
-            TG_LOG_ERROR("フォルダを改名できませんでした: %s", ToUtf8Display(target).c_str());
+            ROCK_LOG_ERROR("フォルダを改名できませんでした: %s", ToUtf8Display(target).c_str());
             return {};
         }
         workspace.Scan();
@@ -245,32 +245,32 @@ fs::path MoveAsset(ProjectWorkspace& workspace, const fs::path& target, const fs
     std::error_code error;
     if (!workspace.Contains(directory) || !fs::is_directory(directory, error) ||
         directory.lexically_relative(workspace.Root()).wstring().starts_with(L".")) {
-        TG_LOG_WARN("移動先のフォルダが使えません: %s", ToUtf8Display(directory).c_str());
+        ROCK_LOG_WARN("移動先のフォルダが使えません: %s", ToUtf8Display(directory).c_str());
         return {};
     }
     if (fs::is_directory(target, error) && !fs::is_symlink(target, error)) {
         // フォルダは中身ごと移す。ルート・内部フォルダは動かさず、自分自身やその配下へは移さない。
         if (!workspace.Contains(target) || SamePath(target, workspace.Root()) ||
             target.lexically_relative(workspace.Root()).wstring().starts_with(L".")) {
-            TG_LOG_WARN("このフォルダは移動できません: %s", ToUtf8Display(target).c_str());
+            ROCK_LOG_WARN("このフォルダは移動できません: %s", ToUtf8Display(target).c_str());
             return {};
         }
         const auto source = fs::weakly_canonical(target, error);
         const auto into = error ? fs::path{} : fs::weakly_canonical(directory, error);
         const auto inside = into.lexically_relative(source);
         if (error || into.empty() || (!inside.empty() && *inside.begin() != L"..")) {
-            TG_LOG_WARN("フォルダを自分自身の中へは移動できません: %s", ToUtf8Display(target).c_str());
+            ROCK_LOG_WARN("フォルダを自分自身の中へは移動できません: %s", ToUtf8Display(target).c_str());
             return {};
         }
         const auto destination = directory / target.filename();
         if (SamePath(target, destination)) return target;
         if (fs::exists(destination, error) || error) {
-            TG_LOG_WARN("移動先に同じ名前のフォルダがあります: %s", ToUtf8Display(destination).c_str());
+            ROCK_LOG_WARN("移動先に同じ名前のフォルダがあります: %s", ToUtf8Display(destination).c_str());
             return {};
         }
         fs::rename(target, destination, error);
         if (error) {
-            TG_LOG_ERROR("フォルダを移動できませんでした: %s", ToUtf8Display(target).c_str());
+            ROCK_LOG_ERROR("フォルダを移動できませんでした: %s", ToUtf8Display(target).c_str());
             return {};
         }
         workspace.Scan();
@@ -279,4 +279,4 @@ fs::path MoveAsset(ProjectWorkspace& workspace, const fs::path& target, const fs
     return RelocateAsset(workspace, target, directory / target.filename());
 }
 
-}  // namespace tg::io
+}  // namespace rock::io

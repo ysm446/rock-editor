@@ -14,14 +14,14 @@
 #include <functional>
 #include <unordered_set>
 
-namespace tg::io {
+namespace rock::io {
 namespace fs = std::filesystem;
 using nlohmann::json;
 namespace {
 
-constexpr const char* kWorkspaceFormat = "terrain-graph.workspace";
-constexpr const char* kSceneFormat = "terrain-graph.scene";
-constexpr const wchar_t* kWorkspaceFile = L"project.tgproj";
+constexpr const char* kWorkspaceFormat = "rock-editor.workspace";
+constexpr const char* kSceneFormat = "rock-editor.scene";
+constexpr const wchar_t* kWorkspaceFile = L"project.reproj";
 
 std::string NewUid() {
     GUID guid{};
@@ -39,7 +39,7 @@ fs::path Absolute(const fs::path& path) {
 
 bool IsNative(const fs::path& path) {
     const auto ext = path.extension().wstring();
-    for (const auto* native : {L".tgmat", L".tgsky", L".tglayer", L".tgboundary", L".tgmodel"})
+    for (const auto* native : {L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".rockmodel"})
         if (_wcsicmp(ext.c_str(), native) == 0) return true;
     return false;
 }
@@ -99,7 +99,7 @@ bool ProjectWorkspace::WriteJson(const fs::path& path, const json& document) {
         if (stream.fail()) return false;
     }
     if (!MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        TG_LOG_ERROR("保存先を更新できません: %s", ToUtf8Display(path).c_str());
+        ROCK_LOG_ERROR("保存先を更新できません: %s", ToUtf8Display(path).c_str());
         fs::remove(temp, error);
         return false;
     }
@@ -128,7 +128,7 @@ bool ProjectWorkspace::Open(const fs::path& root) {
     next.m_root = Absolute(root);
     std::error_code error;
     if (next.m_root.empty() || !fs::is_directory(next.m_root, error)) {
-        TG_LOG_ERROR("ルートフォルダが見つかりません: %s", ToUtf8Display(root).c_str());
+        ROCK_LOG_ERROR("ルートフォルダが見つかりません: %s", ToUtf8Display(root).c_str());
         return false;
     }
     const auto projectPath = next.m_root / kWorkspaceFile;
@@ -136,7 +136,7 @@ bool ProjectWorkspace::Open(const fs::path& root) {
         if (!ReadJson(projectPath, next.m_project) ||
             String(next.m_project, "format") != kWorkspaceFormat ||
             !next.m_project.contains("version") || next.m_project["version"] != 1) {
-            TG_LOG_ERROR("ルートの project.tgproj が対応するプロジェクト形式ではありません");
+            ROCK_LOG_ERROR("ルートの project.reproj が対応するプロジェクト形式ではありません");
             return false;
         }
     } else {
@@ -167,11 +167,11 @@ bool ProjectWorkspace::Scan() {
         json body;
         if (!ReadJson(path, body)) continue;
         const auto uid = String(body, "uid");
-        if (uid.empty()) continue;  // 持ち出し用の旧 .tgmat など。ID を持たないものは対象外
+        if (uid.empty()) continue;  // 持ち出し用の旧 .rockmat など。ID を持たないものは対象外
         auto target = path;
         if (_wcsicmp(path.extension().c_str(), L".meta") == 0) target.replace_extension();
         if (!m_paths.emplace(uid, target).second) {
-            TG_LOG_ERROR("アセット ID が重複しています: %s", ToUtf8Display(path).c_str());
+            ROCK_LOG_ERROR("アセット ID が重複しています: %s", ToUtf8Display(path).c_str());
             return false;
         }
         m_knownUids[ToUtf8Portable(Absolute(target))] = uid;
@@ -226,7 +226,7 @@ fs::path ProjectWorkspace::Import(const fs::path& source, const fs::path& direct
     if (target.empty()) return {};
     fs::create_directories(directory, error);
     if (error || !fs::copy_file(source, target, fs::copy_options::none, error)) {
-        TG_LOG_ERROR("素材をコピーできません: %s", ToUtf8Display(source).c_str());
+        ROCK_LOG_ERROR("素材をコピーできません: %s", ToUtf8Display(source).c_str());
         return {};
     }
     m_imports[sourceKey] = target;
@@ -253,7 +253,7 @@ json ProjectWorkspace::Reference(const fs::path& path) {
         uid = NewUid();
         if (uid.empty()) return nullptr;
         body["uid"] = uid;
-        if (!IsNative(target)) { body["format"] = "terrain-graph.source"; body["version"] = 1; }
+        if (!IsNative(target)) { body["format"] = "rock-editor.source"; body["version"] = 1; }
         if (!WriteJson(metadata, body)) return nullptr;
     }
     if (const auto it = m_paths.find(uid); it != m_paths.end() && Absolute(it->second) != target) return nullptr;
@@ -284,7 +284,7 @@ bool ProjectWorkspace::SaveAsset(fs::path& path, const char* kind, json& body) {
         uid = NewUid();
     }
     if (uid.empty()) return false;
-    body["format"] = std::string("terrain-graph.") + kind;
+    body["format"] = std::string("rock-editor.") + kind;
     body["version"] = 1;
     body["uid"] = uid;
     body.erase("id");
@@ -323,12 +323,12 @@ std::string ProjectWorkspace::FindIdenticalAsset(const char* kind, const json& b
 
 bool ProjectWorkspace::ReadAsset(const fs::path& path, const char* kind, json& body) const {
     return Contains(path) && ReadJson(path, body) &&
-           String(body, "format") == std::string("terrain-graph.") + kind &&
+           String(body, "format") == std::string("rock-editor.") + kind &&
            body.contains("version") && body["version"] == 1;
 }
 
 bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
-    if (_wcsicmp(path.extension().c_str(), L".tgscene") != 0 || !Contains(path) || !Scan()) return false;
+    if (_wcsicmp(path.extension().c_str(), L".rockscene") != 0 || !Contains(path) || !Scan()) return false;
     const auto baseDir = Absolute(path).parent_path();
     std::unordered_map<int, json> textures;
     // 画像の参照。ルート外の実在ファイルは Imported/ へ取り込む。
@@ -369,7 +369,7 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
         const json id = entry.contains("id") ? entry["id"] : json();
         fs::path assetPath = FromUtf8(String(entry, "_assetPath"));
         if (assetPath.empty() || !Contains(assetPath)) {
-            // ID の無い埋め込み（旧 .tgproj）を保存し直すたびに連番の複製を作らない。
+            // ID の無い埋め込み（旧 .reproj）を保存し直すたびに連番の複製を作らない。
             if (String(entry, "uid").empty()) {
                 if (const auto uid = FindIdenticalAsset(kind, entry, claimedUids); !uid.empty()) entry["uid"] = uid;
             }
@@ -394,7 +394,7 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
     std::unordered_map<int, json> materialRefs;
     for (auto& entry : document["materials"]) {
         MapTextures(entry, byNumber(textures));
-        if (!save(entry, "material-asset", "Materials", ".tgmat")) return false;
+        if (!save(entry, "material-asset", "Materials", ".rockmat")) return false;
         if (entry.contains("id") && entry["id"].is_number_integer()) materialRefs[entry["id"].get<int>()] = entry["asset"];
     }
     for (auto& entry : document["skies"]) {
@@ -402,9 +402,9 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
             entry["hdri"] = sourceRef(entry["hdri"]);
             if (entry["hdri"].is_null()) return false;
         }
-        if (!save(entry, "sky-asset", "Skies", ".tgsky")) return false;
+        if (!save(entry, "sky-asset", "Skies", ".rocksky")) return false;
     }
-    // モデル。FBX は元ファイルの固定 ID、スロットは .tgmat の参照にして .tgmodel へ分ける。
+    // モデル。FBX は元ファイルの固定 ID、スロットは .rockmat の参照にして .rockmodel へ分ける。
     for (auto& entry : document["models"]) {
         if (!entry.is_object()) return false;
         entry["source"] = sourceRef(entry.value("path", json()));
@@ -412,7 +412,7 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
         entry.erase("path");
         if (!entry.contains("materials") || !entry["materials"].is_array()) entry["materials"] = json::array();
         for (auto& slot : entry["materials"]) slot = byNumber(materialRefs)(slot);
-        if (!save(entry, "model-asset", "Models", ".tgmodel")) return false;
+        if (!save(entry, "model-asset", "Models", ".rockmodel")) return false;
     }
     // レイヤーマテリアルと境界マテリアル。マテリアル・画像の参照を永続 ID へ写してファイルへ分け、
     // 配置データには番号（SurfaceId）と参照だけを残す。区間やプリセットはその番号で指したまま。
@@ -484,7 +484,7 @@ bool ProjectWorkspace::Expand(json& document) {
         const auto assetPath = Resolve(ref);
         json body;
         if (assetPath.empty() || !ReadAsset(assetPath, kind, body)) {
-            TG_LOG_ERROR("アセットを読み込めません: %s", String(ref, "path").c_str());
+            ROCK_LOG_ERROR("アセットを読み込めません: %s", String(ref, "path").c_str());
             return false;
         }
         body["id"] = entry.value("id", json());
@@ -577,9 +577,9 @@ bool ProjectWorkspace::Expand(json& document) {
             entry["hdri"] = source.empty() ? json() : json(ToUtf8Portable(source));
         }
     }
-    document["format"] = "terrain-graph.project";
+    document["format"] = "rock-editor.project";
     document["version"] = document.contains("projectVersion") ? document["projectVersion"] : json(4);
     return true;
 }
 
-}  // namespace tg::io
+}  // namespace rock::io

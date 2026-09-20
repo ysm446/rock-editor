@@ -5,7 +5,7 @@
 #include <cstring>
 
 void RunShadowCascadeTests() {
-    using namespace tg;
+    using namespace rock;
     using namespace DirectX;
     tests::Section("カスケードシャドウ — 分割と投影");
     renderer::Camera camera;

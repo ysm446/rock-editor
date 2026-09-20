@@ -10,7 +10,7 @@
 #include <limits>
 #include <unordered_map>
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 using namespace DirectX;
@@ -338,4 +338,4 @@ bool LoadModel(const fs::path& path, ModelAsset& asset) {
     return true;
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

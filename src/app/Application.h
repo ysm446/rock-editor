@@ -41,7 +41,7 @@ namespace ax::NodeEditor {
 struct EditorContext;
 }
 
-namespace tg {
+namespace rock {
 
 // コマンドラインから渡せる起動オプション。
 struct StartupOptions {
@@ -49,8 +49,8 @@ struct StartupOptions {
     std::filesystem::path hdriPath;
     // 起動時にテクスチャライブラリへ読み込む画像。--texture を繰り返し指定できる。
     std::vector<std::filesystem::path> texturePaths;
-    // 起動時に開くシーン (.tgscene) または旧プロジェクト (.tgproj)。ルートのフォルダや
-    // project.tgproj を渡すとルートだけを開く。空なら新規シーンで始める。
+    // 起動時に開くシーン (.rockscene) または旧プロジェクト (.reproj)。ルートのフォルダや
+    // project.reproj を渡すとルートだけを開く。空なら新規シーンで始める。
     std::filesystem::path projectPath;
     // プロジェクトのルートフォルダ（--root）。空なら最近使ったルート、無ければ data/。
     std::filesystem::path projectRoot;
@@ -70,7 +70,7 @@ struct StartupOptions {
     std::filesystem::path importModel;
     // 開発用。ルート内のアセットをアセットの帯のダブルクリックと同じ経路で開く。
     std::filesystem::path openAsset;
-    // 開発用。モデル（.tgmodel / .fbx）を原点へ置く（帯からビューポートへ落としたのと同じ経路）。
+    // 開発用。モデル（.rockmodel / .fbx）を原点へ置く（帯からビューポートへ落としたのと同じ経路）。
     std::filesystem::path placeModel;
     // 開発用。モデルのギズモを回転（E）で始める。
     bool gizmoRotate = false;
@@ -159,7 +159,7 @@ private:
     void DrawMaterialSphereWindow();
     // --- モデル（ApplicationModelPanel.cpp） --------------------------------------
     // モデルプレビューの窓（回せるモデル + 寸法・LOD・マテリアルスロット）。
-    // アセットの帯でモデル（.tgmodel / .fbx）をダブルクリックするか、ウィンドウメニューから開く。
+    // アセットの帯でモデル（.rockmodel / .fbx）をダブルクリックするか、ウィンドウメニューから開く。
     void DrawModelPreviewWindow();
     // FBX の取り込み、スロットのマテリアル作成、シーンから外す、GPU メッシュの用意。フレームの外で呼ぶ。
     void ProcessModelWork();
@@ -245,7 +245,7 @@ private:
     // 現在のシーンがそのファイルを使っているか（削除の可否）。
     bool IsAssetLoaded(const std::filesystem::path& path) const;
     void ResumeSceneSwitch();
-    // 保存したシーンのプレビュー画像（ビューポートの縮小）を .terrain-graph/scene-thumbnails へ残す。
+    // 保存したシーンのプレビュー画像（ビューポートの縮小）を .rock-editor/scene-thumbnails へ残す。
     void SaveSceneThumbnail(const std::filesystem::path& path);
     // テクスチャ一覧の右クリックメニュー（読み込む / 削除）。
     // target が kNoTexture なら、対象の要る項目は出さない。
@@ -585,7 +585,7 @@ private:
     bool m_showTextureList = false;
     bool m_showMaterialList = false;
     bool m_showSkyList = false;
-    std::filesystem::path m_projectPath;  // 現在のシーン (.tgscene)。未保存なら空
+    std::filesystem::path m_projectPath;  // 現在のシーン (.rockscene)。未保存なら空
     io::RecentFiles m_recentProjects;
     io::AppSettings m_settings;
     // 設定ウィンドウを出しているか。ドックへは収めない補助ウィンドウ。
@@ -675,4 +675,4 @@ private:
     std::chrono::steady_clock::time_point m_startTime;
 };
 
-}  // namespace tg
+}  // namespace rock

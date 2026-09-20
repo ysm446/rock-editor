@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 constexpr uint32_t ProbeSamples = 33;
 constexpr uint32_t ProbeColumns = 12;
@@ -37,10 +37,10 @@ bool PreviewDiagnostics::Initialize(rhi::Device& device) {
     D3D12_QUERY_HEAP_DESC desc{};
     desc.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
     desc.Count = rhi::kFrameCount * 2;
-    if (!TG_CHECK_HR(device.GetCommandQueue()->GetTimestampFrequency(&m_frequency)) || m_frequency == 0 ||
-        !TG_CHECK_HR(device.GetDevice()->CreateQueryHeap(&desc, IID_PPV_ARGS(&m_queries))) ||
+    if (!ROCK_CHECK_HR(device.GetCommandQueue()->GetTimestampFrequency(&m_frequency)) || m_frequency == 0 ||
+        !ROCK_CHECK_HR(device.GetDevice()->CreateQueryHeap(&desc, IID_PPV_ARGS(&m_queries))) ||
         !device.Allocator().CreateReadbackBuffer(sizeof(uint64_t) * desc.Count, L"PreviewTimestamps", m_timestamps)) {
-        TG_LOG_ERROR("プレビューGPU計測を初期化できませんでした");
+        ROCK_LOG_ERROR("プレビューGPU計測を初期化できませんでした");
         Shutdown(device);
         m_enabled = false;
         return false;
@@ -59,7 +59,7 @@ void PreviewDiagnostics::Begin(rhi::Device& device, ID3D12GraphicsCommandList* c
         const size_t offset = device.FrameIndex() * 2 * sizeof(uint64_t);
         const D3D12_RANGE range{offset, offset + 2 * sizeof(uint64_t)};
         void* mapped = nullptr;
-        if (TG_CHECK_HR(m_timestamps.resource->Map(0, &range, &mapped))) {
+        if (ROCK_CHECK_HR(m_timestamps.resource->Map(0, &range, &mapped))) {
             uint64_t ticks[2];
             std::memcpy(ticks, static_cast<const uint8_t*>(mapped) + offset, sizeof(ticks));
             const D3D12_RANGE written{0, 0};
@@ -95,7 +95,7 @@ void PreviewDiagnostics::End(rhi::Device& device, ID3D12GraphicsCommandList* com
     m_recording = false;
     if (m_samples >= 30) {
         const auto memory = device.QueryVideoMemory();
-        TG_LOG_INFO("プレビューGPU: %u samples, %ux%u, tess=%u, mean=%.3f ms, min=%.3f ms, max=%.3f ms, VRAM usage=%llu allocated=%llu bytes",
+        ROCK_LOG_INFO("プレビューGPU: %u samples, %ux%u, tess=%u, mean=%.3f ms, min=%.3f ms, max=%.3f ms, VRAM usage=%llu allocated=%llu bytes",
                     m_samples, width, height, tessellation ? 1u : 0u, m_totalMs / m_samples, m_minMs, m_maxMs,
                     static_cast<unsigned long long>(memory.usage), static_cast<unsigned long long>(memory.allocated));
         m_samples = 0;
@@ -146,7 +146,7 @@ bool PreviewDiagnostics::PrepareProbe(rhi::Device& device, ID3D12GraphicsCommand
     if (!device.Allocator().CreateTexture2D(desc, m_probeOutput)) return false;
     resourceDesc = m_probeOutput.resource->GetDesc();
     device.GetDevice()->GetCopyableFootprints(&resourceDesc, 0, 1, 0, &m_probeFootprint, nullptr, nullptr, &m_probeBytes);
-    TG_LOG_INFO("接続GPU検査: %u / %zu edges, %u samples per edge", m_probeEdges, mesh.connectionSeams.size(), ProbeSamples);
+    ROCK_LOG_INFO("接続GPU検査: %u / %zu edges, %u samples per edge", m_probeEdges, mesh.connectionSeams.size(), ProbeSamples);
     return device.Allocator().CreateReadbackBuffer(m_probeBytes, L"ConnectionProbeReadback", m_probeReadback);
 }
 
@@ -169,7 +169,7 @@ void PreviewDiagnostics::Probe(rhi::Device& device, rhi::PipelineCache& pipeline
         commands->CopyTextureRegion(&destination, 0, 0, 0, &source, nullptr);
         m_probeFence = device.NextFenceValue();
     } else {
-        TG_LOG_ERROR("接続GPU検査を準備できませんでした（未検証）");
+        ROCK_LOG_ERROR("接続GPU検査を準備できませんでした（未検証）");
     }
     PIXEndEvent(commands);
 }
@@ -179,7 +179,7 @@ void PreviewDiagnostics::CollectProbe(rhi::Device& device) {
     m_probeFence = 0;
     void* mapped = nullptr;
     const D3D12_RANGE range{0, static_cast<size_t>(m_probeBytes)};
-    if (!TG_CHECK_HR(m_probeReadback.resource->Map(0, &range, &mapped))) return;
+    if (!ROCK_CHECK_HR(m_probeReadback.resource->Map(0, &range, &mapped))) return;
     double maxError = 0;
     uint32_t failures = 0, invalid = 0;
     for (uint32_t edge = 0; edge <= m_probeEdges; ++edge) {
@@ -199,13 +199,13 @@ void PreviewDiagnostics::CollectProbe(rhi::Device& device) {
     }
     const D3D12_RANGE written{0, 0};
     m_probeReadback.resource->Unmap(0, &written);
-    TG_LOG_INFO("接続GPU検査: %u points, max=%.6f mm, over0.1mm=%u, invalid/controlFailures=%u (sampled displacement only)",
+    ROCK_LOG_INFO("接続GPU検査: %u points, max=%.6f mm, over0.1mm=%u, invalid/controlFailures=%u (sampled displacement only)",
                 m_probeEdges * ProbeSamples, maxError * 1000, failures, invalid);
-    if (failures || invalid) TG_LOG_ERROR("接続GPU検査が許容誤差を超えました");
+    if (failures || invalid) ROCK_LOG_ERROR("接続GPU検査が許容誤差を超えました");
     // 定常描画のVRAM集計に検査用の一時テクスチャを残さない。
     device.DeferRelease(m_probeInput);
     device.DeferRelease(m_probeOutput);
     device.DeferRelease(m_probeReadback);
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

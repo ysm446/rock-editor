@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace tg {
+namespace rock {
 
 void UndoHistory::Push(const DocumentSnapshot& before, uint32_t editId) {
     // 同じウィジェットを掴んだままの変更は 1 段にまとめる。
@@ -45,4 +45,4 @@ void UndoHistory::Clear() {
     m_lastEditId = 0;
 }
 
-}  // namespace tg
+}  // namespace rock

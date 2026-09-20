@@ -10,7 +10,7 @@
 #include "Common.hlsli"
 
 // 端点の最大数（線分 128 本ぶん）。C++ 側の kOverlayLineMaxVertices と一致させること。
-#define TG_OVERLAY_MAX_VERTICES 256
+#define ROCK_OVERLAY_MAX_VERTICES 256
 
 struct OverlayLineConstants
 {
@@ -19,7 +19,7 @@ struct OverlayLineConstants
     float4 color;
     float4 options; // x: 深度バイアス（NDC）。基準面上のグリッド用。
     // xyz: ワールド座標、w: 端点ごとの不透明度（color.a に掛かる）。
-    float4 positions[TG_OVERLAY_MAX_VERTICES];
+    float4 positions[ROCK_OVERLAY_MAX_VERTICES];
 };
 
 ConstantBuffer<OverlayLineConstants> g_lines : register(b1);

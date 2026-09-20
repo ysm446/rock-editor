@@ -6,7 +6,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 constexpr float kPi = 3.14159265358979f;
@@ -352,4 +352,4 @@ void ModelPreview::RenderInScene(rhi::Device& device, rhi::PipelineCache& pipeli
     }
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

@@ -5,7 +5,7 @@
 
 #include <vector>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 // GPU がまだ参照している可能性のあるオブジェクトを、フレーム同期後に解放するためのキュー。
 // リソースを直接 Reset せず、必ずここを経由させる。
@@ -62,4 +62,4 @@ private:
     std::vector<DescriptorEntry> m_descriptorEntries;
 };
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

@@ -10,7 +10,7 @@
 
 using namespace DirectX;
 
-namespace tg::compositor {
+namespace rock::compositor {
 namespace {
 
 using rhi::DispatchCount;
@@ -24,7 +24,7 @@ constexpr DXGI_FORMAT kHeightFormat = DXGI_FORMAT_R32_FLOAT;
 // 使い切ったら次の評価で倍に広げる。
 constexpr uint64_t kAsyncUploadBytes = 2ull * 1024 * 1024;
 
-// 法線マップの緑を反転して読む（OpenGL 規約の素材）。シェーダの TG_FLAG_* と一致させること。
+// 法線マップの緑を反転して読む（OpenGL 規約の素材）。シェーダの ROCK_FLAG_* と一致させること。
 constexpr uint32_t kFlagFlipNormalGreen = 0x1u;
 
 // ノードに出す合成結果のサムネイルの一辺。ノード上では 64px で描くので同じ大きさ。
@@ -107,7 +107,7 @@ bool MaterialEvaluator::Create(rhi::Device& device, uint32_t resolution, bool as
         if (!m_compute.IsValid() &&
             !m_compute.Create(device, kAsyncUploadBytes, L"MaterialEvaluatorCompute")) {
             // キューが作れなくても同期で評価はできる。落とさずに続ける。
-            TG_LOG_WARN("合成の評価用のコンピュートキューを作れませんでした。同期で評価します");
+            ROCK_LOG_WARN("合成の評価用のコンピュートキューを作れませんでした。同期で評価します");
             m_compute.Destroy(device);
         }
     }
@@ -145,7 +145,7 @@ void MaterialEvaluator::EnsureLayerThumbnails(rhi::Device& device, size_t layerC
         rhi::GpuTexture thumbnail;
         if (!CreateChannelTexture(device, kLayerThumbnailSize, DXGI_FORMAT_R8G8B8A8_UNORM,
                                   L"LayerThumbnail", thumbnail)) {
-            TG_LOG_WARN("結果のサムネイルを作れませんでした");
+            ROCK_LOG_WARN("結果のサムネイルを作れませんでした");
             break;
         }
         m_layerThumbnails.push_back(std::move(thumbnail));
@@ -521,7 +521,7 @@ void MaterialEvaluator::Update(rhi::Device& device, rhi::PipelineCache& pipeline
     // 前回の記録で定数の置き場を使い切っていたら、倍に広げてから記録する。
     if (m_compute.UploadExhausted()) {
         const uint64_t bytes = m_compute.UploadBytes() * 2;
-        TG_LOG_INFO("合成の評価の定数の置き場を %llu KB へ広げます",
+        ROCK_LOG_INFO("合成の評価の定数の置き場を %llu KB へ広げます",
                     static_cast<unsigned long long>(bytes / 1024));
         m_compute.Destroy(device);
         if (!m_compute.Create(device, bytes, L"MaterialEvaluatorCompute")) {
@@ -566,4 +566,4 @@ void MaterialEvaluator::Update(rhi::Device& device, rhi::PipelineCache& pipeline
     m_asyncRevision = stack.Revision();
 }
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

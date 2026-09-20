@@ -9,9 +9,9 @@
 #include <vector>
 
 // MaterialLibrary.h は Windows ヘッダを引き込むため、ここでは合成モードの列挙だけ前方宣言する。
-namespace tg::compositor { enum class BlendMode : uint32_t; }
+namespace rock::compositor { enum class BlendMode : uint32_t; }
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // CPU 側の生成結果。座標は右手系 Y-up、メートル。GPU の所有権を持たない。
 struct MeshVertex {
@@ -121,4 +121,4 @@ float MeshSceneRadius(const MeshScene& scene);
 // ホバー / 選択のシルエット枠に使う。
 std::vector<uint32_t> MeshOutlineEdges(const MeshData& data);
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

@@ -10,7 +10,7 @@
 
 #include <cstdio>
 
-namespace tg {
+namespace rock {
 
 // レイヤー 1 枚ぶんのプロパティ行。グラフパネルの下段から使う。
 // 変更の記録（アンドゥ / グラフの再コンパイル）は呼び出し側で行う。
@@ -82,4 +82,4 @@ bool Application::DrawLayerSettings(compositor::MaterialLayer& layer) {
     return changed;
 }
 
-}  // namespace tg
+}  // namespace rock

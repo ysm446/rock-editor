@@ -2,7 +2,7 @@
 
 #include "io/ProjectWorkspace.h"
 
-namespace tg::io {
+namespace rock::io {
 
 // アセットファイルを退避（削除）する前の参照関係の検査結果。
 struct AssetRelations {
@@ -34,4 +34,4 @@ std::filesystem::path RenameAsset(ProjectWorkspace& workspace, const std::filesy
 std::filesystem::path MoveAsset(ProjectWorkspace& workspace, const std::filesystem::path& target,
                                 const std::filesystem::path& directory);
 
-}  // namespace tg::io
+}  // namespace rock::io

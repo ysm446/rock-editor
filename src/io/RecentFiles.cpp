@@ -11,12 +11,12 @@
 #include <algorithm>
 #include <fstream>
 
-namespace tg::io {
+namespace rock::io {
 namespace fs = std::filesystem;
 using nlohmann::json;
 namespace {
 
-constexpr const char* kFormat = "road-editor.recent";
+constexpr const char* kFormat = "rock-editor.recent";
 constexpr int kVersion = 2;
 
 fs::path Normalize(const fs::path& path) {
@@ -83,10 +83,10 @@ void RecentFiles::AddRoot(const fs::path& root) {
         while (!parent.empty()) {
             if (SamePath(parent, root)) { Insert(entry.scenes, *it); break; }
             // 入れ子の別プロジェクトに属する履歴を、親ルートへ取り込まない。
-            std::ifstream marker(parent / L"project.tgproj", std::ios::binary);
+            std::ifstream marker(parent / L"project.reproj", std::ios::binary);
             if (marker) {
                 const auto project = json::parse(marker, nullptr, false);
-                if (project.is_object() && project.value("format", json()) == "terrain-graph.workspace") break;
+                if (project.is_object() && project.value("format", json()) == "rock-editor.workspace") break;
             }
             const auto next = parent.parent_path();
             if (next == parent) break;
@@ -146,7 +146,7 @@ void RecentFiles::Save() const {
     stream << document.dump(2, ' ', false, json::error_handler_t::replace) << '\n';
     stream.close();
     if (!stream || !MoveFileExW(temporary.c_str(), m_storage.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-        TG_LOG_WARN("最近使ったルート・シーンの履歴を保存できませんでした");
+        ROCK_LOG_WARN("最近使ったルート・シーンの履歴を保存できませんでした");
 }
 
-}  // namespace tg::io
+}  // namespace rock::io

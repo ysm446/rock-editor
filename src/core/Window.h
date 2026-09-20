@@ -7,7 +7,7 @@
 #include <functional>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 // Win32 ウィンドウ。メッセージフックを差し込めるようにして、UI 層への依存を持たない。
 class Window {
@@ -74,4 +74,4 @@ private:
     DropCallback m_dropCallback;
 };
 
-}  // namespace tg
+}  // namespace rock

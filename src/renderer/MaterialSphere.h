@@ -7,7 +7,7 @@
 #include "rhi/Device.h"
 #include "rhi/PipelineCache.h"
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // マテリアル 1 つを、回せる球で描く（マテリアルプレビューの窓が使う）。
 //
@@ -50,4 +50,4 @@ private:
     float m_uvScale = 2.0f;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

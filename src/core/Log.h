@@ -2,7 +2,7 @@
 
 #include <functional>
 
-namespace tg {
+namespace rock {
 
 enum class LogLevel {
     Info,
@@ -21,8 +21,8 @@ void LogMessage(LogLevel level, const char* fmt, ...);
 using LogSink = std::function<void(LogLevel, const char*)>;
 void SetLogSink(LogSink sink);
 
-}  // namespace tg
+}  // namespace rock
 
-#define TG_LOG_INFO(...)  ::tg::LogMessage(::tg::LogLevel::Info, __VA_ARGS__)
-#define TG_LOG_WARN(...)  ::tg::LogMessage(::tg::LogLevel::Warn, __VA_ARGS__)
-#define TG_LOG_ERROR(...) ::tg::LogMessage(::tg::LogLevel::Error, __VA_ARGS__)
+#define ROCK_LOG_INFO(...)  ::rock::LogMessage(::rock::LogLevel::Info, __VA_ARGS__)
+#define ROCK_LOG_WARN(...)  ::rock::LogMessage(::rock::LogLevel::Warn, __VA_ARGS__)
+#define ROCK_LOG_ERROR(...) ::rock::LogMessage(::rock::LogLevel::Error, __VA_ARGS__)

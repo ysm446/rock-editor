@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 void Application::DrawMaterialPanel() {
     // **ここでは前面を要求しない。** レイヤーと同じ枠のタブなので、
@@ -337,4 +337,4 @@ void Application::DrawLightingPanel() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

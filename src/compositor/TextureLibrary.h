@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace tg::compositor {
+namespace rock::compositor {
 
 struct LibraryTexture {
     TextureId id = kNoTexture;
@@ -123,4 +123,4 @@ private:
     TextureId m_nextId = 1;
 };
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

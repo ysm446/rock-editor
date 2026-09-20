@@ -1,5 +1,5 @@
-#ifndef TG_TONEMAP_HLSLI
-#define TG_TONEMAP_HLSLI
+#ifndef ROCK_TONEMAP_HLSLI
+#define ROCK_TONEMAP_HLSLI
 
 #include "Common.hlsli"
 
@@ -56,4 +56,4 @@ float3 ApplyTonemap(float3 color, uint mode)
     return saturate(color);
 }
 
-#endif  // TG_TONEMAP_HLSLI
+#endif  // ROCK_TONEMAP_HLSLI

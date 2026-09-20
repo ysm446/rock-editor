@@ -15,9 +15,9 @@
 #include <vector>
 
 // MaterialLibrary.h は Windows ヘッダを引き込むため、ここでは合成モードの列挙だけ前方宣言する。
-namespace tg::compositor { enum class BlendMode : uint32_t; }
+namespace rock::compositor { enum class BlendMode : uint32_t; }
 
-namespace tg {
+namespace rock {
 
 // アンドゥが対象にするマテリアル 1 つぶん。
 //
@@ -117,4 +117,4 @@ private:
     uint32_t m_lastEditId = 0;
 };
 
-}  // namespace tg
+}  // namespace rock

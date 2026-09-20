@@ -10,7 +10,7 @@
 #include <string>
 #include <system_error>
 
-namespace tg {
+namespace rock {
 
 void RevealFileInExplorer(const std::filesystem::path& path) {
     if (path.empty()) {
@@ -28,8 +28,8 @@ void RevealFileInExplorer(const std::filesystem::path& path) {
         ::ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
     // ShellExecuteW は成功すると 32 より大きい値を返す。
     if (reinterpret_cast<INT_PTR>(result) <= 32) {
-        TG_LOG_WARN("エクスプローラを開けませんでした: %s", ToUtf8Display(target).c_str());
+        ROCK_LOG_WARN("エクスプローラを開けませんでした: %s", ToUtf8Display(target).c_str());
     }
 }
 
-}  // namespace tg
+}  // namespace rock

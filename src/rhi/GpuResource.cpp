@@ -2,7 +2,7 @@
 
 #include "core/Log.h"
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 void TransitionIfNeeded(ID3D12GraphicsCommandList* commandList, GpuTexture& texture,
                         D3D12_RESOURCE_STATES newState) {
@@ -37,7 +37,7 @@ bool ResourceAllocator::Create(ID3D12Device* device, IDXGIAdapter* adapter,
     desc.Flags = D3D12MA::ALLOCATOR_FLAG_DEFAULT_POOLS_NOT_ZEROED;
 
     D3D12MA::Allocator* raw = nullptr;
-    if (!TG_CHECK_HR(D3D12MA::CreateAllocator(&desc, &raw))) {
+    if (!ROCK_CHECK_HR(D3D12MA::CreateAllocator(&desc, &raw))) {
         return false;
     }
     m_allocator.Attach(raw);
@@ -63,13 +63,13 @@ bool ResourceAllocator::CreateTexture2D(const TextureDesc& desc, GpuTexture& out
     // mipLevels = 0（フルミップ連鎖の自動決定）は、ビュー生成や
     // SubresourceIndex の計算が実ミップ数を前提とするため受け付けない。
     if (desc.mipLevels == 0) {
-        TG_LOG_ERROR("CreateTexture2D: mipLevels = 0 は未対応です");
+        ROCK_LOG_ERROR("CreateTexture2D: mipLevels = 0 は未対応です");
         return false;
     }
     // RTV / DSV は現状スライス 0 の 2D ビューしか作らないため、配列とは併用できない。
     if (desc.arraySize > 1 && !desc.isCube &&
         (desc.allowRenderTarget || desc.allowDepthStencil)) {
-        TG_LOG_ERROR("CreateTexture2D: 配列テクスチャの RTV / DSV は未対応です");
+        ROCK_LOG_ERROR("CreateTexture2D: 配列テクスチャの RTV / DSV は未対応です");
         return false;
     }
 
@@ -118,7 +118,7 @@ bool ResourceAllocator::CreateTexture2D(const TextureDesc& desc, GpuTexture& out
 
     D3D12MA::Allocation* allocation = nullptr;
     ID3D12Resource* resource = nullptr;
-    if (!TG_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc, desc.initialState,
+    if (!ROCK_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc, desc.initialState,
                                                  clearValuePtr, &allocation,
                                                  IID_PPV_ARGS(&resource)))) {
         return false;
@@ -278,7 +278,7 @@ bool ResourceAllocator::CreateDefaultBuffer(uint64_t sizeInBytes,
 
     D3D12MA::Allocation* allocation = nullptr;
     ID3D12Resource* resource = nullptr;
-    if (!TG_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc, initialState, nullptr,
+    if (!ROCK_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc, initialState, nullptr,
                                                  &allocation, IID_PPV_ARGS(&resource)))) {
         return false;
     }
@@ -316,7 +316,7 @@ bool ResourceAllocator::CreateUploadBuffer(uint64_t sizeInBytes, const wchar_t* 
 
     D3D12MA::Allocation* allocation = nullptr;
     ID3D12Resource* resource = nullptr;
-    if (!TG_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc,
+    if (!ROCK_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc,
                                                  D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                                                  &allocation, IID_PPV_ARGS(&resource)))) {
         return false;
@@ -393,7 +393,7 @@ bool ResourceAllocator::CreateReadbackBuffer(uint64_t sizeInBytes, const wchar_t
 
     D3D12MA::Allocation* allocation = nullptr;
     ID3D12Resource* resource = nullptr;
-    if (!TG_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc,
+    if (!ROCK_CHECK_HR(m_allocator->CreateResource(&allocDesc, &resourceDesc,
                                                  D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
                                                  &allocation, IID_PPV_ARGS(&resource)))) {
         return false;
@@ -445,4 +445,4 @@ void ResourceAllocator::ReleaseDescriptors(GpuBuffer& buffer) {
     buffer.uav = DescriptorHandle{};
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

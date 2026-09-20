@@ -7,7 +7,7 @@
 
 using namespace DirectX;
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 bool Mesh::Create(rhi::Device& device, const MeshData& data, const wchar_t* debugName) {
     if (data.vertices.empty() || data.indices.empty()) {
@@ -42,7 +42,7 @@ bool Mesh::Create(rhi::Device& device, const MeshData& data, const wchar_t* debu
 
     void* mapped = nullptr;
     const D3D12_RANGE readRange = {0, 0};
-    if (!TG_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
+    if (!ROCK_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
         return false;
     }
     auto* bytes = static_cast<uint8_t*>(mapped);
@@ -157,4 +157,4 @@ void Mesh::DrawOutline(ID3D12GraphicsCommandList* commandList) const {
     commandList->DrawIndexedInstanced(m_outlineIndexCount, 1, 0, 0, 0);
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <thread>
 
-namespace tg {
+namespace rock {
 namespace {
 
 using Clock = std::chrono::steady_clock;
@@ -86,4 +86,4 @@ void FrameLimiter::SleepUpTo(Clock::duration duration) {
     }
 }
 
-}  // namespace tg
+}  // namespace rock

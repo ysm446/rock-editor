@@ -25,7 +25,7 @@
 #include <optional>
 #include <string>
 
-namespace tg {
+namespace rock {
 
 inline float RadiansToDegrees(float radians) {
     return radians * (180.0f / 3.14159265358979323846f);
@@ -80,7 +80,7 @@ inline float PreviewPaneSize() {
 }
 
 // レイヤー一覧のドラッグ＆ドロップで使うペイロードの種別。
-inline constexpr const char* kLayerDragDropType = "TG_LAYER";
+inline constexpr const char* kLayerDragDropType = "ROCK_LAYER";
 // レイヤー一覧の行に並べるサムネイルの一辺（96 DPI 基準）。行の高さはこれで決まる。
 // 中身（マテリアルとマスク）を読めることを優先して、文字より大きく取る。
 inline constexpr float kLayerRowThumbnail = 40.0f;
@@ -102,17 +102,17 @@ inline constexpr float kLayerListMaxHeight = 640.0f;
 inline constexpr float kTexturePreviewSize = 200.0f;
 
 // テクスチャ一覧からマップ欄へのドラッグ＆ドロップで使うペイロードの種別。
-inline constexpr const char* kTextureDragDropType = "TG_TEXTURE";
+inline constexpr const char* kTextureDragDropType = "ROCK_TEXTURE";
 // マテリアル一覧から Surface のマテリアル欄（プロパティの行 / ノードのサムネイル）へ
 // ドラッグ＆ドロップで割り当てるときのペイロードの種別。中身は MaterialAssetId。
-inline constexpr const char* kMaterialDragDropType = "TG_MATERIAL";
+inline constexpr const char* kMaterialDragDropType = "ROCK_MATERIAL";
 // アセットの帯のレイヤーマテリアル / 境界マテリアルのサムネイルをドラッグしたときのペイロード
 //（どちらも graph::SurfaceId）。Road の沿道欄の該当行へ落とすと、その区間に割り当たる。
-inline constexpr const char* kLayerMaterialDragDropType = "TG_LAYER_MATERIAL";
-inline constexpr const char* kBoundaryMaterialDragDropType = "TG_BOUNDARY_MATERIAL";
+inline constexpr const char* kLayerMaterialDragDropType = "ROCK_LAYER_MATERIAL";
+inline constexpr const char* kBoundaryMaterialDragDropType = "ROCK_BOUNDARY_MATERIAL";
 // アセットの帯で、ライブラリの ID を持たないファイル（未読み込みの画像・シーンなど）をドラッグしたときのペイロード。
 // 中身はパスの wchar_t 文字列（終端込み）。一覧のフォルダ・左のフォルダ階層へ落とすと移動する。
-inline constexpr const char* kAssetPathDragDropType = "TG_ASSET_PATH";
+inline constexpr const char* kAssetPathDragDropType = "ROCK_ASSET_PATH";
 
 // 直前の ui::PropertyCombo の値の矩形（サムネイル＋コンボ）を受け口にして、type のペイロードを受ける。
 // 落とされた ID を outId に入れて真。コンボ本体だけでなくサムネイルにも落とせるようにするための部品。
@@ -511,4 +511,4 @@ inline void DrawAxisGizmo(const renderer::Camera& camera, const ImVec2& viewport
 }
 
 
-}  // namespace tg
+}  // namespace rock

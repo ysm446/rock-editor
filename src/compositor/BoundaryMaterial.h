@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string>
 
-namespace tg::compositor {
+namespace rock::compositor {
 // 境界帯の共通設定。テクスチャはTextureLibraryの安定IDで参照する。
 struct BoundaryMaterial {
     uint32_t id = 0;

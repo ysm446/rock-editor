@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
-// FBX から読んだ 3D モデル。terrain-graph の ModelAsset を移植したもの（配置ノードは持たない）。
+// FBX から読んだ 3D モデル。rock-editor の ModelAsset を移植したもの（配置ノードは持たない）。
 // 仕様は docs/reference/model-assets.md。
-namespace tg::renderer {
+namespace rock::renderer {
 
 // マテリアルスロット 1 つぶんの、FBX のマテリアルに書かれていた情報。
 // 「FBX のマテリアルから作成」でマテリアルアセットの初期値に使う。
@@ -67,7 +67,7 @@ struct ModelNodeRotation {
 // GPU リソースを持たないので、アンドゥのスナップショットへそのまま複製できる。
 struct ModelAsset {
     uint64_t id = 0;
-    // 共有アセット（.tgmodel）の置き場所と永続 ID。未保存なら空。
+    // 共有アセット（.rockmodel）の置き場所と永続 ID。未保存なら空。
     std::filesystem::path assetPath;
     std::string assetUid;
     std::string name;
@@ -102,4 +102,4 @@ void ModelNodeWorlds(const ModelGeometry& geometry, const std::vector<ModelNodeR
 // （geometry と materials は変えない）。
 bool LoadModel(const std::filesystem::path& path, ModelAsset& asset);
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

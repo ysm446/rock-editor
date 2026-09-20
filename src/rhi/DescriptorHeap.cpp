@@ -2,7 +2,7 @@
 
 #include "core/Log.h"
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 bool DescriptorHeap::Create(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE type,
                             uint32_t capacity, bool shaderVisible) {
@@ -12,7 +12,7 @@ bool DescriptorHeap::Create(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE typ
     desc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
                                : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
-    if (!TG_CHECK_HR(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_heap)))) {
+    if (!ROCK_CHECK_HR(device->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&m_heap)))) {
         return false;
     }
 
@@ -45,7 +45,7 @@ void DescriptorHeap::Destroy() {
 
 DescriptorHandle DescriptorHeap::Allocate() {
     if (m_freeList.empty()) {
-        TG_LOG_ERROR("ディスクリプタヒープが枯渇しました (capacity=%u)", m_capacity);
+        ROCK_LOG_ERROR("ディスクリプタヒープが枯渇しました (capacity=%u)", m_capacity);
         return DescriptorHandle{};
     }
     const uint32_t index = m_freeList.back();
@@ -59,13 +59,13 @@ void DescriptorHeap::Free(const DescriptorHandle& handle) {
         return;
     }
     if (handle.index >= m_capacity) {
-        TG_LOG_ERROR("範囲外のディスクリプタを解放しようとしました (index=%u)", handle.index);
+        ROCK_LOG_ERROR("範囲外のディスクリプタを解放しようとしました (index=%u)", handle.index);
         return;
     }
     if (!m_inUse[handle.index]) {
         // 二重解放するとフリーリストに同じスロットが 2 つ積まれ、
         // 以後 2 つの別リソースが同じディスクリプタを共有してしまう。
-        TG_LOG_ERROR("解放済みのディスクリプタを再度解放しようとしました (index=%u)",
+        ROCK_LOG_ERROR("解放済みのディスクリプタを再度解放しようとしました (index=%u)",
                      handle.index);
         return;
     }
@@ -86,4 +86,4 @@ DescriptorHandle DescriptorHeap::At(uint32_t index) const {
     return handle;
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

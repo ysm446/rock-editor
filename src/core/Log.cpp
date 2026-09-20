@@ -5,7 +5,7 @@
 #include <cstdarg>
 #include <cstdio>
 
-namespace tg {
+namespace rock {
 namespace {
 
 // 追加の出力先。UI が受け取って直近のメッセージを表示する。
@@ -45,4 +45,4 @@ void LogMessage(LogLevel level, const char* fmt, ...) {
     }
 }
 
-}  // namespace tg
+}  // namespace rock

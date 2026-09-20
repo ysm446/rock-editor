@@ -7,10 +7,10 @@
 
 #include <algorithm>
 
-namespace tg {
+namespace rock {
 namespace {
 
-constexpr const wchar_t* kWindowClassName = L"TerrainGraphWindowClass";
+constexpr const wchar_t* kWindowClassName = L"RockEditorWindowClass";
 
 }  // namespace
 
@@ -24,7 +24,7 @@ bool Window::Create(const wchar_t* title, uint32_t width, uint32_t height) {
     const auto loadIcon = [instance, systemDpi](int widthMetric, int heightMetric) {
         const int iconWidth = ::GetSystemMetricsForDpi(widthMetric, systemDpi);
         const int iconHeight = ::GetSystemMetricsForDpi(heightMetric, systemDpi);
-        return static_cast<HICON>(::LoadImageW(instance, MAKEINTRESOURCEW(TG_APP_ICON),
+        return static_cast<HICON>(::LoadImageW(instance, MAKEINTRESOURCEW(ROCK_APP_ICON),
                                                IMAGE_ICON, iconWidth, iconHeight,
                                                LR_DEFAULTCOLOR | LR_SHARED));
     };
@@ -41,7 +41,7 @@ bool Window::Create(const wchar_t* title, uint32_t width, uint32_t height) {
     wc.hCursor = ::LoadCursorW(nullptr, IDC_ARROW);
     wc.lpszClassName = kWindowClassName;
     if (::RegisterClassExW(&wc) == 0 && ::GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
-        TG_LOG_ERROR("RegisterClassExW に失敗しました (0x%08lX)", ::GetLastError());
+        ROCK_LOG_ERROR("RegisterClassExW に失敗しました (0x%08lX)", ::GetLastError());
         return false;
     }
 
@@ -56,7 +56,7 @@ bool Window::Create(const wchar_t* title, uint32_t width, uint32_t height) {
                                rect.right - rect.left, rect.bottom - rect.top,
                                nullptr, nullptr, instance, this);
     if (m_hwnd == nullptr) {
-        TG_LOG_ERROR("CreateWindowExW に失敗しました (0x%08lX)", ::GetLastError());
+        ROCK_LOG_ERROR("CreateWindowExW に失敗しました (0x%08lX)", ::GetLastError());
         return false;
     }
 
@@ -134,7 +134,7 @@ void Window::ResizeClient(uint32_t width, uint32_t height) {
 
         if (outerWidth > (monitorInfo.rcWork.right - monitorInfo.rcWork.left) ||
             outerHeight > (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top)) {
-            TG_LOG_WARN("ウィンドウ (%ux%u) がモニタの作業領域に収まりません。"
+            ROCK_LOG_WARN("ウィンドウ (%ux%u) がモニタの作業領域に収まりません。"
                         "はみ出したまま開きます", width, height);
         }
     }
@@ -247,4 +247,4 @@ LRESULT Window::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     return ::DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
-}  // namespace tg
+}  // namespace rock

@@ -11,7 +11,7 @@
 
 using namespace DirectX;
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 constexpr DXGI_FORMAT kSceneColorFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -21,7 +21,7 @@ constexpr int kDecalDepthBias = -2000;
 constexpr float kDecalSlopeScaledDepthBias = -2.0f;
 constexpr DXGI_FORMAT kOutputFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 
-// ガイド線の端点の最大数。シェーダの TG_OVERLAY_MAX_VERTICES と一致させること。
+// ガイド線の端点の最大数。シェーダの ROCK_OVERLAY_MAX_VERTICES と一致させること。
 constexpr uint32_t kOverlayLineMaxVertices = 256;
 
 // GPU 側の OverlayLineConstants と一致させること。
@@ -66,7 +66,7 @@ struct LayerContextConstants {
 };
 static_assert(sizeof(LayerContextConstants) == 192);
 
-// MeshConstants::meshDisplayFlags のビット。**HLSL 側の TG_MESH_FLAG_* と一致させること。**
+// MeshConstants::meshDisplayFlags のビット。**HLSL 側の ROCK_MESH_FLAG_* と一致させること。**
 constexpr uint32_t kMeshFlagUvChecker = 2u;
 constexpr uint32_t kMeshFlagOutlineHovered = 4u;
 constexpr uint32_t kMeshFlagOutlineSelected = 8u;
@@ -618,8 +618,8 @@ void PreviewRenderer::ProcessPendingWork(rhi::Device& device,
         if (!ResizeShadowMap(device, m_requestedShadowResolution, m_requestedShadowCascadeCount)) {
             m_requestedShadowResolution = m_shadowResolution;
             m_requestedShadowCascadeCount = m_shadowCascadeCount;
-            TG_LOG_ERROR("影の設定を変更できませんでした。元の設定を維持します");
-        } else TG_LOG_INFO("影の設定を %u 枚・解像度 %u に変更しました", m_shadowCascadeCount, m_shadowResolution);
+            ROCK_LOG_ERROR("影の設定を変更できませんでした。元の設定を維持します");
+        } else ROCK_LOG_INFO("影の設定を %u 枚・解像度 %u に変更しました", m_shadowCascadeCount, m_shadowResolution);
     }
 
     // 合成解像度の変更。シーンの評価器（スロット 1〜4）を作り直す。
@@ -629,10 +629,10 @@ void PreviewRenderer::ProcessPendingWork(rhi::Device& device,
         m_materialResolution = m_requestedMaterialResolution;
         for (auto& material : m_sceneMaterials) {
             if (material.evaluator && !material.evaluator->Resize(device, m_materialResolution))
-                TG_LOG_WARN("道路マテリアルの解像度を変更できませんでした");
+                ROCK_LOG_WARN("道路マテリアルの解像度を変更できませんでした");
             for (auto& layer : material.layerEvaluators) {
                 if (layer && !layer->Resize(device, m_materialResolution))
-                    TG_LOG_WARN("道路レイヤーの解像度を変更できませんでした");
+                    ROCK_LOG_WARN("道路レイヤーの解像度を変更できませんでした");
             }
         }
     }
@@ -716,7 +716,7 @@ void PreviewRenderer::ApplyActiveSky(rhi::Device& device, rhi::PipelineCache& pi
         }
         // 読み込みに失敗しても、天球アセットの中身は書き換えない（ユーザーの
         // 指定を黙って消さない）。環境だけを手続き的な空へ落とす。
-        TG_LOG_WARN("HDRI の読み込みに失敗したため、手続き的な空で描きます");
+        ROCK_LOG_WARN("HDRI の読み込みに失敗したため、手続き的な空で描きます");
     }
     m_environment.BuildFromSky(device, pipelineCache, m_activeSky.procedural);
     m_loadedHdriPath.clear();
@@ -1698,4 +1698,4 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
     PIXEndEvent(commandList);
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

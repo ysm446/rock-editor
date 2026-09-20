@@ -4,7 +4,7 @@
 // 2. CsHistogram 16x16 のタイルごとに groupshared へ集計し、バッファへ加算する。
 // 3. CsResolve   1 グループで百分位を切り出し、結果バッファへ EV100 と平均対数輝度を書く。
 
-#define TG_EXPOSURE_BINS 256
+#define ROCK_EXPOSURE_BINS 256
 
 struct MeterConstants
 {
@@ -22,9 +22,9 @@ struct MeterConstants
 
 ConstantBuffer<MeterConstants> g_constants : register(b0);
 
-groupshared uint g_tile[TG_EXPOSURE_BINS];
+groupshared uint g_tile[ROCK_EXPOSURE_BINS];
 
-[numthreads(TG_EXPOSURE_BINS, 1, 1)]
+[numthreads(ROCK_EXPOSURE_BINS, 1, 1)]
 void CsClear(uint3 id : SV_DispatchThreadID)
 {
     RWStructuredBuffer<uint> histogram = ResourceDescriptorHeap[g_constants.histogramIndex];
@@ -42,7 +42,7 @@ void CsHistogram(uint3 id : SV_DispatchThreadID, uint index : SV_GroupIndex)
         const float3 color = source[id.xy].rgb;
         const float luminance = max(dot(color, float3(0.2126f, 0.7152f, 0.0722f)), 1e-8f);
         const float t = saturate((log2(luminance) - g_constants.minLog2) / g_constants.rangeLog2);
-        const uint bin = min((uint)(t * (TG_EXPOSURE_BINS - 1) + 0.5f), TG_EXPOSURE_BINS - 1);
+        const uint bin = min((uint)(t * (ROCK_EXPOSURE_BINS - 1) + 0.5f), ROCK_EXPOSURE_BINS - 1);
         InterlockedAdd(g_tile[bin], 1u);
     }
     GroupMemoryBarrierWithGroupSync();
@@ -50,10 +50,10 @@ void CsHistogram(uint3 id : SV_DispatchThreadID, uint index : SV_GroupIndex)
     if (g_tile[index] != 0u) InterlockedAdd(histogram[index], g_tile[index]);
 }
 
-groupshared uint g_counts[TG_EXPOSURE_BINS];
-groupshared uint g_prefix[TG_EXPOSURE_BINS];
+groupshared uint g_counts[ROCK_EXPOSURE_BINS];
+groupshared uint g_prefix[ROCK_EXPOSURE_BINS];
 
-[numthreads(TG_EXPOSURE_BINS, 1, 1)]
+[numthreads(ROCK_EXPOSURE_BINS, 1, 1)]
 void CsResolve(uint index : SV_GroupIndex)
 {
     RWStructuredBuffer<uint> histogram = ResourceDescriptorHeap[g_constants.histogramIndex];
@@ -63,7 +63,7 @@ void CsResolve(uint index : SV_GroupIndex)
     if (index == 0u)
     {
         uint running = 0u;
-        [loop] for (uint i = 0u; i < TG_EXPOSURE_BINS; ++i)
+        [loop] for (uint i = 0u; i < ROCK_EXPOSURE_BINS; ++i)
         {
             running += g_counts[i];
             g_prefix[i] = running;
@@ -72,7 +72,7 @@ void CsResolve(uint index : SV_GroupIndex)
     GroupMemoryBarrierWithGroupSync();
     if (index != 0u) return;
 
-    const uint total = g_prefix[TG_EXPOSURE_BINS - 1];
+    const uint total = g_prefix[ROCK_EXPOSURE_BINS - 1];
     RWStructuredBuffer<float> result = ResourceDescriptorHeap[g_constants.resultIndex];
     if (total == 0u)
     {
@@ -83,12 +83,12 @@ void CsResolve(uint index : SV_GroupIndex)
     const float lowCount = g_constants.lowFraction * total;
     const float highCount = (1.0f - g_constants.highFraction) * total;
     float weightSum = 0.0f, logSum = 0.0f;
-    [loop] for (uint i = 0u; i < TG_EXPOSURE_BINS; ++i)
+    [loop] for (uint i = 0u; i < ROCK_EXPOSURE_BINS; ++i)
     {
         const float binStart = i == 0u ? 0.0f : (float)g_prefix[i - 1];
         const float binEnd = (float)g_prefix[i];
         const float weight = max(min(binEnd, highCount) - max(binStart, lowCount), 0.0f);
-        const float logLuminance = g_constants.minLog2 + (i / (float)(TG_EXPOSURE_BINS - 1)) * g_constants.rangeLog2;
+        const float logLuminance = g_constants.minLog2 + (i / (float)(ROCK_EXPOSURE_BINS - 1)) * g_constants.rangeLog2;
         weightSum += weight;
         logSum += weight * logLuminance;
     }

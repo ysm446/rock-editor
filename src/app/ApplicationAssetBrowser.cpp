@@ -3,9 +3,9 @@
 // 旧「テクスチャ / マテリアル / 天球」のタブの代わり。
 //
 // 一覧はファイルそのもの。**シーンへ読み込んでいないものも見える。** ダブルクリックで
-// 読み込み（画像 → テクスチャ、.tgmat → マテリアル、.tgsky → 天球、.tgmodel → モデル、
-// .fbx → モデルを作る、.tgscene → シーン）。
-// 読み込み済みのものはライブラリのサムネイルとドラッグ元（TG_TEXTURE / TG_MATERIAL）を使い、
+// 読み込み（画像 → テクスチャ、.rockmat → マテリアル、.rocksky → 天球、.rockmodel → モデル、
+// .fbx → モデルを作る、.rockscene → シーン）。
+// 読み込み済みのものはライブラリのサムネイルとドラッグ元（ROCK_TEXTURE / ROCK_MATERIAL）を使い、
 // 未読み込みのものは AssetThumbnailCache が
 // 別領域で作ったサムネイルを出す。クリック / Ctrl / Shift で複数選択し、フォルダへドラッグで移動、
 // F2 か右クリックでその場で改名する。
@@ -32,7 +32,7 @@
 #include <functional>
 #include <utility>
 
-namespace tg {
+namespace rock {
 namespace fs = std::filesystem;
 namespace {
 
@@ -132,7 +132,7 @@ void Application::SelectAsset(const fs::path& path, bool toggle, bool range) {
 }
 
 void Application::OpenAssetRename(const fs::path& path) {
-    if (path.empty() || path.filename() == L"project.tgproj") return;
+    if (path.empty() || path.filename() == L"project.reproj") return;
     std::error_code error;
     // 拡張子は変えさせない。フォルダは名前全体を編集する。
     const auto name = fs::is_directory(path, error) ? path.filename() : path.stem();
@@ -265,7 +265,7 @@ void Application::DrawAssetDeleteDialog() {
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ui::Scaled(520));
     ImGui::TextUnformatted(ToUtf8Display(report.target).c_str());
     ImGui::PopTextWrapPos();
-    ui::HintText("元ファイルと付随する .meta を、ルート内の退避フォルダ（.terrain-graph/trash）へ移します。");
+    ui::HintText("元ファイルと付随する .meta を、ルート内の退避フォルダ（.rock-editor/trash）へ移します。");
     const auto list = [&](const char* title, const std::vector<fs::path>& paths) {
         if (paths.empty()) return;
         ImGui::Separator();
@@ -346,11 +346,11 @@ void Application::RefreshAssetBrowser() {
     fs::directory_iterator it(m_assetDirectory, fs::directory_options::skip_permission_denied, error), end;
     for (; it != end && !error; it.increment(error)) {
         const auto& entry = *it;
-        // .meta と内部フォルダ（.terrain-graph）は出さない。
+        // .meta と内部フォルダ（.rock-editor）は出さない。
         if (entry.is_symlink(error) || entry.path().filename().wstring().starts_with(L".")) continue;
         const auto ext = Extension(entry.path());
-        if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".tgmat" && ext != ".tgsky" &&
-            ext != ".tgmodel" && ext != ".fbx" && ext != ".tgscene") continue;
+        if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".rockmat" && ext != ".rocksky" &&
+            ext != ".rockmodel" && ext != ".fbx" && ext != ".rockscene") continue;
         m_assetEntries.push_back(entry);
     }
     std::sort(m_assetEntries.begin(), m_assetEntries.end(), [](const auto& a, const auto& b) {
@@ -399,7 +399,7 @@ void Application::ProcessAssetWork() {
             ++count;
         }
         if (count > 0) {
-            TG_LOG_INFO("%zu 件を移動しました → %s", count,
+            ROCK_LOG_INFO("%zu 件を移動しました → %s", count,
                         ToUtf8Display(directory.lexically_relative(m_workspace.Root())).c_str());
         }
         m_assetRefresh = true;
@@ -409,7 +409,7 @@ void Application::ProcessAssetWork() {
         const auto renamed = io::RenameAsset(m_workspace, source, m_pendingAssetRenameName);
         if (!renamed.empty() && renamed != source) {
             RelinkAssetPaths(source, renamed);
-            TG_LOG_INFO("名前を変更しました: %s → %s", ToUtf8Display(source.filename()).c_str(),
+            ROCK_LOG_INFO("名前を変更しました: %s → %s", ToUtf8Display(source.filename()).c_str(),
                         ToUtf8Display(renamed.filename()).c_str());
         }
         m_assetRefresh = true;
@@ -423,7 +423,7 @@ void Application::ProcessAssetWork() {
             m_assetRefresh = true;
             m_assetThumbnails.Invalidate();
         } else {
-            TG_LOG_WARN("削除できませんでした。対象と参照関係を再確認してください");
+            ROCK_LOG_WARN("削除できませんでした。対象と参照関係を再確認してください");
             m_pendingAssetDeleteInspect = path;
         }
     }
@@ -432,7 +432,7 @@ void Application::ProcessAssetWork() {
         m_pendingAssetDeleteInspect.clear();
         m_assetDeleteDialog = true;
     }
-    // --project にはシーンだけでなく、ルートのフォルダや目印ファイル（project.tgproj）も渡せる。
+    // --project にはシーンだけでなく、ルートのフォルダや目印ファイル（project.reproj）も渡せる。
     if (!m_pendingProjectOpen.empty()) {
         std::error_code error;
         if (fs::is_directory(m_pendingProjectOpen, error)) {
@@ -449,10 +449,10 @@ void Application::ProcessAssetWork() {
         io::ProjectWorkspace next;
         if (next.Open(root)) {
             // ルートの選択とシーンの選択を分ける。履歴から指定されたシーンだけ開く。
-            if (!m_pendingProjectOpen.empty() && Extension(m_pendingProjectOpen) == ".tgscene") {
+            if (!m_pendingProjectOpen.empty() && Extension(m_pendingProjectOpen) == ".rockscene") {
                 nlohmann::json validation;
                 if (!next.ReadScene(m_pendingProjectOpen, validation)) {
-                    TG_LOG_ERROR("シーンを読み込めません。現在のプロジェクトを保持します");
+                    ROCK_LOG_ERROR("シーンを読み込めません。現在のプロジェクトを保持します");
                     m_pendingProjectOpen.clear();
                     return;
                 }
@@ -468,7 +468,7 @@ void Application::ProcessAssetWork() {
             ResetProject();
             m_projectPath.clear();
             UpdateWindowTitle();
-            TG_LOG_INFO("ルートフォルダを開きました: %s", ToUtf8Display(m_workspace.Root()).c_str());
+            ROCK_LOG_INFO("ルートフォルダを開きました: %s", ToUtf8Display(m_workspace.Root()).c_str());
         } else {
             m_pendingProjectOpen.clear();
         }
@@ -478,7 +478,7 @@ void Application::ProcessAssetWork() {
         m_pendingAssetsSave = false;
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary, m_renderer, m_graph, &m_models};
         if (!io::SaveSharedAssets(m_workspace, refs)) {
-            TG_LOG_ERROR("共有アセットを保存できませんでした");
+            ROCK_LOG_ERROR("共有アセットを保存できませんでした");
         }
         m_assetRefresh = true;
         m_assetThumbnails.Invalidate();
@@ -487,7 +487,7 @@ void Application::ProcessAssetWork() {
         const auto path = m_pendingAssetOpen;
         m_pendingAssetOpen.clear();
         const auto ext = Extension(path);
-        if (ext == ".tgmodel") {
+        if (ext == ".rockmodel") {
             // シーンのモデルへ足し（読み込み済みならそれを使い）、参照するマテリアルもライブラリへ読む。
             const size_t before = m_models.size();
             if (io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache, m_textureLibrary, m_materialLibrary,
@@ -498,21 +498,21 @@ void Application::ProcessAssetWork() {
                 m_showModelPreview = true;
                 if (m_models.size() != before) MarkDocumentChanged();
             } else {
-                TG_LOG_ERROR("アセットを開けません: %s", ToUtf8Display(path).c_str());
+                ROCK_LOG_ERROR("アセットを開けません: %s", ToUtf8Display(path).c_str());
             }
         } else if (ext == ".fbx") {
             m_pendingModelImports.push_back(path);
-        } else if (ext == ".tgmat" || ext == ".tgsky") {
+        } else if (ext == ".rockmat" || ext == ".rocksky") {
             nlohmann::json header;
-            if (ext == ".tgmat" && io::ProjectWorkspace::ReadJson(path, header) &&
-                io::ProjectWorkspace::String(header, "format") != "terrain-graph.material-asset") {
-                // 持ち出し用の旧 .tgmat は従来の読み込み（ライブラリへ 1 つ足す）。
+            if (ext == ".rockmat" && io::ProjectWorkspace::ReadJson(path, header) &&
+                io::ProjectWorkspace::String(header, "format") != "rock-editor.material-asset") {
+                // 持ち出し用の旧 .rockmat は従来の読み込み（ライブラリへ 1 つ足す）。
                 m_pendingMaterialImport = path;
                 return;
             }
             if (io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache,
                                     m_textureLibrary, m_materialLibrary, m_skyLibrary)) {
-                if (ext == ".tgmat") {
+                if (ext == ".rockmat") {
                     const auto& entries = m_materialLibrary.Entries();
                     for (size_t i = 0; i < entries.size(); ++i)
                         if (SameFile(entries[i].assetPath, path)) m_selectedMaterial = static_cast<int>(i);
@@ -525,7 +525,7 @@ void Application::ProcessAssetWork() {
                 m_renderer.InvalidateSceneMaterials();
                 MarkDocumentChanged();
             } else {
-                TG_LOG_ERROR("アセットを開けません: %s", ToUtf8Display(path).c_str());
+                ROCK_LOG_ERROR("アセットを開けません: %s", ToUtf8Display(path).c_str());
             }
         } else if (IsImage(ext)) {
             const compositor::TextureId id = m_textureLibrary.Load(m_device, m_pipelineCache, path);
@@ -568,7 +568,7 @@ void Application::DrawAssetBrowser() {
         std::error_code error;
         if (!path.empty()) fs::create_directory(path, error);
         if (path.empty() || error) {
-            TG_LOG_ERROR("フォルダを作成できませんでした");
+            ROCK_LOG_ERROR("フォルダを作成できませんでした");
             return;
         }
         m_assetDirectory = parent;
@@ -688,7 +688,7 @@ void Application::DrawAssetBrowser() {
             loaded[PathKey(a.assetPath)] = {static_cast<ImTextureID>(a.thumbnail.srv.gpu.ptr), compositor::kNoTexture, a.id, MaterialHasMissingTexture(a)};
         for (const auto& a : m_skyLibrary.Entries()) if (!a.assetPath.empty())
             loaded[PathKey(a.assetPath)] = {static_cast<ImTextureID>(a.thumbnail.srv.gpu.ptr)};
-        // モデルは .tgmodel と元の FBX の両方を読み込み済みとして扱う（FBX のダブルクリックでそのモデルを開く）。
+        // モデルは .rockmodel と元の FBX の両方を読み込み済みとして扱う（FBX のダブルクリックでそのモデルを開く）。
         for (const auto& a : m_models) {
             const auto preview = m_modelPreviews.find(a.id);
             Loaded entry;
@@ -730,9 +730,9 @@ void Application::DrawAssetBrowser() {
             if (folder) {
                 DrawFolderIcon(thumb.min, thumb.max);
             } else if (!handle) {
-                const char* type = ext == ".tgscene" ? "シーン" : ext == ".tgmat" ? "マテリアル" :
-                    ext == ".tgsky" ? "天球" :
-                    (ext == ".tgmodel" || ext == ".fbx") ? "モデル" :
+                const char* type = ext == ".rockscene" ? "シーン" : ext == ".rockmat" ? "マテリアル" :
+                    ext == ".rocksky" ? "天球" :
+                    (ext == ".rockmodel" || ext == ".fbx") ? "モデル" :
                     IsImage(ext) || ext == ".hdr" ? "画像" : "ファイル";
                 const auto min = thumb.min, max = thumb.max;
                 const auto text = ImGui::CalcTextSize(type);
@@ -788,13 +788,13 @@ void Application::DrawAssetBrowser() {
             // 1 つだけなら、読み込み済みのものは従来と同じ ID のペイロード（割り当ての欄が受ける）で、
             // それ以外のファイル・フォルダはパスを運ぶ。どちらもフォルダへ落とせば移動する（AssetFolderDropTarget）。
             // テクスチャは hold-to-switch を残すため SourceNoHoldToOpenOthers を付けない。
-            const bool movable = path.filename() != L"project.tgproj";
+            const bool movable = path.filename() != L"project.reproj";
             if (movable && ImGui::BeginDragDropSource()) {
                 std::wstring list;
                 size_t count = 0;
                 if (IsAssetSelected(path) && m_selectedAssets.size() > 1) {
                     for (const auto& item : m_selectedAssets) {
-                        if (item.filename() == L"project.tgproj") continue;
+                        if (item.filename() == L"project.reproj") continue;
                         if (!list.empty()) list += L'\n';
                         list += item.wstring();
                         ++count;
@@ -821,8 +821,8 @@ void Application::DrawAssetBrowser() {
             if (thumb.hovered && ImGui::GetDragDropPayload() == nullptr) {
                 const char* hint = folder ? "ダブルクリックで開く / サムネイルを落とすと移動"
                     : modelId ? "ダブルクリックでモデルプレビュー（マテリアルスロットの割り当て）"
-                    : ext == ".fbx" ? "ダブルクリックでモデル（.tgmodel）を作ってシーンへ読み込む"
-                    : ext == ".tgmodel" ? "ダブルクリックでシーンへ読み込んでプレビュー"
+                    : ext == ".fbx" ? "ダブルクリックでモデル（.rockmodel）を作ってシーンへ読み込む"
+                    : ext == ".rockmodel" ? "ダブルクリックでシーンへ読み込んでプレビュー"
                     : "ダブルクリックで開く";
                 ImGui::SetTooltip("%s\n%s\nCtrl / Shift + クリックで複数選択", ToUtf8Display(path).c_str(), hint);
             }
@@ -833,7 +833,7 @@ void Application::DrawAssetBrowser() {
                     else m_pendingAssetOpen = path;
                 }
                 if (ImGui::MenuItem("エクスプローラで表示")) RevealFileInExplorer(path);
-                if (path.filename() != L"project.tgproj" && ImGui::MenuItem("名前を変更…", "F2")) OpenAssetRename(path);
+                if (path.filename() != L"project.reproj" && ImGui::MenuItem("名前を変更…", "F2")) OpenAssetRename(path);
                 if (textureId != compositor::kNoTexture) {
                     ImGui::Separator();
                     DrawTextureContextMenu(textureId);
@@ -849,7 +849,7 @@ void Application::DrawAssetBrowser() {
                     // ファイルは残す。
                     if (ImGui::MenuItem("シーンから外す")) m_pendingModelRemove = modelId;
                 }
-                if (!folder && path.filename() != L"project.tgproj") {
+                if (!folder && path.filename() != L"project.reproj") {
                     ImGui::Separator();
                     if (ImGui::MenuItem("ファイルを削除…")) m_pendingAssetDeleteInspect = path;
                 }
@@ -882,7 +882,7 @@ void Application::DrawAssetBrowser() {
             if (ImGui::MenuItem("マテリアルを作成")) {
                 const auto id = m_materialLibrary.Add("新規マテリアル");
                 auto* asset = m_materialLibrary.FindMutable(id);
-                asset->assetPath = m_workspace.UniquePath(m_assetDirectory, asset->name, ".tgmat");
+                asset->assetPath = m_workspace.UniquePath(m_assetDirectory, asset->name, ".rockmat");
                 m_selectedMaterial = static_cast<int>(m_materialLibrary.Entries().size()) - 1;
                 m_showMaterialSphere = true;
                 m_pendingAssetsSave = true;
@@ -891,7 +891,7 @@ void Application::DrawAssetBrowser() {
             if (ImGui::MenuItem("天球を作成")) {
                 const auto id = m_skyLibrary.Add("新規天球");
                 auto* asset = m_skyLibrary.FindMutable(id);
-                asset->assetPath = m_workspace.UniquePath(m_assetDirectory, asset->name, ".tgsky");
+                asset->assetPath = m_workspace.UniquePath(m_assetDirectory, asset->name, ".rocksky");
                 m_skyLibrary.SetActive(id);
                 m_showSkyPreview = true;
                 m_pendingAssetsSave = true;
@@ -899,7 +899,7 @@ void Application::DrawAssetBrowser() {
             if (ImGui::MenuItem("ファイルを読み込む…")) {
                 const auto paths = ShowOpenFilesDialog(
                     L"アセットを読み込む",
-                    {{L"画像 / HDRI / マテリアル / モデル", L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.exr;*.hdr;*.tgmat;*.fbx"}});
+                    {{L"画像 / HDRI / マテリアル / モデル", L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.exr;*.hdr;*.rockmat;*.fbx"}});
                 HandleDroppedFiles(paths);
             }
             ImGui::EndPopup();
@@ -909,4 +909,4 @@ void Application::DrawAssetBrowser() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

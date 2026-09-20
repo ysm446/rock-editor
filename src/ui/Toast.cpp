@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <optional>
 
-namespace tg::ui {
+namespace rock::ui {
 namespace {
 
 // 同時に出す上限。積み上がりすぎると画面を覆ってしまう。
@@ -120,4 +120,4 @@ void ToastQueue::Draw() {
     }
 }
 
-}  // namespace tg::ui
+}  // namespace rock::ui

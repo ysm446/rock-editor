@@ -12,8 +12,8 @@
 
 namespace {
 
-using tg::tests::Check;
-using tg::tests::Section;
+using rock::tests::Check;
+using rock::tests::Section;
 using Clock = std::chrono::steady_clock;
 
 // fps の上限で frames 回描くまでの経過ミリ秒と、そのあいだの空回りの回数。
@@ -23,7 +23,7 @@ struct RunResult {
 };
 
 RunResult Run(int fps, int frames) {
-    tg::FrameLimiter limiter;
+    rock::FrameLimiter limiter;
     RunResult result;
     const Clock::time_point start = Clock::now();
     for (int rendered = 0; rendered < frames;) {
@@ -62,7 +62,7 @@ void RunFrameLimiterTests() {
     // **長く止まった後に取り返そうとしない。** 締め切りを素直に積むと、
     // 読み込みなどで数秒止まった後に何フレームも間引かずに走ってしまう。
     {
-        tg::FrameLimiter limiter;
+        rock::FrameLimiter limiter;
         Check(limiter.ShouldRender(20), "1 フレーム目はすぐ描く");
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
@@ -77,7 +77,7 @@ void RunFrameLimiterTests() {
 
     // 締め切りを捨てれば、次のフレームはすぐ描ける。
     {
-        tg::FrameLimiter limiter;
+        rock::FrameLimiter limiter;
         limiter.ShouldRender(10);
         limiter.Reset();
         Check(limiter.ShouldRender(10), "Reset のあとはすぐ描ける");

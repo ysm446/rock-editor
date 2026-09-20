@@ -5,7 +5,7 @@
 #include "rhi/Device.h"
 #include "rhi/PipelineCache.h"
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // 適用中の天球を、回せる球で描く（天球プレビューの窓が使う）。
 //
@@ -43,4 +43,4 @@ private:
     float m_distance = 3.2f;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

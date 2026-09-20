@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 using rhi::DispatchCount;
@@ -133,4 +133,4 @@ void SkySphere::Render(rhi::Device& device, rhi::PipelineCache& pipelineCache,
     PIXEndEvent(commandList);
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

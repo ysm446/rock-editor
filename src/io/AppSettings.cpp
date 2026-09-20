@@ -11,13 +11,13 @@
 #include <string>
 #include <system_error>
 
-namespace tg::io {
+namespace rock::io {
 namespace {
 
 namespace fs = std::filesystem;
 using nlohmann::json;
 
-constexpr const char* kFormat = "road-editor.settings";
+constexpr const char* kFormat = "rock-editor.settings";
 constexpr int kVersion = 1;
 
 fs::path SettingsPath() {
@@ -34,7 +34,7 @@ fs::path AppDataDirectory() {
         const DWORD written = ::GetEnvironmentVariableW(L"LOCALAPPDATA", value.data(), needed);
         if (written > 0) {
             value.resize(written);
-            return fs::path(value) / L"road-editor";
+            return fs::path(value) / L"rock-editor";
         }
     }
     return fs::path(L".");
@@ -52,7 +52,7 @@ void AppSettings::Load() {
     // 例外は使わない方針なので、パース失敗は discarded で受ける。
     const json document = json::parse(stream, nullptr, false);
     if (document.is_discarded() || !document.is_object()) {
-        TG_LOG_WARN("設定を読めませんでした。既定値で始めます");
+        ROCK_LOG_WARN("設定を読めませんでした。既定値で始めます");
         return;
     }
     const auto format = document.find("format");
@@ -176,7 +176,7 @@ bool AppSettings::Save() const {
 
     std::ofstream stream(path, std::ios::binary | std::ios::trunc);
     if (!stream.is_open()) {
-        TG_LOG_WARN("設定を保存できませんでした");
+        ROCK_LOG_WARN("設定を保存できませんでした");
         return false;
     }
     // 壊れた文字列が混ざっていても例外を出さない（不正な UTF-8 は置換文字にする）。
@@ -184,4 +184,4 @@ bool AppSettings::Save() const {
     return stream.good();
 }
 
-}  // namespace tg::io
+}  // namespace rock::io

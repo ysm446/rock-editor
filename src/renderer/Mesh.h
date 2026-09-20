@@ -7,7 +7,7 @@
 
 #include <vector>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // GPU 上のメッシュ。頂点・インデックスとも DEFAULT ヒープに置く。
 class Mesh {
@@ -36,4 +36,4 @@ private:
     uint32_t m_vertexCount = 0;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

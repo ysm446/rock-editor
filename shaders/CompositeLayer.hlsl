@@ -10,12 +10,12 @@
 
 #include "CompositeCommon.hlsli"
 
-#define TG_SOURCE_CONSTANT 0
-#define TG_SOURCE_NOISE    1
-#define TG_SOURCE_TEXTURE  2
+#define ROCK_SOURCE_CONSTANT 0
+#define ROCK_SOURCE_NOISE    1
+#define ROCK_SOURCE_TEXTURE  2
 
 // 法線マップの緑を反転して読む（OpenGL 規約の素材）。
-#define TG_FLAG_FLIP_NORMAL_GREEN 0x1u
+#define ROCK_FLAG_FLIP_NORMAL_GREEN 0x1u
 
 struct LayerConstants
 {
@@ -36,7 +36,7 @@ struct LayerConstants
     uint4 textureIndices1;  // ao, height, opacity, 未使用
 
     uint4 noiseTypes;   // height, 未使用 x3
-    // スカラーのマップのチャンネル指定。4bit ずつ TG_CHANNEL_SLOT_* の順で詰めてある。
+    // スカラーのマップのチャンネル指定。4bit ずつ ROCK_CHANNEL_SLOT_* の順で詰めてある。
     uint4 mapChannels;  // x にすべて入る。yzw は未使用
     // ベースカラーの調整。マテリアルが持つ（ティントを掛けた**あと**に効く）。
     float4 colorAdjust;  // 色相（ラジアン）, 彩度, 明るさ, 未使用
@@ -83,16 +83,16 @@ float SampleLayerHeight(float2 uv, float uvPerOutputTexel)
     const float gain = g_layer.heightNoise.y;
 
     const uint source = uint(g_layer.heightParams.z);
-    if (source == TG_SOURCE_NOISE)
+    if (source == ROCK_SOURCE_NOISE)
     {
         const float noise = SampleNoise(g_layer.noiseTypes.x, uv, g_layer.heightNoise.x,
                                         g_layer.heightNoise.w, int(g_layer.heightNoise.z));
         return base + (noise - kHeightPivot) * gain;
     }
-    if (source == TG_SOURCE_TEXTURE && g_layer.textureIndices1.y != kInvalidTextureIndex)
+    if (source == ROCK_SOURCE_TEXTURE && g_layer.textureIndices1.y != kInvalidTextureIndex)
     {
         // マテリアルのハイトマップはタイル素材なので wrap で読む。
-        const float value = SampleLayerScalar(g_layer.textureIndices1.y, TG_CHANNEL_SLOT_HEIGHT,
+        const float value = SampleLayerScalar(g_layer.textureIndices1.y, ROCK_CHANNEL_SLOT_HEIGHT,
                                               uv, uvPerOutputTexel);
         return base + (value - kHeightPivot) * gain;
     }
@@ -121,7 +121,7 @@ float3 ComputeLayerNormal(float2 uv, float2 texelSize, float uvPerOutputTexel)
         //   DirectX: 緑 = 画像の下向き（+V）
         // このアプリの接空間と自前の法線は DirectX 規約なので、
         // OpenGL 規約のマップは緑を反転して読む（V 方向の陰影が逆になるため）。
-        if ((g_layer.flags & TG_FLAG_FLIP_NORMAL_GREEN) != 0u)
+        if ((g_layer.flags & ROCK_FLAG_FLIP_NORMAL_GREEN) != 0u)
         {
             tangentNormal.y = -tangentNormal.y;
         }
@@ -189,23 +189,23 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (g_layer.textureIndices0.z != kInvalidTextureIndex)
     {
         layerRoughness = SampleLayerScalar(g_layer.textureIndices0.z,
-                                           TG_CHANNEL_SLOT_ROUGHNESS, uv, uvPerOutputTexel);
+                                           ROCK_CHANNEL_SLOT_ROUGHNESS, uv, uvPerOutputTexel);
     }
     if (g_layer.textureIndices0.w != kInvalidTextureIndex)
     {
-        layerMetallic = SampleLayerScalar(g_layer.textureIndices0.w, TG_CHANNEL_SLOT_METALLIC,
+        layerMetallic = SampleLayerScalar(g_layer.textureIndices0.w, ROCK_CHANNEL_SLOT_METALLIC,
                                           uv, uvPerOutputTexel);
     }
     if (g_layer.textureIndices1.x != kInvalidTextureIndex)
     {
-        layerAo = SampleLayerScalar(g_layer.textureIndices1.x, TG_CHANNEL_SLOT_AO, uv,
+        layerAo = SampleLayerScalar(g_layer.textureIndices1.x, ROCK_CHANNEL_SLOT_AO, uv,
                                     uvPerOutputTexel);
     }
     // 不透明度。マップが無ければ材質の定数。Surface の A へ書く。
     float layerOpacity = g_layer.heightParams.w;
     if (g_layer.textureIndices1.z != kInvalidTextureIndex)
     {
-        layerOpacity = SampleLayerScalar(g_layer.textureIndices1.z, TG_CHANNEL_SLOT_OPACITY, uv,
+        layerOpacity = SampleLayerScalar(g_layer.textureIndices1.z, ROCK_CHANNEL_SLOT_OPACITY, uv,
                                          uvPerOutputTexel);
     }
 

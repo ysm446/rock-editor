@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace tg {
+namespace rock {
 namespace {
 
 // クライアント領域（描画される中身）のサイズ。ウィンドウ枠は含まない。
@@ -35,36 +35,36 @@ constexpr uint32_t kInitialHeight = 1080;
 // ホットリロードの走査間隔（フレーム数）。毎フレーム走査するほどの頻度は要らない。
 constexpr uint32_t kHotReloadIntervalFrames = 30;
 
-#if defined(TG_DEBUG)
+#if defined(ROCK_DEBUG)
 constexpr bool kEnableDebugLayer = true;
 #else
 constexpr bool kEnableDebugLayer = false;
 #endif
 
-// シェーダの探索先。環境変数 TG_SHADER_DIR で差し替えられるようにしておく。
+// シェーダの探索先。環境変数 ROCK_SHADER_DIR で差し替えられるようにしておく。
 std::filesystem::path ResolveShaderRoot() {
-    const DWORD needed = ::GetEnvironmentVariableW(L"TG_SHADER_DIR", nullptr, 0);
+    const DWORD needed = ::GetEnvironmentVariableW(L"ROCK_SHADER_DIR", nullptr, 0);
     if (needed > 0) {
         std::wstring value;
         value.resize(needed);
-        const DWORD written = ::GetEnvironmentVariableW(L"TG_SHADER_DIR", value.data(), needed);
+        const DWORD written = ::GetEnvironmentVariableW(L"ROCK_SHADER_DIR", value.data(), needed);
         if (written > 0) {
             value.resize(written);
             return std::filesystem::path(value);
         }
     }
-    return std::filesystem::path(TG_SHADER_DIR);
+    return std::filesystem::path(ROCK_SHADER_DIR);
 }
 
-// スクリーンショットの置き場所。環境変数 TG_DATA_DIR で差し替えられる。
+// スクリーンショットの置き場所。環境変数 ROCK_DATA_DIR で差し替えられる。
 // data/ は .gitignore で外してあるので、撮ったものがリポジトリに混ざらない。
 std::filesystem::path ResolveScreenshotDirectory() {
-    std::filesystem::path dataDir(TG_DATA_DIR);
-    const DWORD needed = ::GetEnvironmentVariableW(L"TG_DATA_DIR", nullptr, 0);
+    std::filesystem::path dataDir(ROCK_DATA_DIR);
+    const DWORD needed = ::GetEnvironmentVariableW(L"ROCK_DATA_DIR", nullptr, 0);
     if (needed > 0) {
         std::wstring value;
         value.resize(needed);
-        const DWORD written = ::GetEnvironmentVariableW(L"TG_DATA_DIR", value.data(), needed);
+        const DWORD written = ::GetEnvironmentVariableW(L"ROCK_DATA_DIR", value.data(), needed);
         if (written > 0) {
             value.resize(written);
             dataDir = std::filesystem::path(value);
@@ -93,7 +93,7 @@ bool Application::Initialize(const StartupOptions& options) {
     m_comInitialized =
         SUCCEEDED(::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE));
     if (!m_comInitialized) {
-        TG_LOG_WARN("COM を初期化できませんでした。ファイル選択ダイアログは使えません");
+        ROCK_LOG_WARN("COM を初期化できませんでした。ファイル選択ダイアログは使えません");
     }
 
     // ウィンドウ生成より前に済ませる必要がある。
@@ -160,7 +160,7 @@ bool Application::Initialize(const StartupOptions& options) {
         }
         if (root.empty()) root = ResolveScreenshotDirectory().parent_path();
         if (!m_workspace.Open(root)) {
-            TG_LOG_ERROR("プロジェクトのルートフォルダを開けません: %s", ToUtf8Display(root).c_str());
+            ROCK_LOG_ERROR("プロジェクトのルートフォルダを開けません: %s", ToUtf8Display(root).c_str());
             return false;
         }
         m_assetDirectory = m_workspace.Root();
@@ -213,7 +213,7 @@ bool Application::Initialize(const StartupOptions& options) {
     // アンドゥの起点。ここを取り忘れると、最初の 1 回が空の文書へ戻ってしまう。
     m_committed = CaptureDocument();
 
-    TG_LOG_INFO("rock-editor %s を起動しました", TG_APP_VERSION);
+    ROCK_LOG_INFO("rock-editor %s を起動しました", ROCK_APP_VERSION);
     return true;
 }
 
@@ -252,7 +252,7 @@ void Application::RequestScreenshot() {
     std::error_code error;
     std::filesystem::create_directories(directory, error);
     if (error) {
-        TG_LOG_ERROR("スクリーンショットの保存先を作れませんでした: %s",
+        ROCK_LOG_ERROR("スクリーンショットの保存先を作れませんでした: %s",
                      ToUtf8Display(directory).c_str());
         m_toasts.Push("スクリーンショットを保存できませんでした", "保存先を作れません");
         return;
@@ -271,7 +271,7 @@ void Application::RequestScreenshot() {
             std::snprintf(detail, sizeof(detail), "%u x %u  %s", width, height,
                           ToUtf8Display(saved.filename()).c_str());
             m_toasts.Push("スクリーンショットを保存しました", detail, saved);
-            TG_LOG_INFO("スクリーンショットを保存しました: %s", ToUtf8Display(saved).c_str());
+            ROCK_LOG_INFO("スクリーンショットを保存しました: %s", ToUtf8Display(saved).c_str());
         });
 }
 
@@ -286,7 +286,7 @@ void Application::PollShaderHotReload() {
         return;
     }
 
-    TG_LOG_INFO("シェーダの更新を検出しました。PSO を作り直します");
+    ROCK_LOG_INFO("シェーダの更新を検出しました。PSO を作り直します");
     // PSO は GPU が参照中の可能性があるため、破棄前に必ず待つ。
     m_device.WaitForGpu();
     m_pipelineCache.InvalidateAll();
@@ -343,7 +343,7 @@ int Application::Run() {
         if (!m_options.saveProjectPath.empty() && m_frameCounter >= m_options.screenshotFrame) {
             const io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                                        m_renderer, m_graph, &m_models};
-            const bool scene = _wcsicmp(m_options.saveProjectPath.extension().c_str(), L".tgscene") == 0;
+            const bool scene = _wcsicmp(m_options.saveProjectPath.extension().c_str(), L".rockscene") == 0;
             if (io::SaveProject(m_options.saveProjectPath, refs, scene ? &m_workspace : nullptr) && scene) {
                 SaveSceneThumbnail(m_options.saveProjectPath);
             }
@@ -426,7 +426,7 @@ int Application::Run() {
         m_imgui.BeginFrame(testDrag ? &testInput : nullptr);
         DrawUi();
         if (testDrag && m_frameCounter == 18) {
-            TG_LOG_INFO("SelectionTest: meshes=%zu dirty=%d",
+            ROCK_LOG_INFO("SelectionTest: meshes=%zu dirty=%d",
                         m_meshHighlight.selected.size(), m_documentDirty ? 1 : 0);
         }
 
@@ -496,7 +496,7 @@ int Application::Run() {
         // 最初のフレームをバックバッファへ出してから窓を見せる。
         // 初期化中（シェーダのコンパイルなど）の白い窓を出さないため。
         if (!m_window.IsShown()) {
-            TG_LOG_INFO("最初のフレームまで %.0f ms", ElapsedSinceStartMs());
+            ROCK_LOG_INFO("最初のフレームまで %.0f ms", ElapsedSinceStartMs());
             m_window.Show();
         }
 
@@ -582,7 +582,7 @@ void Application::DrawUi() {
     // ドックスペースの ID には版を付ける。**パネルを増減したら版を上げること。**
     // ID が変われば ini に配置が無い状態になり、既定レイアウトが組み直される。
     // 上げないと、新しいパネルがどこにも入らず浮いたままになる。
-    const ImGuiID dockspaceId = ImGui::GetID("TerrainGraphDockSpace_v18");
+    const ImGuiID dockspaceId = ImGui::GetID("RockEditorDockSpace_v18");
 
     // ステータスバーもメニューバーと同じく、先に作って作業領域を狭めておく。
     DrawStatusBar();
@@ -980,7 +980,7 @@ void Application::DrawInfoWindow() {
         ui::PropertyValue("ノード", "%zu", m_graph.Nodes().size());
         ui::PropertyValue("マテリアル", "%zu", m_materialLibrary.Entries().size());
         ui::PropertyValue("テクスチャ", "%zu", m_textureLibrary.Entries().size());
-        ui::PropertyValue("バージョン", "%s", TG_APP_VERSION);
+        ui::PropertyValue("バージョン", "%s", ROCK_APP_VERSION);
         ui::PropertyValue("フレーム", "%.1f FPS (%.3f ms)", io.Framerate,
                           1000.0f / io.Framerate);
         ui::PropertyValue("バックバッファ", "%u x %u", m_device.Width(), m_device.Height());
@@ -1010,4 +1010,4 @@ void Application::DrawInfoWindow() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

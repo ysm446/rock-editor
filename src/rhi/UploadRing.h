@@ -2,7 +2,7 @@
 
 #include "rhi/GpuResource.h"
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 // アップロードリングから切り出した領域。
 struct UploadAllocation {
@@ -42,4 +42,4 @@ private:
     bool m_overflowReported = false;
 };
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

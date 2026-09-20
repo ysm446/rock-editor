@@ -1,6 +1,6 @@
 // 地面反射（下半球が「地面反射」のとき）の輝度。惑星の地表を Lambert 面として、
 // 空の照度と大気を通った太陽の直射で照らした輝度を 1 画素に書く。
-// terrain-graph の AtmosphereCloudLighting.hlsl から、雲の高さでの平均輝度と月を除いたもの。
+// rock-editor の AtmosphereCloudLighting.hlsl から、雲の高さでの平均輝度と月を除いたもの。
 #include "AtmosphereCommon.hlsli"
 cbuffer Constants : register(b1) {
     AtmosphericParameters settings;

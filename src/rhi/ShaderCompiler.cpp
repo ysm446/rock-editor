@@ -7,7 +7,7 @@
 #include <fstream>
 #include <vector>
 
-namespace tg::rhi {
+namespace rock::rhi {
 namespace {
 
 bool IsShaderFile(const std::filesystem::path& path) {
@@ -69,17 +69,17 @@ bool ShaderCompiler::Create(const std::filesystem::path& shaderRoot) {
 
     std::error_code ec;
     if (!std::filesystem::is_directory(m_root, ec)) {
-        TG_LOG_ERROR("シェーダディレクトリが見つかりません: %ls", m_root.c_str());
+        ROCK_LOG_ERROR("シェーダディレクトリが見つかりません: %ls", m_root.c_str());
         return false;
     }
 
-    if (!TG_CHECK_HR(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&m_utils)))) {
+    if (!ROCK_CHECK_HR(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&m_utils)))) {
         return false;
     }
-    if (!TG_CHECK_HR(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&m_compiler)))) {
+    if (!ROCK_CHECK_HR(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&m_compiler)))) {
         return false;
     }
-    if (!TG_CHECK_HR(m_utils->CreateDefaultIncludeHandler(&m_includeHandler))) {
+    if (!ROCK_CHECK_HR(m_utils->CreateDefaultIncludeHandler(&m_includeHandler))) {
         return false;
     }
 
@@ -96,7 +96,7 @@ bool ShaderCompiler::Create(const std::filesystem::path& shaderRoot) {
     }
     m_includeDigestValid = false;
 
-    TG_LOG_INFO("シェーダディレクトリ: %ls", m_root.c_str());
+    ROCK_LOG_INFO("シェーダディレクトリ: %ls", m_root.c_str());
     return true;
 }
 
@@ -108,12 +108,12 @@ void ShaderCompiler::SetCacheDirectory(const std::filesystem::path& directory) {
     std::error_code ec;
     std::filesystem::create_directories(m_cacheDirectory, ec);
     if (ec) {
-        TG_LOG_WARN("シェーダキャッシュのフォルダを作れません: %ls。毎回コンパイルします",
+        ROCK_LOG_WARN("シェーダキャッシュのフォルダを作れません: %ls。毎回コンパイルします",
                     m_cacheDirectory.c_str());
         m_cacheDirectory.clear();
         return;
     }
-    TG_LOG_INFO("シェーダキャッシュ: %ls", m_cacheDirectory.c_str());
+    ROCK_LOG_INFO("シェーダキャッシュ: %ls", m_cacheDirectory.c_str());
 }
 
 uint64_t ShaderCompiler::IncludeDigest() {
@@ -170,7 +170,7 @@ void ShaderCompiler::StoreCachedBlob(const std::filesystem::path& path, IDxcBlob
         if (!stream.is_open() ||
             !stream.write(static_cast<const char*>(blob->GetBufferPointer()),
                           static_cast<std::streamsize>(blob->GetBufferSize()))) {
-            TG_LOG_WARN("シェーダキャッシュを書けません: %ls", path.c_str());
+            ROCK_LOG_WARN("シェーダキャッシュを書けません: %ls", path.c_str());
             return;
         }
     }
@@ -202,8 +202,8 @@ ComPtr<IDxcBlob> ShaderCompiler::Compile(const std::wstring& relativePath,
     const std::wstring fullPathStr = fullPath.wstring();
 
     ComPtr<IDxcBlobEncoding> sourceBlob;
-    if (!TG_CHECK_HR(m_utils->LoadFile(fullPathStr.c_str(), nullptr, &sourceBlob))) {
-        TG_LOG_ERROR("シェーダを読み込めません: %ls", fullPathStr.c_str());
+    if (!ROCK_CHECK_HR(m_utils->LoadFile(fullPathStr.c_str(), nullptr, &sourceBlob))) {
+        ROCK_LOG_ERROR("シェーダを読み込めません: %ls", fullPathStr.c_str());
         return result;
     }
 
@@ -220,7 +220,7 @@ ComPtr<IDxcBlob> ShaderCompiler::Compile(const std::wstring& relativePath,
         L"-HV", L"2021",
         L"-enable-16bit-types",
     };
-#if defined(TG_DEBUG)
+#if defined(ROCK_DEBUG)
     extraArgs.push_back(L"-Zi");
     extraArgs.push_back(L"-Qembed_debug");
     extraArgs.push_back(L"-Od");
@@ -256,7 +256,7 @@ ComPtr<IDxcBlob> ShaderCompiler::Compile(const std::wstring& relativePath,
     }
 
     ComPtr<IDxcCompilerArgs> args;
-    if (!TG_CHECK_HR(m_utils->BuildArguments(relativePath.c_str(), entryPoint, targetProfile,
+    if (!ROCK_CHECK_HR(m_utils->BuildArguments(relativePath.c_str(), entryPoint, targetProfile,
                                              extraArgs.data(),
                                              static_cast<UINT32>(extraArgs.size()), nullptr, 0,
                                              &args))) {
@@ -264,7 +264,7 @@ ComPtr<IDxcBlob> ShaderCompiler::Compile(const std::wstring& relativePath,
     }
 
     ComPtr<IDxcResult> compileResult;
-    if (!TG_CHECK_HR(m_compiler->Compile(&source, args->GetArguments(), args->GetCount(),
+    if (!ROCK_CHECK_HR(m_compiler->Compile(&source, args->GetArguments(), args->GetCount(),
                                          m_includeHandler.Get(),
                                          IID_PPV_ARGS(&compileResult)))) {
         return result;
@@ -273,22 +273,22 @@ ComPtr<IDxcBlob> ShaderCompiler::Compile(const std::wstring& relativePath,
     ComPtr<IDxcBlobUtf8> errors;
     if (SUCCEEDED(compileResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr)) &&
         errors && errors->GetStringLength() > 0) {
-        TG_LOG_WARN("%ls %ls:\n%s", relativePath.c_str(), entryPoint, errors->GetStringPointer());
+        ROCK_LOG_WARN("%ls %ls:\n%s", relativePath.c_str(), entryPoint, errors->GetStringPointer());
     }
 
     HRESULT status = S_OK;
     compileResult->GetStatus(&status);
     if (FAILED(status)) {
-        TG_LOG_ERROR("シェーダのコンパイルに失敗しました: %ls %ls", relativePath.c_str(),
+        ROCK_LOG_ERROR("シェーダのコンパイルに失敗しました: %ls %ls", relativePath.c_str(),
                      entryPoint);
         return result;
     }
 
-    if (!TG_CHECK_HR(compileResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&result), nullptr))) {
+    if (!ROCK_CHECK_HR(compileResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&result), nullptr))) {
         return ComPtr<IDxcBlob>();
     }
 
-    TG_LOG_INFO("シェーダをコンパイルしました: %ls %ls (%ls)", relativePath.c_str(), entryPoint,
+    ROCK_LOG_INFO("シェーダをコンパイルしました: %ls %ls (%ls)", relativePath.c_str(), entryPoint,
                 targetProfile);
     if (!cachePath.empty()) {
         StoreCachedBlob(cachePath, result.Get());
@@ -346,4 +346,4 @@ bool ShaderCompiler::PollChanges() {
     return changed;
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // シーンへ置いたモデル 1 つぶん。ワールド行列と、ノードに足す回転（Model ノードの設定。無ければ読んだままの姿勢）。
 struct ModelInstanceDraw {
@@ -23,7 +23,7 @@ struct ModelInstanceDraw {
 };
 
 // モデル 1 つを回せるカメラで描く（モデルプレビューの窓と、アセットの帯のサムネイル）。
-// terrain-graph の ModelPreview から、配置（インスタンス描画）と大気を外したもの。
+// rock-editor の ModelPreview から、配置（インスタンス描画）と大気を外したもの。
 //
 // **照らし方はビューポートに合わせる**（適用中の天球の IBL + 太陽 + 露出 + トーンマップ）。
 // マテリアルの合成モードも見る。マスク抜きはしきい値でくり抜き、半透明は不透明の後に重ねる。
@@ -71,4 +71,4 @@ private:
     Camera m_camera;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

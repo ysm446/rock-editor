@@ -6,7 +6,7 @@
 #include <functional>
 #include <unordered_set>
 
-namespace tg::io {
+namespace rock::io {
 namespace fs = std::filesystem;
 namespace {
 
@@ -24,13 +24,13 @@ fs::path SceneThumbnailPath(const ProjectWorkspace& workspace, const fs::path& s
     const auto key = uid.empty()
         ? "legacy-" + std::to_string(Hash(ToUtf8Portable(scene.lexically_relative(workspace.Root()))))
         : "scene-" + std::to_string(Hash(uid));
-    const auto target = workspace.Root() / L".terrain-graph" / L"scene-thumbnails" / FromUtf8(key + ".png");
+    const auto target = workspace.Root() / L".rock-editor" / L"scene-thumbnails" / FromUtf8(key + ".png");
     return workspace.Contains(target) ? target : fs::path{};
 }
 
 ThumbnailRecord AssetThumbnailRecord(ProjectWorkspace& workspace, const fs::path& path) {
     const auto relative = ToUtf8Portable(path.lexically_relative(workspace.Root()));
-    const auto directory = workspace.Root() / L".terrain-graph" / L"thumbnails";
+    const auto directory = workspace.Root() / L".rock-editor" / L"thumbnails";
     const auto key = std::to_wstring(Hash(relative));
     // 形式・描画条件の変更時に版を上げて古いキャッシュを無効化する。
     uint64_t stamp = Hash("thumbnail-v1");
@@ -46,7 +46,7 @@ ThumbnailRecord AssetThumbnailRecord(ProjectWorkspace& workspace, const fs::path
         const auto size = fs::file_size(file, error);
         if (!error) stamp = Hash(std::to_string(size), stamp);
         const auto extension = file.extension().wstring();
-        if (_wcsicmp(extension.c_str(), L".tgmat") && _wcsicmp(extension.c_str(), L".tgsky") &&
+        if (_wcsicmp(extension.c_str(), L".rockmat") && _wcsicmp(extension.c_str(), L".rocksky") &&
             _wcsicmp(extension.c_str(), L".tglayer") && _wcsicmp(extension.c_str(), L".tgboundary")) return;
         nlohmann::json document;
         if (!ProjectWorkspace::ReadJson(file, document)) return;
@@ -84,4 +84,4 @@ bool CommitThumbnail(const ThumbnailRecord& record) {
     return ProjectWorkspace::WriteJson(record.metadata, {{"stamp", record.stamp}});
 }
 
-}  // namespace tg::io
+}  // namespace rock::io

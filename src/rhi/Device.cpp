@@ -11,7 +11,7 @@
 
 #include <utility>
 
-namespace tg::rhi {
+namespace rock::rhi {
 namespace {
 
 // **シェーダから触るものは全部ここへ並ぶ**（読み込んだ素材、合成の中間テクスチャ、
@@ -183,20 +183,20 @@ bool Device::CreateFactoryAndDevice(bool enableDebugLayer) {
         ComPtr<ID3D12Debug> debug;
         if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug)))) {
             debug->EnableDebugLayer();
-            TG_LOG_INFO("D3D12 デバッグレイヤーを有効化しました");
+            ROCK_LOG_INFO("D3D12 デバッグレイヤーを有効化しました");
 
             ComPtr<ID3D12Debug1> debug1;
             if (SUCCEEDED(debug.As(&debug1))) {
                 debug1->SetEnableGPUBasedValidation(TRUE);
-                TG_LOG_INFO("GPU ベースバリデーションを有効化しました");
+                ROCK_LOG_INFO("GPU ベースバリデーションを有効化しました");
             }
             factoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
         } else {
-            TG_LOG_WARN("D3D12 デバッグレイヤーを取得できませんでした（Graphics Tools 未導入の可能性）");
+            ROCK_LOG_WARN("D3D12 デバッグレイヤーを取得できませんでした（Graphics Tools 未導入の可能性）");
         }
     }
 
-    if (!TG_CHECK_HR(CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(&m_factory)))) {
+    if (!ROCK_CHECK_HR(CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(&m_factory)))) {
         return false;
     }
 
@@ -223,14 +223,14 @@ bool Device::CreateFactoryAndDevice(bool enableDebugLayer) {
         if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0,
                                         IID_PPV_ARGS(&m_device)))) {
             m_adapter = adapter;
-            TG_LOG_INFO("アダプタ: %ls (VRAM %llu MB)", desc.Description,
+            ROCK_LOG_INFO("アダプタ: %ls (VRAM %llu MB)", desc.Description,
                         static_cast<unsigned long long>(desc.DedicatedVideoMemory / (1024 * 1024)));
             break;
         }
     }
 
     if (!m_device) {
-        TG_LOG_ERROR("D3D12 デバイスを作成できるアダプタが見つかりませんでした");
+        ROCK_LOG_ERROR("D3D12 デバイスを作成できるアダプタが見つかりませんでした");
         return false;
     }
 
@@ -239,7 +239,7 @@ bool Device::CreateFactoryAndDevice(bool enableDebugLayer) {
     if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel,
                                              sizeof(shaderModel))) ||
         shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_6) {
-        TG_LOG_ERROR("シェーダモデル 6.6 に対応していません");
+        ROCK_LOG_ERROR("シェーダモデル 6.6 に対応していません");
         return false;
     }
 
@@ -248,14 +248,14 @@ bool Device::CreateFactoryAndDevice(bool enableDebugLayer) {
     if (FAILED(m_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options,
                                              sizeof(options))) ||
         options.ResourceBindingTier < D3D12_RESOURCE_BINDING_TIER_3) {
-        TG_LOG_ERROR("Resource Binding Tier 3 に対応していません（bindless に必要）");
+        ROCK_LOG_ERROR("Resource Binding Tier 3 に対応していません（bindless に必要）");
         return false;
     }
 
     // 合成パスは R11G11B10F / RG16F / RGBA8 / R8 の UAV を読み書きする。
     // 無条件で保証される typed UAV load は R32 系のみなので、追加フォーマット対応を必須とする。
     if (!options.TypedUAVLoadAdditionalFormats) {
-        TG_LOG_ERROR("Typed UAV Load の追加フォーマットに対応していません（合成パスに必要）");
+        ROCK_LOG_ERROR("Typed UAV Load の追加フォーマットに対応していません（合成パスに必要）");
         return false;
     }
 
@@ -297,10 +297,10 @@ void Device::DrainDebugMessages() {
         switch (message->Severity) {
             case D3D12_MESSAGE_SEVERITY_CORRUPTION:
             case D3D12_MESSAGE_SEVERITY_ERROR:
-                TG_LOG_ERROR("D3D12: %s", message->pDescription);
+                ROCK_LOG_ERROR("D3D12: %s", message->pDescription);
                 break;
             case D3D12_MESSAGE_SEVERITY_WARNING:
-                TG_LOG_WARN("D3D12: %s", message->pDescription);
+                ROCK_LOG_WARN("D3D12: %s", message->pDescription);
                 break;
             default:
                 // INFO と MESSAGE は数が多く、内容も定型なので出さない。
@@ -314,48 +314,48 @@ bool Device::CreateCommandObjects() {
     D3D12_COMMAND_QUEUE_DESC queueDesc = {};
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    if (!TG_CHECK_HR(m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue)))) {
+    if (!ROCK_CHECK_HR(m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue)))) {
         return false;
     }
     m_commandQueue->SetName(L"MainDirectQueue");
 
     for (uint32_t i = 0; i < kFrameCount; ++i) {
-        if (!TG_CHECK_HR(m_device->CreateCommandAllocator(
+        if (!ROCK_CHECK_HR(m_device->CreateCommandAllocator(
                 D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocators[i])))) {
             return false;
         }
     }
 
-    if (!TG_CHECK_HR(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+    if (!ROCK_CHECK_HR(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                  m_commandAllocators[0].Get(), nullptr,
                                                  IID_PPV_ARGS(&m_commandList)))) {
         return false;
     }
     // 作成直後は開いた状態なので閉じておく。
-    if (!TG_CHECK_HR(m_commandList->Close())) {
+    if (!ROCK_CHECK_HR(m_commandList->Close())) {
         return false;
     }
 
-    if (!TG_CHECK_HR(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+    if (!ROCK_CHECK_HR(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                       IID_PPV_ARGS(&m_immediateAllocator)))) {
         return false;
     }
-    if (!TG_CHECK_HR(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+    if (!ROCK_CHECK_HR(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                  m_immediateAllocator.Get(), nullptr,
                                                  IID_PPV_ARGS(&m_immediateCommandList)))) {
         return false;
     }
-    if (!TG_CHECK_HR(m_immediateCommandList->Close())) {
+    if (!ROCK_CHECK_HR(m_immediateCommandList->Close())) {
         return false;
     }
 
-    if (!TG_CHECK_HR(m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)))) {
+    if (!ROCK_CHECK_HR(m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)))) {
         return false;
     }
 
     m_fenceEvent = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (m_fenceEvent == nullptr) {
-        TG_LOG_ERROR("フェンス用イベントの作成に失敗しました");
+        ROCK_LOG_ERROR("フェンス用イベントの作成に失敗しました");
         return false;
     }
     return true;
@@ -374,15 +374,15 @@ bool Device::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height) {
     desc.Flags = m_allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
 
     ComPtr<IDXGISwapChain1> swapChain1;
-    if (!TG_CHECK_HR(m_factory->CreateSwapChainForHwnd(m_commandQueue.Get(), hwnd, &desc, nullptr,
+    if (!ROCK_CHECK_HR(m_factory->CreateSwapChainForHwnd(m_commandQueue.Get(), hwnd, &desc, nullptr,
                                                        nullptr, &swapChain1))) {
         return false;
     }
     // Alt+Enter による自動フルスクリーン切り替えは使わない。
-    if (!TG_CHECK_HR(m_factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER))) {
+    if (!ROCK_CHECK_HR(m_factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER))) {
         return false;
     }
-    if (!TG_CHECK_HR(swapChain1.As(&m_swapChain))) {
+    if (!ROCK_CHECK_HR(swapChain1.As(&m_swapChain))) {
         return false;
     }
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
@@ -391,7 +391,7 @@ bool Device::CreateSwapChain(HWND hwnd, uint32_t width, uint32_t height) {
 
 bool Device::CreateBackBufferViews() {
     for (uint32_t i = 0; i < kFrameCount; ++i) {
-        if (!TG_CHECK_HR(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i])))) {
+        if (!ROCK_CHECK_HR(m_swapChain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i])))) {
             return false;
         }
         wchar_t name[32] = {};
@@ -427,11 +427,11 @@ void Device::Resize(uint32_t width, uint32_t height) {
     ReleaseBackBuffers();
 
     const UINT flags = m_allowTearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
-    if (!TG_CHECK_HR(m_swapChain->ResizeBuffers(kFrameCount, width, height, kBackBufferFormat,
+    if (!ROCK_CHECK_HR(m_swapChain->ResizeBuffers(kFrameCount, width, height, kBackBufferFormat,
                                                 flags))) {
         // バックバッファは既に手放しているため、続行すると null 参照になる。
         // デバイスロスト相当として描画を止める。
-        TG_LOG_ERROR("スワップチェーンのリサイズに失敗しました。描画を停止します");
+        ROCK_LOG_ERROR("スワップチェーンのリサイズに失敗しました。描画を停止します");
         m_initialized = false;
         return;
     }
@@ -440,7 +440,7 @@ void Device::Resize(uint32_t width, uint32_t height) {
     m_height = height;
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
     if (!CreateBackBufferViews()) {
-        TG_LOG_ERROR("バックバッファビューの再作成に失敗しました。描画を停止します");
+        ROCK_LOG_ERROR("バックバッファビューの再作成に失敗しました。描画を停止します");
         m_initialized = false;
     }
 }
@@ -454,7 +454,7 @@ ID3D12GraphicsCommandList* Device::BeginFrame(const float clearColor[4]) {
     // m_fenceValues[i] == 0 は未使用スロットなので待たない。
     const uint64_t pending = m_fenceValues[m_frameIndex];
     if (pending != 0 && m_fence->GetCompletedValue() < pending) {
-        if (!TG_CHECK_HR(m_fence->SetEventOnCompletion(pending, m_fenceEvent))) {
+        if (!ROCK_CHECK_HR(m_fence->SetEventOnCompletion(pending, m_fenceEvent))) {
             return nullptr;
         }
         ::WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
@@ -464,10 +464,10 @@ ID3D12GraphicsCommandList* Device::BeginFrame(const float clearColor[4]) {
     m_deletionQueue.Collect(m_fence->GetCompletedValue());
     m_uploadRing.BeginFrame(m_frameIndex);
 
-    if (!TG_CHECK_HR(m_commandAllocators[m_frameIndex]->Reset())) {
+    if (!ROCK_CHECK_HR(m_commandAllocators[m_frameIndex]->Reset())) {
         return nullptr;
     }
-    if (!TG_CHECK_HR(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr))) {
+    if (!ROCK_CHECK_HR(m_commandList->Reset(m_commandAllocators[m_frameIndex].Get(), nullptr))) {
         return nullptr;
     }
 
@@ -548,7 +548,7 @@ void Device::EndFrame(bool vsync) {
 
     PIXEndEvent(m_commandList.Get());
 
-    if (!TG_CHECK_HR(m_commandList->Close())) {
+    if (!ROCK_CHECK_HR(m_commandList->Close())) {
         m_frameOpen = false;
         // このフレームは投入されない。キャプチャを抱えたままにすると、
         // 次フレームで未実行のリードバックを上書きしてゴミを保存してしまう。
@@ -564,12 +564,12 @@ void Device::EndFrame(bool vsync) {
     const HRESULT presentResult = m_swapChain->Present(syncInterval, presentFlags);
     if (presentResult == DXGI_ERROR_DEVICE_REMOVED || presentResult == DXGI_ERROR_DEVICE_RESET) {
         const HRESULT reason = m_device->GetDeviceRemovedReason();
-        TG_LOG_ERROR(
+        ROCK_LOG_ERROR(
             "デバイスロストを検出しました (Present=0x%08X, Reason=0x%08X)。描画を停止します",
             static_cast<unsigned int>(presentResult), static_cast<unsigned int>(reason));
         m_initialized = false;
     } else {
-        TG_CHECK_HR(presentResult);
+        ROCK_CHECK_HR(presentResult);
     }
 
     m_frameOpen = false;
@@ -582,14 +582,14 @@ void Device::EndFrame(bool vsync) {
         bool saved = false;
         void* mapped = nullptr;
         const D3D12_RANGE readRange = {0, static_cast<SIZE_T>(m_pendingCapture.sizeInBytes)};
-        if (TG_CHECK_HR(m_pendingCapture.resource->Map(0, &readRange, &mapped))) {
+        if (ROCK_CHECK_HR(m_pendingCapture.resource->Map(0, &readRange, &mapped))) {
             saved = SaveRgba8Png(
                 m_capturePath, m_width, m_height, m_pendingCaptureFootprint.Footprint.RowPitch,
                 static_cast<const uint8_t*>(mapped) + m_pendingCaptureFootprint.Offset);
             const D3D12_RANGE writtenRange = {0, 0};
             m_pendingCapture.resource->Unmap(0, &writtenRange);
             if (!saved) {
-                TG_LOG_ERROR("バックバッファの書き出しに失敗しました");
+                ROCK_LOG_ERROR("バックバッファの書き出しに失敗しました");
             }
         }
 
@@ -620,13 +620,13 @@ bool Device::ExecuteImmediate(const std::function<void(ID3D12GraphicsCommandList
     }
     if (m_frameOpen) {
         // 内部で WaitForGpu するため、フレーム記録中には使えない（WaitForGpu と同じ理由）。
-        TG_LOG_ERROR("BeginFrame と EndFrame の間で ExecuteImmediate が呼ばれました（無視します）");
+        ROCK_LOG_ERROR("BeginFrame と EndFrame の間で ExecuteImmediate が呼ばれました（無視します）");
         return false;
     }
-    if (!TG_CHECK_HR(m_immediateAllocator->Reset())) {
+    if (!ROCK_CHECK_HR(m_immediateAllocator->Reset())) {
         return false;
     }
-    if (!TG_CHECK_HR(m_immediateCommandList->Reset(m_immediateAllocator.Get(), nullptr))) {
+    if (!ROCK_CHECK_HR(m_immediateCommandList->Reset(m_immediateAllocator.Get(), nullptr))) {
         return false;
     }
 
@@ -635,7 +635,7 @@ bool Device::ExecuteImmediate(const std::function<void(ID3D12GraphicsCommandList
 
     record(m_immediateCommandList.Get());
 
-    if (!TG_CHECK_HR(m_immediateCommandList->Close())) {
+    if (!ROCK_CHECK_HR(m_immediateCommandList->Close())) {
         return false;
     }
     ID3D12CommandList* lists[] = {m_immediateCommandList.Get()};
@@ -646,10 +646,10 @@ bool Device::ExecuteImmediate(const std::function<void(ID3D12GraphicsCommandList
 
 void Device::MoveToNextFrame() {
     const uint64_t value = m_nextFenceValue++;
-    if (!TG_CHECK_HR(m_commandQueue->Signal(m_fence.Get(), value))) {
+    if (!ROCK_CHECK_HR(m_commandQueue->Signal(m_fence.Get(), value))) {
         // Signal に失敗するのは実質デバイスロスト時のみ。古いフェンス値のまま続けると、
         // GPU が実行中のアロケータを次の BeginFrame が Reset してしまうため止める。
-        TG_LOG_ERROR("フェンスの Signal に失敗しました。描画を停止します");
+        ROCK_LOG_ERROR("フェンスの Signal に失敗しました。描画を停止します");
         m_initialized = false;
         return;
     }
@@ -665,16 +665,16 @@ void Device::WaitForGpu() {
     if (m_frameOpen) {
         // フレーム記録中に待つと、記録中のコマンドが参照するオブジェクトの
         // フェンス値まで完了扱いになり、削除キューが早回収してしまう。
-        TG_LOG_ERROR("BeginFrame と EndFrame の間で WaitForGpu が呼ばれました（無視します）");
+        ROCK_LOG_ERROR("BeginFrame と EndFrame の間で WaitForGpu が呼ばれました（無視します）");
         return;
     }
 
     const uint64_t value = m_nextFenceValue++;
-    if (!TG_CHECK_HR(m_commandQueue->Signal(m_fence.Get(), value))) {
+    if (!ROCK_CHECK_HR(m_commandQueue->Signal(m_fence.Get(), value))) {
         return;
     }
     if (m_fence->GetCompletedValue() < value) {
-        if (!TG_CHECK_HR(m_fence->SetEventOnCompletion(value, m_fenceEvent))) {
+        if (!ROCK_CHECK_HR(m_fence->SetEventOnCompletion(value, m_fenceEvent))) {
             return;
         }
         ::WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
@@ -683,7 +683,7 @@ void Device::WaitForGpu() {
     // 補助フェンスの仕事（別キューの合成の評価）も終わるまで待つ。
     // 「GPU が止まった」と信じて消す側は、そちらが参照中かどうかを知らない。
     if (m_auxiliaryFence && m_auxiliaryFence->GetCompletedValue() < m_auxiliaryFenceValue) {
-        if (TG_CHECK_HR(m_auxiliaryFence->SetEventOnCompletion(m_auxiliaryFenceValue,
+        if (ROCK_CHECK_HR(m_auxiliaryFence->SetEventOnCompletion(m_auxiliaryFenceValue,
                                                                 m_fenceEvent))) {
             ::WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
         }
@@ -742,4 +742,4 @@ void Device::Shutdown() {
     m_factory.Reset();
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

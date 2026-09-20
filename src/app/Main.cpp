@@ -19,13 +19,13 @@ __declspec(dllexport) extern const char* D3D12SDKPath = ".\\D3D12\\";
 namespace {
 
 // 使い方:
-//   road_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
+//   rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
 //                       [--hdri <path>] [--texture <path>]...
 //                       [--screenshot <path>] [--screenshot-ui <path>]
 //                       [--screenshot-frame <n>] [--import-model <fbx>] [--open-asset <path>] [--place-model <path>] [--gizmo-rotate] [--gizmo-scale]
 //                       [--model-node-rotation <node> <x> <y> <z>] [--model-node-gizmo <node>] [--focus-panel <name>]
-tg::StartupOptions ParseCommandLine() {
-    tg::StartupOptions options;
+rock::StartupOptions ParseCommandLine() {
+    rock::StartupOptions options;
 
     int argc = 0;
     LPWSTR* argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
@@ -71,14 +71,14 @@ tg::StartupOptions ParseCommandLine() {
         } else if (argument == L"--gizmo-scale") {
             options.gizmoScale = true;
         } else if (argument == L"--model-node-rotation" && (i + 4) < argc) {
-            tg::renderer::ModelNodeRotation rotation;
-            rotation.node = tg::ToUtf8Display(std::filesystem::path(argv[++i]));
+            rock::renderer::ModelNodeRotation rotation;
+            rotation.node = rock::ToUtf8Display(std::filesystem::path(argv[++i]));
             for (float& degrees : rotation.rotationDegrees) degrees = static_cast<float>(::_wtof(argv[++i]));
             options.modelNodeRotations.push_back(std::move(rotation));
         } else if (argument == L"--focus-panel" && (i + 1) < argc) {
-            options.focusPanel = tg::ToUtf8Display(std::filesystem::path(argv[++i]));
+            options.focusPanel = rock::ToUtf8Display(std::filesystem::path(argv[++i]));
         } else if (argument == L"--model-node-gizmo" && (i + 1) < argc) {
-            options.modelNodeGizmo = tg::ToUtf8Display(std::filesystem::path(argv[++i]));
+            options.modelNodeGizmo = rock::ToUtf8Display(std::filesystem::path(argv[++i]));
         } else if (argument == L"--place-model" && (i + 1) < argc) {
             options.placeModel = argv[++i];
         } else if (argument == L"--open-asset" && (i + 1) < argc) {
@@ -102,7 +102,7 @@ tg::StartupOptions ParseCommandLine() {
             options.screenshotFrame = static_cast<uint32_t>(::_wtoi(argv[i + 1]));
             ++i;
         } else {
-            TG_LOG_WARN("不明な引数です: %ls", argument.c_str());
+            ROCK_LOG_WARN("不明な引数です: %ls", argument.c_str());
         }
     }
 
@@ -113,9 +113,9 @@ tg::StartupOptions ParseCommandLine() {
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    const tg::StartupOptions options = ParseCommandLine();
+    const rock::StartupOptions options = ParseCommandLine();
 
-    tg::Application app;
+    rock::Application app;
     if (!app.Initialize(options)) {
         app.Shutdown();
         return 1;

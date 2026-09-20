@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace tg::compositor {
+namespace rock::compositor {
 namespace {
 
 // 表示用テクスチャの一辺。一覧のサムネイル（72）だけでなく、
@@ -158,7 +158,7 @@ bool TextureLibrary::Relink(rhi::Device& device, rhi::PipelineCache& pipelineCac
     // 別の項目がすでに同じ画像を持っているなら、二重に持たない。
     // 参照の付け替えは呼び出し側の仕事（ここでは断るだけ）。
     if (const TextureId other = FindByPath(path); other != kNoTexture && other != id) {
-        TG_LOG_WARN("同じ画像はすでに読み込まれています: %s", ToUtf8Portable(path).c_str());
+        ROCK_LOG_WARN("同じ画像はすでに読み込まれています: %s", ToUtf8Portable(path).c_str());
         return false;
     }
 
@@ -166,7 +166,7 @@ bool TextureLibrary::Relink(rhi::Device& device, rhi::PipelineCache& pipelineCac
     // 失敗しても元の項目（リンク切れならそのまま）を壊さない。
     LibraryTexture loaded;
     if (!LoadInto(device, pipelineCache, path, loaded)) {
-        TG_LOG_WARN("テクスチャを読み込めませんでした: %s", ToUtf8Portable(path).c_str());
+        ROCK_LOG_WARN("テクスチャを読み込めませんでした: %s", ToUtf8Portable(path).c_str());
         return false;
     }
 
@@ -177,7 +177,7 @@ bool TextureLibrary::Relink(rhi::Device& device, rhi::PipelineCache& pipelineCac
     loaded.name = defaultName ? ToUtf8Display(path.filename()) : entry->name;
     loaded.missing = false;
     *entry = std::move(loaded);
-    TG_LOG_INFO("テクスチャを繋ぎ直しました: %s", ToUtf8Portable(path).c_str());
+    ROCK_LOG_INFO("テクスチャを繋ぎ直しました: %s", ToUtf8Portable(path).c_str());
     return true;
 }
 
@@ -305,7 +305,7 @@ bool TextureLibrary::LoadInto(rhi::Device& device, rhi::PipelineCache& pipelineC
 
     void* mapped = nullptr;
     const D3D12_RANGE readRange = {0, 0};
-    if (!TG_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
+    if (!ROCK_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
         device.DeferRelease(staging);
         return failCleanup();
     }
@@ -533,4 +533,4 @@ bool TextureLibrary::GenerateMips(rhi::Device& device, rhi::PipelineCache& pipel
     return executed;
 }
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

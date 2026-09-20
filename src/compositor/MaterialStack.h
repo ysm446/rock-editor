@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace tg::compositor {
+namespace rock::compositor {
 
 // レイヤーを下から上へ積んだもの。index 0 が一番下（下地）。
 // 道路の材質は Surface 1 枚なので、実際には 1 枚だけ入る。
@@ -51,4 +51,4 @@ private:
     uint64_t m_revision = 1;
 };
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

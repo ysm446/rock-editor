@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace tg::ui {
+namespace rock::ui {
 
 // 画面右下へ積み上げて出す通知。
 //
@@ -36,4 +36,4 @@ private:
     std::vector<Toast> m_toasts;
 };
 
-}  // namespace tg::ui
+}  // namespace rock::ui

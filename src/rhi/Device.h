@@ -9,7 +9,7 @@
 #include <filesystem>
 #include <functional>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 // DX12 のデバイス、キュー、スワップチェーン、フレーム同期をまとめて持つ。
 // 1 フレームは BeginFrame() / EndFrame() の対で表す。
@@ -173,4 +173,4 @@ private:
     bool m_initialized = false;
 };
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

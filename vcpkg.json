@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
-  "name": "road-editor",
+  "name": "rock-editor",
   "version": "0.1.0",
-  "description": "道路と道路付属物をノードグラフで構築するオーサリングツール",
+  "description": "岩をノードグラフで生成するプロシージャルオーサリングツール",
   "builtin-baseline": "b5d1a94fb7f88fd835e360fd23a45a09ceedbf48",
   "dependencies": [
     "directx-headers",

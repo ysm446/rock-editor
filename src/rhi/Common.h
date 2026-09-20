@@ -9,7 +9,7 @@
 
 #include <cstdint>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 template <typename T>
 using ComPtr = Microsoft::WRL::ComPtr<T>;
@@ -22,6 +22,6 @@ inline constexpr DXGI_FORMAT kBackBufferFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 // HRESULT を検査し、失敗ならログを出して false を返す。例外は投げない。
 bool CheckHr(HRESULT hr, const char* expr, const char* file, int line);
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi
 
-#define TG_CHECK_HR(expr) ::tg::rhi::CheckHr((expr), #expr, __FILE__, __LINE__)
+#define ROCK_CHECK_HR(expr) ::rock::rhi::CheckHr((expr), #expr, __FILE__, __LINE__)

@@ -2,9 +2,9 @@
 
 #include <filesystem>
 
-namespace tg::io {
+namespace rock::io {
 
-// アプリ側の状態を置くフォルダ（`%LOCALAPPDATA%/road-editor`）。
+// アプリ側の状態を置くフォルダ（`%LOCALAPPDATA%/rock-editor`）。
 // プロジェクトの中身ではないもの（設定、最近使ったファイル）はここへ置く。
 // 環境変数が引けないときは作業ディレクトリを返す。
 std::filesystem::path AppDataDirectory();
@@ -76,4 +76,4 @@ private:
     DisplaySettings m_display;
 };
 
-}  // namespace tg::io
+}  // namespace rock::io

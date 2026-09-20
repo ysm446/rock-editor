@@ -4,7 +4,7 @@
 #include "rhi/GpuResource.h"
 #include "rhi/UploadRing.h"
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 class Device;
 
@@ -68,4 +68,4 @@ private:
     bool m_uploadExhausted = false;
 };
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 using SkyAssetId = uint32_t;
 inline constexpr SkyAssetId kNoSkyAsset = 0;
@@ -43,7 +43,7 @@ bool NeedsLuminanceRebuild(const SkyDefinition& before, const SkyDefinition& aft
 // 天球 1 つぶん。マテリアルと同じく、名前とサムネイルを持つアセット。
 struct SkyAsset {
     SkyAssetId id = kNoSkyAsset;
-    // 共有アセットの置き場所と永続 ID（`.tgsky`）。未保存なら空。
+    // 共有アセットの置き場所と永続 ID（`.rocksky`）。未保存なら空。
     std::filesystem::path assetPath;
     std::string assetUid;
     std::string name;
@@ -97,4 +97,4 @@ private:
     SkyAssetId m_activeId = kNoSkyAsset;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

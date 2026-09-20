@@ -9,7 +9,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 // DXC を使った HLSL のランタイムコンパイラ。
 // シェーダはソースツリーの shaders/ を直接参照し、更新を検出して再コンパイルできる。
@@ -61,4 +61,4 @@ private:
     std::wstring m_compilerVersion;
 };
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

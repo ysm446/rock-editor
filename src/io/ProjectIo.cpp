@@ -20,14 +20,14 @@
 #include <unordered_set>
 #include <vector>
 
-namespace tg::io {
+namespace rock::io {
 namespace {
 
 namespace fs = std::filesystem;
 using nlohmann::json;
 
-constexpr const char* kProjectFormat = "terrain-graph.project";
-constexpr const char* kMaterialFormat = "terrain-graph.material";
+constexpr const char* kProjectFormat = "rock-editor.project";
+constexpr const char* kMaterialFormat = "rock-editor.material";
 // 形式を変えたら上げる。読み込み側は「これ以下なら読める」として扱う。
 //
 // 2: ハイトに gain を追加し、base の意味を変えた（h = base + (src - 0.5) * gain）。
@@ -53,7 +53,7 @@ constexpr const char* kMaterialFormat = "terrain-graph.material";
 // 27: モデル（models）。旧ビルドが読み飛ばして保存し直し、モデルとスロットの割り当てを失うことを防ぐ。
 // 28: model / transform ノードと、道路・モデルの両方を受ける Merge / Mesh Output。旧ビルドが接続を失うことを防ぐ。
 constexpr int kProjectFormatVersion = 28;
-// マテリアル単体 (.tgmat) の版。中身は変わっていないので 3 のまま。
+// マテリアル単体 (.rockmat) の版。中身は変わっていないので 3 のまま。
 constexpr int kMaterialFormatVersion = 3;
 
 // --- 文字列とパス ---------------------------------------------------------
@@ -252,7 +252,7 @@ compositor::NoiseParams ReadNoise(const json& node, const char* key,
 
 // --- マテリアル -----------------------------------------------------------
 //
-// プロジェクトへの埋め込みと .tgmat で同じ形を使う。違うのはテクスチャ参照の書き方だけ。
+// プロジェクトへの埋め込みと .rockmat で同じ形を使う。違うのはテクスチャ参照の書き方だけ。
 
 // compositor::MaterialMap の並び。maps のキーと同じ名前。
 const char* const kMaterialMapNames[] = {"baseColor", "normal", "roughness", "metallic",
@@ -1036,7 +1036,7 @@ bool WriteJsonFile(const fs::path& path, const json& document) {
     {
         std::ofstream stream(tempPath, std::ios::binary | std::ios::trunc);
         if (!stream.is_open()) {
-            TG_LOG_ERROR("ファイルを開けませんでした: %s", ToUtf8Portable(tempPath).c_str());
+            ROCK_LOG_ERROR("ファイルを開けませんでした: %s", ToUtf8Portable(tempPath).c_str());
             return false;
         }
         // 人が読める形で書く。差分も取りやすい。壊れた文字列が混ざっていても
@@ -1045,7 +1045,7 @@ bool WriteJsonFile(const fs::path& path, const json& document) {
         // バッファの最終書き込み・closeの失敗も、元ファイルの差し替え前に検出する。
         stream.close();
         if (!stream.good()) {
-            TG_LOG_ERROR("ファイルの書き込みに失敗しました: %s", ToUtf8Portable(tempPath).c_str());
+            ROCK_LOG_ERROR("ファイルの書き込みに失敗しました: %s", ToUtf8Portable(tempPath).c_str());
             return false;
         }
     }
@@ -1053,7 +1053,7 @@ bool WriteJsonFile(const fs::path& path, const json& document) {
     std::error_code renameError;
     fs::rename(tempPath, path, renameError);
     if (renameError) {
-        TG_LOG_ERROR("ファイルを差し替えられませんでした: %s", ToUtf8Portable(path).c_str());
+        ROCK_LOG_ERROR("ファイルを差し替えられませんでした: %s", ToUtf8Portable(path).c_str());
         std::error_code removeError;
         fs::remove(tempPath, removeError);
         return false;
@@ -1065,14 +1065,14 @@ bool ReadJsonFile(const fs::path& path, const char* expectedFormat, int maxVersi
                   json& outDocument) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream.is_open()) {
-        TG_LOG_ERROR("ファイルを開けませんでした: %s", ToUtf8Portable(path).c_str());
+        ROCK_LOG_ERROR("ファイルを開けませんでした: %s", ToUtf8Portable(path).c_str());
         return false;
     }
 
     // 例外は使わない方針なので、パース失敗は discarded で受ける。
     outDocument = json::parse(stream, nullptr, false);
     if (outDocument.is_discarded() || !outDocument.is_object()) {
-        TG_LOG_ERROR("JSON として読めませんでした: %s", ToUtf8Portable(path).c_str());
+        ROCK_LOG_ERROR("JSON として読めませんでした: %s", ToUtf8Portable(path).c_str());
         return false;
     }
 
@@ -1080,16 +1080,16 @@ bool ReadJsonFile(const fs::path& path, const char* expectedFormat, int maxVersi
     // 中身は同じなので、旧形式名は新形式名へ読み替えて受け付ける（書くのは新形式名のみ）。
     std::string format = ReadString(outDocument, "format");
     if (format.rfind("material-mixer.", 0) == 0) {
-        format = "terrain-graph." + format.substr(std::string("material-mixer.").size());
+        format = "rock-editor." + format.substr(std::string("material-mixer.").size());
     }
     if (format != expectedFormat) {
-        TG_LOG_ERROR("形式が違います（%s ではなく %s）: %s", expectedFormat, format.c_str(),
+        ROCK_LOG_ERROR("形式が違います（%s ではなく %s）: %s", expectedFormat, format.c_str(),
                      ToUtf8Portable(path).c_str());
         return false;
     }
     const int version = ReadInt(outDocument, "version", 0);
     if (version > maxVersion) {
-        TG_LOG_ERROR("このバージョンでは読めません（ファイル %d > 対応 %d）: %s", version,
+        ROCK_LOG_ERROR("このバージョンでは読めません（ファイル %d > 対応 %d）: %s", version,
                      maxVersion, ToUtf8Portable(path).c_str());
         return false;
     }
@@ -1110,13 +1110,13 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
     // シーンとして保存するときは、先に共有アセットを各ファイルへ書く。
     // ここで失敗したら文書には触らない（片方だけ新しい状態を作らない）。
     if (workspace != nullptr) {
-        if (_wcsicmp(savePath.extension().c_str(), L".tgscene") != 0 || !workspace->Contains(savePath)) {
-            TG_LOG_ERROR("シーンはプロジェクトルート内の .tgscene へ保存してください: %s",
+        if (_wcsicmp(savePath.extension().c_str(), L".rockscene") != 0 || !workspace->Contains(savePath)) {
+            ROCK_LOG_ERROR("シーンはプロジェクトルート内の .rockscene へ保存してください: %s",
                          ToUtf8Display(savePath).c_str());
             return false;
         }
         if (!SaveSharedAssets(*workspace, refs)) {
-            TG_LOG_ERROR("共有アセットを保存できないため、シーンの保存を中止しました");
+            ROCK_LOG_ERROR("共有アセットを保存できないため、シーンの保存を中止しました");
             return false;
         }
     }
@@ -1124,7 +1124,7 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
     json document;
     document["format"] = kProjectFormat;
     document["version"] = kProjectFormatVersion;
-    document["app"] = TG_APP_VERSION;
+    document["app"] = ROCK_APP_VERSION;
 
     // --- テクスチャ（画像は参照。パスはプロジェクトからの相対） -----------
     // ファイルの中では通し番号で参照する。実行中の ID をそのまま書くと、
@@ -1223,16 +1223,16 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
 
     if (workspace != nullptr) {
         if (!workspace->SaveScene(savePath, document)) {
-            TG_LOG_ERROR("シーンを保存できませんでした: %s", ToUtf8Display(savePath).c_str());
+            ROCK_LOG_ERROR("シーンを保存できませんでした: %s", ToUtf8Display(savePath).c_str());
             return false;
         }
-        TG_LOG_INFO("シーンを保存しました: %s", ToUtf8Display(savePath).c_str());
+        ROCK_LOG_INFO("シーンを保存しました: %s", ToUtf8Display(savePath).c_str());
         return true;
     }
     if (!WriteJsonFile(savePath, document)) {
         return false;
     }
-    TG_LOG_INFO("プロジェクトを保存しました: %s", ToUtf8Portable(savePath).c_str());
+    ROCK_LOG_INFO("プロジェクトを保存しました: %s", ToUtf8Portable(savePath).c_str());
     return true;
 }
 
@@ -1244,11 +1244,11 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
         // シーンは参照する共有アセットを展開してから、従来の読み込み器に渡す。
         // 欠けたアセットがあればここで止まり、現在の文書は保持される。
         if (!workspace->ReadScene(path, document)) {
-            TG_LOG_ERROR("シーンまたは参照アセットを開けません: %s", ToUtf8Display(path).c_str());
+            ROCK_LOG_ERROR("シーンまたは参照アセットを開けません: %s", ToUtf8Display(path).c_str());
             return false;
         }
         if (const int version = ReadInt(document, "version", 0); version > kProjectFormatVersion) {
-            TG_LOG_ERROR("このバージョンでは読めません（シーン %d > 対応 %d）: %s", version,
+            ROCK_LOG_ERROR("このバージョンでは読めません（シーン %d > 対応 %d）: %s", version,
                          kProjectFormatVersion, ToUtf8Display(path).c_str());
             return false;
         }
@@ -1261,7 +1261,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
     // 旧ファイルの手入力メッシュシーン（scene）は読まない。表示するメッシュは
     // グラフの Mesh Output から生成する。
     if (FindMember(document, "scene") != nullptr) {
-        TG_LOG_WARN("旧形式の手入力メッシュシーン（scene）は読み飛ばしました");
+        ROCK_LOG_WARN("旧形式の手入力メッシュシーン（scene）は読み飛ばしました");
     }
     refs.renderer.ClearMeshScene(device);
 
@@ -1291,7 +1291,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
                 // パスと名前だけの「リンク切れ」として登録し、マテリアルやノードの
                 // 割り当てはそこへ繋いでおく。消してしまうと、次に保存した時点で
                 // どのファイルを指していたかが失われ、繋ぎ直せなくなる。
-                TG_LOG_WARN("テクスチャが見つかりません（リンク切れ）: %s",
+                ROCK_LOG_WARN("テクスチャが見つかりません（リンク切れ）: %s",
                             ToUtf8Portable(texturePath).c_str());
                 id = refs.textures.AddMissing(texturePath, name);
                 if (id == compositor::kNoTexture) {
@@ -1354,7 +1354,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
                 asset.path = ResolvePath(ReadString(node, "path"), baseDir);
                 asset.scale = ReadModelScale(node);
                 if (!renderer::LoadModel(asset.path, asset)) {
-                    TG_LOG_WARN("モデルを読み込めません（%s）: %s", asset.error.c_str(),
+                    ROCK_LOG_WARN("モデルを読み込めません（%s）: %s", asset.error.c_str(),
                                 ToUtf8Display(asset.path).c_str());
                 }
                 if (const json* slots = FindMember(node, "materials"); slots != nullptr && slots->is_array()) {
@@ -1415,7 +1415,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
     }
     if (!graphLoaded) {
         if (!legacyLayers.empty()) {
-            TG_LOG_INFO("旧形式のレイヤーをノードグラフへ移行しました（%zu 枚）",
+            ROCK_LOG_INFO("旧形式のレイヤーをノードグラフへ移行しました（%zu 枚）",
                         legacyLayers.size());
             refs.graph = MigrateLayersToGraph(std::move(legacyLayers));
         } else {
@@ -1450,7 +1450,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
     }
     refs.skies.EnsureDefault();
 
-    TG_LOG_INFO("プロジェクトを開きました: %s", ToUtf8Portable(path).c_str());
+    ROCK_LOG_INFO("プロジェクトを開きました: %s", ToUtf8Portable(path).c_str());
     return true;
 }
 
@@ -1493,7 +1493,7 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
             if (!entry.assetUid.empty()) claimedUids.insert(entry.assetUid);
         }
     }
-    // 置き場所が未定のものの保存先。ID の無いもの（旧 .tgproj・単体 .tgmat から来たもの）は、
+    // 置き場所が未定のものの保存先。ID の無いもの（旧 .reproj・単体 .rockmat から来たもの）は、
     // 同じ中身の既存アセットがあればそれを使う。無ければ名前から連番で作る。
     const auto placement = [&](json& body, const fs::path& current, const char* kind, const wchar_t* folder,
                                const std::string& name, const char* extension) -> fs::path {
@@ -1513,9 +1513,9 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
         compositor::MaterialAsset* asset = refs.materials.FindMutable(entry.id);
         json body = WriteMaterialBody(*asset, writeTexture);
         body["uid"] = asset->assetUid;
-        fs::path assetPath = placement(body, asset->assetPath, "material-asset", L"Materials", asset->name, ".tgmat");
+        fs::path assetPath = placement(body, asset->assetPath, "material-asset", L"Materials", asset->name, ".rockmat");
         if (!valid || !workspace.SaveAsset(assetPath, "material-asset", body)) {
-            TG_LOG_ERROR("マテリアルを保存できません: %s", asset->name.c_str());
+            ROCK_LOG_ERROR("マテリアルを保存できません: %s", asset->name.c_str());
             return false;
         }
         asset->assetPath = assetPath;
@@ -1527,16 +1527,16 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
         json body = WriteSky(*asset, workspace.Root());
         body["hdri"] = source(asset->sky.hdriPath);
         body["uid"] = asset->assetUid;
-        fs::path assetPath = placement(body, asset->assetPath, "sky-asset", L"Skies", asset->name, ".tgsky");
+        fs::path assetPath = placement(body, asset->assetPath, "sky-asset", L"Skies", asset->name, ".rocksky");
         if (!valid || !workspace.SaveAsset(assetPath, "sky-asset", body)) {
-            TG_LOG_ERROR("天球を保存できません: %s", asset->name.c_str());
+            ROCK_LOG_ERROR("天球を保存できません: %s", asset->name.c_str());
             return false;
         }
         asset->assetPath = assetPath;
         asset->assetUid = ReadString(body, "uid");
         claimedUids.insert(asset->assetUid);
     }
-    // モデル。FBX は元ファイルの固定 ID、スロットは上で保存した .tgmat の固定 ID で参照する
+    // モデル。FBX は元ファイルの固定 ID、スロットは上で保存した .rockmat の固定 ID で参照する
     // （SaveScene が作る本文と一致させ、中身が変わらなければ書き直さない）。
     if (refs.models != nullptr) {
         for (renderer::ModelAsset& model : *refs.models) {
@@ -1550,9 +1550,9 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
             json body = {{"name", model.name}, {"source", source(model.path)}, {"scale", model.scale},
                          {"materials", std::move(slots)}};
             body["uid"] = model.assetUid;
-            fs::path assetPath = placement(body, model.assetPath, "model-asset", L"Models", model.name, ".tgmodel");
+            fs::path assetPath = placement(body, model.assetPath, "model-asset", L"Models", model.name, ".rockmodel");
             if (!valid || !workspace.SaveAsset(assetPath, "model-asset", body)) {
-                TG_LOG_ERROR("モデルを保存できません: %s", model.name.c_str());
+                ROCK_LOG_ERROR("モデルを保存できません: %s", model.name.c_str());
                 return false;
             }
             model.assetPath = assetPath;
@@ -1575,7 +1575,7 @@ void AddExpandedLibraries(const json& document, rhi::Device& device, rhi::Pipeli
         const fs::path texturePath = FromUtf8(ReadString(node, "path"));
         compositor::TextureId id = textures.Load(device, pipelineCache, texturePath);
         if (id == compositor::kNoTexture) {
-            TG_LOG_WARN("テクスチャが見つかりません（リンク切れ）: %s", ToUtf8Display(texturePath).c_str());
+            ROCK_LOG_WARN("テクスチャが見つかりません（リンク切れ）: %s", ToUtf8Display(texturePath).c_str());
             id = textures.AddMissing(texturePath, ReadString(node, "name"));
         }
         textureIds[ReadInt(node, "id", 0)] = id;
@@ -1623,8 +1623,8 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
         return false;
     }
     const json reference = {{"uid", assetUid}, {"path", RelativePathString(path, workspace.Root())}};
-    const bool isMaterial = _wcsicmp(path.extension().c_str(), L".tgmat") == 0;
-    const bool isModel = _wcsicmp(path.extension().c_str(), L".tgmodel") == 0;
+    const bool isMaterial = _wcsicmp(path.extension().c_str(), L".rockmat") == 0;
+    const bool isModel = _wcsicmp(path.extension().c_str(), L".rockmodel") == 0;
     if (isModel && models == nullptr) {
         return false;
     }
@@ -1650,7 +1650,7 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
         asset.path = FromUtf8(ReadString(node, "path"));
         asset.scale = ReadModelScale(node);
         if (!renderer::LoadModel(asset.path, asset)) {
-            TG_LOG_WARN("モデルを読み込めません（%s）: %s", asset.error.c_str(), ToUtf8Display(asset.path).c_str());
+            ROCK_LOG_WARN("モデルを読み込めません（%s）: %s", asset.error.c_str(), ToUtf8Display(asset.path).c_str());
         }
         const json& slots = node.at("materials");
         asset.materials.resize(std::max(asset.materials.size(), slots.size()), compositor::kNoMaterialAsset);
@@ -1671,7 +1671,7 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
             skies.SetActive(existing->id);
         }
     }
-    TG_LOG_INFO("アセットを読み込みました: %s", ToUtf8Display(path).c_str());
+    ROCK_LOG_INFO("アセットを読み込みました: %s", ToUtf8Display(path).c_str());
     return true;
 }
 
@@ -1695,12 +1695,12 @@ bool SaveMaterial(const std::filesystem::path& path, const compositor::MaterialA
     json document = WriteMaterialBody(asset, writeTexture);
     document["format"] = kMaterialFormat;
     document["version"] = kMaterialFormatVersion;
-    document["app"] = TG_APP_VERSION;
+    document["app"] = ROCK_APP_VERSION;
 
     if (!WriteJsonFile(savePath, document)) {
         return false;
     }
-    TG_LOG_INFO("マテリアルを書き出しました: %s", ToUtf8Portable(savePath).c_str());
+    ROCK_LOG_INFO("マテリアルを書き出しました: %s", ToUtf8Portable(savePath).c_str());
     return true;
 }
 
@@ -1726,7 +1726,7 @@ compositor::MaterialAssetId LoadMaterial(const std::filesystem::path& path, rhi:
         const compositor::TextureId id = textures.Load(device, pipelineCache, texturePath);
         if (id == compositor::kNoTexture) {
             // プロジェクトと同じく、見つからない画像はリンク切れとして残す。
-            TG_LOG_WARN("テクスチャが見つかりません（リンク切れ）: %s",
+            ROCK_LOG_WARN("テクスチャが見つかりません（リンク切れ）: %s",
                         ToUtf8Portable(texturePath).c_str());
             return textures.AddMissing(texturePath, std::string());
         }
@@ -1741,8 +1741,8 @@ compositor::MaterialAssetId LoadMaterial(const std::filesystem::path& path, rhi:
     ReadMaterialBody(document, *asset, readTexture);
     asset->thumbnailDirty = true;
 
-    TG_LOG_INFO("マテリアルを読み込みました: %s", ToUtf8Portable(path).c_str());
+    ROCK_LOG_INFO("マテリアルを読み込みました: %s", ToUtf8Portable(path).c_str());
     return id;
 }
 
-}  // namespace tg::io
+}  // namespace rock::io

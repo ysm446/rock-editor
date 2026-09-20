@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cstdint>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // カメラのビュー空間の基底をワールド座標で表したもの。
 // 座標軸ギズモのように「向きだけ」が要る用途に使う。
@@ -105,4 +105,4 @@ private:
     uint32_t m_height = 1;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

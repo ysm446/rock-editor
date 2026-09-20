@@ -24,7 +24,7 @@
 #include <system_error>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 // このテクスチャを使っている場所を、人が読める形で並べる。
 //
@@ -399,7 +399,7 @@ void Application::RequestTextureRelinkFolder() {
         }
     }
     if (matched == 0) {
-        TG_LOG_WARN("フォルダにリンク切れと同じ名前のファイルがありません: %s",
+        ROCK_LOG_WARN("フォルダにリンク切れと同じ名前のファイルがありません: %s",
                     ToUtf8Portable(folder).c_str());
     }
 }
@@ -568,4 +568,4 @@ void Application::DrawTexturePreviewWindow() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

@@ -11,7 +11,7 @@
 
 using namespace DirectX;
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 constexpr uint32_t kCubeSize = 256;
@@ -465,7 +465,7 @@ bool Environment::BuildFromHdrFile(rhi::Device& device, rhi::PipelineCache& pipe
 
     void* mapped = nullptr;
     const D3D12_RANGE readRange = {0, 0};
-    if (!TG_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
+    if (!ROCK_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
         device.DeferRelease(staging);
         return false;
     }
@@ -496,9 +496,9 @@ bool Environment::BuildFromHdrFile(rhi::Device& device, rhi::PipelineCache& pipe
 
     m_sourceName = path.filename().string();
     const float scale = SkyLuminanceScale(skyLuminance, m_measuredSkyLuminance);
-    TG_LOG_INFO("HDRI を較正しました: 空の生の値 %.3f を %.0f cd/m^2 とみなす（%.0f 倍）",
+    ROCK_LOG_INFO("HDRI を較正しました: 空の生の値 %.3f を %.0f cd/m^2 とみなす（%.0f 倍）",
                 m_measuredSkyLuminance, skyLuminance, scale);
     return BuildFromEquirect(device, pipelineCache, scale);
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

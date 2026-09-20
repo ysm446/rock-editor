@@ -5,7 +5,7 @@
 
 using namespace DirectX;
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 // 真上・真下でビュー行列が縮退しないよう、わずかに手前で止める。
@@ -193,4 +193,4 @@ XMMATRIX Camera::ProjectionMatrix() const {
     return XMMatrixPerspectiveFovRH(m_fovY, aspect, NearZ(), FarZ());
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

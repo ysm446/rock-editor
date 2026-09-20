@@ -1,6 +1,6 @@
 // モデル（FBX）の取り込み、モデルプレビューの窓、スロットへのマテリアルの割り当て。
-// terrain-graph の ApplicationModelPanel から、配置（Model Scatter）と一覧パネルを外して移植した。
-// 一覧はアセットの帯（.tgmodel / .fbx）が兼ねる。仕様は docs/reference/model-assets.md。
+// rock-editor の ApplicationModelPanel から、配置（Model Scatter）と一覧パネルを外して移植した。
+// 一覧はアセットの帯（.rockmodel / .fbx）が兼ねる。仕様は docs/reference/model-assets.md。
 
 #include "app/Application.h"
 
@@ -16,7 +16,7 @@
 #include <cstdio>
 #include <string>
 
-namespace tg {
+namespace rock {
 namespace fs = std::filesystem;
 
 renderer::ModelAsset* Application::FindModel(uint64_t id) {
@@ -28,7 +28,7 @@ renderer::ModelAsset* Application::FindModel(uint64_t id) {
 void Application::CreateModelMaterials(uint64_t modelId) {
     renderer::ModelAsset* model = FindModel(modelId);
     if (model == nullptr || !model->geometry) return;
-    // 作ったマテリアルは .tgmodel の隣（未保存なら FBX の隣）へ置く。
+    // 作ったマテリアルは .rockmodel の隣（未保存なら FBX の隣）へ置く。
     const fs::path directory = (!model->assetPath.empty() ? model->assetPath : model->path).parent_path();
     // 未保存のマテリアルは UniquePath がまだファイルを見られない。同じ名前のスロットが並んでも
     // 同じファイルへ書かないよう、この場で決めた置き場所を覚えておく。
@@ -37,7 +37,7 @@ void Application::CreateModelMaterials(uint64_t modelId) {
         if (!entry.assetPath.empty()) claimed.push_back(entry.assetPath);
     const auto uniquePath = [&](const std::string& name) {
         for (int suffix = 0; suffix < 1000; ++suffix) {
-            const auto path = m_workspace.UniquePath(directory, suffix ? name + "_" + std::to_string(suffix) : name, ".tgmat");
+            const auto path = m_workspace.UniquePath(directory, suffix ? name + "_" + std::to_string(suffix) : name, ".rockmat");
             if (path.empty()) return path;
             if (std::none_of(claimed.begin(), claimed.end(), [&](const fs::path& p) { return p == path; })) {
                 claimed.push_back(path);
@@ -58,7 +58,7 @@ void Application::CreateModelMaterials(uint64_t modelId) {
         if (!source.baseColorTexture.empty()) {
             texture = m_textureLibrary.Load(m_device, m_pipelineCache, source.baseColorTexture);
             if (texture == compositor::kNoTexture)
-                TG_LOG_WARN("テクスチャを読み込めません: %s", ToUtf8Display(source.baseColorTexture).c_str());
+                ROCK_LOG_WARN("テクスチャを読み込めません: %s", ToUtf8Display(source.baseColorTexture).c_str());
         }
         // テクスチャがあればティントは中立（1）、無ければ FBX の拡散色をそのまま使う。
         asset->baseColor = texture;
@@ -86,10 +86,10 @@ void Application::CreateModelMaterials(uint64_t modelId) {
         ++created;
     }
     if (created == 0) {
-        TG_LOG_INFO("未割り当てのスロットがありません: %s", model->name.c_str());
+        ROCK_LOG_INFO("未割り当てのスロットがありません: %s", model->name.c_str());
         return;
     }
-    TG_LOG_INFO("「%s」のスロットに %zu 個のマテリアルを作成しました", model->name.c_str(), created);
+    ROCK_LOG_INFO("「%s」のスロットに %zu 個のマテリアルを作成しました", model->name.c_str(), created);
     m_renderedModelThumbnails.erase(modelId);
     m_pendingAssetsSave = true;
     MarkDocumentChanged();
@@ -120,12 +120,12 @@ uint64_t Application::ImportModelFile(const fs::path& inputPath) {
         renderer::ModelAsset asset;
         asset.id = m_nextModelId++;
         asset.name = ToUtf8Display(path.stem());
-        asset.assetPath = m_workspace.UniquePath(path.parent_path(), asset.name, ".tgmodel");
+        asset.assetPath = m_workspace.UniquePath(path.parent_path(), asset.name, ".rockmodel");
         if (!renderer::LoadModel(path, asset)) {
-            TG_LOG_ERROR("モデルを読み込めません（%s）: %s", asset.error.c_str(), ToUtf8Display(path).c_str());
+            ROCK_LOG_ERROR("モデルを読み込めません（%s）: %s", asset.error.c_str(), ToUtf8Display(path).c_str());
             return 0;
         }
-        TG_LOG_INFO("モデルを読み込みました: %s（スロット %zu、三角形 %u）", ToUtf8Display(path.filename()).c_str(),
+        ROCK_LOG_INFO("モデルを読み込みました: %s（スロット %zu、三角形 %u）", ToUtf8Display(path.filename()).c_str(),
                     asset.geometry->slots.size(), asset.geometry->lods[0].triangles);
         const uint64_t id = asset.id;
         m_models.push_back(std::move(asset));
@@ -153,7 +153,7 @@ void Application::ProcessModelWork() {
     // --- ビューポートへ落としたモデルを置く --------------------------------------
     for (const auto& placement : std::exchange(m_pendingModelPlacements, {})) {
         const auto ext = placement.path.extension().wstring();
-        const bool isModelAsset = _wcsicmp(ext.c_str(), L".tgmodel") == 0;
+        const bool isModelAsset = _wcsicmp(ext.c_str(), L".rockmodel") == 0;
         uint64_t id = 0;
         for (const auto& model : m_models) {
             if ((isModelAsset ? model.assetPath : model.path).lexically_normal() == placement.path.lexically_normal())
@@ -171,7 +171,7 @@ void Application::ProcessModelWork() {
             id = ImportModelFile(placement.path);
         }
         if (id == 0) {
-            TG_LOG_ERROR("モデルを置けません: %s", ToUtf8Display(placement.path).c_str());
+            ROCK_LOG_ERROR("モデルを置けません: %s", ToUtf8Display(placement.path).c_str());
             continue;
         }
         m_selectedModel = id;
@@ -247,7 +247,7 @@ void Application::DrawModelPreviewWindow() {
     }
     renderer::ModelAsset* found = FindModel(m_selectedModel);
     if (found == nullptr) {
-        ui::HintText("アセットの帯でモデル（.tgmodel / .fbx）をダブルクリックすると開く");
+        ui::HintText("アセットの帯でモデル（.rockmodel / .fbx）をダブルクリックすると開く");
         ImGui::End();
         return;
     }
@@ -368,4 +368,4 @@ void Application::DrawModelPreviewWindow() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

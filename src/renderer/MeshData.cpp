@@ -5,7 +5,7 @@
 #include <cmath>
 #include <limits>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 bool ValidateMeshScene(const MeshScene& scene) {
     for (const auto& mesh : scene.meshes) {
@@ -159,4 +159,4 @@ float MeshSceneRadius(const MeshScene& scene) {
     return radius;
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

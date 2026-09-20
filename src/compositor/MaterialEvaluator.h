@@ -9,7 +9,7 @@
 #include "rhi/Device.h"
 #include "rhi/PipelineCache.h"
 
-namespace tg::compositor {
+namespace rock::compositor {
 
 // 合成結果のチャンネルセット。plan.md の定義に対応する。
 struct MaterialTextureSet {
@@ -152,4 +152,4 @@ private:
     bool m_hasResult = false;
 };
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

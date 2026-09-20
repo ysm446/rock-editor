@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace tg::compositor {
+namespace rock::compositor {
 
 // マテリアル 1 つぶん。PBR のマップ一式に名前を付けたもの。
 //
@@ -24,7 +24,7 @@ enum class BlendMode : uint32_t {
     Translucent = 2,  // 不透明度でそのまま合成する。影は落とさない
 };
 
-// マテリアルのマップ。MaterialAsset::mapUvSets のビットの位置で、シェーダの TG_MAP_* と一致させること。
+// マテリアルのマップ。MaterialAsset::mapUvSets のビットの位置で、シェーダの ROCK_MAP_* と一致させること。
 enum class MaterialMap : uint32_t {
     BaseColor = 0,
     Normal = 1,
@@ -38,7 +38,7 @@ enum class MaterialMap : uint32_t {
 
 struct MaterialAsset {
     MaterialAssetId id = kNoMaterialAsset;
-    // 共有アセットの置き場所と永続 ID（`.tgmat`）。未保存なら空。
+    // 共有アセットの置き場所と永続 ID（`.rockmat`）。未保存なら空。
     // 実行中の id とは別物。id は GPU 用の通し番号で、ファイルには書かない。
     std::filesystem::path assetPath;
     std::string assetUid;
@@ -106,7 +106,7 @@ struct MaterialAsset {
     bool thumbnailDirty = true;
 };
 
-// チャンネル指定をシェーダへ渡す形へ詰める。並びは TG_CHANNEL_SLOT_* と一致させること。
+// チャンネル指定をシェーダへ渡す形へ詰める。並びは ROCK_CHANNEL_SLOT_* と一致させること。
 uint32_t PackMaterialChannels(const MaterialAsset& asset);
 
 inline constexpr uint32_t MaterialMapBit(MaterialMap map) { return 1u << static_cast<uint32_t>(map); }
@@ -154,4 +154,4 @@ private:
     MaterialAssetId m_nextId = 1;
 };
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace tg::compositor {
+namespace rock::compositor {
 
 MaterialLayer MaterialStack::MakeBaseLayer() {
     MaterialLayer layer;
@@ -75,4 +75,4 @@ size_t MaterialStack::FirstEnabledIndex() const {
     return static_cast<size_t>(-1);
 }
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

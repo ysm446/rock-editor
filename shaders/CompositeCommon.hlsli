@@ -1,5 +1,5 @@
-#ifndef TG_COMPOSITE_COMMON_HLSLI
-#define TG_COMPOSITE_COMMON_HLSLI
+#ifndef ROCK_COMPOSITE_COMMON_HLSLI
+#define ROCK_COMPOSITE_COMMON_HLSLI
 
 #include "Common.hlsli"
 
@@ -32,11 +32,11 @@ uint UnpackChannel(uint packed, uint slotIndex)
     return (packed >> (slotIndex * 4u)) & 0xFu;
 }
 
-#define TG_CHANNEL_SLOT_ROUGHNESS 0u
-#define TG_CHANNEL_SLOT_METALLIC  1u
-#define TG_CHANNEL_SLOT_AO        2u
-#define TG_CHANNEL_SLOT_HEIGHT    3u
-#define TG_CHANNEL_SLOT_OPACITY   5u
+#define ROCK_CHANNEL_SLOT_ROUGHNESS 0u
+#define ROCK_CHANNEL_SLOT_METALLIC  1u
+#define ROCK_CHANNEL_SLOT_AO        2u
+#define ROCK_CHANNEL_SLOT_HEIGHT    3u
+#define ROCK_CHANNEL_SLOT_OPACITY   5u
 
 float3 DecodeTangentNormal(float2 xy)
 {
@@ -135,4 +135,4 @@ float3 AdjustBaseColor(float3 color, float hueRadians, float saturation, float b
     return saturate(color * brightness);
 }
 
-#endif  // TG_COMPOSITE_COMMON_HLSLI
+#endif  // ROCK_COMPOSITE_COMMON_HLSLI

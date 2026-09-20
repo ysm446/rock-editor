@@ -1,5 +1,5 @@
-#ifndef TG_COMMON_HLSLI
-#define TG_COMMON_HLSLI
+#ifndef ROCK_COMMON_HLSLI
+#define ROCK_COMMON_HLSLI
 
 // 全パス共通のルートシグネチャに対応する宣言。
 // b0 は各シェーダが自前のルート定数構造体を宣言するため、ここでは定義しない。
@@ -235,12 +235,12 @@ float WorleyEdgeFbm(float2 p, int octaves, float period)
 
 // ノイズの種類。C++ 側の NoiseType と一致させること。
 // **並びを変えない。** 保存したプロジェクトの見た目が変わる。
-#define TG_NOISE_FBM    0
-#define TG_NOISE_RIDGED 1
-#define TG_NOISE_WORLEY 2
-#define TG_NOISE_PERLIN 3
-#define TG_NOISE_BILLOW 4
-#define TG_NOISE_CRACKS 5
+#define ROCK_NOISE_FBM    0
+#define ROCK_NOISE_RIDGED 1
+#define ROCK_NOISE_WORLEY 2
+#define ROCK_NOISE_PERLIN 3
+#define ROCK_NOISE_BILLOW 4
+#define ROCK_NOISE_CRACKS 5
 
 // uv（0〜1 でタイル 1 枚）にスケールとオフセットを掛けて評価する。
 // タイルするよう、実際の周波数は**整数へ丸めた周期**を使う。
@@ -249,27 +249,27 @@ float SampleNoise(uint type, float2 uv, float scale, float offset, int octaves)
 {
     const float period = max(round(scale), 1.0f);
     const float2 p = uv * period + offset;
-    if (type == TG_NOISE_RIDGED)
+    if (type == ROCK_NOISE_RIDGED)
     {
         return RidgedFbm(p, octaves, period);
     }
-    if (type == TG_NOISE_WORLEY)
+    if (type == ROCK_NOISE_WORLEY)
     {
         return WorleyFbm(p, octaves, period);
     }
-    if (type == TG_NOISE_PERLIN)
+    if (type == ROCK_NOISE_PERLIN)
     {
         return PerlinFbm(p, octaves, period);
     }
-    if (type == TG_NOISE_BILLOW)
+    if (type == ROCK_NOISE_BILLOW)
     {
         return BillowFbm(p, octaves, period);
     }
-    if (type == TG_NOISE_CRACKS)
+    if (type == ROCK_NOISE_CRACKS)
     {
         return WorleyEdgeFbm(p, octaves, period);
     }
     return Fbm(p, octaves, period);
 }
 
-#endif  // TG_COMMON_HLSLI
+#endif  // ROCK_COMMON_HLSLI

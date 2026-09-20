@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 // 線形 HDR 画像。常に RGBA の 4 チャンネルで保持する。
 struct HdrImage {
@@ -66,4 +66,4 @@ bool SaveGray8Png(const std::filesystem::path& path, uint32_t width, uint32_t he
 bool SaveExr(const std::filesystem::path& path, uint32_t width, uint32_t height, int channels,
              const float* pixels, bool asHalf);
 
-}  // namespace tg
+}  // namespace rock

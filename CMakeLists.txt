@@ -17,7 +17,7 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     endif()
 endif()
 
-project(road_editor VERSION 0.1.0 LANGUAGES CXX)
+project(rock_editor VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "本プロジェクトは Windows 専用です。")
@@ -79,9 +79,9 @@ find_package(tinyexr CONFIG REQUIRED)
 find_package(unofficial-imgui-node-editor CONFIG REQUIRED)
 find_package(ufbx CONFIG REQUIRED)
 
-set(tg_sources
+set(rock_sources
     src/app/Main.cpp
-    src/app/TerrainGraph.rc
+    src/app/RockEditor.rc
     src/app/Application.cpp
     src/app/Application.h
     src/app/ApplicationDocument.cpp
@@ -194,20 +194,20 @@ set(tg_sources
 )
 
 # シェーダはビルド対象ではないが、VS のソリューションから編集できるようにしておく。
-file(GLOB tg_shaders CONFIGURE_DEPENDS "shaders/*.hlsl" "shaders/*.hlsli")
-set_source_files_properties(${tg_shaders} PROPERTIES HEADER_FILE_ONLY TRUE)
-source_group("shaders" FILES ${tg_shaders})
+file(GLOB rock_shaders CONFIGURE_DEPENDS "shaders/*.hlsl" "shaders/*.hlsli")
+set_source_files_properties(${rock_shaders} PROPERTIES HEADER_FILE_ONLY TRUE)
+source_group("shaders" FILES ${rock_shaders})
 
-add_executable(road_editor WIN32 ${tg_sources} ${tg_shaders})
+add_executable(rock_editor WIN32 ${rock_sources} ${rock_shaders})
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${tg_sources})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${rock_sources})
 
-target_include_directories(road_editor PRIVATE
+target_include_directories(rock_editor PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${Stb_INCLUDE_DIR}"
 )
 
-target_compile_definitions(road_editor PRIVATE
+target_compile_definitions(rock_editor PRIVATE
     UNICODE
     _UNICODE
     WIN32_LEAN_AND_MEAN
@@ -215,19 +215,19 @@ target_compile_definitions(road_editor PRIVATE
     # PIX マーカーを有効にする。未定義だと pix3.h の呼び出しが消え、
     # Release で PIX による計測ができなくなる。
     USE_PIX
-    TG_APP_VERSION="${PROJECT_VERSION}"
+    ROCK_APP_VERSION="${PROJECT_VERSION}"
     # シェーダはホットリロードのためソースツリーを直接参照する。
-    TG_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+    ROCK_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/shaders"
     # 手元のデータ置き場（スクリーンショットの既定の保存先もここ）。
     # data/ は .gitignore で外してあるので、撮ったものがリポジトリに混ざらない。
     # コミットするアセットは assets/ で、こちらとは別。
-    TG_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
-    $<$<CONFIG:Debug>:TG_DEBUG=1>
+    ROCK_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+    $<$<CONFIG:Debug>:ROCK_DEBUG=1>
 )
 
-target_compile_options(road_editor PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)
+target_compile_options(rock_editor PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)
 
-target_link_libraries(road_editor PRIVATE
+target_link_libraries(rock_editor PRIVATE
     Microsoft::DirectX-Headers
     Microsoft::DirectX-Guids
     Microsoft::DirectX12-Agility
@@ -248,14 +248,14 @@ target_link_libraries(road_editor PRIVATE
 )
 
 # --- Agility SDK の DLL を実行ファイル横の D3D12/ に配置する ---------------
-add_custom_command(TARGET road_editor POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:road_editor>/D3D12"
+add_custom_command(TARGET rock_editor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:rock_editor>/D3D12"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_PROPERTY:Microsoft::DirectX12-Core,IMPORTED_LOCATION_RELEASE>"
-        "$<TARGET_FILE_DIR:road_editor>/D3D12"
+        "$<TARGET_FILE_DIR:rock_editor>/D3D12"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_PROPERTY:Microsoft::DirectX12-Layers,IMPORTED_LOCATION_DEBUG>"
-        "$<TARGET_FILE_DIR:road_editor>/D3D12"
+        "$<TARGET_FILE_DIR:rock_editor>/D3D12"
     COMMAND_EXPAND_LISTS
     COMMENT "Agility SDK の DLL を D3D12/ に配置"
 )
@@ -263,10 +263,10 @@ add_custom_command(TARGET road_editor POST_BUILD
 # --- DXC の署名用 DLL を実行ファイル横に置く -------------------------------
 # dxcompiler.dll はリンクしているため applocal で配置されるが、
 # dxil.dll (署名) はリンクしていないので明示的にコピーする。
-add_custom_command(TARGET road_editor POST_BUILD
+add_custom_command(TARGET rock_editor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_PROPERTY:Microsoft::DXIL,IMPORTED_LOCATION_DEBUG>"
-        "$<TARGET_FILE_DIR:road_editor>"
+        "$<TARGET_FILE_DIR:rock_editor>"
     COMMAND_EXPAND_LISTS
     COMMENT "dxil.dll を配置"
 )
@@ -281,7 +281,7 @@ add_custom_command(TARGET road_editor POST_BUILD
 # 実装だけ元に戻したときに検出できない。
 enable_testing()
 
-add_executable(road_editor_tests
+add_executable(rock_editor_tests
     tests/TestMain.cpp
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
@@ -317,16 +317,16 @@ add_executable(road_editor_tests
     src/ui/UiStyle.h
 )
 
-target_include_directories(road_editor_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_include_directories(rock_editor_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 # テストの一時フォルダは data/test/ に作る（AGENTS.md）。
-target_compile_definitions(road_editor_tests PRIVATE TG_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
-target_compile_options(road_editor_tests PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)
+target_compile_definitions(rock_editor_tests PRIVATE ROCK_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+target_compile_options(rock_editor_tests PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)
 # ole32 は ProjectWorkspace の永続 ID（CoCreateGuid）に要る。
-target_link_libraries(road_editor_tests PRIVATE imgui::imgui nlohmann_json::nlohmann_json ufbx::ufbx ole32)
+target_link_libraries(rock_editor_tests PRIVATE imgui::imgui nlohmann_json::nlohmann_json ufbx::ufbx ole32)
 
-add_test(NAME ui-interaction COMMAND road_editor_tests)
+add_test(NAME ui-interaction COMMAND rock_editor_tests)
 
-set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT road_editor)
-set_target_properties(road_editor PROPERTIES
-    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:road_editor>"
+set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT rock_editor)
+set_target_properties(rock_editor PROPERTIES
+    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:rock_editor>"
 )

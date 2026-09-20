@@ -7,12 +7,12 @@
 #include <vector>
 #include <nlohmann/json.hpp>
 
-namespace tg::io {
+namespace rock::io {
 
 // プロジェクトのルートフォルダ、永続ID、共有アセットの入出力。GPU には依存しない。
 //
-// ルート直下の `project.tgproj`（terrain-graph.workspace 版1）がプロジェクトの目印。
-// シーン (.tgscene) はルート内の任意の場所に置き、マテリアル (.tgmat)・天球 (.tgsky)・モデル (.tgmodel) などは
+// ルート直下の `project.reproj`（rock-editor.workspace 版1）がプロジェクトの目印。
+// シーン (.rockscene) はルート内の任意の場所に置き、マテリアル (.rockmat)・天球 (.rocksky)・モデル (.rockmodel) などは
 // 個別ファイルとして共有する。参照は `{"uid", "path"}` で、走査した ID から現在のパスを引く。
 // 仕様は docs/design/project-workspace.md。
 class ProjectWorkspace {
@@ -33,7 +33,7 @@ public:
     nlohmann::json Reference(const std::filesystem::path& path);
     // 中身が変わらなければ書き込まない（更新日時を保ち、サムネイルのキャッシュを無効にしない）。
     bool SaveAsset(std::filesystem::path& path, const char* kind, nlohmann::json& body);
-    // ID を持たない本文（旧 .tgproj の埋め込みなど）と同じ中身の既存アセットの ID を探す。
+    // ID を持たない本文（旧 .reproj の埋め込みなど）と同じ中身の既存アセットの ID を探す。
     // 無ければ空。claimedUids の ID は、同じ保存で別のアセットが使うので対象にしない。
     std::string FindIdenticalAsset(const char* kind, const nlohmann::json& body,
                                    const std::unordered_set<std::string>& claimedUids) const;
@@ -58,4 +58,4 @@ private:
     std::unordered_map<std::string, std::string> m_knownUids;
 };
 
-}  // namespace tg::io
+}  // namespace rock::io

@@ -3,7 +3,7 @@
 #include "core/Log.h"
 #include "rhi/Device.h"
 
-namespace tg::rhi {
+namespace rock::rhi {
 namespace {
 
 uint64_t AlignUp(uint64_t value, uint64_t alignment) {
@@ -23,30 +23,30 @@ bool ComputeQueue::Create(Device& device, uint64_t uploadBytes, const wchar_t* d
     D3D12_COMMAND_QUEUE_DESC queueDesc = {};
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
     queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    if (!TG_CHECK_HR(d3d->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_queue)))) {
+    if (!ROCK_CHECK_HR(d3d->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_queue)))) {
         return false;
     }
     m_queue->SetName(debugName);
 
-    if (!TG_CHECK_HR(d3d->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE,
+    if (!ROCK_CHECK_HR(d3d->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE,
                                                  IID_PPV_ARGS(&m_allocator)))) {
         return false;
     }
-    if (!TG_CHECK_HR(d3d->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COMPUTE, m_allocator.Get(),
+    if (!ROCK_CHECK_HR(d3d->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_COMPUTE, m_allocator.Get(),
                                             nullptr, IID_PPV_ARGS(&m_commandList)))) {
         return false;
     }
     // 作った直後は記録状態。Reset で始める作法に揃えるため閉じておく。
-    if (!TG_CHECK_HR(m_commandList->Close())) {
+    if (!ROCK_CHECK_HR(m_commandList->Close())) {
         return false;
     }
 
-    if (!TG_CHECK_HR(d3d->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)))) {
+    if (!ROCK_CHECK_HR(d3d->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)))) {
         return false;
     }
     m_fenceEvent = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (m_fenceEvent == nullptr) {
-        TG_LOG_ERROR("コンピュートキューのフェンスイベントを作れませんでした");
+        ROCK_LOG_ERROR("コンピュートキューのフェンスイベントを作れませんでした");
         return false;
     }
 
@@ -56,7 +56,7 @@ bool ComputeQueue::Create(Device& device, uint64_t uploadBytes, const wchar_t* d
     }
     void* mapped = nullptr;
     const D3D12_RANGE readRange = {0, 0};
-    if (!TG_CHECK_HR(m_upload.resource->Map(0, &readRange, &mapped))) {
+    if (!ROCK_CHECK_HR(m_upload.resource->Map(0, &readRange, &mapped))) {
         return false;
     }
     m_uploadMapped = static_cast<uint8_t*>(mapped);
@@ -93,10 +93,10 @@ ID3D12GraphicsCommandList* ComputeQueue::Begin(Device& device) {
         return nullptr;
     }
     // 前回の仕事は終わっている。アロケータも定数の置き場も巻き戻せる。
-    if (!TG_CHECK_HR(m_allocator->Reset())) {
+    if (!ROCK_CHECK_HR(m_allocator->Reset())) {
         return nullptr;
     }
-    if (!TG_CHECK_HR(m_commandList->Reset(m_allocator.Get(), nullptr))) {
+    if (!ROCK_CHECK_HR(m_commandList->Reset(m_allocator.Get(), nullptr))) {
         return nullptr;
     }
     m_uploadOffset = 0;
@@ -113,21 +113,21 @@ bool ComputeQueue::Submit(Device& device) {
         return false;
     }
     m_recording = false;
-    if (!TG_CHECK_HR(m_commandList->Close())) {
+    if (!ROCK_CHECK_HR(m_commandList->Close())) {
         return false;
     }
 
     // グラフィックスキューが、いま記録中のフレームを流し終えるまで待つ。
     // このフレームの中で遷移させたリソース（書き込み先を UAV へ、など）を、
     // その状態で受け取るため。フェンスは EndFrame でこの値を立てる。
-    if (!TG_CHECK_HR(m_queue->Wait(device.FrameFence(), device.NextFenceValue()))) {
+    if (!ROCK_CHECK_HR(m_queue->Wait(device.FrameFence(), device.NextFenceValue()))) {
         return false;
     }
     ID3D12CommandList* lists[] = {m_commandList.Get()};
     m_queue->ExecuteCommandLists(1, lists);
 
     const uint64_t value = m_submittedValue + 1;
-    if (!TG_CHECK_HR(m_queue->Signal(m_fence.Get(), value))) {
+    if (!ROCK_CHECK_HR(m_queue->Signal(m_fence.Get(), value))) {
         return false;
     }
     m_submittedValue = value;
@@ -140,7 +140,7 @@ void ComputeQueue::Abort() {
     }
     m_recording = false;
     // 開いたままでは次の Reset ができない。閉じるだけで実行はしない。
-    TG_CHECK_HR(m_commandList->Close());
+    ROCK_CHECK_HR(m_commandList->Close());
 }
 
 bool ComputeQueue::IsBusy() const {
@@ -154,7 +154,7 @@ void ComputeQueue::Wait() {
     if (!IsBusy() || m_fenceEvent == nullptr) {
         return;
     }
-    if (!TG_CHECK_HR(m_fence->SetEventOnCompletion(m_submittedValue, m_fenceEvent))) {
+    if (!ROCK_CHECK_HR(m_fence->SetEventOnCompletion(m_submittedValue, m_fenceEvent))) {
         return;
     }
     ::WaitForSingleObjectEx(m_fenceEvent, INFINITE, FALSE);
@@ -169,7 +169,7 @@ UploadAllocation ComputeQueue::Allocate(uint64_t size, uint64_t alignment) {
     if (offset + size > m_uploadBytes) {
         // 1 回だけ知らせる。呼び出し側は広げてやり直す。
         if (!m_uploadExhausted) {
-            TG_LOG_WARN("コンピュートキューの定数の置き場を使い切りました（%llu KB）",
+            ROCK_LOG_WARN("コンピュートキューの定数の置き場を使い切りました（%llu KB）",
                         static_cast<unsigned long long>(m_uploadBytes / 1024));
         }
         m_uploadExhausted = true;
@@ -184,4 +184,4 @@ UploadAllocation ComputeQueue::Allocate(uint64_t size, uint64_t alignment) {
     return result;
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

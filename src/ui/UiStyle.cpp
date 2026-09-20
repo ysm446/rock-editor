@@ -15,7 +15,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace tg::ui {
+namespace rock::ui {
 namespace {
 
 float g_dpiScale = 1.0f;
@@ -1076,4 +1076,4 @@ void HintText(const char* format, ...) {
     va_end(args);
 }
 
-}  // namespace tg::ui
+}  // namespace rock::ui

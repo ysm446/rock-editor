@@ -21,7 +21,7 @@
 #include <cwctype>
 #include <unordered_map>
 
-namespace tg {
+namespace rock {
 namespace fs = std::filesystem;
 using namespace DirectX;
 
@@ -330,7 +330,7 @@ graph::GraphId Application::PlaceModel(uint64_t modelId, const XMFLOAT3& positio
     m_graphSelectionRequest = nodeId;
     m_meshHighlight.selected.clear();
     MarkDocumentChanged();
-    TG_LOG_INFO("Model ノードを追加しました: %s", FindModel(modelId)->name.c_str());
+    ROCK_LOG_INFO("Model ノードを追加しました: %s", FindModel(modelId)->name.c_str());
     return nodeId;
 }
 
@@ -992,7 +992,7 @@ void Application::ModelDropTarget(const ImVec2& viewportMin, const ImVec2& viewp
                 const size_t end = std::min(text.find(L'\n', begin), text.size());
                 const fs::path path = text.substr(begin, end - begin);
                 const auto ext = LowerExtension(path);
-                if (ext == L".tgmodel" || ext == L".fbx") {
+                if (ext == L".rockmodel" || ext == L".fbx") {
                     m_pendingModelPlacements.push_back({path, {point.x + offset, point.y, point.z}});
                     offset += 2.0f;
                 }
@@ -1012,7 +1012,7 @@ bool Application::DrawModelNodeSettings(graph::Node& node) {
     ui::SectionHeader(settings ? "モデル" : "Transform");
     if (ui::BeginPropertyTable("modelNode")) {
         if (settings != nullptr) {
-            ui::PropertyLabel("モデル", "シーンに読み込んだモデル。アセットの帯で .tgmodel / .fbx をダブルクリックすると候補に加わる");
+            ui::PropertyLabel("モデル", "シーンに読み込んだモデル。アセットの帯で .rockmodel / .fbx をダブルクリックすると候補に加わる");
             ImGui::SetNextItemWidth(std::min(ui::Scaled(ui::kComboMaxWidth), ImGui::GetContentRegionAvail().x));
             if (ImGui::BeginCombo("##model", model ? model->name.c_str() : "なし")) {
                 if (ImGui::Selectable("なし", settings->model == 0)) {
@@ -1158,4 +1158,4 @@ bool Application::ViewportRay(const ImVec2& mouse, const ImVec2& viewportMin, co
     return true;
 }
 
-}  // namespace tg
+}  // namespace rock

@@ -15,7 +15,7 @@
 // プロジェクトとマテリアルのファイル入出力。
 //
 // 形式の仕様は docs/reference/file-format.md にある。変更したらそちらも直すこと。
-namespace tg::io {
+namespace rock::io {
 
 // 保存・読み込みの対象。Application が持っているものへの参照をまとめたもの。
 // 合成の構造はグラフが唯一の持ち主（旧形式の layers[] は読み込み時にグラフへ移行する）。
@@ -25,27 +25,27 @@ struct ProjectRefs {
     renderer::SkyLibrary& skies;
     renderer::PreviewRenderer& renderer;
     graph::NodeGraph& graph;
-    // モデル（.tgmodel）。渡さなければモデルは読み書きしない。
+    // モデル（.rockmodel）。渡さなければモデルは読み書きしない。
     std::vector<renderer::ModelAsset>* models = nullptr;
 };
 
-// --- プロジェクト (.tgproj) -----------------------------------------------
+// --- プロジェクト (.reproj) -----------------------------------------------
 //
 // マテリアルの構造は丸ごと埋め込む。開くのに別のマテリアルファイルは要らない。
 // テクスチャの画像だけは参照で持ち、パスはプロジェクトからの相対で書く。
 //
 // 読み込みは GPU 待機を伴うため、**フレームの外で呼ぶこと。**
 
-// workspace を渡すとシーン (.tgscene) として扱う。マテリアルと天球は共有アセット
-// （`.tgmat` / `.tgsky`）へ分離し、画像はルート内へ取り込んで ID で参照する。
-// 渡さなければ従来の `.tgproj`（埋め込み・相対パス）をそのまま読み書きする。
+// workspace を渡すとシーン (.rockscene) として扱う。マテリアルと天球は共有アセット
+// （`.rockmat` / `.rocksky`）へ分離し、画像はルート内へ取り込んで ID で参照する。
+// 渡さなければ従来の `.reproj`（埋め込み・相対パス）をそのまま読み書きする。
 bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
                  ProjectWorkspace* workspace = nullptr);
 bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
                  rhi::PipelineCache& pipelineCache, const ProjectRefs& refs,
                  ProjectWorkspace* workspace = nullptr);
 
-// --- 共有アセット（ルート内の .tgmat / .tgsky / .tgmodel） ---------------
+// --- 共有アセット（ルート内の .rockmat / .rocksky / .rockmodel） ---------------
 //
 // 読み込み済みのマテリアル・天球・モデルをそれぞれのファイルへ書く。
 // 置き場所が未定のものは `Materials/` / `Skies/` / `Models/` に名前から作る。
@@ -56,13 +56,13 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs);
 // 共有アセット 1 つを現在のライブラリへ足す。同じ ID がすでにあれば足さずにそれを使う
 // （天球は適用する）。参照している画像もその場で読み込む。
 // rescan を false にすると、ルートを走査し直さず手持ちの ID 表で解決する（サムネイルの連続生成用）。
-// .tgmodel は models へ足し（参照するマテリアルもライブラリへ）、models が無ければ失敗する。
+// .rockmodel は models へ足し（参照するマテリアルもライブラリへ）、models が無ければ失敗する。
 bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& path,
                      rhi::Device& device, rhi::PipelineCache& pipelineCache,
                      compositor::TextureLibrary& textures, compositor::MaterialLibrary& materials,
                      renderer::SkyLibrary& skies, bool rescan = true,
                      std::vector<renderer::ModelAsset>* models = nullptr);
-// --- マテリアル単体 (.tgmat) ----------------------------------------------
+// --- マテリアル単体 (.rockmat) ----------------------------------------------
 //
 // プロジェクト間でマテリアルを持ち回るための書き出し / 読み込み。
 // テクスチャはこのファイルのある場所からの相対パスで参照する。
@@ -75,4 +75,4 @@ compositor::MaterialAssetId LoadMaterial(const std::filesystem::path& path, rhi:
                                          compositor::TextureLibrary& textures,
                                          compositor::MaterialLibrary& materials);
 
-}  // namespace tg::io
+}  // namespace rock::io

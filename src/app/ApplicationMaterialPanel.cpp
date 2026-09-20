@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 void Application::DrawMaterialLibraryPanel() {
     if (!ImGui::Begin("マテリアル")) {
@@ -159,7 +159,7 @@ void Application::DrawMaterialContextMenu(compositor::MaterialAssetId target) {
         }
     }
 
-    // マテリアル単体のファイル (.tgmat)。プロジェクト間で持ち回るために使う。
+    // マテリアル単体のファイル (.rockmat)。プロジェクト間で持ち回るために使う。
     // プロジェクトにはマテリアルの構造ごと埋め込まれるので、保存には要らない。
     ImGui::Separator();
     if (ImGui::MenuItem("読み込み…")) {
@@ -171,7 +171,7 @@ void Application::DrawMaterialContextMenu(compositor::MaterialAssetId target) {
     }
     if (asset != nullptr && ImGui::MenuItem("書き出し…")) {
         const std::filesystem::path path = ShowSaveFileDialog(
-            L"マテリアルを書き出す", MaterialFileFilters(), L"tgmat", FromUtf8(asset->name));
+            L"マテリアルを書き出す", MaterialFileFilters(), L"rockmat", FromUtf8(asset->name));
         if (!path.empty()) {
             m_pendingMaterialExport = path;
             m_pendingExportMaterial = target;
@@ -189,7 +189,7 @@ bool Application::DrawMaterialProperties(compositor::MaterialAsset& asset) {
     if (ui::BeginPropertyTable("materialBasicRows")) {
         char nameBuffer[128] = {};
         std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", asset.name.c_str());
-        // 名前は `.tgmat` のファイル名と同じ。保存済みなら確定でファイルを改名する。
+        // 名前は `.rockmat` のファイル名と同じ。保存済みなら確定でファイルを改名する。
         if (ui::PropertyTextInputCommit("名前", nameBuffer, sizeof(nameBuffer),
                                         "アセットのファイル名（拡張子なし）。保存済みならファイルも改名する")) {
             // 名前もアンドゥの対象。落とすと、次のアンドゥで改名まで巻き戻る。
@@ -406,4 +406,4 @@ void Application::DrawMaterialSphereWindow() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

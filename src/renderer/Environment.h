@@ -8,7 +8,7 @@
 #include <filesystem>
 #include <string>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // 手続き的な空の設定。単位は cd/m^2 相当。
 // 太陽はディレクショナルライトで別に扱うため、ここには入れない
@@ -106,4 +106,4 @@ private:
     bool m_ready = false;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

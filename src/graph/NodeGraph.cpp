@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <utility>
 
-namespace tg::graph {
+namespace rock::graph {
 namespace {
 
 // --- 定義テーブル ---------------------------------------------------------
@@ -517,4 +517,4 @@ std::vector<ModelPlacementPath> CollectOutputModels(const NodeGraph& graph, Grap
     return result;
 }
 
-}  // namespace tg::graph
+}  // namespace rock::graph

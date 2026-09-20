@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 // ファイル選択ダイアログの絞り込み。表示名と `*.png;*.jpg` 形式のパターンの対。
 struct FileFilter {
@@ -34,10 +34,10 @@ std::filesystem::path ShowPickFolderDialog(const wchar_t* title,
                                            const std::filesystem::path& initialPath = {});
 
 // 保存先を選ぶ。取り消したら空のパスを返す。
-// defaultExtension は先頭のドットを含めない（"tgproj" など）。
+// defaultExtension は先頭のドットを含めない（"reproj" など）。
 std::filesystem::path ShowSaveFileDialog(const wchar_t* title,
                                          const std::vector<FileFilter>& filters,
                                          const wchar_t* defaultExtension,
                                          const std::filesystem::path& initialPath = {});
 
-}  // namespace tg
+}  // namespace rock

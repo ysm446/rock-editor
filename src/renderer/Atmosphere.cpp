@@ -9,7 +9,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 constexpr auto kReadState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
@@ -77,7 +77,7 @@ bool Atmosphere::Update(rhi::Device& device, rhi::PipelineCache& pipelines, cons
     }
     if (!m_environment.BuildFromAtmosphere(device, pipelines, settings, m_multiScatter.SrvIndex(), m_ground.SrvIndex())) {
         m_ready = false;
-        TG_LOG_WARN("大気散乱の環境マップを生成できませんでした");
+        ROCK_LOG_WARN("大気散乱の環境マップを生成できませんでした");
         return false;
     }
     m_applied = settings;
@@ -115,4 +115,4 @@ DirectX::XMFLOAT3 AtmosphereSunTransmittance(const AtmosphereSettings& p) {
             static_cast<float>(std::exp(-33.1e-6 * p.density * opticalR - mie))};
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

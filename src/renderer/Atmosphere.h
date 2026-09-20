@@ -6,9 +6,9 @@
 
 #include <cstdint>
 
-// シーンの空（大気散乱）。terrain-graph の Atmosphere から、雲・月と星空・ゴッドレイ・アニメーションを除いたもの。
+// シーンの空（大気散乱）。rock-editor の Atmosphere から、雲・月と星空・ゴッドレイ・アニメーションを除いたもの。
 // 仕様は docs/design/rendering.md の「シーンの空（大気散乱）」。
-namespace tg::renderer {
+namespace rock::renderer {
 
 // HLSL の AtmosphericParameters（shaders/AtmosphereCommon.hlsli）と同じ並び。
 // 距離は m、角度はラジアン、太陽は大気圏外照度（lux）。
@@ -49,4 +49,4 @@ private:
 // シェーダの AtmComputeSunTransmittance と同じ積分を CPU で行う（直接光の色と太陽の円盤に使う）。
 DirectX::XMFLOAT3 AtmosphereSunTransmittance(const AtmosphereSettings& settings);
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

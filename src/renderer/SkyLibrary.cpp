@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace tg::renderer {
+namespace rock::renderer {
 namespace {
 
 using rhi::DispatchCount;
@@ -112,7 +112,7 @@ bool UploadEquirect(rhi::Device& device, const HdrImage& image, rhi::GpuTexture&
 
     void* mapped = nullptr;
     const D3D12_RANGE readRange = {0, 0};
-    if (!TG_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
+    if (!ROCK_CHECK_HR(staging.resource->Map(0, &readRange, &mapped))) {
         device.DeferRelease(staging);
         return false;
     }
@@ -258,7 +258,7 @@ void SkyLibrary::ProcessPendingWork(rhi::Device& device, rhi::PipelineCache& pip
             continue;
         }
         if (!BuildThumbnail(device, pipelineCache, asset)) {
-            TG_LOG_WARN("天球「%s」のサムネイルを作れませんでした", asset.name.c_str());
+            ROCK_LOG_WARN("天球「%s」のサムネイルを作れませんでした", asset.name.c_str());
         }
         // 失敗しても要求は落とす（同じ失敗を毎フレーム繰り返さない）。
         asset.thumbnailDirty = false;
@@ -347,4 +347,4 @@ bool SkyLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pipelin
     return executed;
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

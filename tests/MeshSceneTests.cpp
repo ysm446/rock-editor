@@ -8,7 +8,7 @@
 #include <limits>
 
 void RunMeshSceneTests() {
-    using namespace tg;
+    using namespace rock;
     tests::Section("Mesh scene");
     renderer::SceneMesh mesh;
     mesh.geometry.vertices = {

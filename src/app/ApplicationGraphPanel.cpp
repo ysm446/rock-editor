@@ -22,7 +22,7 @@
 
 namespace ed = ax::NodeEditor;
 
-namespace tg {
+namespace rock {
 namespace {
 
 ImU32 ColorToU32(const ImVec4& color) {
@@ -271,7 +271,7 @@ void Application::CopySelectedGraphNodes() {
         }
         m_graphClipboard.push_back(std::move(entry));
     }
-    TG_LOG_INFO("ノードをコピーしました: %zu 個", m_graphClipboard.size());
+    ROCK_LOG_INFO("ノードをコピーしました: %zu 個", m_graphClipboard.size());
 }
 
 void Application::PasteGraphNodes(const ImVec2& viewCenter) {
@@ -350,7 +350,7 @@ void Application::PasteGraphNodes(const ImVec2& viewCenter) {
         }
     }
     MarkDocumentChanged();
-    TG_LOG_INFO("ノードを貼り付けました: %zu 個", m_graphClipboard.size());
+    ROCK_LOG_INFO("ノードを貼り付けました: %zu 個", m_graphClipboard.size());
 }
 
 bool Application::IsGraphPinVisible(const graph::Pin& /*pin*/) const {
@@ -697,7 +697,7 @@ void Application::DrawGraphEditor() {
             const graph::GraphId nodeId = m_graph.CreateNode(kind);
             graph::Node* node = m_graph.FindMutableNode(nodeId);
             if (node == nullptr) {
-                TG_LOG_WARN("ノードを追加できませんでした（種類の定義が見つかりません）");
+                ROCK_LOG_WARN("ノードを追加できませんでした（種類の定義が見つかりません）");
                 return;
             }
             if (auto* settings = std::get_if<graph::LayerNodeSettings>(&node->settings)) {
@@ -718,11 +718,11 @@ void Application::DrawGraphEditor() {
             SetPreviewGraphNode(nodeId);
             MarkDocumentChanged();
             // ステータスバーに残す。追加が効いたかを画面で確かめられるようにする。
-            TG_LOG_INFO("ノードを追加しました: %s", NodeDisplayName(*node));
+            ROCK_LOG_INFO("ノードを追加しました: %s", NodeDisplayName(*node));
         };
         // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
         ImGui::TextDisabled("モデル");
-        addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.tgmodel）を 1 つ置く");
+        addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
         ImGui::Separator();
         addNodeMenuItem(graph::NodeKind::Merge, "Merge — メッシュとモデルをまとめる（モデルだけなら Transform へ繋げる）");
@@ -907,4 +907,4 @@ void Application::DrawGraphPanel() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

@@ -1,5 +1,5 @@
-#ifndef TG_ENV_COMMON_HLSLI
-#define TG_ENV_COMMON_HLSLI
+#ifndef ROCK_ENV_COMMON_HLSLI
+#define ROCK_ENV_COMMON_HLSLI
 
 #include "Common.hlsli"
 
@@ -62,4 +62,4 @@ float3 EvaluateProceduralSky(float3 direction, float3 zenithColor, float3 horizo
     return groundColor * lerp(1.0f, 0.45f, t) * intensity;
 }
 
-#endif  // TG_ENV_COMMON_HLSLI
+#endif  // ROCK_ENV_COMMON_HLSLI

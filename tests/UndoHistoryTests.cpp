@@ -10,10 +10,10 @@
 
 namespace {
 
-using tg::DocumentSnapshot;
-using tg::UndoHistory;
-using tg::tests::Check;
-using tg::tests::Section;
+using rock::DocumentSnapshot;
+using rock::UndoHistory;
+using rock::tests::Check;
+using rock::tests::Section;
 
 // 段を見分けるため、グラフのノード数を目印に使う。
 DocumentSnapshot MakeSnapshot(size_t nodeCount) {

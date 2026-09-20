@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 class ShaderCompiler;
 
@@ -96,4 +96,4 @@ private:
     std::unordered_map<std::wstring, ComPtr<ID3D12PipelineState>> m_graphicsPipelines;
 };
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

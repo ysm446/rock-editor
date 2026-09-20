@@ -16,7 +16,7 @@
 #include <cstring>
 #include <utility>
 
-namespace tg {
+namespace rock {
 namespace fs = std::filesystem;
 namespace {
 
@@ -37,8 +37,8 @@ std::string Extension(const fs::path& path) {
 bool AssetThumbnailCache::Supports(const fs::path& path) {
     const auto ext = Extension(path);
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" ||
-           ext == ".exr" || ext == ".hdr" || ext == ".tgmat" || ext == ".tgsky" || ext == ".tgscene" ||
-           ext == ".tglayer" || ext == ".tgboundary" || ext == ".tgmodel" || ext == ".fbx";
+           ext == ".exr" || ext == ".hdr" || ext == ".rockmat" || ext == ".rocksky" || ext == ".rockscene" ||
+           ext == ".tglayer" || ext == ".tgboundary" || ext == ".rockmodel" || ext == ".fbx";
 }
 
 void AssetThumbnailCache::BeginRequests() {
@@ -101,7 +101,7 @@ void AssetThumbnailCache::Store(rhi::Device& device, const fs::path& path, rhi::
     entry.texture = std::move(texture);
     // 生成を試みて失敗したときだけ知らせる（保存前のシーンや、未保存のレイヤーマテリアルの画像が無いのは正常）。
     if (entry.failed && persist)
-        TG_LOG_WARN("アセットのサムネイルを生成できません: %s", ToUtf8Display(path).c_str());
+        ROCK_LOG_WARN("アセットのサムネイルを生成できません: %s", ToUtf8Display(path).c_str());
     m_entries.emplace(path, std::move(entry));
 }
 
@@ -157,7 +157,7 @@ bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, 
     if (!device.Allocator().CreateUploadBuffer(pixels.size(), L"AssetThumbnailUpload", staging)) return false;
     void* mapped = nullptr;
     const D3D12_RANGE range{0, 0};
-    if (!TG_CHECK_HR(staging.resource->Map(0, &range, &mapped))) { device.DeferRelease(staging); return false; }
+    if (!ROCK_CHECK_HR(staging.resource->Map(0, &range, &mapped))) { device.DeferRelease(staging); return false; }
     std::memcpy(mapped, pixels.data(), pixels.size());
     staging.resource->Unmap(0, nullptr);
     const bool result = device.ExecuteImmediate([&](ID3D12GraphicsCommandList* list) {
@@ -173,12 +173,12 @@ bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, 
     return result;
 }
 
-// モデルを一時の領域へ読み、斜め上からの全体を描く。.tgmodel は割り当てたマテリアルで、
+// モデルを一時の領域へ読み、斜め上からの全体を描く。.rockmodel は割り当てたマテリアルで、
 // FBX 単体は灰色で描く。
 bool AssetThumbnailCache::BuildModel(rhi::Device& device, rhi::PipelineCache& pipelines,
                                      io::ProjectWorkspace& workspace, const fs::path& path, rhi::GpuTexture& output) {
     std::vector<renderer::ModelAsset> models;
-    if (Extension(path) == ".tgmodel") {
+    if (Extension(path) == ".rockmodel") {
         if (!io::LoadSharedAsset(workspace, path, device, pipelines, m_textures, m_materials, m_skies, false, &models))
             return false;
     } else {
@@ -226,7 +226,7 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
     const auto extension = Extension(path);
     rhi::GpuTexture thumbnail;
     m_diskRecord = {};
-    if (extension == ".tgscene") {
+    if (extension == ".rockscene") {
         const auto preview = io::SceneThumbnailPath(workspace, path);
         std::error_code error;
         if (fs::is_regular_file(preview, error)) BuildImage(device, preview, thumbnail);
@@ -261,14 +261,14 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
         m_entries[path].failed = false;
         return;
     }
-    if (extension == ".tgmodel" || extension == ".fbx") {
+    if (extension == ".rockmodel" || extension == ".fbx") {
         ClearScratch(device, m_textures.Entries().size() >= MaxScratchTextures);
         if (!BuildModel(device, pipelines, workspace, path, thumbnail)) device.DeferRelease(thumbnail);
         Store(device, path, std::move(thumbnail));
         ClearScratch(device, false);
         return;
     }
-    if (extension != ".tgmat" && extension != ".tgsky") {
+    if (extension != ".rockmat" && extension != ".rocksky") {
         if (!BuildImage(device, path, thumbnail)) device.DeferRelease(thumbnail);
         Store(device, path, std::move(thumbnail));
         return;
@@ -277,8 +277,8 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
     bool loaded = false;
     nlohmann::json header;
     const auto format = io::ProjectWorkspace::ReadJson(path, header) ? io::ProjectWorkspace::String(header, "format") : "";
-    if (extension == ".tgmat" && (format == "terrain-graph.material" || format == "material-mixer.material")) {
-        // 持ち出し用の旧 .tgmat。相対パスの画像を読んでそのまま球を作る。
+    if (extension == ".rockmat" && (format == "rock-editor.material" || format == "material-mixer.material")) {
+        // 持ち出し用の旧 .rockmat。相対パスの画像を読んでそのまま球を作る。
         loaded = io::LoadMaterial(path, device, pipelines, m_textures, m_materials) != compositor::kNoMaterialAsset;
     } else {
         loaded = io::LoadSharedAsset(workspace, path, device, pipelines, m_textures, m_materials, m_skies, false);
@@ -295,4 +295,4 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
     ClearScratch(device, false);
 }
 
-}  // namespace tg
+}  // namespace rock

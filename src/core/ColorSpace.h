@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace tg {
+namespace rock {
 
 // sRGB とリニアの相互変換（IEC 61966-2-1）。
 //
@@ -24,4 +24,4 @@ inline float LinearToSrgb(float c) {
     return (v <= 0.0031308f) ? (v * 12.92f) : (1.055f * std::pow(v, 1.0f / 2.4f) - 0.055f);
 }
 
-}  // namespace tg
+}  // namespace rock

@@ -3,12 +3,12 @@
 #include <filesystem>
 #include <vector>
 
-namespace tg::io {
+namespace rock::io {
 
 // 最近使ったルートフォルダと、ルートごとのシーンの履歴。
 //
 // プロジェクトの中身ではなくアプリ側の状態なので、ルートには入れず
-// **`%LOCALAPPDATA%/road-editor/recent.json`** に置く。
+// **`%LOCALAPPDATA%/rock-editor/recent.json`** に置く。
 // 版1（プロジェクトファイルの一覧）は、所属するルートを開いたときに移行する。
 class RecentFiles {
 public:
@@ -42,4 +42,4 @@ private:
     std::vector<std::filesystem::path> m_legacy;
 };
 
-}  // namespace tg::io
+}  // namespace rock::io

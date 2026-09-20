@@ -6,7 +6,7 @@
 
 #include <array>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // 開発用の明示的な計測。読み戻しはフェンス完了後だけ行い、通常表示では確保しない。
 class PreviewDiagnostics {
@@ -46,4 +46,4 @@ private:
     bool m_probeAttempted = false;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

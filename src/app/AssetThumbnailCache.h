@@ -14,20 +14,20 @@
 #include <unordered_map>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 // アセットの帯に出す、**まだシーンへ読み込んでいない**ファイルのサムネイル。
 //
 // 画像は CPU で縮小して転送する。マテリアルと天球は、シーンのライブラリとは別の
 // 読み込み領域（m_textures / m_materials / m_skies）へ一時的に読み、既存の球の
-// サムネイルを取り出して使う。モデル（.tgmodel / .fbx）は同じ領域へ読んで ModelPreview で描く。
+// サムネイルを取り出して使う。モデル（.rockmodel / .fbx）は同じ領域へ読んで ModelPreview で描く。
 // シーン側の一覧・ID・アンドゥには一切触れない。
 //
 // 生成はフレームの外で 1 フレームに 1 件だけ（GPU 待機と画像の読み込みを伴う）。
 // ルートの走査はマテリアルごとには行わない（ルートの切り替えと Invalidate のときだけ）。
 // 読み込んだ画像は、同じフォルダの続くマテリアルで使い回す（共有の _ORD や複製は同じ画像を指す）。
 // 要求を作り終えたとき、または MaxScratchTextures 枚を超えたときに返す。
-// 生成したものは `<ルート>/.terrain-graph/thumbnails/` へ PNG で残し、
+// 生成したものは `<ルート>/.rock-editor/thumbnails/` へ PNG で残し、
 // 次回はそれを読む（io/ThumbnailStore）。メモリには最大 MaxEntries 件を保持する。
 class AssetThumbnailCache {
 public:
@@ -82,4 +82,4 @@ private:
     ModelLighting m_modelLighting;
 };
 
-}  // namespace tg
+}  // namespace rock

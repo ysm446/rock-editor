@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 namespace {
 
@@ -551,7 +551,7 @@ void Application::DrawViewportPanel() {
                                    ImGuiButtonFlags_MouseButtonLeft |
                                        ImGuiButtonFlags_MouseButtonMiddle |
                                        ImGuiButtonFlags_MouseButtonRight);
-            // アセットの帯のモデル（.tgmodel / .fbx）を落とすと、その位置へ置く。
+            // アセットの帯のモデル（.rockmodel / .fbx）を落とすと、その位置へ置く。
             ModelDropTarget(imageOrigin, ImVec2(imageOrigin.x + available.x, imageOrigin.y + available.y));
 
             const ImGuiIO& io = ImGui::GetIO();
@@ -599,4 +599,4 @@ void Application::DrawViewportPanel() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

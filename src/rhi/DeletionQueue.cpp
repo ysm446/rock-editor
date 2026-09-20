@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 void DeletionQueue::SetAuxiliaryFence(ComPtr<ID3D12Fence> fence, uint64_t value) {
     m_guard.fence = std::move(fence);
@@ -58,4 +58,4 @@ void DeletionQueue::Flush() {
     m_descriptorEntries.clear();
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

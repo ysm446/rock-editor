@@ -18,9 +18,9 @@
 #include <chrono>
 #include <functional>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
-// ビューポートに何を出すか。シェーダの TG_VIEW_* と一致させること。
+// ビューポートに何を出すか。シェーダの ROCK_VIEW_* と一致させること。
 //
 // チャンネルを覗く表示（ベースカラー〜ハイト）は「中身をそのまま見る」ためのもので、
 // 露出もトーンマップも掛けない。**形を見る表示（ワイヤーフレーム / クレイ）は
@@ -437,4 +437,4 @@ private:
     uint32_t m_height = 0;
 };
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

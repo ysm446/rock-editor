@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace tg::renderer {
+namespace rock::renderer {
 
 // 投影位置での1mあたりの画面変位。有限距離のプローブを使わず、
 // 透視除算の微分でカメラ面をまたぐ反転と差分の桁落ちを避ける。
@@ -47,4 +47,4 @@ inline AxisProjection ProjectMoveAxes(const DirectX::XMMATRIX& viewProjection,
     return result;
 }
 
-}  // namespace tg::renderer
+}  // namespace rock::renderer

@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace tg::rhi {
+namespace rock::rhi {
 
 bool SaveTextureToPng(Device& device, GpuTexture& texture, const std::filesystem::path& path,
                       uint32_t maxSize) {
@@ -32,7 +32,7 @@ bool SaveTextureToPng(Device& device, GpuTexture& texture, const std::filesystem
     if (!executed) { device.DeferRelease(readback); return false; }
     void* mapped = nullptr;
     const D3D12_RANGE range{0, static_cast<SIZE_T>(totalBytes)};
-    if (!TG_CHECK_HR(readback.resource->Map(0, &range, &mapped))) { device.DeferRelease(readback); return false; }
+    if (!ROCK_CHECK_HR(readback.resource->Map(0, &range, &mapped))) { device.DeferRelease(readback); return false; }
     const auto* source = static_cast<const uint8_t*>(mapped) + footprint.Offset;
     const float scale = maxSize ? std::min(1.0f, float(maxSize) / float(std::max(texture.width, texture.height))) : 1.0f;
     const uint32_t width = std::max(1u, uint32_t(texture.width * scale));
@@ -62,4 +62,4 @@ bool SaveTextureToPng(Device& device, GpuTexture& texture, const std::filesystem
     return saved;
 }
 
-}  // namespace tg::rhi
+}  // namespace rock::rhi

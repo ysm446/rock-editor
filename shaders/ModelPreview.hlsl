@@ -1,6 +1,6 @@
 // FBX から読んだモデルの描画。モデルプレビューの窓・アセットの帯のサムネイル（sceneMode = 0）と、
 // ビューポートに置いたモデル（sceneMode = 1。線形 HDR を書き、道路と同じシャドウマップの影を受ける）。
-// terrain-graph の ModelPreview.hlsl から、インスタンス描画と大気を外したもの。
+// rock-editor の ModelPreview.hlsl から、インスタンス描画と大気を外したもの。
 //
 // **照らし方はビューポートと同じ**（適用中の天球の IBL + 太陽 + 露出 + トーンマップ）。
 // マテリアルの合成モードを見る。マスク抜きはしきい値未満を捨て、半透明は不透明度を A に入れて重ねる
@@ -38,12 +38,12 @@ struct ModelConstants
 ConstantBuffer<ModelConstants> g_model : register(b1);
 
 // MaterialAsset::mapUvSets のビットの位置（compositor::MaterialMap と同じ並び）。
-#define TG_MAP_BASE_COLOR 0u
-#define TG_MAP_NORMAL     1u
-#define TG_MAP_ROUGHNESS  2u
-#define TG_MAP_METALLIC   3u
-#define TG_MAP_AO         4u
-#define TG_MAP_OPACITY    6u
+#define ROCK_MAP_BASE_COLOR 0u
+#define ROCK_MAP_NORMAL     1u
+#define ROCK_MAP_ROUGHNESS  2u
+#define ROCK_MAP_METALLIC   3u
+#define ROCK_MAP_AO         4u
+#define ROCK_MAP_OPACITY    6u
 
 static const uint kBlendMasked = 1u;
 static const uint kBlendTranslucent = 2u;
@@ -175,8 +175,8 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
         opacity = g_model.opacityValue;
         if (g_model.opacityIndex != kInvalidTextureIndex)
         {
-            const MapUv m = MAP_UV(TG_MAP_OPACITY);
-            opacity = SampleScalarMap(g_model.opacityIndex, TG_CHANNEL_SLOT_OPACITY, m.uv, m.deltaX, m.deltaY);
+            const MapUv m = MAP_UV(ROCK_MAP_OPACITY);
+            opacity = SampleScalarMap(g_model.opacityIndex, ROCK_CHANNEL_SLOT_OPACITY, m.uv, m.deltaX, m.deltaY);
         }
         if (g_model.blendMode == kBlendMasked)
         {
@@ -188,7 +188,7 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
     float3 baseColor = g_model.baseColorTint;
     if (g_model.baseColorIndex != kInvalidTextureIndex)
     {
-        const MapUv m = MAP_UV(TG_MAP_BASE_COLOR);
+        const MapUv m = MAP_UV(ROCK_MAP_BASE_COLOR);
         baseColor *= SampleMap(g_model.baseColorIndex, m.uv, MapLod(g_model.baseColorIndex, m.deltaX, m.deltaY)).rgb;
     }
     baseColor = AdjustBaseColor(baseColor, g_model.colorAdjust.x, g_model.colorAdjust.y, g_model.brightness);
@@ -196,20 +196,20 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
     float roughness = g_model.roughnessValue;
     if (g_model.roughnessIndex != kInvalidTextureIndex)
     {
-        const MapUv m = MAP_UV(TG_MAP_ROUGHNESS);
-        roughness = SampleScalarMap(g_model.roughnessIndex, TG_CHANNEL_SLOT_ROUGHNESS, m.uv, m.deltaX, m.deltaY);
+        const MapUv m = MAP_UV(ROCK_MAP_ROUGHNESS);
+        roughness = SampleScalarMap(g_model.roughnessIndex, ROCK_CHANNEL_SLOT_ROUGHNESS, m.uv, m.deltaX, m.deltaY);
     }
     float metallic = g_model.metallicValue;
     if (g_model.metallicIndex != kInvalidTextureIndex)
     {
-        const MapUv m = MAP_UV(TG_MAP_METALLIC);
-        metallic = SampleScalarMap(g_model.metallicIndex, TG_CHANNEL_SLOT_METALLIC, m.uv, m.deltaX, m.deltaY);
+        const MapUv m = MAP_UV(ROCK_MAP_METALLIC);
+        metallic = SampleScalarMap(g_model.metallicIndex, ROCK_CHANNEL_SLOT_METALLIC, m.uv, m.deltaX, m.deltaY);
     }
     float ambientOcclusion = g_model.aoValue;
     if (g_model.aoIndex != kInvalidTextureIndex)
     {
-        const MapUv m = MAP_UV(TG_MAP_AO);
-        ambientOcclusion = SampleScalarMap(g_model.aoIndex, TG_CHANNEL_SLOT_AO, m.uv, m.deltaX, m.deltaY);
+        const MapUv m = MAP_UV(ROCK_MAP_AO);
+        ambientOcclusion = SampleScalarMap(g_model.aoIndex, ROCK_CHANNEL_SLOT_AO, m.uv, m.deltaX, m.deltaY);
     }
 
     // --- 法線 --------------------------------------------------------------
@@ -220,7 +220,7 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
     if (g_model.normalIndex != kInvalidTextureIndex)
     {
         // 接線は 1 つ目の UV から求めてあるので、2 つ目の UV で読む法線マップは向きが合わないことがある。
-        const MapUv m = MAP_UV(TG_MAP_NORMAL);
+        const MapUv m = MAP_UV(ROCK_MAP_NORMAL);
         float3 sampled = SampleMap(g_model.normalIndex, m.uv, MapLod(g_model.normalIndex, m.deltaX, m.deltaY)).rgb * 2.0f - 1.0f;
         if (g_model.flipNormalGreen != 0u)
         {

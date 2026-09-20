@@ -20,7 +20,7 @@
 // ここでは実装マクロを定義しない。
 #include <tinyexr.h>
 
-namespace tg {
+namespace rock {
 namespace {
 
 // パスを stb / tinyexr のナロー API へ渡さない。ナロー変換（path::string()）は
@@ -66,18 +66,18 @@ bool SavePng(const std::filesystem::path& path, uint32_t width, uint32_t height,
         ::stbi_write_png_to_mem(pixels, static_cast<int>(rowPitch), static_cast<int>(width),
                                 static_cast<int>(height), channels, &pngSize);
     if (png == nullptr || pngSize <= 0) {
-        TG_LOG_ERROR("PNG を書き出せません: %s", ToUtf8Display(path).c_str());
+        ROCK_LOG_ERROR("PNG を書き出せません: %s", ToUtf8Display(path).c_str());
         ::free(png);
         return false;
     }
     const bool written = WriteFileBytes(path, png, static_cast<size_t>(pngSize));
     ::free(png);
     if (!written) {
-        TG_LOG_ERROR("PNG を書き出せません: %s", ToUtf8Display(path).c_str());
+        ROCK_LOG_ERROR("PNG を書き出せません: %s", ToUtf8Display(path).c_str());
         return false;
     }
 
-    TG_LOG_INFO("PNG を書き出しました: %s (%u x %u, %d ch)", ToUtf8Display(path).c_str(), width,
+    ROCK_LOG_INFO("PNG を書き出しました: %s (%u x %u, %d ch)", ToUtf8Display(path).c_str(), width,
                 height, channels);
     return true;
 }
@@ -90,7 +90,7 @@ bool LoadLdrImage(const std::filesystem::path& path, LdrImage& outImage) {
     const std::string utf8Path = ToUtf8Display(path);
     const std::vector<uint8_t> bytes = ReadFileBytes(path);
     if (bytes.empty()) {
-        TG_LOG_ERROR("画像を読み込めません: %s (ファイルを開けない)", utf8Path.c_str());
+        ROCK_LOG_ERROR("画像を読み込めません: %s (ファイルを開けない)", utf8Path.c_str());
         return false;
     }
 
@@ -100,7 +100,7 @@ bool LoadLdrImage(const std::filesystem::path& path, LdrImage& outImage) {
     stbi_uc* data = ::stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()),
                                             &width, &height, &channels, 4);
     if (data == nullptr) {
-        TG_LOG_ERROR("画像を読み込めません: %s (%s)", utf8Path.c_str(), ::stbi_failure_reason());
+        ROCK_LOG_ERROR("画像を読み込めません: %s (%s)", utf8Path.c_str(), ::stbi_failure_reason());
         return false;
     }
 
@@ -109,7 +109,7 @@ bool LoadLdrImage(const std::filesystem::path& path, LdrImage& outImage) {
     outImage.pixels.assign(data, data + static_cast<size_t>(width) * height * 4);
     ::stbi_image_free(data);
 
-    TG_LOG_INFO("画像を読み込みました: %s (%d x %d, %d ch)", utf8Path.c_str(), width, height,
+    ROCK_LOG_INFO("画像を読み込みました: %s (%d x %d, %d ch)", utf8Path.c_str(), width, height,
                 channels);
     return true;
 }
@@ -151,7 +151,7 @@ bool LoadHdrImage(const std::filesystem::path& path, HdrImage& outImage) {
     const std::string utf8Path = ToUtf8Display(path);
     const std::vector<uint8_t> bytes = ReadFileBytes(path);
     if (bytes.empty()) {
-        TG_LOG_ERROR("HDR 画像を読み込めません: %s (ファイルを開けない)", utf8Path.c_str());
+        ROCK_LOG_ERROR("HDR 画像を読み込めません: %s (ファイルを開けない)", utf8Path.c_str());
         return false;
     }
 
@@ -161,7 +161,7 @@ bool LoadHdrImage(const std::filesystem::path& path, HdrImage& outImage) {
     float* data = ::stbi_loadf_from_memory(bytes.data(), static_cast<int>(bytes.size()),
                                            &width, &height, &channels, 4);
     if (data == nullptr) {
-        TG_LOG_ERROR("HDR 画像を読み込めません: %s (%s)", utf8Path.c_str(), ::stbi_failure_reason());
+        ROCK_LOG_ERROR("HDR 画像を読み込めません: %s (%s)", utf8Path.c_str(), ::stbi_failure_reason());
         return false;
     }
 
@@ -170,7 +170,7 @@ bool LoadHdrImage(const std::filesystem::path& path, HdrImage& outImage) {
     outImage.pixels.assign(data, data + static_cast<size_t>(width) * height * 4);
     ::stbi_image_free(data);
 
-    TG_LOG_INFO("HDR 画像を読み込みました: %s (%d x %d, %d ch)", utf8Path.c_str(), width, height,
+    ROCK_LOG_INFO("HDR 画像を読み込みました: %s (%d x %d, %d ch)", utf8Path.c_str(), width, height,
                 channels);
     return true;
 }
@@ -181,7 +181,7 @@ bool LoadExrImage(const std::filesystem::path& path, HdrImage& outImage) {
     const std::string utf8Path = ToUtf8Display(path);
     const std::vector<uint8_t> bytes = ReadFileBytes(path);
     if (bytes.empty()) {
-        TG_LOG_ERROR("EXR を読み込めません: %s (ファイルを開けない)", utf8Path.c_str());
+        ROCK_LOG_ERROR("EXR を読み込めません: %s (ファイルを開けない)", utf8Path.c_str());
         return false;
     }
 
@@ -193,7 +193,7 @@ bool LoadExrImage(const std::filesystem::path& path, HdrImage& outImage) {
     const int result =
         ::LoadEXRFromMemory(&data, &width, &height, bytes.data(), bytes.size(), &error);
     if (result != TINYEXR_SUCCESS) {
-        TG_LOG_ERROR("EXR を読み込めません: %s (%s)", utf8Path.c_str(),
+        ROCK_LOG_ERROR("EXR を読み込めません: %s (%s)", utf8Path.c_str(),
                      (error != nullptr) ? error : "原因不明");
         if (error != nullptr) {
             ::FreeEXRErrorMessage(error);
@@ -206,7 +206,7 @@ bool LoadExrImage(const std::filesystem::path& path, HdrImage& outImage) {
     outImage.pixels.assign(data, data + static_cast<size_t>(width) * height * 4);
     ::free(data);
 
-    TG_LOG_INFO("EXR を読み込みました: %s (%d x %d)", utf8Path.c_str(), width, height);
+    ROCK_LOG_INFO("EXR を読み込みました: %s (%d x %d)", utf8Path.c_str(), width, height);
     return true;
 }
 
@@ -231,7 +231,7 @@ bool SaveExr(const std::filesystem::path& path, uint32_t width, uint32_t height,
         return false;
     }
     if (channels != 1 && channels != 3 && channels != 4) {
-        TG_LOG_ERROR("EXR に書けないチャンネル数です: %d", channels);
+        ROCK_LOG_ERROR("EXR に書けないチャンネル数です: %d", channels);
         return false;
     }
 
@@ -240,7 +240,7 @@ bool SaveExr(const std::filesystem::path& path, uint32_t width, uint32_t height,
     const int size = ::SaveEXRToMemory(pixels, static_cast<int>(width), static_cast<int>(height),
                                        channels, asHalf ? 1 : 0, &buffer, &error);
     if (size <= 0 || buffer == nullptr) {
-        TG_LOG_ERROR("EXR を書き出せません: %s (%s)", ToUtf8Display(path).c_str(),
+        ROCK_LOG_ERROR("EXR を書き出せません: %s (%s)", ToUtf8Display(path).c_str(),
                      (error != nullptr) ? error : "不明なエラー");
         ::FreeEXRErrorMessage(error);
         ::free(buffer);
@@ -251,13 +251,13 @@ bool SaveExr(const std::filesystem::path& path, uint32_t width, uint32_t height,
     const bool written = WriteFileBytes(path, buffer, static_cast<size_t>(size));
     ::free(buffer);
     if (!written) {
-        TG_LOG_ERROR("EXR を書き出せません: %s", ToUtf8Display(path).c_str());
+        ROCK_LOG_ERROR("EXR を書き出せません: %s", ToUtf8Display(path).c_str());
         return false;
     }
 
-    TG_LOG_INFO("EXR を書き出しました: %s (%u x %u, %d ch)", ToUtf8Display(path).c_str(), width,
+    ROCK_LOG_INFO("EXR を書き出しました: %s (%u x %u, %d ch)", ToUtf8Display(path).c_str(), width,
                 height, channels);
     return true;
 }
 
-}  // namespace tg
+}  // namespace rock

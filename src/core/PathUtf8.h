@@ -3,7 +3,7 @@
 #include <filesystem>
 #include <string>
 
-namespace tg {
+namespace rock {
 
 // パスの UTF-8 変換。**path::string() はロケール依存（ACP）なので使わない。**
 // 用途で 2 つに分ける。
@@ -25,4 +25,4 @@ inline std::filesystem::path FromUtf8(const std::string& text) {
     return std::filesystem::path(std::u8string(text.begin(), text.end()));
 }
 
-}  // namespace tg
+}  // namespace rock

@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 // ファイルメニュー。ここでは要求を積むだけで、実際の読み書きは
 // ProcessPendingFileWork がフレームの外で行う（GPU 待機を伴うため）。
@@ -37,9 +37,9 @@ void Application::RequestOpenProject() {
 }
 
 // saveAs が偽でも、まだ一度も保存していなければ保存先を聞く。
-// 保存先は常にルート内の .tgscene。
+// 保存先は常にルート内の .rockscene。
 void Application::RequestSaveProject(bool saveAs) {
-    const bool isScene = _wcsicmp(m_projectPath.extension().c_str(), L".tgscene") == 0;
+    const bool isScene = _wcsicmp(m_projectPath.extension().c_str(), L".rockscene") == 0;
     if (!saveAs && isScene && m_workspace.Contains(m_projectPath)) {
         m_pendingProjectSave = m_projectPath;
         return;
@@ -47,16 +47,16 @@ void Application::RequestSaveProject(bool saveAs) {
     const std::filesystem::path initial =
         isScene ? m_projectPath
                 : m_workspace.Root() / L"Scenes" /
-                      (m_projectPath.empty() ? std::wstring(L"Untitled.tgscene")
-                                             : m_projectPath.stem().wstring() + L".tgscene");
+                      (m_projectPath.empty() ? std::wstring(L"Untitled.rockscene")
+                                             : m_projectPath.stem().wstring() + L".rockscene");
     std::filesystem::path path = ShowSaveFileDialog(
-        L"シーンを保存", {{L"Road Editor シーン", L"*.tgscene"}}, L"tgscene", initial);
+        L"シーンを保存", {{L"Rock Editor シーン", L"*.rockscene"}}, L"rockscene", initial);
     if (path.empty()) {
         return;
     }
-    path.replace_extension(L".tgscene");
+    path.replace_extension(L".rockscene");
     if (!m_workspace.Contains(path)) {
-        TG_LOG_ERROR("シーンはプロジェクトルート内に保存してください: %s", ToUtf8Display(path).c_str());
+        ROCK_LOG_ERROR("シーンはプロジェクトルート内に保存してください: %s", ToUtf8Display(path).c_str());
         return;
     }
     m_pendingProjectSave = path;
@@ -65,16 +65,16 @@ void Application::RequestSaveProject(bool saveAs) {
 // 保存したシーンのプレビュー画像。ビューポートを縦横比を保って最大 256px へ縮小する。
 // 失敗してもシーン本体の保存は成功扱い。
 void Application::SaveSceneThumbnail(const std::filesystem::path& path) {
-    if (_wcsicmp(path.extension().c_str(), L".tgscene") != 0 || !m_renderer.HasOutput()) return;
+    if (_wcsicmp(path.extension().c_str(), L".rockscene") != 0 || !m_renderer.HasOutput()) return;
     const std::filesystem::path thumbnail = io::SceneThumbnailPath(m_workspace, path);
     if (thumbnail.empty()) {
-        TG_LOG_WARN("シーンのサムネイルの保存先がルート外です");
+        ROCK_LOG_WARN("シーンのサムネイルの保存先がルート外です");
         return;
     }
     std::error_code error;
     std::filesystem::create_directories(thumbnail.parent_path(), error);
     if (error || !m_renderer.SaveOutputToPng(m_device, thumbnail, 256)) {
-        TG_LOG_WARN("シーンは保存しましたが、サムネイルを保存できませんでした");
+        ROCK_LOG_WARN("シーンは保存しましたが、サムネイルを保存できませんでした");
     }
     m_assetThumbnails.Invalidate();
 }
@@ -197,7 +197,7 @@ void Application::DrawFileMenu() {
     }
     if (ImGui::MenuItem("シーンを開く…")) {
         const std::filesystem::path path = ShowOpenFileDialog(
-            L"シーンを開く", {{L"シーン", L"*.tgscene"}});
+            L"シーンを開く", {{L"シーン", L"*.rockscene"}});
         if (!path.empty()) {
             m_pendingProjectOpen = path;
         }
@@ -225,14 +225,14 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         // 拡張子で行き先を決める。読み込み自体はどれも保留し、フレームの外で処理する。
-        if (extension == ".tgscene") {
+        if (extension == ".rockscene") {
             m_pendingProjectOpen = path;
-        } else if (extension == ".tgsky" || extension == ".tgmodel") {
+        } else if (extension == ".rocksky" || extension == ".rockmodel") {
             m_pendingAssetOpen = path;
         } else if (extension == ".fbx") {
             // ルート外ならアセットの帯で表示中のフォルダへ取り込む（ProcessModelWork）。
             m_pendingModelImports.push_back(path);
-        } else if (extension == ".tgmat") {
+        } else if (extension == ".rockmat") {
             // 共有アセットか持ち出し用かは ProcessAssetWork が中身を見て振り分ける。
             m_pendingAssetOpen = path;
         } else if (extension == ".hdr") {
@@ -242,7 +242,7 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
                 sky->sky.source = renderer::SkySource::Hdri;
                 sky->sky.hdriPath = path;
                 m_skyLibrary.MarkThumbnailDirty(sky->id);
-                TG_LOG_INFO("天球「%s」に %s を割り当てました", sky->name.c_str(),
+                ROCK_LOG_INFO("天球「%s」に %s を割り当てました", sky->name.c_str(),
                             ToUtf8Display(path.filename()).c_str());
             }
         } else if (extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
@@ -250,11 +250,11 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
             m_pendingTexturePaths.push_back(path);
             ++images;
         } else {
-            TG_LOG_WARN("扱えない形式です: %s", ToUtf8Display(path.filename()).c_str());
+            ROCK_LOG_WARN("扱えない形式です: %s", ToUtf8Display(path.filename()).c_str());
         }
     }
     if (images > 0) {
-        TG_LOG_INFO("%zu 枚の画像を読み込みます", images);
+        ROCK_LOG_INFO("%zu 枚の画像を読み込みます", images);
     }
 }
 
@@ -303,7 +303,7 @@ void Application::UpdateWindowTitle() {
     if (!m_projectPath.empty()) {
         title = m_projectPath.filename().wstring() + L" - ";
     }
-    title += L"Road Editor";
+    title += L"Rock Editor";
     m_window.SetTitle(title.c_str());
 }
 
@@ -352,8 +352,8 @@ void Application::ProcessPendingFileWork() {
 
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                              m_renderer, m_graph, &m_models};
-        // .tgscene はルートの共有アセットを参照する。旧 .tgproj は従来の埋め込み形式のまま読む。
-        const bool isScene = _wcsicmp(path.extension().c_str(), L".tgscene") == 0;
+        // .rockscene はルートの共有アセットを参照する。旧 .reproj は従来の埋め込み形式のまま読む。
+        const bool isScene = _wcsicmp(path.extension().c_str(), L".rockscene") == 0;
         if (io::LoadProject(path, m_device, m_pipelineCache, refs, isScene ? &m_workspace : nullptr)) {
             m_meshHighlight = MeshHighlightState{};
             if (isScene) m_recentProjects.Add(m_workspace.Root(), path);
@@ -407,7 +407,7 @@ void Application::ProcessPendingFileWork() {
             m_deferredRoot.clear();
             m_deferredScene.clear();
             m_deferredNew = false;
-            TG_LOG_ERROR("シーンの保存に失敗しました。現在の作業を保持しています");
+            ROCK_LOG_ERROR("シーンの保存に失敗しました。現在の作業を保持しています");
         }
     }
 
@@ -521,4 +521,4 @@ void Application::ProcessPendingFileWork() {
     SyncAssetNamesToFiles();
 }
 
-}  // namespace tg
+}  // namespace rock

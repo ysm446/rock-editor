@@ -21,7 +21,7 @@
 //     レイヤー列へ落とし、MaterialStack として評価する。
 //
 // UI / D3D12 には依存しない（compositor のデータ構造にだけ依存する）。
-namespace tg::graph {
+namespace rock::graph {
 
 using GraphId = int;
 
@@ -47,7 +47,7 @@ enum class NodeKind : uint32_t {
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
-    // 3D モデル（.tgmodel）を 1 つ置く。出力（Model 型）を Mesh Output か Merge へ繋ぐとビューポートに出る。
+    // 3D モデル（.rockmodel）を 1 つ置く。出力（Model 型）を Mesh Output か Merge へ繋ぐとビューポートに出る。
     Model = 32,
     // 上流のモデルをまとめて移動・回転・拡大する。Model 型を受けて Model 型を出す。
     Transform = 33,
@@ -245,4 +245,4 @@ bool IsModelNodeKind(NodeKind kind);
 // 入力数が可変の種類か（Merge）。
 bool IsVariableInputNodeKind(NodeKind kind);
 
-}  // namespace tg::graph
+}  // namespace rock::graph

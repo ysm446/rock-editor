@@ -70,7 +70,7 @@ struct MeshConstants
     uint materialSurfaceIndex;
     uint materialHeightIndex;
 
-    // ビューポートに何を出すか（0 = シェーディング結果）。TG_VIEW_* と一致させる。
+    // ビューポートに何を出すか（0 = シェーディング結果）。ROCK_VIEW_* と一致させる。
     uint debugView;
     // ハイトを形状に反映する量。0 なら押し出さない。
     float displacementScale;
@@ -145,17 +145,17 @@ static const float kLocalHeightRadiusTexels = 6.0f;
 static const float kLocalHeightGain = 16.0f;
 
 // ビューポートの表示モード。C++ 側の renderer::DebugView と一致させること。
-#define TG_VIEW_SHADED          0
-#define TG_VIEW_BASECOLOR       1
-#define TG_VIEW_NORMAL_VIEW     2
-#define TG_VIEW_NORMAL_WORLD    3
-#define TG_VIEW_ROUGHNESS       4
-#define TG_VIEW_METALLIC        5
-#define TG_VIEW_AO              6
-#define TG_VIEW_HEIGHT          7
-#define TG_VIEW_HEIGHT_LOCAL    8
-#define TG_VIEW_WIREFRAME       9
-#define TG_VIEW_CLAY            10
+#define ROCK_VIEW_SHADED          0
+#define ROCK_VIEW_BASECOLOR       1
+#define ROCK_VIEW_NORMAL_VIEW     2
+#define ROCK_VIEW_NORMAL_WORLD    3
+#define ROCK_VIEW_ROUGHNESS       4
+#define ROCK_VIEW_METALLIC        5
+#define ROCK_VIEW_AO              6
+#define ROCK_VIEW_HEIGHT          7
+#define ROCK_VIEW_HEIGHT_LOCAL    8
+#define ROCK_VIEW_WIREFRAME       9
+#define ROCK_VIEW_CLAY            10
 
 ConstantBuffer<MeshConstants> g_mesh : register(b1);
 
@@ -796,14 +796,14 @@ float4 PsWireframe(VsOutput input) : SV_Target0
 }
 
 // meshDisplayFlags のビット。C++ の kMeshFlag* と一致させる。
-#define TG_MESH_FLAG_OUTLINE_HOVERED 4u
-#define TG_MESH_FLAG_OUTLINE_SELECTED 8u
+#define ROCK_MESH_FLAG_OUTLINE_HOVERED 4u
+#define ROCK_MESH_FLAG_OUTLINE_SELECTED 8u
 
 // ホバー / 選択メッシュのシルエット枠（外周の辺を LINELIST で描く）。
 // 選択はライトギズモと同じ暖色、ホバーはワイヤーフレームと同じ寒色で区別する。
 float4 PsOutline(VsOutput input) : SV_Target0
 {
-    if ((g_mesh.meshDisplayFlags & TG_MESH_FLAG_OUTLINE_SELECTED) != 0u)
+    if ((g_mesh.meshDisplayFlags & ROCK_MESH_FLAG_OUTLINE_SELECTED) != 0u)
         return float4(1.0f, 0.74f, 0.30f, 0.95f);
     return float4(0.55f, 0.85f, 1.0f, 0.9f);
 }
@@ -835,7 +835,7 @@ float4 PsMain(VsOutput input) : SV_Target0
 
     // **クレイ表示**は、形（変位）はそのままで陰影だけをテクスチャ抜きにする。
     // 合成の色 / 法線 / サーフェスを読まず、単色マテリアルと面の向きで塗る。
-    const bool clay = (g_mesh.debugView == TG_VIEW_CLAY);
+    const bool clay = (g_mesh.debugView == ROCK_VIEW_CLAY);
     const bool useMaterialShading = (g_mesh.useMaterialTextures != 0u) && !clay;
 
     if (clay)
@@ -967,15 +967,15 @@ float4 PsMain(VsOutput input) : SV_Target0
     // チャンネルの中身をそのまま出す。露出もトーンマップも掛けない
     // （後段の TonemapPass が素通しする）。**クレイはここへ来ない。**
     // 陰影を付ける表示なので、下のシェーディングをそのまま通す。
-    if (g_mesh.debugView != TG_VIEW_SHADED && !clay)
+    if (g_mesh.debugView != ROCK_VIEW_SHADED && !clay)
     {
         float3 debugColor = float3(0.0f, 0.0f, 0.0f);
-        if (g_mesh.debugView == TG_VIEW_BASECOLOR)
+        if (g_mesh.debugView == ROCK_VIEW_BASECOLOR)
         {
             // ベースカラーはリニアで持っているので、見た目を合わせて sRGB で出す。
             debugColor = LinearToSrgb(saturate(baseColor));
         }
-        else if (g_mesh.debugView == TG_VIEW_NORMAL_VIEW)
+        else if (g_mesh.debugView == ROCK_VIEW_NORMAL_VIEW)
         {
             // 陰影に使う向きを**カメラ空間**で見る。ビュー行列は回転と平行移動だけ
             // なので、上 3x3 を掛ければ向きが移る（正規化は数値誤差の始末）。
@@ -984,29 +984,29 @@ float4 PsMain(VsOutput input) : SV_Target0
             const float3 viewNormal = normalize(mul((float3x3)g_mesh.view, normal));
             debugColor = viewNormal * 0.5f + 0.5f;
         }
-        else if (g_mesh.debugView == TG_VIEW_NORMAL_WORLD)
+        else if (g_mesh.debugView == ROCK_VIEW_NORMAL_WORLD)
         {
             // 陰影に実際に使う向き。法線マップを当てたあとのワールド空間法線。
             debugColor = normal * 0.5f + 0.5f;
         }
-        else if (g_mesh.debugView == TG_VIEW_ROUGHNESS)
+        else if (g_mesh.debugView == ROCK_VIEW_ROUGHNESS)
         {
             debugColor = roughnessValue.xxx;
         }
-        else if (g_mesh.debugView == TG_VIEW_METALLIC)
+        else if (g_mesh.debugView == ROCK_VIEW_METALLIC)
         {
             debugColor = metallicValue.xxx;
         }
-        else if (g_mesh.debugView == TG_VIEW_AO)
+        else if (g_mesh.debugView == ROCK_VIEW_AO)
         {
             debugColor = ambientOcclusion.xxx;
         }
-        else if (g_mesh.debugView == TG_VIEW_WIREFRAME)
+        else if (g_mesh.debugView == ROCK_VIEW_WIREFRAME)
         {
             // 線だけを見る表示。塗りではないので単色で描く。
             debugColor = float3(0.66f, 0.72f, 0.78f);
         }
-        else if (g_mesh.debugView == TG_VIEW_HEIGHT)
+        else if (g_mesh.debugView == ROCK_VIEW_HEIGHT)
         {
             float height = 0.0f;
             if (g_mesh.connectionContextCount != 0u)
@@ -1020,7 +1020,7 @@ float4 PsMain(VsOutput input) : SV_Target0
             }
             debugColor = saturate(height).xxx;
         }
-        else if (g_mesh.debugView == TG_VIEW_HEIGHT_LOCAL)
+        else if (g_mesh.debugView == ROCK_VIEW_HEIGHT_LOCAL)
         {
             // **その場の起伏だけ**を見る。地形の大きな高さ（標高差 600m の傾き）を
             // 周りの平均として引き、残りを 0.5 中心へ伸ばす。

@@ -22,14 +22,14 @@
 namespace {
 
 // アプリと同じペイロード種別（Application.cpp の kTextureDragDropType）。
-const char* const kPayloadType = "TG_TEXTURE";
+const char* const kPayloadType = "ROCK_TEXTURE";
 
 const ImVec2 kSourcePos(50.0f, 50.0f);
 const ImVec2 kTargetPos(50.0f, 300.0f);
 constexpr float kThumbnailSize = 72.0f;
 
-using tg::tests::Check;
-using tg::tests::Section;
+using rock::tests::Check;
+using rock::tests::Section;
 
 void Frame(float x, float y, bool down) {
     ImGuiIO& io = ImGui::GetIO();
@@ -64,7 +64,7 @@ struct Result {
 void SubmitSource(Result& result) {
     ImGui::SetCursorScreenPos(kSourcePos);
     ImGui::PushID(1234);
-    tg::ui::ThumbnailButton("##thumbnail", ImTextureID{}, kThumbnailSize, true);
+    rock::ui::ThumbnailButton("##thumbnail", ImTextureID{}, kThumbnailSize, true);
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
         result.sourceStarted = true;
         const unsigned int textureId = 7;
@@ -165,8 +165,8 @@ SplitterResult RunSplitterDrag(float startHeight, float dragToY, float minHeight
     // 境界は上の区画の下に余白を挟んだ位置。掴む高さの中ほどを狙う。
     // **位置は定数から導く。** 直値で書くと、余白や掴み幅を変えたときに
     // 「掴めていないのに落ちる」テストになって原因が分かりにくい。
-    const float grabY = kSourcePos.y + startHeight + tg::ui::kSplitterMargin +
-                        tg::ui::kSplitterGrabWidth * 0.5f;
+    const float grabY = kSourcePos.y + startHeight + rock::ui::kSplitterMargin +
+                        rock::ui::kSplitterGrabWidth * 0.5f;
     const float grabX = kSourcePos.x + 100.0f;
     struct Step {
         float y;
@@ -186,7 +186,7 @@ SplitterResult RunSplitterDrag(float startHeight, float dragToY, float minHeight
         ImGui::SetCursorScreenPos(kSourcePos);
         ImGui::BeginChild("top", ImVec2(300.0f, result.height));
         ImGui::EndChild();
-        if (tg::ui::HorizontalSplitter("split", &result.height, minHeight, maxHeight, 300.0f)) {
+        if (rock::ui::HorizontalSplitter("split", &result.height, minHeight, maxHeight, 300.0f)) {
             ++result.releasedCount;
         }
         ImGui::BeginChild("bottom", ImVec2(300.0f, 0.0f));
@@ -219,18 +219,18 @@ TypingResult RunSliderTyping(bool confirmWithEnter, bool coordinates = false) {
     const auto draw = [&]() {
         BeginPanel();
         ImGui::SetCursorScreenPos(kSourcePos);
-        if (tg::ui::BeginPropertyTable("rows")) {
+        if (rock::ui::BeginPropertyTable("rows")) {
             bool edited = false;
             if (coordinates) {
                 float xyz[] = {result.value, 2.0f, 3.0f};
                 const float defaults[] = {1.0f, 2.0f, 3.0f};
-                const unsigned axes = tg::ui::PropertyFloat3Input("値", xyz, defaults);
+                const unsigned axes = rock::ui::PropertyFloat3Input("値", xyz, defaults);
                 Check((axes & ~1u) == 0 && xyz[1] == 2.0f && xyz[2] == 3.0f,
                       "X入力はY/Zを書き換えない");
                 result.value = xyz[0];
                 edited = axes != 0;
             } else {
-                edited = tg::ui::PropertyFloat("値", &result.value, 0.0f, 100.0f, 1.0f, "テスト", "%.1f");
+                edited = rock::ui::PropertyFloat("値", &result.value, 0.0f, 100.0f, 1.0f, "テスト", "%.1f");
             }
             if (edited) {
                 ++result.changedCount;
@@ -239,7 +239,7 @@ TypingResult RunSliderTyping(bool confirmWithEnter, bool coordinates = false) {
                 }
             }
             sliderRect = ImGui::TableGetCellBgRect(ImGui::GetCurrentTable(), 1);
-            tg::ui::EndPropertyTable();
+            rock::ui::EndPropertyTable();
         }
         ImGui::End();
         ImGui::Render();

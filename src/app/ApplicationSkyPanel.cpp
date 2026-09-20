@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-namespace tg {
+namespace rock {
 
 void Application::DrawSkyLibraryPanel() {
     if (!ImGui::Begin("天球")) {
@@ -217,7 +217,7 @@ void Application::DrawSkyPreviewWindow() {
     if (ui::BeginPropertyTable("skyBasicRows")) {
         char nameBuffer[128] = {};
         std::snprintf(nameBuffer, sizeof(nameBuffer), "%s", active->name.c_str());
-        // 名前は `.tgsky` のファイル名と同じ。保存済みなら確定でファイルを改名する。
+        // 名前は `.rocksky` のファイル名と同じ。保存済みなら確定でファイルを改名する。
         if (ui::PropertyTextInputCommit("名前", nameBuffer, sizeof(nameBuffer),
                                         "アセットのファイル名（拡張子なし）。保存済みならファイルも改名する")) {
             RequestAssetNameChange(active->assetPath, active->name, nameBuffer);
@@ -297,4 +297,4 @@ void Application::DrawSkyPreviewWindow() {
     ImGui::End();
 }
 
-}  // namespace tg
+}  // namespace rock

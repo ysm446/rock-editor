@@ -4,7 +4,7 @@
 
 #include <chrono>
 
-namespace tg {
+namespace rock {
 
 // フレームレートの上限。
 //
@@ -42,4 +42,4 @@ private:
     bool m_timerChecked = false;
 };
 
-}  // namespace tg
+}  // namespace rock

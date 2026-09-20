@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-namespace tg::compositor {
+namespace rock::compositor {
 namespace {
 
 using rhi::DispatchCount;
@@ -50,7 +50,7 @@ struct ThumbnailConstants {
 }  // namespace
 
 uint32_t PackMaterialChannels(const MaterialAsset& asset) {
-    // 並びは TG_CHANNEL_SLOT_* と一致させること。
+    // 並びは ROCK_CHANNEL_SLOT_* と一致させること。
     return PackChannel(asset.roughness.channel, 0) | PackChannel(asset.metallic.channel, 1) |
            PackChannel(asset.ambientOcclusion.channel, 2) | PackChannel(asset.height.channel, 3) |
            PackChannel(asset.opacity.channel, 5);
@@ -182,7 +182,7 @@ void MaterialLibrary::ProcessPendingWork(rhi::Device& device, rhi::PipelineCache
         } else {
             // 失敗を繰り返さないよう、要求は落とす。
             asset.thumbnailDirty = false;
-            TG_LOG_WARN("マテリアル「%s」のサムネイルを作れませんでした", asset.name.c_str());
+            ROCK_LOG_WARN("マテリアル「%s」のサムネイルを作れませんでした", asset.name.c_str());
         }
     }
 }
@@ -268,4 +268,4 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
     return true;
 }
 
-}  // namespace tg::compositor
+}  // namespace rock::compositor

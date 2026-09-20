@@ -9,7 +9,7 @@
 // **UI を変更するときは docs/design/design-guide.md に従うこと。**
 // 個々のパネルが ImGui のウィジェットを直接呼ぶのではなく、
 // ここのヘルパーを通すことで、ラベルの体裁・幅・既定値・ツールチップが揃う。
-namespace tg::ui {
+namespace rock::ui {
 
 // 部品の寸法。96 DPI 基準の値を置き、使うときに Scaled() で現在の DPI へ合わせる。
 // 値の意味と使い分けは design-guide.md にある。種類を勝手に増やさない。
@@ -227,4 +227,4 @@ CaptionEdit InlineNameInput(const char* id, char* buffer, size_t bufferSize, flo
 // GridCaption の位置に置く InlineNameInput。高さは GridCaption と同じ 2 行ぶんを取る。
 CaptionEdit GridCaptionInput(const char* id, char* buffer, size_t bufferSize, float width, bool* focus);
 
-}  // namespace tg::ui
+}  // namespace rock::ui

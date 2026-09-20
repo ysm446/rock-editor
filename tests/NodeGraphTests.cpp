@@ -11,18 +11,18 @@
 
 namespace {
 
-using tg::graph::NodeGraph;
-using tg::graph::NodeKind;
-using tg::tests::Check;
-using tg::tests::Section;
+using rock::graph::NodeGraph;
+using rock::graph::NodeKind;
+using rock::tests::Check;
+using rock::tests::Section;
 
-bool IsNeutralPlane(const tg::graph::CompiledGraph& compiled) {
+bool IsNeutralPlane(const rock::graph::CompiledGraph& compiled) {
     if (compiled.layers.size() != 1) {
         return false;
     }
-    const tg::compositor::MaterialLayer& layer = compiled.layers.front();
-    return layer.enabled && layer.heightSource == tg::compositor::ValueSource::Constant &&
-           layer.heightBase == tg::compositor::kHeightPivot;
+    const rock::compositor::MaterialLayer& layer = compiled.layers.front();
+    return layer.enabled && layer.heightSource == rock::compositor::ValueSource::Constant &&
+           layer.heightBase == rock::compositor::kHeightPivot;
 }
 
 }  // namespace
@@ -67,18 +67,18 @@ void RunNodeGraphTests() {
               "出力ノードは無いので、既定のレイヤー列は変位 0 の平面になる");
 
         // Surface は入力を持たず、それ 1 枚がレイヤー列になる。
-        const tg::graph::GraphId surfaceId = graph.CreateNode(NodeKind::Surface);
-        tg::graph::Node* surface = graph.FindMutableNode(surfaceId);
+        const rock::graph::GraphId surfaceId = graph.CreateNode(NodeKind::Surface);
+        rock::graph::Node* surface = graph.FindMutableNode(surfaceId);
         Check(surface != nullptr && surface->inputs.empty() && surface->outputs.size() == 1,
               "Surface は入力を持たず、Result だけを出す");
-        std::get<tg::graph::LayerNodeSettings>(surface->settings).layer.roughness = 0.31f;
-        const tg::graph::CompiledGraph compiled = graph.CompileLayersTo(surfaceId);
+        std::get<rock::graph::LayerNodeSettings>(surface->settings).layer.roughness = 0.31f;
+        const rock::graph::CompiledGraph compiled = graph.CompileLayersTo(surfaceId);
         Check(compiled.layers.size() == 1 && compiled.layers.front().roughness == 0.31f &&
                   compiled.layerSources.size() == 1 && compiled.layerSources[0] == surfaceId,
               "Surface 1 つがそのままレイヤー列になり、元ノードを控える");
 
         // 無効な Surface は中立平面へ落ちる（古い結果を残さない）。
-        std::get<tg::graph::LayerNodeSettings>(surface->settings).layer.enabled = false;
+        std::get<rock::graph::LayerNodeSettings>(surface->settings).layer.enabled = false;
         Check(IsNeutralPlane(graph.CompileLayersTo(surfaceId)),
               "無効な Surface は変位 0 の平面になる");
     }

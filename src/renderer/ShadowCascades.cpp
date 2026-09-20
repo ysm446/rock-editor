@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace tg::renderer {
+namespace rock::renderer {
 ShadowCascadeData BuildShadowCascades(const Camera& camera, const DirectX::XMFLOAT3& lightDirection,
                                      float sceneRadius, float aspect, uint32_t resolution, uint32_t count) {
     using namespace DirectX;
@@ -68,4 +68,4 @@ ShadowCascadeData BuildShadowCascades(const Camera& camera, const DirectX::XMFLO
     }
     return result;
 }
-}  // namespace tg::renderer
+}  // namespace rock::renderer

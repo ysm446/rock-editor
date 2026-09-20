@@ -23,6 +23,6 @@ int main() {
     RunFrameLimiterTests();
     RunNodeGraphTests();
 
-    std::printf("\n%s\n", (tg::tests::g_failures == 0) ? "すべて成功" : "失敗あり");
-    return (tg::tests::g_failures == 0) ? 0 : 1;
+    std::printf("\n%s\n", (rock::tests::g_failures == 0) ? "すべて成功" : "失敗あり");
+    return (rock::tests::g_failures == 0) ? 0 : 1;
 }
