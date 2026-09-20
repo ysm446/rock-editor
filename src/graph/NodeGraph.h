@@ -2,6 +2,7 @@
 
 #include "compositor/MaterialLayer.h"
 #include "crack/CrackPatch.h"
+#include "geometry/BaseRock.h"
 #include "fracture/PlaneSplit.h"
 #include "renderer/ModelAsset.h"
 
@@ -90,11 +91,8 @@ struct Pin {
 // (3) NodeGraph.cpp の定義テーブルへ登録し、(4) 保存とプロパティ UI の
 // 対応を足す。それ以外の場所を触る必要がないように保つ。
 
-// Box は seed に依存しない。将来のノイズ用に保存しておく。
-struct BaseRockNodeSettings {
-    std::array<float, 3> size{2.0f, 2.0f, 2.0f};
-    int seed = 0;
-};
+// 母岩の CPU 設定をグラフと保存・Undo で共有する。
+using BaseRockNodeSettings = geometry::BaseRockSettings;
 
 // サーフェス。既存のレイヤーそのもの。
 struct LayerNodeSettings {

@@ -108,6 +108,7 @@ set(rock_sources
     src/fracture/PlaneSplit.cpp
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
+    src/geometry/BaseRock.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
     src/graph/NodeGraph.cpp
@@ -291,6 +292,7 @@ enable_testing()
 add_executable(rock_editor_tests
     tests/TestMain.cpp
     tests/RockTests.cpp
+    tests/BaseRockTests.cpp
     tests/CrackTests.cpp
     tests/PartialCutTests.cpp
     tests/FractureTests.cpp
@@ -327,6 +329,7 @@ add_executable(rock_editor_tests
     src/fracture/PlaneSplit.cpp
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
+    src/geometry/BaseRock.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
     src/graph/NodeGraph.cpp

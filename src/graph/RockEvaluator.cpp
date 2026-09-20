@@ -51,12 +51,14 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
         };
         if (node->kind == NodeKind::BaseRock) {
             const auto* settings = std::get_if<BaseRockNodeSettings>(&node->settings);
-            auto mesh = settings ? geometry::MakeBox(settings->size) : geometry::Mesh{};
-            geometry::MeshInfo info;
-            if (!geometry::InspectMesh(mesh, info) || !info.closed || info.components != 1 ||
-                info.volume <= 0)
-                return finish(Failure(id, "Base Rock", "寸法は有限の 0.001～1000 m にしてください"));
-            result.rocks.push_back({id, std::move(mesh), settings->size});
+            std::string error;
+            auto mesh = settings ? geometry::MakeBaseRock(*settings, error) : geometry::Mesh{};
+            if (!settings || !error.empty())
+                return finish(Failure(id, "Base Rock", settings ? error : "設定がありません"));
+            const auto uncutBox = settings->shape == geometry::BaseShape::Box && settings->noiseStrength == 0
+                                      ? std::optional{settings->size}
+                                      : std::nullopt;
+            result.rocks.push_back({id, std::move(mesh), uncutBox});
         } else if (node->kind == NodeKind::Crack) {
             const auto* settings = std::get_if<crack::CrackSettings>(&node->settings);
             const auto* upstream =

@@ -765,7 +765,7 @@ void Application::DrawGraphEditor() {
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
         addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂の表示と Box の部分切断");
-        addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — Box の母岩を生成");
+        addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
         ImGui::Separator();
@@ -1016,14 +1016,41 @@ void Application::DrawGraphPanel() {
         bool changed = false;
         auto edited = *rock;
         if (ui::BeginPropertyTable("baseRockRows")) {
-            ui::PropertyValue("Shape", "%s", "Box");
-            changed |= ui::PropertyFloat("Size X (m)", &edited.size[0], 0.001f, 1000.0f, 2.0f);
-            changed |= ui::PropertyFloat("Size Y (m)", &edited.size[1], 0.001f, 1000.0f, 2.0f);
-            changed |= ui::PropertyFloat("Size Z (m)", &edited.size[2], 0.001f, 1000.0f, 2.0f);
+            const char* shapes[] = {"Box", "RoundedBox", "Sphere", "Ellipsoid", "不明（選び直してください）"};
+            int shape = std::clamp(static_cast<int>(edited.shape), 0, 4);
+            if (ui::PropertyCombo("形状", &shape, shapes, shape == 4 ? 5 : 4, 0)) {
+                edited.shape = static_cast<geometry::BaseShape>(shape);
+                changed = true;
+            }
+            changed |=
+                ui::PropertyFloat(edited.shape == geometry::BaseShape::Sphere ? "直径 (m)" : "Size X (m)",
+                                  &edited.size[0], 0.001f, 1000.0f, 2.0f);
+            if (edited.shape != geometry::BaseShape::Sphere) {
+                changed |= ui::PropertyFloat("Size Y (m)", &edited.size[1], 0.001f, 1000.0f, 2.0f);
+                changed |= ui::PropertyFloat("Size Z (m)", &edited.size[2], 0.001f, 1000.0f, 2.0f);
+            }
+            if (edited.shape == geometry::BaseShape::RoundedBox)
+                changed |= ui::PropertyFloat("丸み", &edited.roundness, 0, 1, 0.25f);
+            const char* levels[] = {"4", "8", "16", "32", "不明（選び直してください）"};
+            const int divisions[] = {4, 8, 16, 32};
+            int level = 4;
+            for (int i = 0; i < 4; ++i)
+                if (edited.subdivisions == divisions[i]) level = i;
+            if (ui::PropertyCombo("面の分割数", &level, levels, level == 4 ? 5 : 4, 1) && level < 4) {
+                edited.subdivisions = divisions[level];
+                changed = true;
+            }
+            changed |= ui::PropertyFloat("ノイズ強度", &edited.noiseStrength, 0, 0.15f, 0);
+            changed |= ui::PropertyFloat("ノイズ細かさ", &edited.noiseScale, 0.5f, 4, 2);
             changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 0);
             ui::EndPropertyTable();
         }
-        ui::HintText("原点中心の Box。Seed は保存されますが、Box の形状には影響しません。");
+        ui::HintText(
+            "原点中心の母岩。寸法はノイズを加える前の大きさです。ノイズ強度は半径に対する変位率、細かさを上げ"
+            "ると細かな凹凸になります。");
+        ui::HintText(
+            "Seed はノイズがあるときに形を変えます。部分切断はノイズなしの Box のみ。曲面やノイズ付き母岩は "
+            "Fracture で分割できます。");
         if (changed) {
             *rock = edited;
             m_graph.MarkDirty();

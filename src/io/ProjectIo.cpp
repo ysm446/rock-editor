@@ -471,7 +471,13 @@ json WriteGraph(const graph::NodeGraph& graphData,
                              {"aperture", crack->aperture}, {"showGuide", crack->showGuide},
                              {"applyCut", crack->applyCut}, {"showBridge", crack->showBridge}};
         } else if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
-            item["baseRock"] = {{"size", rock->size}, {"seed", rock->seed}};
+            item["baseRock"] = {{"size", rock->size},
+                                {"seed", rock->seed},
+                                {"shape", geometry::BaseShapeName(rock->shape)},
+                                {"subdivisions", rock->subdivisions},
+                                {"roundness", rock->roundness},
+                                {"noiseStrength", rock->noiseStrength},
+                                {"noiseScale", rock->noiseScale}};
         } else if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
             item["layer"] = WriteLayer(settings->layer, writeMaterial);
         } else if (const auto* model = std::get_if<graph::ModelNodeSettings>(&node.settings)) {
@@ -648,6 +654,11 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     const auto size = ReadFloat3(*values, "size", {2, 2, 2});
                     settings.size = {size.x, size.y, size.z};
                     settings.seed = ReadInt(*values, "seed", 0);
+                    settings.shape = geometry::ParseBaseShape(ReadString(*values, "shape", "box"));
+                    settings.subdivisions = ReadInt(*values, "subdivisions", 8);
+                    settings.roundness = ReadFloat(*values, "roundness", 0.25f);
+                    settings.noiseStrength = ReadFloat(*values, "noiseStrength", 0);
+                    settings.noiseScale = ReadFloat(*values, "noiseScale", 2);
                 }
                 created.settings = settings;
             } else if (graph::IsLayerNodeKind(created.kind)) {

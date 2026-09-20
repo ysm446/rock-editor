@@ -10,6 +10,7 @@ void RunPartialCutTests();
 void RunFractureTests();
 void RunCrackTests();
 void RunRockTests();
+void RunBaseRockTests();
 void RunShadowCascadeTests();
 void RunMeshSceneTests();
 void RunFrameLimiterTests();
@@ -23,6 +24,7 @@ int main() {
     RunFractureTests();
     RunCrackTests();
     RunRockTests();
+    RunBaseRockTests();
     RunShadowCascadeTests();
     RunMeshSceneTests();
     RunUiInteractionTests();
