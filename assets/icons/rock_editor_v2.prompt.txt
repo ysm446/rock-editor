@@ -1,0 +1,5 @@
+生成方法: 組み込み image_gen
+
+Use case: logo-brand
+Asset type: Windows desktop application icon for rock-editor, a procedural rock mesh modeling editor.
+Primary request: Create one polished icon featuring a bold sculptural fractured rock, with three closely fitting angular stone chunks and a clearly readable diagonal split revealing clean planar cut faces. Express rock geometry and controlled fracturing. Natural slate-gray stone, lighter top planes and darker side planes. Stylized dimensional low-poly industrial design, restrained surface detail, crisp silhouette, strong value contrast readable at 32 pixels. Center the rock, occupying about 80 percent of a square canvas with comfortable equal padding. Genuine transparent background; no backdrop tile, no ground plane, no cast shadow outside the object. One standalone icon only, no presentation board, no text, no letters, no tools, no roads, no extra objects, no watermark. 1024x1024.

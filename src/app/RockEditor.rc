@@ -10,4 +10,4 @@
 #include "../core/ResourceIds.h"
 
 // アイコンの ID は Win32 のウィンドウ側（core/Window.cpp）と共有する。
-ROCK_APP_ICON ICON "../../assets/icons/rock_editor.ico"
+ROCK_APP_ICON ICON "../../assets/icons/rock_editor_v2.ico"

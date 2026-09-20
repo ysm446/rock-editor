@@ -1,9 +1,14 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-20 20:05
+更新日時: 2026-09-20 21:33
 
 ## 完了
+
+### 2026-09-20 岩をモチーフにしたアプリアイコン
+
+- 切断面と割れ目のある岩塊を描いた透過 PNG と、16 / 24 / 32 / 48 / 64 / 128 / 256px を含む ICO を作成。
+- `assets/icons/rock_editor_v2.*` に画像・生成プロンプトを保存し、`RockEditor.rc` の参照先を更新。
 
 ### 2026-09-20 rock-editor への改名と土台のクリーンアップ
 
@@ -66,8 +71,7 @@ Debug ビルドとテスト（`rock_editor_tests`）が通り、アプリが起�
   `BoundaryMaterials/`、`LayerMaterials/`、道路テクスチャなど約 1 GB）。
   新しい rock-editor はこれらを認識しないので、ルートを開くと
   `project.reproj` を新たに作る。不要になったら手で整理する。
-- `assets/icons/rock_editor.ico` はファイル名だけ変えたもので、**絵柄は道路のまま**。
-  差し替えが要る（`rock_editor.prompt.txt` も道路向けの生成プロンプトのまま）。
+- 旧 `assets/icons/rock_editor.*` は道路の絵柄の資料として保持。アプリは `rock_editor_v2.ico` を使用する。
 - `AGENTS.md` / `CLAUDE.md` はバージョンの基準を `package.json` と書いているが、
   このプロジェクトに `package.json` は無い。実際の基準は `CMakeLists.txt` の
   `project(rock_editor VERSION ...)`。
