@@ -1,5 +1,23 @@
 #include "renderer/CrackGuide.h"
 namespace rock::renderer {
+std::vector<OverlayLineSet> MakeBridgeGuides(const crack::RockBridge& bridge) {
+    OverlayLineSet fill, outline;
+    fill.color = {0.2f, 1, 0.45f, 0.22f};
+    fill.triangles = true;
+    fill.depthTest = false;
+    outline.color = {0.2f, 1, 0.45f, 0.95f};
+    outline.depthTest = false;
+    const auto point = [&](size_t i) {
+        const auto p = bridge.section[i];
+        return DirectX::XMFLOAT3{p.x, p.y, p.z};
+    };
+    for (size_t i : {0, 1, 2, 0, 2, 3}) fill.points.push_back(point(i));
+    for (size_t i = 0; i < 4; ++i) {
+        outline.points.push_back(point(i));
+        outline.points.push_back(point((i + 1) % 4));
+    }
+    return {std::move(fill), std::move(outline)};
+}
 std::vector<OverlayLineSet> MakeCrackGuides(const crack::CrackPatch& patch) {
     std::vector<OverlayLineSet> result;
     const auto rectangle = [&](const auto& corners, DirectX::XMFLOAT4 color, bool fill) {

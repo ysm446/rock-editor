@@ -7,6 +7,7 @@
 #include "core/FrameLimiter.h"
 #include "core/Window.h"
 #include "graph/NodeGraph.h"
+#include "graph/RockEvaluator.h"
 #include "app/AssetThumbnailCache.h"
 #include "app/UndoHistory.h"
 #include "io/AssetRelations.h"
@@ -138,6 +139,7 @@ private:
     graph::GraphId m_meshGraphPreviewNode = 0;
     bool m_meshGraphActive = false;
     std::string m_meshGraphError;
+    std::vector<graph::GeneratedCut> m_cutReports;
     // 選択中のノードを控える / 貼り付ける（Ctrl+C / Ctrl+V）。
     void CopySelectedGraphNodes();
     // 控えたノードを貼る。viewCenter は今のキャンバスの中央（キャンバス座標）で、

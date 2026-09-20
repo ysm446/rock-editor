@@ -6,6 +6,7 @@
 
 #include "TestSupport.h"
 
+void RunPartialCutTests();
 void RunCrackTests();
 void RunRockTests();
 void RunShadowCascadeTests();
@@ -17,6 +18,7 @@ void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
 
 int main() {
+    RunPartialCutTests();
     RunCrackTests();
     RunRockTests();
     RunShadowCascadeTests();

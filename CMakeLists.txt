@@ -104,6 +104,7 @@ set(rock_sources
     src/core/Log.cpp
     src/core/Log.h
     src/crack/CrackPatch.cpp
+    src/crack/PartialCut.cpp
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/graph/RockEvaluator.cpp
@@ -290,6 +291,7 @@ add_executable(rock_editor_tests
     tests/TestMain.cpp
     tests/RockTests.cpp
     tests/CrackTests.cpp
+    tests/PartialCutTests.cpp
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
     src/renderer/Camera.cpp
@@ -319,6 +321,7 @@ add_executable(rock_editor_tests
     src/compositor/MaterialStack.cpp
     src/compositor/MaterialStack.h
     src/crack/CrackPatch.cpp
+    src/crack/PartialCut.cpp
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/graph/RockEvaluator.cpp

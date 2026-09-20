@@ -219,6 +219,7 @@ void Application::SyncMeshGraph() {
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;
+    m_cutReports = evaluated.cuts;
     m_meshHighlight = MeshHighlightState{};
     if (scene.meshes.empty()) {
         if (m_meshGraphActive) m_renderer.ClearMeshScene(m_device);
@@ -236,6 +237,13 @@ void Application::SyncMeshGraph() {
             auto generated = renderer::MakeCrackGuides(crack.patch);
             for (auto& guide : generated) guides.push_back(std::move(guide));
         }
+    }
+    if (m_meshGraphActive && m_meshGraphError.empty()) {
+        for (const auto& report : evaluated.cuts)
+            if (report.bridge && report.showBridge) {
+                auto generated = renderer::MakeBridgeGuides(*report.bridge);
+                for (auto& guide : generated) guides.push_back(std::move(guide));
+            }
     }
     m_renderer.SetCrackGuides(std::move(guides));
     m_meshGraphRevision = m_graph.Revision();
@@ -745,7 +753,7 @@ void Application::DrawGraphEditor() {
         };
         // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
         ImGui::TextDisabled("モデル");
-        addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂の範囲・深さをガイド表示");
+        addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂の表示と Box の部分切断");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — Box の母岩を生成");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
@@ -905,7 +913,9 @@ void Application::DrawGraphPanel() {
         const float zero[3] = {0, 0, 0};
         bool changed = false;
         if (ui::BeginPropertyTable("crackRows")) {
+            changed |= ui::PropertyBool("部分切断 (Box)", &edited.applyCut, false);
             changed |= ui::PropertyBool("ガイド表示", &edited.showGuide, true);
+            changed |= ui::PropertyBool("Bridge 表示", &edited.showBridge, true);
             changed |= ui::PropertyFloat3Input("中心 (m)", edited.center.data(), zero) != 0;
             changed |= ui::PropertyFloat3Input("回転 (度)", edited.rotationDegrees.data(), zero) != 0;
             changed |= ui::PropertyFloat("半幅 U (m)", &edited.extentU, 0.001f, 1000, 1.2f);
@@ -919,7 +929,25 @@ void Application::DrawGraphPanel() {
                 ui::PropertyValue("到達深さ (m)", "%.3f", patch.effectiveDepth);
             ui::EndPropertyTable();
         }
-        ui::HintText("青: 有限範囲 / 橙: 到達範囲。内部を透視するガイドです。まだ岩は切断しません。");
+        if (edited.applyCut) {
+            ui::HintText(
+                "軸に沿う単一の切り込みを Box に作ります。回転は90度単位。+V "
+                "端を母岩の外面まで伸ばしてください。");
+            const auto report = std::find_if(m_cutReports.begin(), m_cutReports.end(),
+                                             [&](const auto& value) { return value.source == selected->id; });
+            if (report != m_cutReports.end()) {
+                ui::HintText("%s", report->status.c_str());
+                if (report->bridge && ui::BeginPropertyTable("bridgeRows")) {
+                    ui::PropertyValue("切込深さ (m)", "%.4f", report->penetration);
+                    ui::PropertyValue("未破断厚 (m)", "%.4f", report->bridge->thickness);
+                    ui::PropertyValue("未破断面積 (m²)", "%.4f", report->bridge->area);
+                    ui::EndPropertyTable();
+                }
+            }
+        } else
+            ui::HintText("ガイド表示のみ。部分切断をオンにすると実際の切り込みを作ります。");
+        ui::HintText(
+            "青: 候補 / 橙: 到達範囲 / 緑: 未破断部。形状確認時はガイドと Bridge 表示をオフにできます。");
         ui::HintText("+V 端から -V へ、min(Depth, V 全幅) × Persistence だけ進みます。");
         if (changed) {
             *crack = edited;

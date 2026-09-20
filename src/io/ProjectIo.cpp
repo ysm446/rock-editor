@@ -460,7 +460,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["crack"] = {{"center", crack->center},     {"rotation", crack->rotationDegrees},
                              {"extentU", crack->extentU},   {"extentV", crack->extentV},
                              {"depth", crack->depth},       {"persistence", crack->persistence},
-                             {"aperture", crack->aperture}, {"showGuide", crack->showGuide}};
+                             {"aperture", crack->aperture}, {"showGuide", crack->showGuide},
+                             {"applyCut", crack->applyCut}, {"showBridge", crack->showBridge}};
         } else if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
             item["baseRock"] = {{"size", rock->size}, {"seed", rock->seed}};
         } else if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
@@ -610,6 +611,8 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.persistence = ReadFloat(*v, "persistence", settings.persistence);
                     settings.aperture = ReadFloat(*v, "aperture", settings.aperture);
                     settings.showGuide = ReadBool(*v, "showGuide", true);
+                    settings.applyCut = ReadBool(*v, "applyCut", false);
+                    settings.showBridge = ReadBool(*v, "showBridge", true);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::BaseRock) {
