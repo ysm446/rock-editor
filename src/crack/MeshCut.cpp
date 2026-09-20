@@ -4,6 +4,7 @@
 #include <cmath>
 #include <map>
 #include <tuple>
+
 namespace rock::crack {
 namespace {
 using geometry::Vec3;
@@ -46,19 +47,29 @@ PartialCutResult CutMesh(const geometry::Mesh& input, const CrackSettings& s) {
         maxN = std::max(maxN, n);
     }
     const float half = s.aperture * 0.5f, tip = s.extentV - patch.effectiveDepth;
-    if (minN >= half - eps || maxN <= -half + eps || maxV <= tip + eps || minV >= s.extentV - eps) {
+    if (minN >= half - eps || maxN <= -half + eps || maxV <= tip + eps || minV >= s.extentV - eps ||
+        minU >= s.extentU - eps || maxU <= -s.extentU + eps) {
         result.status = "交差がないため形状は変更しません";
         return result;
     }
-    if (-s.extentU > minU + eps || s.extentU < maxU - eps || s.extentV < maxV - eps)
-        return Fail("Mesh 部分切断は U 全幅と +V 側の外面を覆う範囲にしてください");
+    if (s.extentV < maxV - eps) return Fail("Mesh 部分切断は +V 側の外面を覆う範囲にしてください");
     if (tip <= minV + eps) return Fail("未破断部が残りません。深さを下げてください");
     if (minN >= -half - eps || maxN <= half + eps || s.aperture <= eps * 4)
         return Fail("亀裂の両側に岩が残る位置と、許容誤差より十分大きい開口幅にしてください");
-    const std::vector<fracture::SplitPlane> planes = {
+    std::vector<fracture::SplitPlane> planes = {
         {Offset(patch.center, patch.normal, -half), patch.normal, "left"},
         {Offset(patch.center, patch.normal, half), patch.normal, "right"},
         {Offset(patch.center, patch.tangentV, tip), patch.tangentV, "tip"}};
+    // 母岩の内側にある U 端だけを追加し、外面と一致する平面を重複生成しない。
+    const bool lowEnd = -s.extentU > minU + eps;
+    const bool highEnd = s.extentU < maxU - eps;
+
+    if (lowEnd) {
+        planes.push_back({Offset(patch.center, patch.tangentU, -s.extentU), patch.tangentU, "start"});
+    }
+    if (highEnd) {
+        planes.push_back({Offset(patch.center, patch.tangentU, s.extentU), patch.tangentU, "end"});
+    }
     auto partition = fracture::SplitByPlanes(input, planes);
     if (!partition.error.empty()) return Fail(partition.error);
     // 全セルで同じ境界平面を使い、内部の区切り面を除いて外皮と溝の壁だけを結合する。
@@ -88,8 +99,12 @@ PartialCutResult CutMesh(const geometry::Mesh& input, const CrackSettings& s) {
     double removed = 0;
     bool hasWall[3] = {};
     for (const auto& piece : partition.pieces) {
-        // 分割キーはこの関数で指定した3平面の負/正側。
-        const bool discarded = piece.key == "left+;right-;tip+;";
+        // 分割キーはこの関数で指定した境界平面の負/正側。
+        const bool discarded = piece.key.find("left+;") != std::string::npos &&
+                               piece.key.find("right-;") != std::string::npos &&
+                               piece.key.find("tip+;") != std::string::npos &&
+                               (!lowEnd || piece.key.find("start+;") != std::string::npos) &&
+                               (!highEnd || piece.key.find("end-;") != std::string::npos);
         if (discarded) {
             geometry::MeshInfo info;
             geometry::InspectMesh(piece.mesh, info);
@@ -101,7 +116,8 @@ PartialCutResult CutMesh(const geometry::Mesh& input, const CrackSettings& s) {
                        c = piece.mesh.positions[triangle[2]];
             const Vec3 mid{(a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3};
             const auto local = Sub(mid, patch.center);
-            const double v = Dot(local, patch.tangentV), n = Dot(local, patch.normal);
+            const double u = Dot(local, patch.tangentU), v = Dot(local, patch.tangentV),
+                         n = Dot(local, patch.normal);
             const auto normal = geometry::FaceNormal(piece.mesh, triangle);
             bool keep = true;
             for (size_t i = 0; i < planes.size(); ++i) {
@@ -110,10 +126,16 @@ PartialCutResult CutMesh(const geometry::Mesh& input, const CrackSettings& s) {
                 if (std::abs(distance(a)) > eps * 2 || std::abs(distance(b)) > eps * 2 ||
                     std::abs(distance(c)) > eps * 2)
                     continue;
-                keep = i == 0   ? v > tip + eps && Dot(normal, patch.normal) > 0
-                       : i == 1 ? v > tip + eps && Dot(normal, patch.normal) < 0
-                                : n > -half + eps && n < half - eps && Dot(normal, patch.tangentV) > 0;
-                if (keep) hasWall[i] = true;
+                const bool insideU = u > -s.extentU + eps && u < s.extentU - eps;
+                const bool insideN = n > -half + eps && n < half - eps;
+                if (i < 2)
+                    keep = insideU && v > tip + eps && Dot(normal, patch.normal) * (i == 0 ? 1 : -1) > 0;
+                else if (i == 2)
+                    keep = insideU && insideN && Dot(normal, patch.tangentV) > 0;
+                else
+                    keep = insideN && v > tip + eps &&
+                           Dot(normal, patch.tangentU) * (plane.key == "start" ? 1 : -1) > 0;
+                if (keep && i < 3) hasWall[i] = true;
                 break;
             }
             if (keep) mesh.triangles.push_back({vertex(a), vertex(b), vertex(c)});
@@ -125,6 +147,43 @@ PartialCutResult CutMesh(const geometry::Mesh& input, const CrackSettings& s) {
     }
     if (!hasWall[0] || !hasWall[1] || !hasWall[2])
         return Fail("両側の亀裂壁と奥の終端を確認できません。位置・深さを調整してください");
+    // セルごとの断面三角形化で生じる T 字接続を、共有辺上の頂点で分割する。
+    // 境界頂点を省略せず、追加頂点がある面だけ中心から扇状に張り直す。
+    std::map<std::pair<uint32_t, uint32_t>, size_t> edgeCounts;
+    for (const auto& t : mesh.triangles)
+        for (int e = 0; e < 3; ++e) ++edgeCounts[std::minmax(t[e], t[(e + 1) % 3])];
+    const auto triangles = std::move(mesh.triangles);
+    const size_t boundaryVertices = mesh.positions.size();
+    for (const auto& t : triangles) {
+        std::vector<uint32_t> ring;
+        for (int e = 0; e < 3; ++e) {
+            const auto a = mesh.positions[t[e]], b = mesh.positions[t[(e + 1) % 3]];
+            const auto edge = Sub(b, a);
+            const double length2 = Dot(edge, edge);
+            std::vector<std::pair<double, uint32_t>> points{{0, t[e]}};
+            if (edgeCounts[std::minmax(t[e], t[(e + 1) % 3])] == 1)
+                for (uint32_t id = 0; id < boundaryVertices; ++id) {
+                    if (id == t[e] || id == t[(e + 1) % 3]) continue;
+                    const auto delta = Sub(mesh.positions[id], a);
+                    const double along = Dot(delta, edge) / length2;
+                    if (along <= 0 || along >= 1) continue;
+                    const double dx = delta.x - along * edge.x, dy = delta.y - along * edge.y,
+                                 dz = delta.z - along * edge.z;
+                    if (dx * dx + dy * dy + dz * dz <= weld * weld) points.push_back({along, id});
+                }
+            std::sort(points.begin(), points.end());
+            for (const auto& point : points) ring.push_back(point.second);
+        }
+        if (ring.size() == 3) {
+            mesh.triangles.push_back(t);
+            continue;
+        }
+        const auto a = mesh.positions[t[0]], b = mesh.positions[t[1]], c = mesh.positions[t[2]];
+        const auto center = static_cast<uint32_t>(mesh.positions.size());
+        mesh.positions.push_back({(a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3});
+        for (size_t k = 0; k < ring.size(); ++k)
+            mesh.triangles.push_back({ring[k], ring[(k + 1) % ring.size()], center});
+    }
     geometry::MeshInfo info;
     if (!geometry::InspectMesh(mesh, info) || !info.closed || info.components != 1 || info.volume <= 0 ||
         std::abs(info.volume + removed - original.volume) > original.volume * 1e-4)

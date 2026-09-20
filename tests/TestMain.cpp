@@ -14,6 +14,7 @@ void RunCrackTests();
 void RunJointSetTests();
 void RunRockTests();
 void RunBaseRockTests();
+void RunVolumeTests();
 void RunShadowCascadeTests();
 void RunMeshSceneTests();
 void RunFrameLimiterTests();
@@ -31,6 +32,7 @@ int main() {
     RunJointSetTests();
     RunRockTests();
     RunBaseRockTests();
+    RunVolumeTests();
     RunShadowCascadeTests();
     RunMeshSceneTests();
     RunUiInteractionTests();

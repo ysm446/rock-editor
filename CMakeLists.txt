@@ -112,6 +112,8 @@ set(rock_sources
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/geometry/BaseRock.cpp
+    src/geometry/BoxCluster.cpp
+    src/geometry/Volume.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
     src/graph/NodeGraph.cpp
@@ -296,6 +298,7 @@ add_executable(rock_editor_tests
     tests/TestMain.cpp
     tests/RockTests.cpp
     tests/BaseRockTests.cpp
+    tests/VolumeTests.cpp
     tests/CrackTests.cpp
     tests/JointSetTests.cpp
     tests/PartialCutTests.cpp
@@ -339,6 +342,8 @@ add_executable(rock_editor_tests
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/geometry/BaseRock.cpp
+    src/geometry/BoxCluster.cpp
+    src/geometry/Volume.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
     src/graph/NodeGraph.cpp

@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <memory>
 
 #include "crack/PartialCut.h"
 #include "geometry/Mesh.h"
@@ -15,6 +16,8 @@ struct GeneratedRock {
     bool locked = false;
     geometry::Vec3 pivot;
     std::string key;  // 多片の変換設定を結び付ける半空間のキー。
+    std::shared_ptr<const std::vector<geometry::OrientedBox>> boxes;
+    std::shared_ptr<const geometry::VolumeGrid> volume;
 };
 struct GeneratedCrack {
     GraphId source = 0;

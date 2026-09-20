@@ -65,7 +65,49 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             cache[id] = value;
             return value;
         };
-        if (node->kind == NodeKind::BaseRock) {
+        if (node->kind == NodeKind::RandomBoxes) {
+            const auto* settings = std::get_if<geometry::BoxClusterSettings>(&node->settings);
+            if (!settings) return finish(Failure(id, "Random Boxes", "設定がありません"));
+            std::string error;
+            auto boxes = geometry::MakeBoxCluster(*settings, error);
+            if (!error.empty()) return finish(Failure(id, "Random Boxes", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.mesh = geometry::BoxClusterPreview(boxes);
+            rock.boxes = std::make_shared<const std::vector<geometry::OrientedBox>>(std::move(boxes));
+            result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::ToVolume) {
+            const auto* settings = std::get_if<geometry::VolumeSettings>(&node->settings);
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream) return finish(Failure(id, "To Volume", "Random Boxes の Boxes 出力を接続してください"));
+            const auto input = evaluate(upstream->id, depth + 1);
+            if (!input.error.empty()) return finish(input);
+            if (input.rocks.size() != 1 || !input.rocks[0].boxes)
+                return finish(Failure(id, "To Volume", "直方体の集合が必要です"));
+            std::string error;
+            auto volume = geometry::BoxesToVolume(*input.rocks[0].boxes, *settings, error);
+            if (!error.empty()) return finish(Failure(id, "To Volume", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(volume));
+            result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::VolumeToMesh) {
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!upstream)
+                return finish(Failure(id, "Volume to Mesh", "To Volume の Volume 出力を接続してください"));
+            const auto input = evaluate(upstream->id, depth + 1);
+            if (!input.error.empty()) return finish(input);
+            if (input.rocks.size() != 1 || !input.rocks[0].volume)
+                return finish(Failure(id, "Volume to Mesh", "ボリュームが必要です"));
+            std::string error;
+            auto mesh = geometry::VolumeSurface(*input.rocks[0].volume, error);
+            if (!error.empty()) return finish(Failure(id, "Volume to Mesh", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.mesh = std::move(mesh);
+            result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::BaseRock) {
             const auto* settings = std::get_if<BaseRockNodeSettings>(&node->settings);
             std::string error;
             auto mesh = settings ? geometry::MakeBaseRock(*settings, error) : geometry::Mesh{};
@@ -115,7 +157,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
                 if (!settings->meshCut && !result.rocks.front().uncutBox)
                     return finish(Failure(
                         id, "Crack",
-                        "Box 部分切断は未加工の Box 1個のみ対応します。曲面は Mesh 全幅溝を選んでください"));
+                        "Box 部分切断は未加工の Box 1個のみ対応します。曲面は Mesh 有限溝を選んでください"));
                 auto cut = settings->meshCut ? crack::CutMesh(result.rocks.front().mesh, *settings)
                                              : crack::CutBox(*result.rocks.front().uncutBox, *settings);
                 if (!cut.error.empty()) return finish(Failure(id, "Crack", cut.error));
@@ -223,7 +265,18 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
         }
         return finish(result);
     };
-    if (preview != 0) return evaluate(preview, 0);
+    // Volume の外皮は描画へ渡す最後にだけ抽出する。下流の評価にはグリッドを渡す。
+    const auto preparePreview = [](RockEvaluation result) {
+        if (!result.error.empty()) return result;
+        for (auto& rock : result.rocks) {
+            if (!rock.volume) continue;
+            std::string error;
+            rock.mesh = geometry::VolumeSurface(*rock.volume, error);
+            if (!error.empty()) return Failure(rock.source, "Volume Preview", error);
+        }
+        return result;
+    };
+    if (preview != 0) return preparePreview(evaluate(preview, 0));
     RockEvaluation result;
     for (const auto& node : graph.Nodes())
         if (node.kind == NodeKind::MeshOutput) {
@@ -231,6 +284,6 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             if (!input.error.empty()) return input;
             Append(result, input);
         }
-    return result;
+    return preparePreview(std::move(result));
 }
 }  // namespace rock::graph

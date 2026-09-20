@@ -56,6 +56,11 @@ ImVec4 PinTypeColor(graph::ValueType valueType) {
         case graph::ValueType::Model:
             return ImVec4(0.70f, 0.62f, 0.90f, 1.0f);
         // どちらも受ける入力（Merge / Mesh Output）と、何も繋がっていない Merge の出力は無彩色。
+        case graph::ValueType::Boxes:
+            return ImVec4(0.78f, 0.65f, 0.43f, 1.0f);
+        case graph::ValueType::Volume:
+            return ImVec4(0.42f, 0.70f, 0.82f, 1.0f);
+        case graph::ValueType::Preview:
         case graph::ValueType::Any:
             return ImVec4(0.80f, 0.80f, 0.82f, 1.0f);
         case graph::ValueType::Material:
@@ -768,6 +773,9 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::JointSet, "Joint Set — 方向と間隔を持つ有限パッチ列");
         addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
         addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂と部分切断");
+        addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体を重ねて塊を作る");
+        addNodeMenuItem(graph::NodeKind::ToVolume, "To Volume — 直方体の塊をボリュームに変換");
+        addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
@@ -1043,7 +1051,7 @@ void Application::DrawGraphPanel() {
         bool changed = false;
         if (ui::BeginPropertyTable("crackRows")) {
             changed |= ui::PropertyBool("部分切断", &edited.applyCut, false);
-            changed |= ui::PropertyBool("Mesh 全幅溝", &edited.meshCut, false);
+            changed |= ui::PropertyBool("Mesh 有限溝", &edited.meshCut, false);
             changed |= ui::PropertyBool("ガイド表示", &edited.showGuide, true);
             ImGui::BeginDisabled(edited.meshCut);
             changed |= ui::PropertyBool("Bridge 表示", &edited.showBridge, true);
@@ -1064,7 +1072,7 @@ void Application::DrawGraphPanel() {
         if (edited.applyCut) {
             if (edited.meshCut)
                 ui::HintText(
-                    "曲面・斜め方向に1回の溝を作ります。U 全幅と +V "
+                    "曲面・斜め方向に1回の溝を作ります。U 半幅で長さを指定し、+V "
                     "側の外面を覆う範囲にしてください。深さを抑えて奥に未破断部を残します。上限4096三角形。Br"
                     "idge 断面の計測・表示は未対応です。");
             else
@@ -1089,6 +1097,41 @@ void Application::DrawGraphPanel() {
         ui::HintText("+V 端から -V へ、min(Depth, V 全幅) × Persistence だけ進みます。");
         if (changed) {
             *crack = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* boxes = std::get_if<geometry::BoxClusterSettings>(&selected->settings)) {
+        auto edited = *boxes;
+        bool changed = false;
+        if (ui::BeginPropertyTable("randomBoxesRows")) {
+            changed |= ui::PropertyInt("個数", &edited.count, 1, 32, 8);
+            changed |= ui::PropertyFloat("基準寸法 X (m)", &edited.size[0], .1f, 100, 2);
+            changed |= ui::PropertyFloat("基準寸法 Y (m)", &edited.size[1], .1f, 100, 2.4f);
+            changed |= ui::PropertyFloat("基準寸法 Z (m)", &edited.size[2], .1f, 100, 1.8f);
+            changed |= ui::PropertyFloat("サイズばらつき", &edited.sizeVariation, 0, .8f, .55f);
+            changed |= ui::PropertyFloat("配置の広がり", &edited.spread, 0, .95f, .85f);
+            changed |= ui::PropertyFloat("回転幅 (度)", &edited.rotation, 0, 90, 25);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 42);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("直方体を互いに重ねて塊を作ります。同じ Seed で同じ形になります。基準寸法は最初の直方体の大きさです。");
+        ui::HintText("Boxes を To Volume に接続すると、重なりを一体化した外側の表面を表示します。出力ピンをクリックすると変換前を比較できます。");
+        if (changed) {
+            *boxes = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* volume = std::get_if<geometry::VolumeSettings>(&selected->settings)) {
+        auto edited = *volume;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeRows")) {
+            changed |= ui::PropertyInt("解像度", &edited.resolution, 16, 96, 48);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("Random Boxes の重なりを一つのボリュームへ変換します。Volume を Volume to Mesh に接続すると、表面を Mesh として取り出せます。");
+        ui::HintText("解像度は最長辺の分割数です。高くすると角や細い形を保ちやすくなり、処理時間も増えます。");
+        if (changed) {
+            *volume = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }
@@ -1129,7 +1172,7 @@ void Application::DrawGraphPanel() {
             "原点中心の母岩。寸法はノイズを加える前の大きさです。ノイズ強度は半径に対する変位率、細かさを上げ"
             "ると細かな凹凸になります。");
         ui::HintText(
-            "Seed はノイズがあるときに形を変えます。曲面の部分切断は Crack の Mesh 全幅溝、完全分割は "
+            "Seed はノイズがあるときに形を変えます。曲面の部分切断は Crack の Mesh 有限溝、完全分割は "
             "Fracture で分割できます。");
         if (changed) {
             *rock = edited;
@@ -1146,8 +1189,11 @@ void Application::DrawGraphPanel() {
         }
         ui::HintText("メッシュやモデルを繋ぐと、まとめて 1 つにする。"
                      "繋ぐたびに入力が 1 本増える。同じノード由来のメッシュは 1 回だけ積む。");
+    } else if (selected->kind == graph::NodeKind::VolumeToMesh) {
+        ui::HintText("Volume の表面を三角形メッシュへ変換します。Mesh 出力を Mesh Output や Merge に接続できます。");
+        ui::HintText("解像度は上流の To Volume で調整します。このノードには追加の設定はありません。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
-        ui::HintText("メッシュやモデルを接続すると表示する。複数の Mesh Output を同時に表示できる。");
+        ui::HintText("メッシュ・モデル・Boxes・Volume を接続すると表示する。複数の Mesh Output を同時に表示できる。");
     } else if (auto* settings = std::get_if<graph::LayerNodeSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("graphNodeBasicRows")) {

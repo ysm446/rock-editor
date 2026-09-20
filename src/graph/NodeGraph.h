@@ -4,6 +4,7 @@
 #include "crack/CrackPatch.h"
 #include "crack/JointSet.h"
 #include "geometry/BaseRock.h"
+#include "geometry/Volume.h"
 #include "fracture/PlaneSplit.h"
 #include "renderer/ModelAsset.h"
 
@@ -43,6 +44,9 @@ enum class ValueType : uint32_t {
     // メッシュとモデルのどちらでも受ける入力（Merge / Mesh Output）。
     // Merge の出力はこの型にはならず、入力から決まる（NodeGraph::EffectiveOutputType）。
     Any = 6,
+    Boxes = 7,
+    Volume = 8,
+    Preview = 9,  // Mesh Output 専用。Mesh / Model / Boxes / Volume を表示する。
 };
 
 // 数値は保存名ではなくファイルには書かない（定義テーブルの name を書く）が、
@@ -52,6 +56,9 @@ enum class NodeKind : uint32_t {
     Crack = 35,
     Fracture = 36,
     JointSet = 37,
+    RandomBoxes = 38,
+    ToVolume = 39,
+    VolumeToMesh = 40,
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
@@ -132,10 +139,10 @@ struct CompiledGraph {
     std::vector<GraphId> layerSources;
 };
 
-// 設定を持たないノード（Mesh Output）は std::monostate。
+// 設定を持たないノード（Mesh Output / Volume to Mesh）は std::monostate。
 using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings,
                                   TransformNodeSettings, BaseRockNodeSettings, crack::CrackSettings,
-                                  fracture::FractureSettings, crack::JointSetSettings, std::monostate>;
+                                  fracture::FractureSettings, crack::JointSetSettings, geometry::BoxClusterSettings, geometry::VolumeSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;

@@ -494,6 +494,12 @@ json WriteGraph(const graph::NodeGraph& graphData,
                              {"aperture", crack->aperture}, {"showGuide", crack->showGuide},
                              {"applyCut", crack->applyCut}, {"showBridge", crack->showBridge},
                              {"meshCut", crack->meshCut}};
+        } else if (const auto* boxes = std::get_if<geometry::BoxClusterSettings>(&node.settings)) {
+            item["randomBoxes"] = {{"count", boxes->count}, {"size", boxes->size},
+                                   {"sizeVariation", boxes->sizeVariation}, {"spread", boxes->spread},
+                                   {"rotation", boxes->rotation}, {"seed", boxes->seed}};
+        } else if (const auto* volume = std::get_if<geometry::VolumeSettings>(&node.settings)) {
+            item["toVolume"] = {{"resolution", volume->resolution}};
         } else if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
             item["baseRock"] = {{"size", rock->size},
                                 {"seed", rock->seed},
@@ -703,6 +709,23 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.meshCut = ReadBool(*v, "meshCut", false);
                     settings.showBridge = ReadBool(*v, "showBridge", true);
                 }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::RandomBoxes) {
+                geometry::BoxClusterSettings settings;
+                if (const json* v = FindMember(item, "randomBoxes"); v && v->is_object()) {
+                    settings.count = ReadInt(*v, "count", settings.count);
+                    const auto size = ReadFloat3(*v, "size", {2, 2.4f, 1.8f});
+                    settings.size = {size.x, size.y, size.z};
+                    settings.sizeVariation = ReadFloat(*v, "sizeVariation", settings.sizeVariation);
+                    settings.spread = ReadFloat(*v, "spread", settings.spread);
+                    settings.rotation = ReadFloat(*v, "rotation", settings.rotation);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::ToVolume) {
+                geometry::VolumeSettings settings;
+                if (const json* v = FindMember(item, "toVolume"); v && v->is_object())
+                    settings.resolution = ReadInt(*v, "resolution", settings.resolution);
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::BaseRock) {
                 graph::BaseRockNodeSettings settings;

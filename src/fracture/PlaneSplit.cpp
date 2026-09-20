@@ -135,47 +135,69 @@ SplitResult SplitByPlane(const Mesh& input, Vec3 center, Vec3 normal) {
         signedArea += Turn(points[loop[0]], points[loop[i]], points[loop[i + 1]], normal) * 0.5;
     if (signedArea <= areaEps) return Fail("断面が小さすぎるか向きが不正です");
     result.sectionArea = signedArea;
-    // 共線の境界頂点も保持する ear clipping。境界上の別頂点を跨ぐ耳は使わない。
-    const auto quality = [&](uint32_t a, uint32_t b, uint32_t c) {
-        const double area = Turn(points[a], points[b], points[c], normal);
-        const auto ab = Sub(points[b], points[a]), ac = Sub(points[c], points[a]),
-                   bc = Sub(points[c], points[b]);
-        const double maxEdge = std::max({Dot(ab, ab), Dot(ac, ac), Dot(bc, bc)});
-        return area > areaEps && maxEdge > 0 ? area / maxEdge : 0.0;
-    };
-    const auto insideEdge = [&](uint32_t a, uint32_t b, uint32_t p) {
-        const auto edge = Sub(points[b], points[a]);
-        return Turn(points[a], points[b], points[p], normal) >= -eps * std::sqrt(Dot(edge, edge));
-    };
-    while (loop.size() > 3) {
-        size_t best = loop.size();
-        double bestQuality = 1e-6;
-        for (size_t i = 0; i < loop.size(); ++i) {
-            const auto a = loop[(i + loop.size() - 1) % loop.size()], b = loop[i],
-                       c = loop[(i + 1) % loop.size()];
-            const double q = quality(a, b, c);
-            if (q <= bestQuality) continue;
-            bool occupied = false;
-            for (const auto p : loop) {
-                if (p == a || p == b || p == c) continue;
-                if (insideEdge(a, b, p) && insideEdge(b, c, p) && insideEdge(c, a, p)) {
-                    occupied = true;
-                    break;
-                }
-            }
-            if (occupied) continue;
-            best = i;
-            bestQuality = q;
-        }
-        if (best == loop.size()) return Fail("断面の三角形化に失敗しました。平面を移動してください");
-        const auto a = loop[(best + loop.size() - 1) % loop.size()], b = loop[best],
-                   c = loop[(best + 1) % loop.size()];
-        result.meshes[0].triangles.push_back({a, b, c});
-        result.meshes[1].triangles.push_back({c, b, a});
-        loop.erase(loop.begin() + best);
+    // 断面の平均点が全境界辺の内側なら、境界頂点を保持した扇形で閉じる。
+    // 連続切断で増える共線頂点を細長い耳として切り取る必要がなくなる。
+    double cx = 0, cy = 0, cz = 0;
+    for (auto id : loop) {
+        cx += points[id].x;
+        cy += points[id].y;
+        cz += points[id].z;
     }
-    result.meshes[0].triangles.push_back({loop[0], loop[1], loop[2]});
-    result.meshes[1].triangles.push_back({loop[2], loop[1], loop[0]});
+    const Vec3 capCenter{float(cx / loop.size()), float(cy / loop.size()), float(cz / loop.size())};
+    bool starShaped = true;
+    for (size_t i = 0; i < loop.size(); ++i)
+        starShaped &= Turn(points[loop[i]], points[loop[(i + 1) % loop.size()]], capCenter, normal) > areaEps;
+    if (starShaped) {
+        const auto id = static_cast<uint32_t>(points.size());
+        points.push_back(capCenter);
+        for (size_t i = 0; i < loop.size(); ++i) {
+            const auto a = loop[i], b = loop[(i + 1) % loop.size()];
+            result.meshes[0].triangles.push_back({a, b, id});
+            result.meshes[1].triangles.push_back({b, a, id});
+        }
+    } else {
+        // 共線の境界頂点も保持する ear clipping。境界上の別頂点を跨ぐ耳は使わない。
+        const auto quality = [&](uint32_t a, uint32_t b, uint32_t c) {
+            const double area = Turn(points[a], points[b], points[c], normal);
+            const auto ab = Sub(points[b], points[a]), ac = Sub(points[c], points[a]),
+                       bc = Sub(points[c], points[b]);
+            const double maxEdge = std::max({Dot(ab, ab), Dot(ac, ac), Dot(bc, bc)});
+            return area > areaEps && maxEdge > 0 ? area / maxEdge : 0.0;
+        };
+        const auto insideEdge = [&](uint32_t a, uint32_t b, uint32_t p) {
+            const auto edge = Sub(points[b], points[a]);
+            return Turn(points[a], points[b], points[p], normal) >= -eps * std::sqrt(Dot(edge, edge));
+        };
+        while (loop.size() > 3) {
+            size_t best = loop.size();
+            double bestQuality = 1e-6;
+            for (size_t i = 0; i < loop.size(); ++i) {
+                const auto a = loop[(i + loop.size() - 1) % loop.size()], b = loop[i],
+                           c = loop[(i + 1) % loop.size()];
+                const double q = quality(a, b, c);
+                if (q <= bestQuality) continue;
+                bool occupied = false;
+                for (const auto p : loop) {
+                    if (p == a || p == b || p == c) continue;
+                    if (insideEdge(a, b, p) && insideEdge(b, c, p) && insideEdge(c, a, p)) {
+                        occupied = true;
+                        break;
+                    }
+                }
+                if (occupied) continue;
+                best = i;
+                bestQuality = q;
+            }
+            if (best == loop.size()) return Fail("断面の三角形化に失敗しました。平面を移動してください");
+            const auto a = loop[(best + loop.size() - 1) % loop.size()], b = loop[best],
+                       c = loop[(best + 1) % loop.size()];
+            result.meshes[0].triangles.push_back({a, b, c});
+            result.meshes[1].triangles.push_back({c, b, a});
+            loop.erase(loop.begin() + best);
+        }
+        result.meshes[0].triangles.push_back({loop[0], loop[1], loop[2]});
+        result.meshes[1].triangles.push_back({loop[2], loop[1], loop[0]});
+    }
     double volume = 0;
     for (auto& mesh : result.meshes) {
         mesh.positions = points;

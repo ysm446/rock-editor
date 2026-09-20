@@ -39,14 +39,22 @@ constexpr std::array<PinDefinition, 2> kMergePins = {{
 
 // メッシュ・モデル・それらをまとめた Merge のどれでも受ける。
 constexpr std::array<PinDefinition, 1> kMeshOutputPins = {{
-    {PinKind::Input, ValueType::Any, "Mesh"},
+    {PinKind::Input, ValueType::Preview, "Geometry"},
 }};
 
 constexpr std::array<PinDefinition, 1> kBaseRockPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
 
 constexpr std::array<PinDefinition, 2> kCrackPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 9> kNodeDefinitions = {{
+constexpr std::array<PinDefinition, 1> kRandomBoxesPins = {{{PinKind::Output, ValueType::Boxes, "Boxes"}}};
+constexpr std::array<PinDefinition, 2> kToVolumePins = {{{PinKind::Input, ValueType::Boxes, "Boxes"},
+    {PinKind::Output, ValueType::Volume, "Volume"}}};
+constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
+    {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<NodeDefinition, 12> kNodeDefinitions = {{
+    {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
+    {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
+    {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::JointSet, "jointSet", "Joint Set", kCrackPins},
     {NodeKind::Crack, "crack", "Crack", kCrackPins},
     {NodeKind::Fracture, "fracture", "Fracture", kCrackPins},
@@ -88,7 +96,8 @@ bool IsLayerNodeKind(NodeKind kind) {
 
 bool IsMeshNodeKind(NodeKind kind) {
     return kind == NodeKind::Merge || kind == NodeKind::BaseRock || kind == NodeKind::Crack ||
-           kind == NodeKind::Fracture || kind == NodeKind::JointSet;
+           kind == NodeKind::Fracture || kind == NodeKind::JointSet ||
+           kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume || kind == NodeKind::VolumeToMesh;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -224,6 +233,8 @@ bool NodeGraph::TypesCompatible(ValueType output, ValueType input) {
     const auto scene = [](ValueType type) {
         return type == ValueType::Mesh || type == ValueType::Model || type == ValueType::Any;
     };
+    if (input == ValueType::Preview)
+        return scene(output) || output == ValueType::Boxes || output == ValueType::Volume;
     if (input == ValueType::Any) return scene(output);
     if (output == ValueType::Any) return input == ValueType::Mesh || input == ValueType::Model;
     return output == input;
@@ -362,7 +373,11 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
     Node node;
     node.id = AllocateGraphId();
     node.kind = kind;
-    if (kind == NodeKind::JointSet) {
+    if (kind == NodeKind::RandomBoxes) {
+        node.settings = geometry::BoxClusterSettings{};
+    } else if (kind == NodeKind::ToVolume) {
+        node.settings = geometry::VolumeSettings{};
+    } else if (kind == NodeKind::JointSet) {
         node.settings = crack::JointSetSettings{};
     } else if (kind == NodeKind::Fracture) {
         node.settings = fracture::FractureSettings{};
