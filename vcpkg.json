@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "road-editor",
+  "version": "0.1.0",
+  "description": "道路と道路付属物をノードグラフで構築するオーサリングツール",
+  "builtin-baseline": "b5d1a94fb7f88fd835e360fd23a45a09ceedbf48",
+  "dependencies": [
+    "directx-headers",
+    "directx12-agility",
+    "winpixevent",
+    "d3d12-memory-allocator",
+    "directx-dxc",
+    "stb",
+    "nlohmann-json",
+    "tinyexr",
+    "ufbx",
+    "imgui-node-editor",
+    {
+      "name": "imgui",
+      "features": [
+        "dx12-binding",
+        "win32-binding",
+        "docking-experimental"
+      ]
+    }
+  ]
+}

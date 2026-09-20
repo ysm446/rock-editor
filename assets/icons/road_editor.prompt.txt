@@ -1,0 +1,8 @@
+Generator: built-in image_gen
+Final format: opaque square PNG, multi-resolution Windows ICO
+
+Create one finished Windows desktop application icon for Road Editor, a node-based 3D road mesh authoring tool. Square 1024x1024 raster asset, actual transparent background outside the icon. A bold compact curved road ribbon in a subtly dimensional graphite rounded-square tile, with a clearly legible white dashed center line and two small solid editing control-point nodes integrated into the curve. Restrained professional creative-software aesthetic, crisp silhouette, broad simple shapes, subtle depth, excellent contrast at 32px, generous 8 percent outer transparent margin. Road motif must dominate; nodes secondary. No letters, no words, no captions, no watermark, no mockup, no surrounding scene, no tiny decorative details. Deliver only a single centered icon.
+
+Edit this application icon: preserve the road tile and its contents exactly. Remove the white/light gray checkerboard outside the rounded tile and make all pixels outside the tile actually transparent using an alpha channel. No painted checkerboard, no backdrop. The rounded square tile itself stays opaque. Return transparent PNG.
+
+Revise this icon into a full-bleed square opaque app icon. Keep the curved road and its two editing nodes. The graphite background must fill the ENTIRE square image edge to edge, with NO margin, NO rounded outside border, NO checkerboard, NO white outside space, NO transparency. Zoom the road tile to fill the canvas. Simplify the road texture and use broad crisp contours suitable for small Windows icons. Single square app icon, no text.
