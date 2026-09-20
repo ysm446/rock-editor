@@ -42,7 +42,10 @@ constexpr std::array<PinDefinition, 1> kMeshOutputPins = {{
     {PinKind::Input, ValueType::Any, "Mesh"},
 }};
 
-constexpr std::array<NodeDefinition, 5> kNodeDefinitions = {{
+constexpr std::array<PinDefinition, 1> kBaseRockPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
+
+constexpr std::array<NodeDefinition, 6> kNodeDefinitions = {{
+    {NodeKind::BaseRock, "baseRock", "Base Rock", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
     {NodeKind::Model, "model", "Model", kModelPins},
     {NodeKind::Transform, "transform", "Transform", kTransformPins},
@@ -79,7 +82,7 @@ bool IsLayerNodeKind(NodeKind kind) {
 }
 
 bool IsMeshNodeKind(NodeKind kind) {
-    return kind == NodeKind::Merge;
+    return kind == NodeKind::Merge || kind == NodeKind::BaseRock;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -353,7 +356,9 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
     Node node;
     node.id = AllocateGraphId();
     node.kind = kind;
-    if (IsLayerNodeKind(kind)) {
+    if (kind == NodeKind::BaseRock) {
+        node.settings = BaseRockNodeSettings{};
+    } else if (IsLayerNodeKind(kind)) {
         node.settings = LayerNodeSettings{};
     } else if (kind == NodeKind::Merge) {
         node.settings = MergeNodeSettings{};

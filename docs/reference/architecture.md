@@ -1,22 +1,22 @@
 # 岩生成の設計整理
 
 作成日時: 2026-09-20 22:06
-更新日時: 2026-09-20 22:06
+更新日時: 2026-09-20 22:17
 
 ## 位置づけ
 
-[v2 原仕様](../rock_generator_spec_v2.md) を既存実装へ接続するための設計案。新しい型やアルゴリズムはまだ実装していない。工程は [実装計画](../plan/plan.md) を参照。
+[v2 原仕様](../rock_generator_spec_v2.md) を既存実装へ接続するための設計案。Box の CPU メッシュ・評価・描画変換は実装済み。それ以外の亀裂・破断の型とアルゴリズムは設計案。工程は [実装計画](../plan/plan.md) を参照。
 
 ## 現在のコードと追加先
 
 | 現在のコード | 現状と追加方針 |
 | --- | --- |
 | `src/graph/NodeGraph.h/.cpp` | NodeKind、ValueType、variant による設定、接続検証、Revision を持つ。既存モデルを拡張し、仕様例の仮想 RockNode 階層へ全面置換しない |
-| `src/app/ApplicationGraphPanel.cpp` | SyncMeshGraph は生成シーンを空に保つ。岩の CPU 評価結果を renderer に渡す接続を追加 |
+| `src/app/ApplicationGraphPanel.cpp` | SyncMeshGraph は RockEvaluator の CPU 評価結果を RockMesh で描画データへ変換して転送する |
 | `src/renderer/MeshData.h/.cpp` | CPU 描画データと検証を持つが道路由来の属性が残る。岩処理用トポロジーを分離し、描画境界で変換 |
 | `src/renderer/`、`src/rhi/` | DX12 表示、カメラ、GPU リソース基盤を再利用 |
 | `src/compositor/`、`shaders/` | 既存 Surface / PBR 評価を再利用。岩用 Triplanar は別途接続・検証 |
-| `src/io/ProjectIo.cpp` | JSON 保存版は現在1。岩ノード設定・seed・選択参照を追加 |
+| `src/io/ProjectIo.cpp` | JSON 保存版は現在1。Base Rock の寸法・seed を保存。今後、亀裂・Chunk 選択参照を追加 |
 | `src/app/UndoHistory.*` | 既存 Undo に岩ノード設定と操作を統合 |
 | `tests/`、`CMakeLists.txt` | 実処理を呼ぶジオメトリ・グラフ・保存テストを追加 |
 
@@ -84,3 +84,11 @@ Geometry / CrackField / JointSet / ChunkSet / Selection を既存 ValueType に�
 | 非凸形状、複数パッチ交差、Bridge 面積・厚さの推定 | P3 で制約を明示し、P5 で拡張 |
 | 低周波の破断面ノイズ | P7。両側境界の整合と自己交差を検証 |
 | Triplanar と OBJ 材質の対応 | P7/P8。OBJ でシェーダを再現できないため、形状出力と材質再現の範囲を明示。ベイクは後続候補 |
+
+## P1 で確定したメッシュ基盤
+
+`geometry::Mesh` は共有位置頂点と三角形 index を保持し、描画時に面法線用の頂点を分離する。Box は原点中心、右手系 Y-up、寸法はメートル。各軸 0.001～1000 m の有限値を受け付ける。
+`InspectMesh` は AABB、符号付き体積、頂点接続による連結成分、共有辺が逆向きに2回現れる閉包を調べる。縮退面は外積の二乗が辺長二乗の積の 1e-12 以下として検出する。自己交差や頂点周りの manifold 判定はまだ対象外で、亀裂実装時に拡張する。
+
+P1 は既存 Mesh ピンを利用し、Base Rock / Merge / Mesh Output の到達可能な岩を生成する。同じ生成元は重複させない。モデルは従来どおり別経路で表示する。グラフ Revision が変わったときに再評価し、枝単位キャッシュは P6 で追加する。
+不正寸法では岩の生成結果を空にし、ノード ID を含む診断を表示する。Box にノイズはなく、Seed は将来用の保存値。Triplanar・素材入力は P7 で追加する。

@@ -456,7 +456,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
             outputs.push_back(pin.id);
         }
         item["outputs"] = std::move(outputs);
-        if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
+        if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
+            item["baseRock"] = {{"size", rock->size}, {"seed", rock->seed}};
+        } else if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
             item["layer"] = WriteLayer(settings->layer, writeMaterial);
         } else if (const auto* model = std::get_if<graph::ModelNodeSettings>(&node.settings)) {
             item["model"] = {{"model", writeModel ? writeModel(model->model) : json()},
@@ -590,7 +592,15 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 }
             }
 
-            if (graph::IsLayerNodeKind(created.kind)) {
+            if (created.kind == graph::NodeKind::BaseRock) {
+                graph::BaseRockNodeSettings settings;
+                if (const json* values = FindMember(item, "baseRock"); values && values->is_object()) {
+                    const auto size = ReadFloat3(*values, "size", {2, 2, 2});
+                    settings.size = {size.x, size.y, size.z};
+                    settings.seed = ReadInt(*values, "seed", 0);
+                }
+                created.settings = settings;
+            } else if (graph::IsLayerNodeKind(created.kind)) {
                 graph::LayerNodeSettings settings;
                 if (const json* layer = FindMember(item, "layer");
                     layer != nullptr && layer->is_object()) {

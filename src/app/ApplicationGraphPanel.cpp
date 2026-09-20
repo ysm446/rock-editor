@@ -7,6 +7,8 @@
 // ノードエディタ UI から移植した。
 
 #include "app/Application.h"
+#include "graph/RockEvaluator.h"
+#include "renderer/RockMesh.h"
 
 #include "app/ApplicationUiHelpers.h"
 #include "ui/UiStyle.h"
@@ -207,14 +209,27 @@ void Application::SyncMeshGraph() {
         previewMeshNode = node->id;
     }
     if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode) return;
-    // 岩の生成ノードはこれから実装する。いまはメッシュを作るノードが無いので、
-    // シーンは空のまま（モデルは Application が別に描く）。
-    if (m_meshGraphActive) {
-        m_renderer.ClearMeshScene(m_device);
-        m_meshGraphActive = false;
-        m_meshHighlight = MeshHighlightState{};
+    const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode);
+    renderer::MeshScene scene;
+    for (const auto& rock : evaluated.rocks) {
+        renderer::SceneMesh mesh;
+        mesh.geometry = renderer::MakeRockMeshData(rock.mesh);
+        mesh.material.baseColor = {0.35f, 0.32f, 0.28f};
+        mesh.material.roughness = 0.8f;
+        scene.meshes.push_back(std::move(mesh));
     }
-    m_meshGraphError.clear();
+    m_meshGraphError = evaluated.error;
+    m_meshHighlight = MeshHighlightState{};
+    if (scene.meshes.empty()) {
+        if (m_meshGraphActive) m_renderer.ClearMeshScene(m_device);
+        m_meshGraphActive = false;
+    } else {
+        m_meshGraphActive = m_renderer.SetGeneratedMeshScene(m_device, scene);
+        if (!m_meshGraphActive) {
+            m_renderer.ClearMeshScene(m_device);
+            m_meshGraphError = "岩メッシュを描画へ転送できませんでした";
+        }
+    }
     m_meshGraphRevision = m_graph.Revision();
     m_meshGraphPreviewNode = previewMeshNode;
 }
@@ -722,6 +737,7 @@ void Application::DrawGraphEditor() {
         };
         // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
         ImGui::TextDisabled("モデル");
+        addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — Box の母岩を生成");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
         ImGui::Separator();
@@ -875,6 +891,23 @@ void Application::DrawGraphPanel() {
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
                      "ピンをドラッグして接続、Ctrl+C / Ctrl+V でコピー");
+    } else if (auto* rock = std::get_if<graph::BaseRockNodeSettings>(&selected->settings)) {
+        bool changed = false;
+        auto edited = *rock;
+        if (ui::BeginPropertyTable("baseRockRows")) {
+            ui::PropertyValue("Shape", "%s", "Box");
+            changed |= ui::PropertyFloat("Size X (m)", &edited.size[0], 0.001f, 1000.0f, 2.0f);
+            changed |= ui::PropertyFloat("Size Y (m)", &edited.size[1], 0.001f, 1000.0f, 2.0f);
+            changed |= ui::PropertyFloat("Size Z (m)", &edited.size[2], 0.001f, 1000.0f, 2.0f);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 0);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("原点中心の Box。Seed は保存されますが、Box の形状には影響しません。");
+        if (changed) {
+            *rock = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
     } else if (selected->kind == graph::NodeKind::Model || selected->kind == graph::NodeKind::Transform) {
         // 置き方の変更はメッシュを作り直さない（MarkDirty しない）。描画は毎フレーム設定から行う。
         if (DrawModelNodeSettings(*selected)) m_documentDirty = true;

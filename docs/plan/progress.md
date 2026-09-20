@@ -1,22 +1,38 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-20 22:06
+更新日時: 2026-09-20 22:20
 
-## 今回の整理と現在地
+## 現在地
 
-v2 原仕様に合わせて目的・実装計画を更新し、ドキュメント案内、設計整理、検証計画を追加した。完全分割より先に有限亀裂と Rock Bridge を検証する計画へ変更した。
-今回は資料の整理のみ。ソースを確認したが、ビルド・テスト・起動の再実行はしていない。下記の過去の成功記録とは区別する。
+P0 の基盤確認と P1 の Base Rock（Box）を実装した。次は [計画](plan.md) の P2：有限亀裂パッチの可視化。
 
 | 区分 | 現在の状態 |
 | --- | --- |
 | アプリ基盤 | DX12 / ImGui、モデル表示、グラフ編集、素材・アセット・保存基盤あり |
-| 岩生成 | Base Rock / Joint Set / Crack / Fracture / Chunk 編集は未実装 |
-| メッシュ接続 | SyncMeshGraph は生成シーンを空に保つ。描画用 MeshData はある |
-| 岩用評価・保存 | 新しいデータ型、CPU 評価、dirty/cache、seed と岩ノードの保存は未実装 |
-| 次の作業 | [計画](plan.md) の P0 基盤確認 → P1 Box 表示 |
+| 岩生成 | Base Rock の Box、寸法 X/Y/Z、Seed の編集に対応。亀裂・破断は未実装 |
+| メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応 |
+| 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。枝単位キャッシュは P6 |
+| 次の作業 | P2：中心・向き・有限範囲・深さ・persistence を持つパッチと半透明表示 |
 
 ## 完了
+
+### 2026-09-20 Base Rock の Box（P0/P1）
+
+- `geometry/Mesh` に共有頂点の CPU メッシュ、Box、面法線、AABB・体積・閉包・連結性の検証を追加。
+- Base Rock を右クリックメニューに追加。原点中心の Box を Mesh Output / Merge / 途中プレビューから表示する。
+- 寸法は各軸 0.001～1000 m。Seed は保存するが Box 形状には影響しない。寸法不正時はノード ID を含む診断を出す。
+- `ProjectIo` に設定の保存/読込を追加し、既存 Undo/Redo のスナップショットに統合。
+- Debug ビルド、既存と新規テストを含む CTest が成功。テストは形状・不正入力・描画変換・接続・再評価・Undo/Redo を確認。
+- Release 版で 3×4×5 m、Seed 123 の Box と設定パネルを目視確認。実アプリで保存→再読み込み→再保存を行い、寸法・seed・接続の一致を確認。
+- 検証資料は Git 対象外の `build/p1-validation/`（`box-ui.png`、`reloaded-ui.png`、往復保存したシーン、ログ）。既存 `data/` は変更していない。
+
+**検証環境の補足**
+
+- vcpkg 再実行が `C:/vcpkg/buildtrees` の書き込み権限で失敗したため、導入済み依存を利用して `cmake --preset x64 -DVCPKG_MANIFEST_INSTALL=OFF` で再構成した。リポジトリのプリセットは変更していない。
+- 起動中の既存 Release アプリが通常の出力先を使用していたため、MSBuild の `OutDir` で `build/p1-release/` に検証用実行ファイルを出力した。
+- Debug の GPU ベースバリデーション有効時は初回描画までの待機が長く、今回の画面確認は Release で行った。Debug の起動描画確認は未完了。
+
 
 ### 2026-09-20 岩をモチーフにしたアプリアイコン
 
@@ -72,10 +88,10 @@ Debug ビルドとテスト（`rock_editor_tests`）が通り、アプリが起�
 
 ## 未完了
 
-- 岩の生成ノードは 1 つも無い。[plan.md](plan.md) の P0/P1 から始める。
-- `SyncMeshGraph()` はメッシュを作るノードが無いため、当面シーンを空に保つだけの実装。
-  Base Rock / Fracture を入れるときにここを本実装へ置き換える。
-- Merge / Mesh Output は型の受け渡しだけが生きていて、メッシュを実際に積む経路は無い。
+- P2/P3 の有限亀裂と Rock Bridge、P4 の完全分割・Chunk 操作。
+- Box 以外の母岩、BaseNoise、Joint Set、枝単位キャッシュ、Chip、Triplanar、OBJ。
+- P1 の Box は無地表示。Surface 接続と岩用 UV/Triplanar は未対応。既存の Transform ノードはモデル専用のまま。
+- グラフからの寸法変更・Undo/Redo は自動テストで確認。実マウス操作による一連の編集操作は今回未検証。
 
 ## 注意点
 

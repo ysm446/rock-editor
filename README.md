@@ -9,13 +9,14 @@
 ## 現在の状態
 
 road-editor（旧 terrain-graph）のアプリ基盤を土台に、道路・地形に特化した実装を撤去した段階。
-**岩の生成ノード（Base Rock / Joint Set / Fracture / Select Chunk など）は未実装**で、
-ビューポートにはグリッドと配置したモデルだけが出る。
+**Base Rock の Box 生成に対応**。ノードグラフの右クリックから Base Rock と Mesh Output を追加し、
+Mesh ピンを接続すると母岩を表示する。寸法 X/Y/Z と Seed を編集でき、Undo・保存／読み込みに対応する。
+Box は原点中心で、Seed は形状に影響しない。Joint Set / Crack / Fracture / Chunk 編集は未実装。
 
 土台として動いているもの:
 
 - DX12 + Dear ImGui のウィンドウ、ドックレイアウト、ビューポートと軌道カメラ
-- ノードグラフ（Surface / Model / Transform / Merge / Mesh Output）と、
+- ノードグラフ（Base Rock / Surface / Model / Transform / Merge / Mesh Output）と、
   コピー／貼り付け、アンドゥ、グラフの保存と読み込み
 - PBR マテリアル合成、テクスチャ、天球（HDRI / 手続き的な空）、直接光・IBL・露出・トーンマップ
 - FBX モデルの取り込みと配置、ギズモ（移動 / 回転 / 倍率）

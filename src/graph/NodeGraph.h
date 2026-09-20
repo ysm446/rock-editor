@@ -44,6 +44,7 @@ enum class ValueType : uint32_t {
 // 数値は保存名ではなくファイルには書かない（定義テーブルの name を書く）が、
 // 撤去した種類の値は再利用しない。
 enum class NodeKind : uint32_t {
+    BaseRock = 34,
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
@@ -84,6 +85,12 @@ struct Pin {
 // (3) NodeGraph.cpp の定義テーブルへ登録し、(4) 保存とプロパティ UI の
 // 対応を足す。それ以外の場所を触る必要がないように保つ。
 
+// Box は seed に依存しない。将来のノイズ用に保存しておく。
+struct BaseRockNodeSettings {
+    std::array<float, 3> size{2.0f, 2.0f, 2.0f};
+    int seed = 0;
+};
+
 // サーフェス。既存のレイヤーそのもの。
 struct LayerNodeSettings {
     compositor::MaterialLayer layer;
@@ -123,7 +130,7 @@ struct CompiledGraph {
 // 設定を持たないノード（Mesh Output）は std::monostate。
 using NodeSettings =
     std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings, TransformNodeSettings,
-                 std::monostate>;
+                 BaseRockNodeSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;
@@ -235,7 +242,7 @@ const NodeDefinition* FindNodeDefinition(NodeKind kind);
 const NodeDefinition* FindNodeDefinitionByName(std::string_view name);
 // レイヤー設定を持つ種類か（Surface）。
 bool IsLayerNodeKind(NodeKind kind);
-// メッシュの鎖を成す種類か（Merge）。Mesh Output は含まない。
+// メッシュの鎖を成す種類か（Base Rock / Merge）。Mesh Output は含まない。
 // 出力ピンを選ぶと、そのノードまでの鎖がメッシュシーンに出る。
 bool IsMeshNodeKind(NodeKind kind);
 // 選ぶとプレビューの対象になる種類か。
