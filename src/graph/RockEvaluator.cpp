@@ -1,5 +1,6 @@
 #include "graph/RockEvaluator.h"
 #include "fracture/MultiSplit.h"
+#include "crack/MeshCut.h"
 
 #include <algorithm>
 #include <cmath>
@@ -104,12 +105,21 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             result = evaluate(upstream->id, depth + 1);
             if (!result.error.empty()) return finish(result);
             if (settings->applyCut) {
-                if (result.hasModels || result.rocks.size() != 1 || !result.rocks.front().uncutBox)
-                    return finish(
-                        Failure(id, "Crack", "部分切断は未加工の Box 1 個・切り込み1回のみ対応します"));
-                auto cut = crack::CutBox(*result.rocks.front().uncutBox, *settings);
+                if (result.hasModels || result.rocks.size() != 1 || result.rocks.front().chunk != 0)
+                    return finish(Failure(id, "Crack", "部分切断は未分割の岩1個を接続してください"));
+                if (settings->meshCut && std::any_of(result.cuts.begin(), result.cuts.end(),
+                                                     [](const auto& c) { return c.removedVolume > 0; }))
+                    return finish(Failure(
+                        id, "Crack",
+                        "Mesh 部分切断は未加工の母岩への1回だけ対応します。交差する複数亀裂は未対応です"));
+                if (!settings->meshCut && !result.rocks.front().uncutBox)
+                    return finish(Failure(
+                        id, "Crack",
+                        "Box 部分切断は未加工の Box 1個のみ対応します。曲面は Mesh 全幅溝を選んでください"));
+                auto cut = settings->meshCut ? crack::CutMesh(result.rocks.front().mesh, *settings)
+                                             : crack::CutBox(*result.rocks.front().uncutBox, *settings);
                 if (!cut.error.empty()) return finish(Failure(id, "Crack", cut.error));
-                if (cut.bridge) {
+                if (cut.removedVolume > 0) {
                     result.rocks.front() = {id, std::move(cut.mesh), std::nullopt};
                 }
                 result.cuts.push_back(

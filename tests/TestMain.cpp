@@ -7,6 +7,7 @@
 #include "TestSupport.h"
 
 void RunPartialCutTests();
+void RunMeshCutTests();
 void RunFractureTests();
 void RunMultiSplitTests();
 void RunCrackTests();
@@ -23,6 +24,7 @@ void RunProjectWorkspaceTests();
 
 int main() {
     RunPartialCutTests();
+    RunMeshCutTests();
     RunFractureTests();
     RunMultiSplitTests();
     RunCrackTests();

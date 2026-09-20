@@ -106,6 +106,7 @@ set(rock_sources
     src/crack/CrackPatch.cpp
     src/crack/JointSet.cpp
     src/crack/PartialCut.cpp
+    src/crack/MeshCut.cpp
     src/fracture/PlaneSplit.cpp
     src/fracture/MultiSplit.cpp
     src/renderer/CrackGuide.cpp
@@ -298,6 +299,7 @@ add_executable(rock_editor_tests
     tests/CrackTests.cpp
     tests/JointSetTests.cpp
     tests/PartialCutTests.cpp
+    tests/MeshCutTests.cpp
     tests/FractureTests.cpp
     tests/MultiSplitTests.cpp
     tests/ShadowCascadeTests.cpp
@@ -331,6 +333,7 @@ add_executable(rock_editor_tests
     src/crack/CrackPatch.cpp
     src/crack/JointSet.cpp
     src/crack/PartialCut.cpp
+    src/crack/MeshCut.cpp
     src/fracture/PlaneSplit.cpp
     src/fracture/MultiSplit.cpp
     src/renderer/CrackGuide.cpp

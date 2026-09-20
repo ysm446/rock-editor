@@ -492,7 +492,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
                              {"extentU", crack->extentU},   {"extentV", crack->extentV},
                              {"depth", crack->depth},       {"persistence", crack->persistence},
                              {"aperture", crack->aperture}, {"showGuide", crack->showGuide},
-                             {"applyCut", crack->applyCut}, {"showBridge", crack->showBridge}};
+                             {"applyCut", crack->applyCut}, {"showBridge", crack->showBridge},
+                             {"meshCut", crack->meshCut}};
         } else if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
             item["baseRock"] = {{"size", rock->size},
                                 {"seed", rock->seed},
@@ -699,6 +700,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.aperture = ReadFloat(*v, "aperture", settings.aperture);
                     settings.showGuide = ReadBool(*v, "showGuide", true);
                     settings.applyCut = ReadBool(*v, "applyCut", false);
+                    settings.meshCut = ReadBool(*v, "meshCut", false);
                     settings.showBridge = ReadBool(*v, "showBridge", true);
                 }
                 created.settings = settings;

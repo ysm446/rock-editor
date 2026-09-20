@@ -767,7 +767,7 @@ void Application::DrawGraphEditor() {
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::JointSet, "Joint Set — 方向と間隔を持つ有限パッチ列");
         addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
-        addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂の表示と Box の部分切断");
+        addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂と部分切断");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
@@ -1042,9 +1042,12 @@ void Application::DrawGraphPanel() {
         const float zero[3] = {0, 0, 0};
         bool changed = false;
         if (ui::BeginPropertyTable("crackRows")) {
-            changed |= ui::PropertyBool("部分切断 (Box)", &edited.applyCut, false);
+            changed |= ui::PropertyBool("部分切断", &edited.applyCut, false);
+            changed |= ui::PropertyBool("Mesh 全幅溝", &edited.meshCut, false);
             changed |= ui::PropertyBool("ガイド表示", &edited.showGuide, true);
+            ImGui::BeginDisabled(edited.meshCut);
             changed |= ui::PropertyBool("Bridge 表示", &edited.showBridge, true);
+            ImGui::EndDisabled();
             changed |= ui::PropertyFloat3Input("中心 (m)", edited.center.data(), zero) != 0;
             changed |= ui::PropertyFloat3Input("回転 (度)", edited.rotationDegrees.data(), zero) != 0;
             changed |= ui::PropertyFloat("半幅 U (m)", &edited.extentU, 0.001f, 1000, 1.2f);
@@ -1059,9 +1062,15 @@ void Application::DrawGraphPanel() {
             ui::EndPropertyTable();
         }
         if (edited.applyCut) {
-            ui::HintText(
-                "軸に沿う単一の切り込みを Box に作ります。回転は90度単位。+V "
-                "端を母岩の外面まで伸ばしてください。");
+            if (edited.meshCut)
+                ui::HintText(
+                    "曲面・斜め方向に1回の溝を作ります。U 全幅と +V "
+                    "側の外面を覆う範囲にしてください。深さを抑えて奥に未破断部を残します。上限4096三角形。Br"
+                    "idge 断面の計測・表示は未対応です。");
+            else
+                ui::HintText(
+                    "Box 専用方式は回転90度単位で、有限長の溝にも対応します。+V "
+                    "端を母岩の外面まで伸ばしてください。");
             const auto report = std::find_if(m_cutReports.begin(), m_cutReports.end(),
                                              [&](const auto& value) { return value.source == selected->id; });
             if (report != m_cutReports.end()) {
@@ -1120,7 +1129,7 @@ void Application::DrawGraphPanel() {
             "原点中心の母岩。寸法はノイズを加える前の大きさです。ノイズ強度は半径に対する変位率、細かさを上げ"
             "ると細かな凹凸になります。");
         ui::HintText(
-            "Seed はノイズがあるときに形を変えます。部分切断はノイズなしの Box のみ。曲面やノイズ付き母岩は "
+            "Seed はノイズがあるときに形を変えます。曲面の部分切断は Crack の Mesh 全幅溝、完全分割は "
             "Fracture で分割できます。");
         if (changed) {
             *rock = edited;

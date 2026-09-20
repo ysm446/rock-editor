@@ -14,6 +14,7 @@ struct CrackSettings {
     float persistence = 0.6f;
     float aperture = 0.02f;
     bool showGuide = true;
+    bool meshCut = false;   // 全幅の Mesh 溝。旧シーンは Box 専用の方式を維持する。
     bool applyCut = false;  // 旧シーンはガイド表示を維持する。
     bool showBridge = true;
 };
