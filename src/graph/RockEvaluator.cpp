@@ -1,6 +1,7 @@
 #include "graph/RockEvaluator.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <map>
 #include <unordered_set>
@@ -19,7 +20,12 @@ void Append(RockEvaluation& target, const RockEvaluation& source) {
                              [&](const auto& other) { return other.source == item.source; }))
                 dst.push_back(item);
     };
-    append(target.rocks, source.rocks);
+    for (const auto& item : source.rocks)
+        if (std::none_of(target.rocks.begin(), target.rocks.end(), [&](const auto& other) {
+                return other.source == item.source && other.chunk == item.chunk;
+            }))
+            target.rocks.push_back(item);
+    append(target.fractures, source.fractures);
     append(target.cracks, source.cracks);
     append(target.cuts, source.cuts);
     target.hasModels |= source.hasModels;
@@ -74,6 +80,61 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
                     {id, cut.bridge, cut.penetration, cut.removedVolume, settings->showBridge, cut.status});
             }
             if (settings->showGuide) result.cracks.push_back({id, patch});
+        } else if (node->kind == NodeKind::Fracture) {
+            const auto* settings = std::get_if<fracture::FractureSettings>(&node->settings);
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream) return finish(Failure(id, "Fracture", "Mesh 入力を接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.size() != 1 || result.rocks.front().chunk != 0)
+                return finish(
+                    Failure(id, "Fracture", "未分割の岩1個を接続してください。再帰分割は未対応です"));
+            crack::CrackSettings plane;
+            plane.center = settings->center;
+            plane.rotationDegrees = settings->rotationDegrees;
+            crack::CrackPatch frame;
+            std::string error;
+            if (!crack::BuildCrackPatch(plane, frame, error)) return finish(Failure(id, "Fracture", error));
+            auto split = fracture::SplitByPlane(result.rocks.front().mesh, frame.center, frame.normal);
+            if (!split.error.empty()) return finish(Failure(id, "Fracture", split.error));
+            const auto parent = result.rocks.front().source;
+            result.rocks.clear();
+            // 上流の有限亀裂ガイドは分割・移動後の形状を表さない。上流プレビューで確認する。
+            result.cracks.clear();
+            result.cuts.clear();
+            result.fractures.push_back({id, parent, frame.center, frame.normal, split.sectionArea});
+            for (int side = 0; side < 2; ++side) {
+                const auto& transform = settings->chunks[side];
+                crack::CrackSettings rotation;
+                rotation.center = transform.position;
+                rotation.rotationDegrees = transform.rotationDegrees;
+                crack::CrackPatch basis;
+                if (!crack::BuildCrackPatch(rotation, basis, error))
+                    return finish(Failure(id, "Fracture", error));
+                geometry::MeshInfo info;
+                geometry::InspectMesh(split.meshes[side], info);
+                const geometry::Vec3 pivot{(info.minimum.x + info.maximum.x) * 0.5f,
+                                           (info.minimum.y + info.maximum.y) * 0.5f,
+                                           (info.minimum.z + info.maximum.z) * 0.5f};
+                for (auto& p : split.meshes[side].positions) {
+                    const float x = p.x - pivot.x, y = p.y - pivot.y, z = p.z - pivot.z;
+                    p = {pivot.x + basis.tangentU.x * x + basis.tangentV.x * y + basis.normal.x * z +
+                             transform.position[0],
+                         pivot.y + basis.tangentU.y * x + basis.tangentV.y * y + basis.normal.y * z +
+                             transform.position[1],
+                         pivot.z + basis.tangentU.z * x + basis.tangentV.z * y + basis.normal.z * z +
+                             transform.position[2]};
+                }
+                geometry::MeshInfo transformed;
+                if (!geometry::InspectMesh(split.meshes[side], transformed) || !transformed.closed ||
+                    transformed.components != 1 ||
+                    std::abs(transformed.volume - info.volume) > info.volume * 1e-4)
+                    return finish(Failure(id, "Fracture",
+                                          "移動・回転後の精度を保てません。移動量を小さくしてください"));
+                result.rocks.push_back({id, std::move(split.meshes[side]), std::nullopt, side + 1, parent,
+                                        transform.locked, pivot});
+            }
         } else if (node->kind == NodeKind::Model || node->kind == NodeKind::Transform) {
             result.hasModels = true;
         } else if (node->kind == NodeKind::Merge || node->kind == NodeKind::MeshOutput) {

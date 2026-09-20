@@ -211,16 +211,26 @@ void Application::SyncMeshGraph() {
     if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode) return;
     const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode);
     renderer::MeshScene scene;
+    m_rockMeshReferences.clear();
     for (const auto& rock : evaluated.rocks) {
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(rock.mesh);
-        mesh.material.baseColor = {0.35f, 0.32f, 0.28f};
+        mesh.material.baseColor = rock.chunk == 1   ? DirectX::XMFLOAT3{0.28f, 0.39f, 0.48f}
+                                  : rock.chunk == 2 ? DirectX::XMFLOAT3{0.48f, 0.34f, 0.24f}
+                                                    : DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
+        m_rockMeshReferences.push_back({rock.source, rock.chunk, rock.pivot});
         mesh.material.roughness = 0.8f;
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;
     m_cutReports = evaluated.cuts;
+    m_fractureReports = evaluated.fractures;
     m_meshHighlight = MeshHighlightState{};
+    for (size_t i = 0; i < m_rockMeshReferences.size(); ++i) {
+        const auto& ref = m_rockMeshReferences[i];
+        if (ref.source == m_selectedGraphNode && ref.chunk == m_selectedChunk)
+            m_meshHighlight.selected.push_back(static_cast<int>(i));
+    }
     if (scene.meshes.empty()) {
         if (m_meshGraphActive) m_renderer.ClearMeshScene(m_device);
         m_meshGraphActive = false;
@@ -753,6 +763,7 @@ void Application::DrawGraphEditor() {
         };
         // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
         ImGui::TextDisabled("モデル");
+        addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
         addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂の表示と Box の部分切断");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — Box の母岩を生成");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -908,6 +919,53 @@ void Application::DrawGraphPanel() {
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
                      "ピンをドラッグして接続、Ctrl+C / Ctrl+V でコピー");
+    } else if (auto* fracture = std::get_if<fracture::FractureSettings>(&selected->settings)) {
+        auto edited = *fracture;
+        const float zero[3] = {0, 0, 0};
+        bool changed = false;
+        if (ui::BeginPropertyTable("fractureRows")) {
+            changed |= ui::PropertyFloat3Input("平面中心 (m)", edited.center.data(), zero) != 0;
+            changed |= ui::PropertyFloat3Input("平面回転 (度)", edited.rotationDegrees.data(), zero) != 0;
+            ui::EndPropertyTable();
+        }
+        ui::HintText("平面で岩全体を2片に分けます。初期の法線は +Z。Crack の有限範囲や深さは延長しません。");
+        if (const auto report = std::find_if(m_fractureReports.begin(), m_fractureReports.end(),
+                                             [&](const auto& r) { return r.source == selected->id; });
+            report != m_fractureReports.end()) {
+            if (ui::BeginPropertyTable("fractureReportRows")) {
+                ui::PropertyValue("親ノード", "#%d", report->parent);
+                ui::PropertyValue("分割面積 (m²)", "%.4f", report->sectionArea);
+                ui::EndPropertyTable();
+            }
+        }
+        const auto selectChunk = [&](int chunk) {
+            m_selectedChunk = chunk;
+            m_meshHighlight.selected.clear();
+            for (size_t i = 0; i < m_rockMeshReferences.size(); ++i)
+                if (m_rockMeshReferences[i].source == selected->id && m_rockMeshReferences[i].chunk == chunk)
+                    m_meshHighlight.selected.push_back(static_cast<int>(i));
+        };
+        if (ImGui::RadioButton("Chunk 1 (- / 青)", m_selectedChunk == 1)) selectChunk(1);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Chunk 2 (+ / 茶)", m_selectedChunk == 2)) selectChunk(2);
+        auto& chunk = edited.chunks[static_cast<size_t>(m_selectedChunk - 1)];
+        if (ui::BeginPropertyTable("chunkRows")) {
+            ui::PropertyValue("Chunk ID", "%d:%d", selected->id, m_selectedChunk);
+            changed |= ui::PropertyBool("Locked", &chunk.locked, true);
+            ImGui::BeginDisabled(chunk.locked);
+            changed |= ui::PropertyFloat3Input("移動 (m)", chunk.position.data(), zero) != 0;
+            changed |= ui::PropertyFloat3Input("回転 (度)", chunk.rotationDegrees.data(), zero) != 0;
+            ImGui::EndDisabled();
+            ui::EndPropertyTable();
+        }
+        ui::HintText(
+            "Locked は現在の配置を固定します。解除すると個別に移動・回転できます。W: 移動 / E: "
+            "回転。回転中心は分割直後の各片の外接箱中心です。");
+        if (changed) {
+            *fracture = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
     } else if (auto* crack = std::get_if<crack::CrackSettings>(&selected->settings)) {
         auto edited = *crack;
         const float zero[3] = {0, 0, 0};

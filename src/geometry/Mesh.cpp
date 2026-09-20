@@ -57,7 +57,13 @@ bool InspectMesh(const Mesh& mesh, MeshInfo& info) {
         const Vec3 ab = Sub(b, a), ac = Sub(c, a), n = Cross(ab, ac);
         // 面積は辺長に対する相対値で判定し、小さな正常 Box を拒否しない。
         if (Dot(n, n) <= 1e-12 * Dot(ab, ab) * Dot(ac, ac)) return false;
-        info.volume += Dot(a, Cross(b, c)) / 6.0;
+        // 原点から遠い Chunk でも桁落ちしないよう、メッシュ上の点を基準に積分する。
+        const auto va = Sub(a, mesh.positions.front()), vb = Sub(b, mesh.positions.front()),
+                   vc = Sub(c, mesh.positions.front());
+        info.volume += (double(va.x) * (double(vb.y) * vc.z - double(vb.z) * vc.y) +
+                        double(va.y) * (double(vb.z) * vc.x - double(vb.x) * vc.z) +
+                        double(va.z) * (double(vb.x) * vc.y - double(vb.y) * vc.x)) /
+                       6.0;
         for (size_t k = 0; k < 3; ++k) {
             const auto u = f[k], v = f[(k + 1) % 3];
             used[u] = true;

@@ -46,8 +46,9 @@ constexpr std::array<PinDefinition, 1> kBaseRockPins = {{{PinKind::Output, Value
 
 constexpr std::array<PinDefinition, 2> kCrackPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 7> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 8> kNodeDefinitions = {{
     {NodeKind::Crack, "crack", "Crack", kCrackPins},
+    {NodeKind::Fracture, "fracture", "Fracture", kCrackPins},
     {NodeKind::BaseRock, "baseRock", "Base Rock", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
     {NodeKind::Model, "model", "Model", kModelPins},
@@ -85,7 +86,8 @@ bool IsLayerNodeKind(NodeKind kind) {
 }
 
 bool IsMeshNodeKind(NodeKind kind) {
-    return kind == NodeKind::Merge || kind == NodeKind::BaseRock || kind == NodeKind::Crack;
+    return kind == NodeKind::Merge || kind == NodeKind::BaseRock || kind == NodeKind::Crack ||
+           kind == NodeKind::Fracture;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -359,7 +361,9 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
     Node node;
     node.id = AllocateGraphId();
     node.kind = kind;
-    if (kind == NodeKind::BaseRock) {
+    if (kind == NodeKind::Fracture) {
+        node.settings = fracture::FractureSettings{};
+    } else if (kind == NodeKind::BaseRock) {
         node.settings = BaseRockNodeSettings{};
     } else if (kind == NodeKind::Crack) {
         node.settings = crack::CrackSettings{};

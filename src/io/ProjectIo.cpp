@@ -456,7 +456,15 @@ json WriteGraph(const graph::NodeGraph& graphData,
             outputs.push_back(pin.id);
         }
         item["outputs"] = std::move(outputs);
-        if (const auto* crack = std::get_if<crack::CrackSettings>(&node.settings)) {
+        if (const auto* fracture = std::get_if<fracture::FractureSettings>(&node.settings)) {
+            json chunks = json::array();
+            for (const auto& chunk : fracture->chunks)
+                chunks.push_back({{"locked", chunk.locked},
+                                  {"position", chunk.position},
+                                  {"rotation", chunk.rotationDegrees}});
+            item["fracture"] = {
+                {"center", fracture->center}, {"rotation", fracture->rotationDegrees}, {"chunks", chunks}};
+        } else if (const auto* crack = std::get_if<crack::CrackSettings>(&node.settings)) {
             item["crack"] = {{"center", crack->center},     {"rotation", crack->rotationDegrees},
                              {"extentU", crack->extentU},   {"extentV", crack->extentV},
                              {"depth", crack->depth},       {"persistence", crack->persistence},
@@ -598,7 +606,26 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 }
             }
 
-            if (created.kind == graph::NodeKind::Crack) {
+            if (created.kind == graph::NodeKind::Fracture) {
+                fracture::FractureSettings settings;
+                if (const json* v = FindMember(item, "fracture"); v && v->is_object()) {
+                    const auto center = ReadFloat3(*v, "center", {}),
+                               rotation = ReadFloat3(*v, "rotation", {});
+                    settings.center = {center.x, center.y, center.z};
+                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    if (const json* chunks = FindMember(*v, "chunks"); chunks && chunks->is_array())
+                        for (size_t i = 0; i < std::min(size_t(2), chunks->size()); ++i) {
+                            const auto& c = (*chunks)[i];
+                            if (!c.is_object()) continue;
+                            auto& chunk = settings.chunks[i];
+                            chunk.locked = ReadBool(c, "locked", true);
+                            const auto p = ReadFloat3(c, "position", {}), r = ReadFloat3(c, "rotation", {});
+                            chunk.position = {p.x, p.y, p.z};
+                            chunk.rotationDegrees = {r.x, r.y, r.z};
+                        }
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::Crack) {
                 crack::CrackSettings settings;
                 if (const json* v = FindMember(item, "crack"); v && v->is_object()) {
                     const auto center = ReadFloat3(*v, "center", {}),
@@ -676,7 +703,6 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     assign(settings);
                     created.settings = settings;
                 }
-
             } else {
                 // Mesh Output は設定を持たない。
                 created.settings = std::monostate{};

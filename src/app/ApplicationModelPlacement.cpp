@@ -369,6 +369,12 @@ std::vector<Application::VisibleModel> Application::CollectVisibleModels() const
 bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
     graph::Node* node = m_graph.FindMutableNode(nodeId);
     if (node == nullptr) return false;
+    if (auto* fracture = std::get_if<fracture::FractureSettings>(&node->settings)) {
+        auto& chunk = fracture->chunks[static_cast<size_t>(m_selectedChunk - 1)];
+        if (chunk.locked) return false;
+        out = {chunk.position.data(), chunk.rotationDegrees.data(), nullptr};
+        return true;
+    }
     if (auto* model = std::get_if<graph::ModelNodeSettings>(&node->settings)) {
         out = {model->position, model->rotationDegrees, &model->scale};
         return true;
@@ -382,6 +388,19 @@ bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
 
 bool Application::NodeGizmoFrame(graph::GraphId nodeId, XMFLOAT3& pivot, XMFLOAT4X4& parent) const {
     const graph::Node* node = m_graph.FindNode(nodeId);
+    if (node && node->kind == graph::NodeKind::Fracture) {
+        const auto& settings = std::get<fracture::FractureSettings>(node->settings);
+        const auto& chunk = settings.chunks[static_cast<size_t>(m_selectedChunk - 1)];
+        if (chunk.locked || !m_meshGraphError.empty() || !m_meshGraphActive) return false;
+        for (const auto& ref : m_rockMeshReferences)
+            if (ref.source == nodeId && ref.chunk == m_selectedChunk) {
+                pivot = {ref.pivot.x + chunk.position[0], ref.pivot.y + chunk.position[1],
+                         ref.pivot.z + chunk.position[2]};
+                XMStoreFloat4x4(&parent, XMMatrixIdentity());
+                return true;
+            }
+        return false;
+    }
     if (node == nullptr || (node->kind != graph::NodeKind::Model && node->kind != graph::NodeKind::Transform)) return false;
     const float* position = nullptr;
     if (const auto* model = std::get_if<graph::ModelNodeSettings>(&node->settings)) position = model->position;
@@ -569,18 +588,22 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
             drag = {};
             return true;
         }
+        const auto documentChanged = [&]() {
+            m_documentDirty = true;
+            if (!target.scale) m_graph.MarkDirty();
+        };
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             // 掴む前の値へ戻す。
             if (drag.dragging && drag.nodeRotation) {
                 graph::Node* node = m_graph.FindMutableNode(drag.node);
                 if (auto* settings = node ? std::get_if<graph::ModelNodeSettings>(&node->settings) : nullptr)
                     SetModelNodeRotation(*settings, drag.modelNodeName, drag.startNodeRotation);
-                m_documentDirty = true;
+                documentChanged();
             } else if (drag.dragging) {
                 std::copy(std::begin(drag.startPosition), std::end(drag.startPosition), target.position);
                 std::copy(std::begin(drag.startRotation), std::end(drag.startRotation), target.rotation);
-                *target.scale = drag.startScale;
-                m_documentDirty = true;
+                if (target.scale) *target.scale = drag.startScale;
+                documentChanged();
             }
             drag = {};
             return true;
@@ -618,7 +641,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
             // 0 付近は 0 に揃える（すべて 0 なら項目を消す）。
             for (float& value : degrees)
                 if (std::abs(value) < 1e-3f) value = 0.0f;
-            if (SetModelNodeRotation(*settings, drag.modelNodeName, degrees)) m_documentDirty = true;
+            if (SetModelNodeRotation(*settings, drag.modelNodeName, degrees)) documentChanged();
             return true;
         }
         const XMMATRIX parent = XMLoadFloat4x4(&drag.parent);
@@ -634,7 +657,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
                                    drag.startPosition[2] + local.z};
             if (!std::equal(std::begin(next), std::end(next), target.position)) {
                 std::copy(std::begin(next), std::end(next), target.position);
-                m_documentDirty = true;
+                documentChanged();
             }
         };
         if (drag.handle >= kHandleAxis && drag.handle < kHandlePlane) {
@@ -649,6 +672,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
             if (IntersectPlane(rayOrigin, rayDirection, pivot, XMLoadFloat3(&kAxes[axisIndex]), hit))
                 applyTranslation(XMVectorSubtract(XMLoadFloat3(&hit), XMLoadFloat3(&drag.pressPoint)));
         } else if (drag.handle >= kHandleScale) {
+            if (!target.scale) return true;
             // 軸は、ピボットから掴んだ点までの長さとの比。中心の四角は、右か上へ動かすほど大きくなる。
             float factor = 1.0f;
             if (drag.handle == kHandleScaleAll) {
@@ -665,7 +689,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
             if (io.KeyCtrl) scale = std::max(0.1f, std::round(scale * 10.0f) / 10.0f);
             if (scale != *target.scale) {
                 *target.scale = scale;
-                m_documentDirty = true;
+                documentChanged();
             }
         } else if (drag.handle >= kHandleRing) {
             // 画面上でピボットのまわりに回した角度。軸がカメラを向いていれば反時計回りが正（右手系）。
@@ -693,7 +717,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
             renderer::RotationToDegrees(rotated, degrees);
             if (!std::equal(std::begin(degrees), std::end(degrees), target.rotation)) {
                 std::copy(std::begin(degrees), std::end(degrees), target.rotation);
-                m_documentDirty = true;
+                documentChanged();
             }
         }
         return true;
@@ -704,6 +728,8 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
     XMFLOAT3 pivot{};
     XMFLOAT4X4 parent{};
     const bool hasGizmo = NodeTransform(m_selectedGraphNode, selected) && NodeGizmoFrame(m_selectedGraphNode, pivot, parent);
+    if (hasGizmo && !selected.scale && m_modelGizmoMode == ModelGizmoMode::Scale)
+        m_modelGizmoMode = ModelGizmoMode::Translate;
     if (itemHovered && !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && hasGizmo) {
         // W / E / R はモデルのギズモ。ノード用のギズモから戻る。
         const auto choose = [&](ModelGizmoMode mode) {
@@ -712,7 +738,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         };
         if (ImGui::IsKeyPressed(ImGuiKey_W, false)) choose(ModelGizmoMode::Translate);
         if (ImGui::IsKeyPressed(ImGuiKey_E, false)) choose(ModelGizmoMode::Rotate);
-        if (ImGui::IsKeyPressed(ImGuiKey_R, false)) choose(ModelGizmoMode::Scale);
+        if (selected.scale && ImGui::IsKeyPressed(ImGuiKey_R, false)) choose(ModelGizmoMode::Scale);
     }
     const std::vector<VisibleModel> visibleModels = CollectVisibleModels();
     ModelNodeGizmo nodeGizmo;
@@ -738,7 +764,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         drag.parent = frameParent;
         std::copy(target.position, target.position + 3, drag.startPosition);
         std::copy(target.rotation, target.rotation + 3, drag.startRotation);
-        drag.startScale = *target.scale;
+        drag.startScale = target.scale ? *target.scale : 1.0f;
         const XMVECTOR p = XMLoadFloat3(&framePivot);
         if (handle >= kHandleAxis && handle < kHandlePlane) {
             ClosestOnLine(rayOrigin, rayDirection, p, XMLoadFloat3(&kAxes[handle - kHandleAxis]), drag.pressParameter);
@@ -808,7 +834,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         return true;
     }
     if (hasGizmo && !io.WantTextInput) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+        if (selected.scale && ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
             // ノードごと消す（グラフのノードの削除と同じ。アンドゥで戻る）。
             m_graph.DeleteNode(m_selectedGraphNode);
             m_graph.NormalizeVariablePins();
@@ -854,8 +880,8 @@ void Application::DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVe
     renderer::OverlayLineSet hovered{color(ImGuiCol_PlotLines), {}};
     renderer::OverlayLineSet selectedSet{color(ImGuiCol_PlotLinesHovered), {}};
     const graph::Node* selectedNode = m_graph.FindNode(m_selectedGraphNode);
-    const bool modelSelected = selectedNode != nullptr &&
-        (selectedNode->kind == graph::NodeKind::Model || selectedNode->kind == graph::NodeKind::Transform);
+    NodeTransformRef activeTransform;
+    const bool modelSelected = selectedNode != nullptr && NodeTransform(m_selectedGraphNode, activeTransform);
     for (const VisibleModel& model : visible) {
         const bool inSelection = modelSelected &&
             (model.node == m_selectedGraphNode ||

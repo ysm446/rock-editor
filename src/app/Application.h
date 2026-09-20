@@ -140,6 +140,14 @@ private:
     bool m_meshGraphActive = false;
     std::string m_meshGraphError;
     std::vector<graph::GeneratedCut> m_cutReports;
+    std::vector<graph::GeneratedFracture> m_fractureReports;
+    struct RockMeshReference {
+        graph::GraphId source = 0;
+        int chunk = 0;
+        geometry::Vec3 pivot;
+    };
+    std::vector<RockMeshReference> m_rockMeshReferences;
+    int m_selectedChunk = 1;
     // 選択中のノードを控える / 貼り付ける（Ctrl+C / Ctrl+V）。
     void CopySelectedGraphNodes();
     // 控えたノードを貼る。viewCenter は今のキャンバスの中央（キャンバス座標）で、

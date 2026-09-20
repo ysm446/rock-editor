@@ -2,6 +2,7 @@
 
 #include "compositor/MaterialLayer.h"
 #include "crack/CrackPatch.h"
+#include "fracture/PlaneSplit.h"
 #include "renderer/ModelAsset.h"
 
 #include <array>
@@ -47,10 +48,12 @@ enum class ValueType : uint32_t {
 enum class NodeKind : uint32_t {
     BaseRock = 34,
     Crack = 35,
+    Fracture = 36,
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
-    // 3D モデル（.rockmodel）を 1 つ置く。出力（Model 型）を Mesh Output か Merge へ繋ぐとビューポートに出る。
+    // 3D モデル（.rockmodel）を 1 つ置く。出力（Model 型）を Mesh Output か Merge
+    // へ繋ぐとビューポートに出る。
     Model = 32,
     // 上流のモデルをまとめて移動・回転・拡大する。Model 型を受けて Model 型を出す。
     Transform = 33,
@@ -132,7 +135,7 @@ struct CompiledGraph {
 // 設定を持たないノード（Mesh Output）は std::monostate。
 using NodeSettings =
     std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings, TransformNodeSettings,
-                 BaseRockNodeSettings, crack::CrackSettings, std::monostate>;
+                 BaseRockNodeSettings, crack::CrackSettings, fracture::FractureSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;
