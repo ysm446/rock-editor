@@ -59,10 +59,6 @@ std::vector<std::string> Application::CollectTextureUsers(compositor::TextureId 
             add("ハイト");
         }
     }
-    for (const auto& boundary : m_surfaceLayouts.boundaryMaterials) {
-        if (boundary.mask == id) users.push_back("境界マテリアル「" + boundary.name + "」のマスク");
-        if (boundary.height == id) users.push_back("境界マテリアル「" + boundary.name + "」のハイト");
-    }
     return users;
 }
 
@@ -78,9 +74,6 @@ size_t Application::CountTextureUsers(compositor::TextureId id) const {
         count += (asset.metallic.texture == id) ? 1 : 0;
         count += (asset.ambientOcclusion.texture == id) ? 1 : 0;
         count += (asset.height.texture == id) ? 1 : 0;
-    }
-    for (const auto& boundary : m_surfaceLayouts.boundaryMaterials) {
-        count += boundary.mask == id; count += boundary.height == id;
     }
     return count;
 }

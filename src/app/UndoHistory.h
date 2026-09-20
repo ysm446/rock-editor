@@ -1,7 +1,5 @@
 #pragma once
 
-#include "graph/SurfaceLayout.h"
-
 // MaterialLibrary.h は含めない。あちらは rhi（D3D12）を引き込むため、
 // GPU の無いテストから使えなくなる。ID と MapSlot は MaterialLayer.h にある。
 // NodeGraph.h も STL と compositor のデータ構造にしか依存しない。
@@ -70,8 +68,6 @@ struct MaterialSnapshot {
 struct DocumentSnapshot {
     std::vector<graph::Node> graphNodes;
     std::vector<graph::Link> graphLinks;
-    graph::RoadNetworkSettings roadNetwork;
-    graph::SurfaceLayoutDocument surfaceLayouts;
     std::vector<MaterialSnapshot> materials;
     std::vector<renderer::ModelAsset> models;
     graph::GraphId selectedGraphNode = 0;

@@ -1,14 +1,13 @@
-// モデルの系統のノード（Model / Transform。まとめるのは道路と共通の Merge）。ノードの追加と Mesh Output への接続、描画、
+// モデルの系統のノード（Model / Transform。まとめるのは Merge）。ノードの追加と Mesh Output への接続、描画、
 // ビューポートでの選択・ギズモ（W 移動 / E 回転 / R 倍率、FBX のノードを回すノード用の輪）・ドラッグ移動、範囲の枠、プロパティ。
-// 描画はレンダラの drawSceneExtras から呼ばれ、道路と同じシャドウマップ・照明で描く。
-// 置き方（位置・回転・倍率）の変更は道路のメッシュに関係しないので、グラフの改版（道路の再生成）を起こさない。
+// 描画はレンダラの drawSceneExtras から呼ばれ、メッシュと同じシャドウマップ・照明で描く。
+// 置き方（位置・回転・倍率）の変更はメッシュに関係しないので、グラフの改版（再生成）を起こさない。
 // 仕様は docs/reference/model-assets.md の「モデルの系統のノード」。
 
 #include "app/Application.h"
 
 #include "app/ApplicationUiHelpers.h"
 #include "core/Log.h"
-#include "graph/Road.h"
 #include "ui/UiStyle.h"
 
 #include <imgui.h>
@@ -1132,6 +1131,30 @@ bool Application::SelectedModelInstanceFocusTarget(XMFLOAT3& target) {
         }
     }
     target = pivot;
+    return true;
+}
+
+// カーソル位置からカメラのレイ（ワールド座標、方向は単位長）。ビューポートが潰れていれば偽。
+bool Application::ViewportRay(const ImVec2& mouse, const ImVec2& viewportMin, const ImVec2& viewportMax,
+                              XMFLOAT3& outOrigin, XMFLOAT3& outDirection) const {
+    const ImVec2 size(viewportMax.x - viewportMin.x, viewportMax.y - viewportMin.y);
+    if (size.x <= 0.0f || size.y <= 0.0f) {
+        return false;
+    }
+    const renderer::Camera& camera = m_renderer.GetCamera();
+    const XMMATRIX viewProjection = camera.ViewMatrix() * camera.ProjectionMatrix();
+    XMVECTOR determinant;
+    const XMMATRIX inverse = XMMatrixInverse(&determinant, viewProjection);
+    if (XMVectorGetX(determinant) == 0.0f) {
+        return false;
+    }
+    const float ndcX = ((mouse.x - viewportMin.x) / size.x) * 2.0f - 1.0f;
+    const float ndcY = 1.0f - ((mouse.y - viewportMin.y) / size.y) * 2.0f;
+    const XMVECTOR nearPoint = XMVector3TransformCoord(XMVectorSet(ndcX, ndcY, 0.0f, 1.0f), inverse);
+    const XMVECTOR farPoint = XMVector3TransformCoord(XMVectorSet(ndcX, ndcY, 1.0f, 1.0f), inverse);
+    const XMVECTOR direction = XMVector3Normalize(XMVectorSubtract(farPoint, nearPoint));
+    XMStoreFloat3(&outOrigin, nearPoint);
+    XMStoreFloat3(&outDirection, direction);
     return true;
 }
 

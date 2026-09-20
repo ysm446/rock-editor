@@ -3,7 +3,6 @@
 #include "compositor/MaterialLibrary.h"
 #include "compositor/TextureLibrary.h"
 #include "graph/NodeGraph.h"
-#include "graph/SurfaceLayout.h"
 #include "io/ProjectWorkspace.h"
 #include "renderer/ModelAsset.h"
 #include "renderer/PreviewRenderer.h"
@@ -26,10 +25,6 @@ struct ProjectRefs {
     renderer::SkyLibrary& skies;
     renderer::PreviewRenderer& renderer;
     graph::NodeGraph& graph;
-    graph::SurfaceLayoutDocument& surfaceLayouts;
-    bool& previewSurfaceBands;
-    bool& connectSurfaceBands;
-    bool& displaceConnectedBands;
     // モデル（.tgmodel）。渡さなければモデルは読み書きしない。
     std::vector<renderer::ModelAsset>* models = nullptr;
 };
@@ -50,12 +45,12 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
                  rhi::PipelineCache& pipelineCache, const ProjectRefs& refs,
                  ProjectWorkspace* workspace = nullptr);
 
-// --- 共有アセット（ルート内の .tgmat / .tgsky / .tglayer / .tgboundary / .tgmodel） ------
+// --- 共有アセット（ルート内の .tgmat / .tgsky / .tgmodel） ---------------
 //
-// 読み込み済みのマテリアル・天球・レイヤーマテリアル・境界マテリアル・モデルをそれぞれのファイルへ書く。
-// 置き場所が未定のものは `Materials/` / `Skies/` / `LayerMaterials/` / `BoundaryMaterials/` / `Models/` に名前から作る。
-// ただし ID を持たないもの（旧 .tgproj の埋め込みなど）は、
-// 同じ中身の既存アセットがあればそれへ書く（保存し直すたびに連番の複製を作らない）。
+// 読み込み済みのマテリアル・天球・モデルをそれぞれのファイルへ書く。
+// 置き場所が未定のものは `Materials/` / `Skies/` / `Models/` に名前から作る。
+// ただし ID を持たないものは、同じ中身の既存アセットがあればそれへ書く
+// （保存し直すたびに連番の複製を作らない）。
 // シーンの保存はこれを先に行う。
 bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs);
 // 共有アセット 1 つを現在のライブラリへ足す。同じ ID がすでにあれば足さずにそれを使う
@@ -67,14 +62,6 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
                      compositor::TextureLibrary& textures, compositor::MaterialLibrary& materials,
                      renderer::SkyLibrary& skies, bool rescan = true,
                      std::vector<renderer::ModelAsset>* models = nullptr);
-// 共有のレイヤーマテリアル（.tglayer）/ 境界マテリアル（.tgboundary）を 1 つ配置データへ足し、その ID を返す。
-// 同じ固定 ID のものが読み込み済みなら足さずにそれを返す。参照するマテリアルと画像もライブラリへ読み込む。
-// 失敗は 0（配置データは変えない）。
-graph::SurfaceId LoadSharedSurfaceAsset(ProjectWorkspace& workspace, const std::filesystem::path& path,
-                                        rhi::Device& device, rhi::PipelineCache& pipelineCache,
-                                        compositor::TextureLibrary& textures, compositor::MaterialLibrary& materials,
-                                        graph::SurfaceLayoutDocument& layouts);
-
 // --- マテリアル単体 (.tgmat) ----------------------------------------------
 //
 // プロジェクト間でマテリアルを持ち回るための書き出し / 読み込み。

@@ -16,45 +16,12 @@ namespace {
 // **ノードの名前とピンのラベルは英語で書く。**
 // ノードグラフを持つツール（Substance / Houdini / Gaea など）はどれも英語表記で、
 // 素材やノードの呼び名もその語彙で流通している。説明文だけ日本語にする。
-// 材質（Surface）のピン。入力は無く、Result を Road / Shoulder / Decal などの Material へ繋ぐ。
-// 旧地形の Base / Mask 入力は撤去した（旧ファイルのリンクはピンが無いので読み込み時に捨てる）。
+// 材質（Surface）のピン。入力は無く、Result を Material スロットへ繋ぐ。
 constexpr std::array<PinDefinition, 1> kLayerNodePins = {{
     {PinKind::Output, ValueType::Material, "Result"},
 }};
 
-// パスのピン。Surface に Road の RoadSurface を繋ぐと、そのパスは面の座標（横位置 × 実距離）で
-// 保持され、道路を変形しても面に貼り付いたまま追従する（デカールの経路）。繋がなければ実寸 XYZ。
-// 旧地形パスの Base（どの地形に沿うか）はこのピンの前身で、旧ファイルのリンクは型が違うので捨てる。
-constexpr std::array<PinDefinition, 2> kPathPins = {{
-    {PinKind::Input, ValueType::Mesh, "Surface"},
-    {PinKind::Output, ValueType::Path, "Path"},
-}};
-constexpr std::array<PinDefinition, 3> kDecalPins = {{
-    {PinKind::Input, ValueType::Mesh, "RoadSurface"},
-    {PinKind::Input, ValueType::Path, "Path"},
-    {PinKind::Output, ValueType::Mesh, "RoadSurface"},
-}};
-// 路肩のピン。Path には Road の Left / Right か、別の路肩の Outer を繋ぐ。
-// Outer は外側の境界（実寸 Path）で、次の路肩や縁石へ渡す。
-// 材質スロットとマスクは Road と同じ並び。
-constexpr std::array<PinDefinition, 10> kShoulderPins = {{
-    {PinKind::Input, ValueType::Path, "Path"},
-    {PinKind::Input, ValueType::Material, "Material"},
-    {PinKind::Input, ValueType::Material, "Material 2"},
-    {PinKind::Input, ValueType::Material, "Material 3"},
-    {PinKind::Input, ValueType::Material, "Material 4"},
-    {PinKind::Input, ValueType::RoadMask, "Mask 2"},
-    {PinKind::Input, ValueType::RoadMask, "Mask 3"},
-    {PinKind::Input, ValueType::RoadMask, "Mask 4"},
-    {PinKind::Output, ValueType::Mesh, "RoadSurface"},
-    {PinKind::Output, ValueType::Path, "Outer"},
-}};
-// ひび割れのピン。Decal と同じく RoadSurface を受けて RoadSurface を返す。材質はプロパティで指定する。
-constexpr std::array<PinDefinition, 2> kCrackPins = {{
-    {PinKind::Input, ValueType::Mesh, "RoadSurface"},
-    {PinKind::Output, ValueType::Mesh, "RoadSurface"},
-}};
-// モデルの系統のピン。どれも Model 型だけを受け渡す（道路の Mesh とは繋がらない）。
+// モデルの系統のピン。どれも Model 型だけを受け渡す（Mesh とは繋がらない）。
 constexpr std::array<PinDefinition, 1> kModelPins = {{
     {PinKind::Output, ValueType::Model, "Model"},
 }};
@@ -64,51 +31,23 @@ constexpr std::array<PinDefinition, 2> kTransformPins = {{
 }};
 
 // Merge のピン。入力は可変で、繋ぐたびに空きが 1 本増える（NormalizeVariablePins）。
-// 入力は道路のメッシュとモデルのどちらも受ける。出力の型は入力から決まる（EffectiveOutputType）。
+// 入力はメッシュとモデルのどちらも受ける。出力の型は入力から決まる（EffectiveOutputType）。
 constexpr std::array<PinDefinition, 2> kMergePins = {{
     {PinKind::Input, ValueType::Any, "Input 1"},
     {PinKind::Output, ValueType::Any, "Output"},
 }};
 
-// 材質はスロット 1〜4。スロット 2〜4 は道路マスク（Mask 2〜4）で被覆する。
-constexpr std::array<PinDefinition, 11> kRoadPins = {{
-    {PinKind::Input, ValueType::Path, "Path"},
-    {PinKind::Input, ValueType::Material, "Material"},
-    {PinKind::Input, ValueType::Material, "Material 2"},
-    {PinKind::Input, ValueType::Material, "Material 3"},
-    {PinKind::Input, ValueType::Material, "Material 4"},
-    {PinKind::Input, ValueType::RoadMask, "Mask 2"},
-    {PinKind::Input, ValueType::RoadMask, "Mask 3"},
-    {PinKind::Input, ValueType::RoadMask, "Mask 4"},
-    {PinKind::Output, ValueType::Mesh, "RoadSurface"},
-    {PinKind::Output, ValueType::Path, "Left"},
-    {PinKind::Output, ValueType::Path, "Right"},
-}};
-constexpr std::array<PinDefinition, 1> kRoadMaskPins = {{
-    {PinKind::Output, ValueType::RoadMask, "Mask"},
-}};
-// 道路のメッシュ・モデル・それらをまとめた Merge のどれでも受ける。
+// メッシュ・モデル・それらをまとめた Merge のどれでも受ける。
 constexpr std::array<PinDefinition, 1> kMeshOutputPins = {{
     {PinKind::Input, ValueType::Any, "Mesh"},
 }};
-constexpr std::array<PinDefinition, 2> kRoadMarkingPins = {{
-    {PinKind::Input, ValueType::Mesh, "RoadSurface"},
-    {PinKind::Output, ValueType::Mesh, "RoadSurface"},
-}};
 
-constexpr std::array<NodeDefinition, 12> kNodeDefinitions = {{
-    {NodeKind::Road, "road", "Road", kRoadPins},
-    {NodeKind::RoadMask, "roadMask", "Road Mask", kRoadMaskPins},
-    {NodeKind::Decal, "decal", "Decal", kDecalPins},
-    {NodeKind::Shoulder, "shoulder", "Shoulder", kShoulderPins},
+constexpr std::array<NodeDefinition, 5> kNodeDefinitions = {{
     {NodeKind::Merge, "merge", "Merge", kMergePins},
-    {NodeKind::Crack, "crack", "Crack", kCrackPins},
     {NodeKind::Model, "model", "Model", kModelPins},
     {NodeKind::Transform, "transform", "Transform", kTransformPins},
-    {NodeKind::RoadMarking, "roadMarking", "Lane Marking", kRoadMarkingPins},
     {NodeKind::MeshOutput, "meshOutput", "Mesh Output", kMeshOutputPins},
     {NodeKind::Surface, "surface", "Surface", kLayerNodePins},
-    {NodeKind::Path, "path", "Path", kPathPins},
 }};
 
 }  // namespace
@@ -140,12 +79,11 @@ bool IsLayerNodeKind(NodeKind kind) {
 }
 
 bool IsMeshNodeKind(NodeKind kind) {
-    return kind == NodeKind::Road || kind == NodeKind::RoadMarking || kind == NodeKind::Decal ||
-           kind == NodeKind::Shoulder || kind == NodeKind::Merge || kind == NodeKind::Crack;
+    return kind == NodeKind::Merge;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
-    // 道路メッシュのノードはそのノードまでの鎖、モデルの系統のノードはその枝のモデルだけを出す。
+    // メッシュのノードはそのノードまでの鎖、モデルの系統のノードはその枝のモデルだけを出す。
     return IsMeshNodeKind(kind) || IsModelNodeKind(kind);
 }
 
@@ -417,26 +355,12 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
     node.kind = kind;
     if (IsLayerNodeKind(kind)) {
         node.settings = LayerNodeSettings{};
-    } else if (kind == NodeKind::Road) {
-        node.settings = RoadNodeSettings{};
-    } else if (kind == NodeKind::RoadMarking) {
-        node.settings = RoadMarkingNodeSettings{};
-    } else if (kind == NodeKind::RoadMask) {
-        node.settings = RoadMaskNodeSettings{};
-    } else if (kind == NodeKind::Decal) {
-        node.settings = DecalNodeSettings{};
-    } else if (kind == NodeKind::Shoulder) {
-        node.settings = ShoulderNodeSettings{};
     } else if (kind == NodeKind::Merge) {
         node.settings = MergeNodeSettings{};
-    } else if (kind == NodeKind::Crack) {
-        node.settings = CrackNodeSettings{};
     } else if (kind == NodeKind::Model) {
         node.settings = ModelNodeSettings{};
     } else if (kind == NodeKind::Transform) {
         node.settings = TransformNodeSettings{};
-    } else if (kind == NodeKind::Path) {
-        node.settings = PathNodeSettings{};
     } else {
         // Mesh Output は設定を持たない。
         node.settings = std::monostate{};
@@ -554,10 +478,43 @@ CompiledGraph NodeGraph::CompileLayers() const {
 CompiledGraph NodeGraph::CompileLayersTo(GraphId nodeId, GraphId /*outputPin*/) const {
     const Node* node = FindNode(nodeId);
     if (node == nullptr || !IsLayerNodeKind(node->kind)) {
-        // Path やメッシュのノードはレイヤー列を持たない。下地 1 枚（中立平面）になる。
+        // メッシュのノードはレイヤー列を持たない。下地 1 枚（中立平面）になる。
         return CompileLayers();
     }
     return CompileSurface(node);
+}
+
+std::vector<ModelPlacementPath> CollectOutputModels(const NodeGraph& graph, GraphId previewNodeId) {
+    std::vector<ModelPlacementPath> result;
+    // グラフは DAG なので経路は有限だが、枝分かれの掛け算で増えすぎないよう上限を置く。
+    constexpr size_t kMaxModels = 4096;
+    std::vector<GraphId> transforms;
+    const auto visit = [&](auto&& self, const Node* node, int depth) -> void {
+        if (node == nullptr || depth > 64 || result.size() >= kMaxModels) return;
+        if (node->kind == NodeKind::Model) {
+            ModelPlacementPath path;
+            path.model = node->id;
+            // transforms は出力側から積んでいるので、モデルに近い順へ並べ替える。
+            path.transforms.assign(transforms.rbegin(), transforms.rend());
+            result.push_back(std::move(path));
+        } else if (node->kind == NodeKind::Transform) {
+            transforms.push_back(node->id);
+            if (!node->inputs.empty()) self(self, graph.FindUpstreamNodeForPin(node->inputs.front().id), depth + 1);
+            transforms.pop_back();
+        } else if (node->kind == NodeKind::Merge) {
+            for (const Pin& pin : node->inputs) self(self, graph.FindUpstreamNodeForPin(pin.id), depth + 1);
+        }
+    };
+    if (const Node* preview = graph.FindNode(previewNodeId); preview != nullptr) {
+        // モデルの系統か Merge ならその枝のモデル、ほかのノードならモデルは出さない。
+        if (IsModelNodeKind(preview->kind) || preview->kind == NodeKind::Merge) visit(visit, preview, 0);
+        if (IsModelNodeKind(preview->kind) || IsMeshNodeKind(preview->kind)) return result;
+    }
+    for (const auto& node : graph.Nodes()) {
+        if (node.kind == NodeKind::MeshOutput && !node.inputs.empty())
+            visit(visit, graph.FindUpstreamNodeForPin(node.inputs.front().id), 0);
+    }
+    return result;
 }
 
 }  // namespace tg::graph

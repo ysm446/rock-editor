@@ -334,8 +334,8 @@ bool Application::HandleLightDrag(renderer::LightSettings& light, LightInteracti
     return true;
 }
 
-// F で選択中のパス要素（選択が無ければPath全体）へ注視点を移す。
-// Path以外のプレビューは原点へ戻し、Aは全体が収まる距離まで引く。
+// F で選択中のモデル / メッシュへ注視点を移す。
+// 選択が無ければ原点へ戻し、A は全体が収まる距離まで引く。
 // DCC の「選択をフレーム / 全体をフレーム」に倣った割り当て。
 //
 // 修飾キーは付けない（Ctrl は数値の直接入力、Alt は軌道に使っている）。
@@ -368,9 +368,9 @@ void Application::HandleCameraInput(renderer::PreviewRenderer& preview, bool ite
     constexpr DirectX::XMFLOAT3 kMeshCenter{0.0f, 0.0f, 0.0f};
 
     if (ImGui::IsKeyPressed(ImGuiKey_F, false)) {
-        // 選択中のパスの点、無ければ選択中のメッシュ、それも無ければ原点。
+        // 選択中のモデル、無ければ選択中のメッシュ、それも無ければ原点。
         DirectX::XMFLOAT3 target = kMeshCenter;
-        if (&preview == &m_renderer && !SelectedPathFocusTarget(target) && !SelectedModelInstanceFocusTarget(target))
+        if (&preview == &m_renderer && !SelectedModelInstanceFocusTarget(target))
             SelectedMeshFocusTarget(target);
         camera.Focus(target);
     } else if (ImGui::IsKeyPressed(ImGuiKey_A, false)) {
@@ -562,28 +562,17 @@ void Application::DrawViewportPanel() {
             // L + 左ドラッグはライトの向き。軌道より先に見る。
             const bool lightDragging = HandleLightDrag(m_renderer.Light(), m_viewportLightInteraction, itemActive);
 
-            // Path ノードを選んでいる間は、左クリック / ドラッグと右クリックがパスの編集。
-            // 視点は Alt を押している間だけ動く。
             const ImVec2 imageMax(imageOrigin.x + available.x, imageOrigin.y + available.y);
-            graph::Node* pathNode = CurrentPathNode();
-            const bool pathEnabled = (pathNode != nullptr) && !lightDragging;
-            if (pathEnabled && !io.KeyAlt) {
-                HandlePathInput(*pathNode, itemActive, itemHovered, imageOrigin, imageMax);
-            } else {
-                m_pathEdit.boxPending = m_pathEdit.boxSelecting = false;
-                m_pathEdit.dragging = false;
-                m_pathEdit.dragPoint = 0;
-            }
 
-            // Path 未選択なら、置いたモデル → メッシュの順にカーソル直下を強調し、クリックで選ぶ。
+            // 置いたモデル → メッシュの順にカーソル直下を強調し、クリックで選ぶ。
             // モデルを掴んだ入力はメッシュの選択へ渡さない。
-            const bool modelInput = pathNode == nullptr && !lightDragging && !io.KeyAlt &&
+            const bool modelInput = !lightDragging && !io.KeyAlt &&
                                     HandleModelInstanceInput(itemActive, itemHovered, imageOrigin, imageMax);
-            if (pathNode != nullptr || lightDragging || io.KeyAlt) {
+            if (lightDragging || io.KeyAlt) {
                 m_hoveredModelNode = 0;
                 m_modelInstanceDrag = {};
             }
-            if (pathNode == nullptr && m_renderer.HasMeshScene() && !lightDragging && !io.KeyAlt && !modelInput) {
+            if (m_renderer.HasMeshScene() && !lightDragging && !io.KeyAlt && !modelInput) {
                 HandleMeshHover(itemHovered, imageOrigin, imageMax);
             } else {
                 m_meshHighlight.hovered = -1;
@@ -593,16 +582,13 @@ void Application::DrawViewportPanel() {
 
             // 視点操作は Alt を押している間だけ受ける（Maya と同じ割り当て）。
             //
-            // Alt なしのドラッグはメッシュの矩形選択（Path 選択中は制御点の矩形選択）。
+            // Alt なしのドラッグはメッシュの矩形選択。
             // Alt を押している間はライトも無効になる（HandleLightDrag が !io.KeyAlt を見る）ので、
             // ここで競合は起きない。
             HandleCameraInput(m_renderer, itemActive, itemHovered, m_settings.Display().showReferenceGrid);
 
             DrawAxisGizmo(camera, imageOrigin, imageMax);
             DrawLightGizmo(m_renderer.Light(), m_viewportLightInteraction, camera, imageOrigin, imageMax);
-            if (pathNode != nullptr) {
-                DrawPathOverlay(*pathNode, imageOrigin, imageMax);
-            }
             DrawModelInstanceOverlay(imageOrigin, imageMax);
 
             // ビューポートに重ねる操作。左上に表示モードの切り替え、右上に FPS。

@@ -87,15 +87,11 @@ set(tg_sources
     src/app/ApplicationDocument.cpp
     src/app/ApplicationFileWork.cpp
     src/app/ApplicationGraphPanel.cpp
-    src/app/ApplicationSurfaceLayout.cpp
-    src/app/ApplicationSurfacePreset.cpp
     src/app/ApplicationAssetBrowser.cpp
-    src/app/ApplicationBoundaryMaterial.cpp
     src/app/ApplicationLayerPanel.cpp
     src/app/ApplicationMaterialPanel.cpp
     src/app/ApplicationModelPanel.cpp
     src/app/ApplicationModelPlacement.cpp
-    src/app/ApplicationPathEdit.cpp
     src/app/ApplicationPreviewPanels.cpp
     src/app/ApplicationSkyPanel.cpp
     src/app/ApplicationTexturePanel.cpp
@@ -107,27 +103,8 @@ set(tg_sources
     src/app/UndoHistory.h
     src/core/Log.cpp
     src/core/Log.h
-    src/graph/Road.cpp
-    src/graph/SurfaceLayoutEditing.cpp
-    src/graph/SurfaceLayoutEditing.h
-    src/graph/SurfaceBandGeometry.cpp
-    src/graph/SurfaceBandGeometry.h
-    src/graph/SurfaceLayoutEvaluation.cpp
-    src/graph/SurfaceLayoutEvaluation.h
-    src/graph/SurfacePresetGraph.cpp
-    src/graph/SurfaceLayout.cpp
-    src/graph/SurfaceLayout.h
-    src/io/SurfaceLayoutIo.cpp
-    src/io/SurfaceLayoutIo.h
-    src/graph/ConnectionPrototype.cpp
-    src/graph/ConnectionPrototype.h
-    src/graph/RoadProfile.cpp
-    src/graph/RoadMask.cpp
-    src/graph/Road.h
     src/graph/NodeGraph.cpp
     src/graph/NodeGraph.h
-    src/graph/Path.cpp
-    src/graph/Path.h
     src/compositor/MaterialEvaluator.cpp
     src/compositor/MaterialEvaluator.h
     src/compositor/MaterialLayer.h
@@ -309,24 +286,6 @@ add_executable(road_editor_tests
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
     src/renderer/Camera.cpp
-    tests/RoadTests.cpp
-    tests/SurfaceLayoutTests.cpp
-    tests/ConnectionPrototypeTests.cpp
-    src/graph/SurfaceLayoutEditing.cpp
-    src/graph/SurfaceLayoutEditing.h
-    src/graph/SurfaceBandGeometry.cpp
-    src/graph/SurfaceBandGeometry.h
-    src/graph/SurfaceLayoutEvaluation.cpp
-    src/graph/SurfaceLayoutEvaluation.h
-    src/graph/SurfacePresetGraph.cpp
-    src/graph/SurfaceLayout.cpp
-    src/graph/SurfaceLayout.h
-    src/io/SurfaceLayoutIo.cpp
-    src/io/SurfaceLayoutIo.h
-    src/graph/ConnectionPrototype.cpp
-    src/graph/Road.cpp
-    src/graph/RoadProfile.cpp
-    src/graph/RoadMask.cpp
     tests/MeshSceneTests.cpp
     src/renderer/MeshData.cpp
     src/renderer/ModelAsset.cpp
@@ -354,8 +313,6 @@ add_executable(road_editor_tests
     src/compositor/MaterialStack.h
     src/graph/NodeGraph.cpp
     src/graph/NodeGraph.h
-    src/graph/Path.cpp
-    src/graph/Path.h
     src/ui/UiStyle.cpp
     src/ui/UiStyle.h
 )

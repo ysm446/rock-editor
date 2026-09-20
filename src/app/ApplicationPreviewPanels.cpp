@@ -27,24 +27,13 @@ void Application::DrawMaterialPanel() {
     // **ここでは前面を要求しない。** レイヤーと同じ枠のタブなので、
     // 両方が要求すると後から描いたほうが勝ち、既定の前面が定まらない。
     if (ImGui::Begin("プレビュー設定")) {
-        // 道路網に共通の設定。走行側は道路ごとに変えるものではないのでここに 1 つ置く。
-        ui::SectionHeader("道路");
-        if (ui::BeginPropertyTable("roadNetworkRows")) {
-            static const char* const kTrafficSideLabels[] = {"左側通行", "右側通行"};
-            int side = m_graph.RoadNetwork().leftHandTraffic ? 0 : 1;
-            if (ui::PropertyCombo("走行側", &side, kTrafficSideLabels, IM_ARRAYSIZE(kTrafficSideLabels), 0,
-                                  "車線の進行方向と、矢印・標識の向きを決める。左側通行では進行方向に向かって左の車線が"
-                                  "線形の向きへ進む")) {
-                graph::RoadNetworkSettings settings = m_graph.RoadNetwork();
-                settings.leftHandTraffic = (side == 0);
-                m_graph.SetRoadNetwork(settings);
-                MarkDocumentChanged();
-            }
-            // 変位量は Road ノードごと（材質が違うため）。分割の仕方だけをここで決める。
+        ui::SectionHeader("メッシュ");
+        if (ui::BeginPropertyTable("previewMeshRows")) {
+            // 分割の仕方をここで決める。
             ui::PropertyBool("テセレーション", &m_renderer.TessellationEnabled(),
                              renderer::kPreviewDefaults.tessellationEnabled,
                              "画面上の辺が長いところだけメッシュを細かく割る。"
-                             "Road の変位量を上げたときに形がなめらかになる。分割後の辺は"
+                             "変位量を上げたときに形がなめらかになる。分割後の辺は"
                              "表示メニューのワイヤーフレームで確認できる");
             if (m_renderer.TessellationEnabled()) {
                 ui::PropertyFloat("分割の上限", &m_renderer.TessellationFactor(), 1.0f, 64.0f,

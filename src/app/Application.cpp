@@ -8,7 +8,6 @@
 #include "core/FileDialog.h"
 #include "core/Log.h"
 #include "io/ProjectIo.h"
-#include "graph/SurfaceLayoutEditing.h"
 #include "ui/UiStyle.h"
 
 #include <imgui.h>
@@ -80,7 +79,7 @@ std::string ScreenshotFileName() {
     std::tm local = {};
     ::localtime_s(&local, &now);
     char buffer[64] = {};
-    std::strftime(buffer, sizeof(buffer), "road_editor_%Y%m%d_%H%M%S.png", &local);
+    std::strftime(buffer, sizeof(buffer), "rock_editor_%Y%m%d_%H%M%S.png", &local);
     return buffer;
 }
 
@@ -103,7 +102,7 @@ bool Application::Initialize(const StartupOptions& options) {
     // クライアント領域を実ピクセルで 1920x1080 にする。DPI では拡大しない。
     // UI の大きさは ImGui 側の DPI スケールで合わせる。
     // モニタからはみ出す場合は Window::Create 側で作業領域に収める。
-    if (!m_window.Create(L"Road Editor", kInitialWidth, kInitialHeight)) {
+    if (!m_window.Create(L"Rock Editor", kInitialWidth, kInitialHeight)) {
         return false;
     }
 
@@ -214,7 +213,7 @@ bool Application::Initialize(const StartupOptions& options) {
     // アンドゥの起点。ここを取り忘れると、最初の 1 回が空の文書へ戻ってしまう。
     m_committed = CaptureDocument();
 
-    TG_LOG_INFO("road-editor %s を起動しました", TG_APP_VERSION);
+    TG_LOG_INFO("rock-editor %s を起動しました", TG_APP_VERSION);
     return true;
 }
 
@@ -235,8 +234,6 @@ void Application::Shutdown() {
     m_textureLibrary.Destroy(m_device);
     m_renderer.Shutdown(m_device);
     if (m_layerPreviewInitialized) m_layerPreview.Shutdown(m_device);
-    if (m_layerThumbnailInitialized) m_layerThumbnailRenderer.Shutdown(m_device);
-    for (auto& thumbnail : m_layerThumbnails) m_device.DeferRelease(thumbnail.texture);
     m_imgui.Shutdown();
     m_pipelineCache.Destroy();
     m_shaderCompiler.Destroy();
@@ -338,15 +335,14 @@ int Application::Run() {
         // プロジェクトとマテリアルの読み書きも GPU 待機を伴うため、フレームの外で。
         // 他の保留処理より先に行う（読み込みが中身を丸ごと入れ替えるため）。
         ProcessPendingFileWork();
-        // 道路メッシュの生成と転送も GPU 待機を伴うため、フレームの外で。
+        // メッシュの生成と転送も GPU 待機を伴うため、フレームの外で。
         SyncMeshGraph();
 
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。
         if (!m_options.saveProjectPath.empty() && m_frameCounter >= m_options.screenshotFrame) {
             const io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
-                                       m_renderer, m_graph, m_surfaceLayouts,
-                             m_previewSurfaceBands, m_connectSurfaceBands, m_displaceConnectedBands, &m_models};
+                                       m_renderer, m_graph, &m_models};
             const bool scene = _wcsicmp(m_options.saveProjectPath.extension().c_str(), L".tgscene") == 0;
             if (io::SaveProject(m_options.saveProjectPath, refs, scene ? &m_workspace : nullptr) && scene) {
                 SaveSceneThumbnail(m_options.saveProjectPath);
@@ -392,7 +388,6 @@ int Application::Run() {
                     m_materialLibrary.MarkThumbnailDirty(asset.id);
                 }
                 m_renderer.InvalidateSceneMaterials();
-                m_layerThumbnailsDirty = true; ++m_layerThumbnailTextureRevision;
             }
         }
 
@@ -410,25 +405,6 @@ int Application::Run() {
             m_renderer.Resize(m_device, m_requestedViewportWidth, m_requestedViewportHeight);
         }
 
-        ProcessLayerPreview();
-        if (m_options.testLayerThumbnailCache && !m_options.uiScreenshotPath.empty()) {
-            if (m_frameCounter == 60 && !m_surfaceLayouts.layouts.empty()) {
-                for (auto& band : m_surfaceLayouts.layouts.front().bands)
-                    if (!band.spans.empty()) band.spans.front().blendInMeters += 0.1f;
-                MarkDocumentChanged();
-            }
-            if (m_frameCounter == 62 && !m_surfaceLayouts.layerMaterials.empty()) {
-                m_surfaceLayouts.layerMaterials.front().displacementMeters += 0.01f;
-                MarkDocumentChanged();
-            }
-        }
-        ProcessLayerThumbnails();
-        if (m_options.testLayerThumbnailCache && (m_frameCounter == 61 || m_frameCounter == 63)) {
-            const auto dirty = std::count_if(m_layerThumbnails.begin(), m_layerThumbnails.end(), [](const auto& t) { return t.dirty; });
-            const auto ready = std::count_if(m_layerThumbnails.begin(), m_layerThumbnails.end(), [](const auto& t) { return t.ready; });
-            TG_LOG_INFO("LayerCacheTest: frame=%u dirty=%zu ready=%zu total=%zu", m_frameCounter,
-                        static_cast<size_t>(dirty), static_cast<size_t>(ready), m_layerThumbnails.size());
-        }
         ImGuiLayer::TestInput testInput{};
         const bool testDrag = m_options.testDrag && !m_options.uiScreenshotPath.empty();
         if (testDrag) {
@@ -450,19 +426,8 @@ int Application::Run() {
         m_imgui.BeginFrame(testDrag ? &testInput : nullptr);
         DrawUi();
         if (testDrag && m_frameCounter == 18) {
-            TG_LOG_INFO("SelectionTest: points=%zu edges=%zu meshes=%zu dirty=%d", m_pathEdit.selected.size(), m_pathEdit.selectedEdges.size(),
+            TG_LOG_INFO("SelectionTest: meshes=%zu dirty=%d",
                         m_meshHighlight.selected.size(), m_documentDirty ? 1 : 0);
-            TG_LOG_INFO("IndependentLightTest: road=%.4f,%.4f layer=%.4f,%.4f",
-                        m_renderer.Light().azimuth, m_renderer.Light().elevation,
-                        m_layerPreview.Light().azimuth, m_layerPreview.Light().elevation);
-            const auto camera = m_layerPreview.GetCamera().State();
-            TG_LOG_INFO("LayerViewportTest: yaw=%.4f pitch=%.4f distance=%.4f target=%.4f,%.4f,%.4f light=%.4f,%.4f",
-                        camera.yaw, camera.pitch, camera.distance, camera.target.x, camera.target.y, camera.target.z,
-                        m_renderer.Light().azimuth, m_renderer.Light().elevation);
-            size_t spans = 0;
-            for (const auto& layout : m_surfaceLayouts.layouts) for (const auto& band : layout.bands) spans += band.spans.size();
-            TG_LOG_INFO("LayoutUiTest: layouts=%zu spans=%zu presets=%zu undo=%zu", m_surfaceLayouts.layouts.size(),
-                        spans, m_surfaceLayouts.presets.size(), m_undoHistory.UndoCount());
         }
 
         ID3D12GraphicsCommandList* commandList =
@@ -483,9 +448,6 @@ int Application::Run() {
         m_renderer.SetExtraSceneRadius(ModelInstancesRadius());
         m_renderer.Render(m_device, m_pipelineCache, commandList, m_textureLibrary,
                           m_materialLibrary);
-        if (m_editSurfacePreset && m_layerPreviewInitialized)
-            m_layerPreview.Render(m_device, m_pipelineCache, commandList, m_textureLibrary, m_materialLibrary);
-        RenderLayerThumbnails(commandList);
 
         // マテリアルプレビューの球。**窓を開いている間だけ描く。**
         // ImGui はこのフレームで描いた中身をそのまま読む（submit 済みの
@@ -518,9 +480,7 @@ int Application::Run() {
 
         // UI 込みの書き出しは、バックバッファが描き終わったこのフレームで写す。
         // **材質の評価は非同期なので、走っている最中は撮らない**（前回の絵が写る）。
-        const bool evaluationIdle = !m_renderer.IsEvaluating() &&
-            (!m_editSurfacePreset || !m_layerPreviewInitialized || !m_layerPreview.IsEvaluating()) &&
-            !m_layerThumbnailActive && std::none_of(m_layerThumbnails.begin(), m_layerThumbnails.end(), [](const auto& t) { return t.dirty; });
+        const bool evaluationIdle = !m_renderer.IsEvaluating();
         const bool captureUi = !m_options.uiScreenshotPath.empty() &&
                                (m_frameCounter + 1) >= m_options.screenshotFrame && evaluationIdle &&
                                !m_assetThumbnails.HasPendingWork();
@@ -647,7 +607,6 @@ void Application::DrawUi() {
     DrawGraphPanel();
     // アセットの帯は畳める。出さなければドックノードが空になり、中央（ビューポート）が
     // その高さをもらう。ウィンドウはドック先を覚えているので、戻せば同じ所へ入る。
-    // レイヤーマテリアル・境界マテリアルもアセット（.tglayer / .tgboundary）として帯に並ぶ。
     m_assetThumbnails.BeginRequests();
     if (m_settings.Display().showAssetBand) {
         DrawAssetBrowser();
@@ -656,8 +615,6 @@ void Application::DrawUi() {
     if (m_showMaterialList) DrawMaterialLibraryPanel();
     if (m_showSkyList) DrawSkyLibraryPanel();
     DrawMaterialPanel();
-    if (m_editSurfacePreset) DrawSurfacePresetEditor();
-    if (m_editBoundaryMaterial) DrawBoundaryMaterialEditor();
     DrawLightingPanel();
 
     DrawMaterialSphereWindow();
@@ -681,8 +638,6 @@ void Application::DrawUi() {
     // 掴んでいるウィジェットの ID を渡すことで、スライダーのドラッグが
     // 1 段に収まる（毎フレーム変更が来ても ID は変わらない）。
     if (m_documentDirty) {
-        // パス編集で変わった全長へ路面・左右沿道を追従させ、同じ履歴へ保存する。
-        if (graph::FitSurfaceLayoutsToRoads(m_surfaceLayouts, m_graph)) m_graph.MarkDirty();
         m_documentDirty = false;
         // 直前の編集の続き（ドラッグを離した時点の経路の計算し直しなど）は、
         // 直前の段の ID を渡して同じ段に畳む。
@@ -741,8 +696,7 @@ void Application::BuildDefaultLayout(ImGuiID dockspaceId) {
     // （ImGui の hold-to-switch。テクスチャのドラッグ元で SourceNoHoldToOpenOthers を付けない）。
     // **前面にしたい「テクスチャ」を最後にドックする。** 同じ枠では最後にドックしたものが
     // 選ばれる。タブの並びは submit した順（テクスチャ → マテリアル → … → 天球）。
-    // 帯は「アセット」1 枠（ルートのフォルダ階層とその中身）。レイヤーマテリアル・境界マテリアルも
-    // .tglayer / .tgboundary としてここに並ぶ。
+    // 帯は「アセット」1 枠（ルートのフォルダ階層とその中身）。
     ImGui::DockBuilderDockWindow("アセット", bottom);
     // 右カラムへタブで重ねる。縦に積むと 1 枚あたりが短くなり、
     // どれもスクロールしないと全体が見えなくなる。
@@ -785,13 +739,6 @@ void Application::DrawStatusBar() {
         if (ImGui::BeginMenuBar()) {
             // --- 左: いまのモードと直近の通知 -------------------------------
             // モードでビューポートの操作が変わるので、常に見える場所へ出す。
-            // パスを編集している間は左クリックが点を置く。
-            if (const graph::Node* pathNode = CurrentPathNode(); pathNode != nullptr) {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_CheckMark));
-                ImGui::TextUnformatted("パス編集中");
-                ImGui::PopStyleColor();
-                ImGui::TextDisabled("|");
-            }
             // 材質の評価はコンピュートキューで走る。見えている絵が古い間はここで分かる。
             if (m_renderer.IsEvaluating()) {
                 ImGui::TextDisabled("マテリアルを評価中…");

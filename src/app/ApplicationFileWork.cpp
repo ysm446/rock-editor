@@ -37,7 +37,7 @@ void Application::RequestOpenProject() {
 }
 
 // saveAs が偽でも、まだ一度も保存していなければ保存先を聞く。
-// 保存先は常にルート内の .tgscene。旧 .tgproj を開いていても別名の .tgscene へ書く（移行元は残る）。
+// 保存先は常にルート内の .tgscene。
 void Application::RequestSaveProject(bool saveAs) {
     const bool isScene = _wcsicmp(m_projectPath.extension().c_str(), L".tgscene") == 0;
     if (!saveAs && isScene && m_workspace.Contains(m_projectPath)) {
@@ -196,9 +196,8 @@ void Application::DrawFileMenu() {
         RequestOpenProject();
     }
     if (ImGui::MenuItem("シーンを開く…")) {
-        // 旧 .tgproj もここから開ける（保存は .tgscene へ）。
         const std::filesystem::path path = ShowOpenFileDialog(
-            L"シーンを開く", {{L"シーン / 旧プロジェクト", L"*.tgscene;*.tgproj;*.mmproj"}});
+            L"シーンを開く", {{L"シーン", L"*.tgscene"}});
         if (!path.empty()) {
             m_pendingProjectOpen = path;
         }
@@ -226,15 +225,14 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         // 拡張子で行き先を決める。読み込み自体はどれも保留し、フレームの外で処理する。
-        // 旧拡張子 (.mmproj / .mmmat) は material-mixer 時代のファイル。読み込みだけ受け付ける。
-        if (extension == ".tgscene" || extension == ".tgproj" || extension == ".mmproj") {
+        if (extension == ".tgscene") {
             m_pendingProjectOpen = path;
         } else if (extension == ".tgsky" || extension == ".tgmodel") {
             m_pendingAssetOpen = path;
         } else if (extension == ".fbx") {
             // ルート外ならアセットの帯で表示中のフォルダへ取り込む（ProcessModelWork）。
             m_pendingModelImports.push_back(path);
-        } else if (extension == ".tgmat" || extension == ".mmmat") {
+        } else if (extension == ".tgmat") {
             // 共有アセットか持ち出し用かは ProcessAssetWork が中身を見て振り分ける。
             m_pendingAssetOpen = path;
         } else if (extension == ".hdr") {
@@ -276,12 +274,6 @@ void Application::ResetProject() {
     // メッシュシーンは次のフレームの SyncMeshGraph が作り直す（改版を 0 に戻す）。
     m_meshHighlight = MeshHighlightState{};
     m_graph = graph::NodeGraph::CreateDefault();
-    m_surfaceLayouts = {};
-    m_layerThumbnailsDirty = true; ++m_layerThumbnailTextureRevision;
-    m_previewSurfaceBands = m_connectSurfaceBands = m_displaceConnectedBands = false;
-    m_editSurfacePreset = 0;
-    m_editBoundaryMaterial = 0;
-    m_surfacePresetError.clear();
     m_selectedGraphNode = 0;
     m_previewGraphNode = 0;
     m_previewGraphPin = 0;
@@ -359,35 +351,16 @@ void Application::ProcessPendingFileWork() {
         m_pendingProjectOpen.clear();
 
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
-                             m_renderer, m_graph, m_surfaceLayouts,
-                             m_previewSurfaceBands, m_connectSurfaceBands, m_displaceConnectedBands, &m_models};
+                             m_renderer, m_graph, &m_models};
         // .tgscene はルートの共有アセットを参照する。旧 .tgproj は従来の埋め込み形式のまま読む。
         const bool isScene = _wcsicmp(path.extension().c_str(), L".tgscene") == 0;
         if (io::LoadProject(path, m_device, m_pipelineCache, refs, isScene ? &m_workspace : nullptr)) {
-            m_layerThumbnailsDirty = true; ++m_layerThumbnailTextureRevision;
             m_meshHighlight = MeshHighlightState{};
             if (isScene) m_recentProjects.Add(m_workspace.Root(), path);
             m_projectPath = path;
             m_assetRefresh = true;
             m_selectedGraphNode = m_graph.FindNode(m_options.selectNode) ? m_options.selectNode : 0;
             m_options.selectNode = 0;
-            m_editSurfacePreset = graph::PresetLayerMaterial(m_surfaceLayouts, m_options.editPreset);
-            if (!m_editSurfacePreset) m_editSurfacePreset = m_options.editPreset;
-            m_options.editPreset = 0;
-            m_editBoundaryMaterial = m_options.editBoundary;
-            m_options.editBoundary = 0;
-            m_surfacePresetError.clear();
-            m_pathEdit = PathEditState{};
-            m_pathEdit.nodeId = m_selectedGraphNode;
-            if (m_options.selectPathPoint != 0) m_pathEdit.selected = {m_options.selectPathPoint};
-            if (!m_options.selectPathPoints.empty()) m_pathEdit.selected = std::move(m_options.selectPathPoints);
-            if (m_options.profileMode != 0) {
-                m_pathEdit.profileMode = std::clamp(m_options.profileMode, 0, 2);
-                m_pathEdit.selectedProfile = m_options.selectPathPoint;
-                m_pathEdit.selected.clear();
-            }
-            m_options.selectPathPoint = 0;
-            m_options.profileMode = 0;
             m_previewGraphNode = 0;
             m_previewGraphPin = 0;
             m_meshGraphRevision = 0;
@@ -418,11 +391,9 @@ void Application::ProcessPendingFileWork() {
         m_pendingProjectSave.clear();
 
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
-                             m_renderer, m_graph, m_surfaceLayouts,
-                             m_previewSurfaceBands, m_connectSurfaceBands, m_displaceConnectedBands, &m_models};
+                             m_renderer, m_graph, &m_models};
         if (io::SaveProject(path, refs, &m_workspace)) {
             SaveSceneThumbnail(path);
-            m_persistLayerThumbnails = true;
             m_assetRefresh = true;
             m_recentProjects.Add(m_workspace.Root(), path);
             m_projectPath = path;
@@ -499,11 +470,6 @@ void Application::ProcessPendingFileWork() {
             }
         }
         clearSlot(m_ordTexture);
-        bool boundaryChanged = false;
-        for (auto& boundary : m_surfaceLayouts.boundaryMaterials) {
-            boundaryChanged |= clearSlot(boundary.mask); boundaryChanged |= clearSlot(boundary.height);
-        }
-        if (boundaryChanged) m_graph.MarkDirty();
 
         // 解放は DeferRelease でフレーム同期後に行われるため、GPU 待機は不要。
         m_textureLibrary.Remove(m_device, removed);

@@ -1,5 +1,4 @@
 #include "io/ProjectIo.h"
-#include "io/SurfaceLayoutIo.h"
 
 #include "core/PathUtf8.h"
 
@@ -374,183 +373,6 @@ uint32_t ReadChannelMask(const json& node, const char* key, uint32_t fallback) {
 
 // パス。座標は position:[X,Y,Z]（m）。worldSpace は旧ビルドとの互換のために常に真で書く
 // （旧地形 UV のパスは読まない）。
-json WritePath(const graph::PathSettings& path) {
-    json node;
-    node["worldSpace"] = true;
-    if (path.surfaceSpace) node["surfaceSpace"] = true;
-    json points = json::array();
-    for (const graph::PathPoint& point : path.points) {
-        json item;
-        item["id"] = point.id;
-        item["position"] = json::array({point.x, point.y, point.z});
-        item["width"] = point.widthMeters;
-        item["feather"] = point.featherMeters;
-        item["intensity"] = point.intensity;
-        if (point.stopLine != graph::PathStopLine::None) item["stopLine"] = static_cast<int>(point.stopLine);
-        points.push_back(std::move(item));
-    }
-    node["points"] = std::move(points);
-    json edges = json::array();
-    static const char* const kPathCurveNames[] = {"line", "quadratic", "cubic", "clothoid"};
-    for (const graph::PathEdge& edge : path.edges) {
-        json item;
-        item["id"] = edge.id;
-        item["from"] = edge.from;
-        item["to"] = edge.to;
-        item["curve"] = EnumName(kPathCurveNames, static_cast<uint32_t>(edge.curve));
-        item["rounding"] = edge.rounding;
-        item["clothoidRatio"] = edge.clothoidRatio;
-        // 幅の上書き。切っているときは書かない（点の値を使う）。
-        if (edge.overrideValues) {
-            item["overrideValues"] = true;
-            item["width"] = edge.widthMeters;
-            item["feather"] = edge.featherMeters;
-            item["intensity"] = edge.intensity;
-        }
-        edges.push_back(std::move(item));
-    }
-    node["edges"] = std::move(edges);
-    node["defaultWidth"] = path.defaultWidthMeters;
-    node["defaultFeather"] = path.defaultFeatherMeters;
-    node["defaultIntensity"] = path.defaultIntensity;
-    // 道路線形。縦断ポイントとバンクポイントは無ければ書かない。
-    {
-        if (!path.verticalPoints.empty()) {
-            json vertical = json::array();
-            for (const graph::PathVerticalPoint& point : path.verticalPoints) {
-                vertical.push_back({{"id", point.id}, {"u", point.u}, {"vcl", point.vclMeters},
-                                    {"offset", point.offsetMeters}});
-            }
-            node["verticalPoints"] = std::move(vertical);
-        }
-        if (!path.bankPoints.empty()) {
-            json bank = json::array();
-            for (const graph::PathBankPoint& point : path.bankPoints) {
-                bank.push_back({{"id", point.id}, {"u", point.u}, {"designSpeed", point.designSpeedKmh},
-                                {"manual", point.manual}, {"angle", point.angleDegrees}});
-            }
-            node["bankPoints"] = std::move(bank);
-        }
-        node["bankEnabled"] = path.bankEnabled;
-        node["designSpeed"] = path.designSpeedKmh;
-        node["friction"] = path.frictionCoefficient;
-        node["smoothBank"] = path.smoothBank;
-        node["bankSmoothDistance"] = path.bankSmoothMeters;
-    }
-    node["nextId"] = path.nextId;
-    return node;
-}
-
-graph::PathSettings ReadPath(const json& parent, const char* key) {
-    graph::PathSettings path;
-    const json* node = FindMember(parent, key);
-    if (node == nullptr || !node->is_object()) {
-        return path;
-    }
-    // 旧地形 UV のパス（worldSpace が偽）は読まない。地形の平面が無くなったので実寸へ直せない。
-    // キーは読んで判定だけに使い、点とエッジを捨てて空の実寸パスにする。
-    if (!ReadBool(*node, "worldSpace", false)) {
-        TG_LOG_WARN("旧地形 UV の Path は読み込めないため、空の Path にしました");
-        return path;
-    }
-    path.surfaceSpace = ReadBool(*node, "surfaceSpace", false);
-    const graph::PathSettings defaults;
-    path.defaultWidthMeters = ReadFloat(*node, "defaultWidth", defaults.defaultWidthMeters);
-    path.defaultFeatherMeters = ReadFloat(*node, "defaultFeather", defaults.defaultFeatherMeters);
-    path.defaultIntensity = ReadFloat(*node, "defaultIntensity", defaults.defaultIntensity);
-    graph::PathElementId maxId = 0;
-    if (const json* points = FindMember(*node, "points"); points != nullptr && points->is_array()) {
-        for (const json& item : *points) {
-            if (!item.is_object()) {
-                continue;
-            }
-            graph::PathPoint point;
-            point.id = ReadInt(item, "id", 0);
-            if (point.id <= 0) {
-                continue;
-            }
-            point.widthMeters = ReadFloat(item, "width", path.defaultWidthMeters);
-            point.featherMeters = ReadFloat(item, "feather", path.defaultFeatherMeters);
-            point.intensity = ReadFloat(item, "intensity", path.defaultIntensity);
-            point.stopLine = static_cast<graph::PathStopLine>(std::clamp(ReadInt(item, "stopLine", 0), 0, 3));
-            const auto position = ReadFloat3(item, "position", {0.0f, 0.0f, 0.0f});
-            point.x = position.x;
-            point.y = position.y;
-            point.z = position.z;
-            maxId = std::max(maxId, point.id);
-            path.points.push_back(point);
-        }
-    }
-    if (const json* edges = FindMember(*node, "edges"); edges != nullptr && edges->is_array()) {
-        for (const json& item : *edges) {
-            if (!item.is_object()) {
-                continue;
-            }
-            static const char* const kPathCurveNames[] = {"line", "quadratic", "cubic",
-                                                          "clothoid"};
-            graph::PathEdge edge;
-            edge.id = ReadInt(item, "id", 0);
-            edge.from = ReadInt(item, "from", 0);
-            edge.to = ReadInt(item, "to", 0);
-            edge.curve = static_cast<graph::PathCurve>(EnumValue(
-                kPathCurveNames, item, "curve", static_cast<uint32_t>(graph::PathCurve::Line)));
-            edge.rounding = std::clamp(ReadFloat(item, "rounding", 1.0f), 0.0f, 1.0f);
-            edge.clothoidRatio = std::clamp(ReadFloat(item, "clothoidRatio", 0.5f), 0.0f, 1.0f);
-            if (const json* override = FindMember(item, "overrideValues");
-                override != nullptr && override->is_boolean() && override->get<bool>()) {
-                edge.overrideValues = true;
-                edge.widthMeters = ReadFloat(item, "width", path.defaultWidthMeters);
-                edge.featherMeters = ReadFloat(item, "feather", path.defaultFeatherMeters);
-                edge.intensity = ReadFloat(item, "intensity", path.defaultIntensity);
-            }
-            // 旧ファイルの経路探索（route / waypoints）は読まない（地形が無くなったため）。
-            // 端点が無い / 自分へ戻るエッジは捨てる（壊れたファイルの安全網）。
-            if (edge.id <= 0 || edge.from == edge.to || path.FindPoint(edge.from) == nullptr ||
-                path.FindPoint(edge.to) == nullptr) {
-                continue;
-            }
-            maxId = std::max(maxId, edge.id);
-            path.edges.push_back(edge);
-        }
-    }
-    {
-        path.bankEnabled = ReadBool(*node, "bankEnabled", defaults.bankEnabled);
-        path.designSpeedKmh = std::clamp(ReadFloat(*node, "designSpeed", defaults.designSpeedKmh), 0.0f, 300.0f);
-        path.frictionCoefficient = std::clamp(ReadFloat(*node, "friction", defaults.frictionCoefficient), 0.0f, 1.0f);
-        path.smoothBank = ReadBool(*node, "smoothBank", defaults.smoothBank);
-        path.bankSmoothMeters = std::clamp(ReadFloat(*node, "bankSmoothDistance", defaults.bankSmoothMeters), 0.0f, 500.0f);
-        if (const json* vertical = FindMember(*node, "verticalPoints"); vertical != nullptr && vertical->is_array()) {
-            for (const json& item : *vertical) {
-                if (!item.is_object()) continue;
-                graph::PathVerticalPoint point;
-                point.id = ReadInt(item, "id", 0);
-                if (point.id <= 0) continue;
-                point.u = std::clamp(ReadFloat(item, "u", 0.0f), 0.0f, 1.0f);
-                point.vclMeters = std::clamp(ReadFloat(item, "vcl", point.vclMeters), 0.0f, 10000.0f);
-                point.offsetMeters = std::clamp(ReadFloat(item, "offset", 0.0f), -1000.0f, 1000.0f);
-                maxId = std::max(maxId, point.id);
-                path.verticalPoints.push_back(point);
-            }
-        }
-        if (const json* bank = FindMember(*node, "bankPoints"); bank != nullptr && bank->is_array()) {
-            for (const json& item : *bank) {
-                if (!item.is_object()) continue;
-                graph::PathBankPoint point;
-                point.id = ReadInt(item, "id", 0);
-                if (point.id <= 0) continue;
-                point.u = std::clamp(ReadFloat(item, "u", 0.0f), 0.0f, 1.0f);
-                point.designSpeedKmh = std::clamp(ReadFloat(item, "designSpeed", path.designSpeedKmh), 0.0f, 300.0f);
-                point.manual = ReadBool(item, "manual", false);
-                point.angleDegrees = std::clamp(ReadFloat(item, "angle", 0.0f), -90.0f, 90.0f);
-                maxId = std::max(maxId, point.id);
-                path.bankPoints.push_back(point);
-            }
-        }
-    }
-    path.nextId = std::max(ReadInt(*node, "nextId", 1), maxId + 1);
-    return path;
-}
-
 json WriteLayer(const compositor::MaterialLayer& layer,
                 const std::function<json(compositor::MaterialAssetId)>& writeMaterial) {
     json node;
@@ -656,102 +478,6 @@ json WriteGraph(const graph::NodeGraph& graphData,
         item["outputs"] = std::move(outputs);
         if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
             item["layer"] = WriteLayer(settings->layer, writeMaterial);
-        } else if (const auto* road = std::get_if<graph::RoadNodeSettings>(&node.settings)) {
-            item["road"] = {{"width", road->widthMeters}, {"uvRepeat", road->uvRepeatMeters},
-                            {"lanesForward", road->lanesForward}, {"lanesBackward", road->lanesBackward},
-                            {"displacement", road->displacementMeters}, {"uvAlongU", road->uvAlongU},
-                            {"layerWorldUv", json::array({road->layerWorldUv[0], road->layerWorldUv[1],
-                                                          road->layerWorldUv[2], road->layerWorldUv[3]})},
-                            {"layerUvRepeat", json::array({road->layerUvRepeatMeters[0], road->layerUvRepeatMeters[1],
-                                                           road->layerUvRepeatMeters[2], road->layerUvRepeatMeters[3]})},
-                            {"layerHeightGate", json::array({road->layerHeightGate[0], road->layerHeightGate[1],
-                                                            road->layerHeightGate[2], road->layerHeightGate[3]})},
-                            {"layerHeightGateThreshold", json::array({road->layerHeightGateThreshold[0], road->layerHeightGateThreshold[1],
-                                                                     road->layerHeightGateThreshold[2], road->layerHeightGateThreshold[3]})},
-                            {"layerHeightGateSoftness", json::array({road->layerHeightGateSoftness[0], road->layerHeightGateSoftness[1],
-                                                                    road->layerHeightGateSoftness[2], road->layerHeightGateSoftness[3]})},
-                            {"layerBlendMode", json::array({road->layerBlendMode[0], road->layerBlendMode[1],
-                                                           road->layerBlendMode[2], road->layerBlendMode[3]})},
-                            {"layerBlendRange", road->layerBlendRange}};
-        } else if (const auto* decal = std::get_if<graph::DecalNodeSettings>(&node.settings)) {
-            item["decal"] = {{"material", decal->material ? WriteLayer(*decal->material, writeMaterial) : json()}, {"width", decal->widthMeters}, {"lift", decal->liftMeters},
-                             {"uvRepeat", decal->uvRepeatMeters}, {"uvAlongU", decal->uvAlongU},
-                             {"heightMeters", decal->heightMeters}, {"imageWidthScale", decal->imageWidthScale},
-                             {"imageLengthScale", decal->imageLengthScale}, {"showWireframe", decal->showWireframe}};
-        } else if (const auto* crack = std::get_if<graph::CrackNodeSettings>(&node.settings)) {
-            static const char* const kCrackOrientationNames[] = {"longitudinal", "transverse", "mixed"};
-            static const char* const kCrackPlacementNames[] = {"uniform", "wheelTracks", "edges"};
-            item["crack"] = {{"material", crack->material ? WriteLayer(*crack->material, writeMaterial) : json()}, {"seed", crack->seed}, {"density", crack->densityPer100m},
-                             {"lengthMin", crack->lengthMinMeters}, {"lengthMax", crack->lengthMaxMeters},
-                             {"orientation", EnumName(kCrackOrientationNames, static_cast<uint32_t>(crack->orientation))},
-                             {"transverseRatio", crack->transverseRatio}, {"angleJitter", crack->angleJitterDegrees},
-                             {"placement", EnumName(kCrackPlacementNames, static_cast<uint32_t>(crack->placement))},
-                             {"trunkWidth", crack->trunkWidthMeters},
-                             {"branchesMin", crack->branchesMin}, {"branchesMax", crack->branchesMax},
-                             {"branchLengthRatio", crack->branchLengthRatio}, {"branchWidthRatio", crack->branchWidthRatio},
-                             {"lift", crack->liftMeters}, {"uvRepeat", crack->uvRepeatMeters}, {"uvAlongU", crack->uvAlongU}};
-        } else if (const auto* shoulder = std::get_if<graph::ShoulderNodeSettings>(&node.settings)) {
-            item["shoulder"] = {{"width", shoulder->widthMeters}, {"crossSlope", shoulder->crossSlopePercent},
-                                {"stepHeight", shoulder->stepHeightMeters}, {"stepWidth", shoulder->stepWidthMeters},
-                                {"uvRepeat", shoulder->uvRepeatMeters}, {"uvAlongU", shoulder->uvAlongU},
-                                {"displacement", shoulder->displacementMeters},
-                                {"layerWorldUv", json::array({shoulder->layerWorldUv[0], shoulder->layerWorldUv[1],
-                                                              shoulder->layerWorldUv[2], shoulder->layerWorldUv[3]})},
-                                {"layerUvRepeat", json::array({shoulder->layerUvRepeatMeters[0], shoulder->layerUvRepeatMeters[1],
-                                                               shoulder->layerUvRepeatMeters[2], shoulder->layerUvRepeatMeters[3]})},
-                            {"layerHeightGate", json::array({shoulder->layerHeightGate[0], shoulder->layerHeightGate[1],
-                                                            shoulder->layerHeightGate[2], shoulder->layerHeightGate[3]})},
-                            {"layerHeightGateThreshold", json::array({shoulder->layerHeightGateThreshold[0], shoulder->layerHeightGateThreshold[1],
-                                                                     shoulder->layerHeightGateThreshold[2], shoulder->layerHeightGateThreshold[3]})},
-                            {"layerHeightGateSoftness", json::array({shoulder->layerHeightGateSoftness[0], shoulder->layerHeightGateSoftness[1],
-                                                                    shoulder->layerHeightGateSoftness[2], shoulder->layerHeightGateSoftness[3]})},
-                                {"layerBlendMode", json::array({shoulder->layerBlendMode[0], shoulder->layerBlendMode[1],
-                                                           shoulder->layerBlendMode[2], shoulder->layerBlendMode[3]})},
-                                {"layerBlendRange", shoulder->layerBlendRange}};
-        } else if (const auto* roadMaskSettings = std::get_if<graph::RoadMaskNodeSettings>(&node.settings)) {
-            static const char* const kRoadMaskShapeNames[] = {"wheelTracks", "edgeFalloff", "lengthNoise", "constant", "worldNoise"};
-            static const char* const kRoadMaskSideNames[] = {"both", "left", "right"};
-            item["roadMask"] = {{"shape", EnumName(kRoadMaskShapeNames, static_cast<uint32_t>(roadMaskSettings->shape))},
-                                {"laneOffset", roadMaskSettings->laneOffsetMeters},
-                                {"trackSpacing", roadMaskSettings->trackSpacingMeters},
-                                {"trackWidth", roadMaskSettings->trackWidthMeters},
-                                {"feather", roadMaskSettings->featherMeters},
-                                {"bothLanes", roadMaskSettings->bothLanes},
-                                {"tracksFromLanes", roadMaskSettings->tracksFromLanes},
-                                {"edgeWidth", roadMaskSettings->edgeWidthMeters},
-                                {"edgeSide", EnumName(kRoadMaskSideNames, static_cast<uint32_t>(roadMaskSettings->edgeSide))},
-                                {"noiseScale", roadMaskSettings->noiseScaleMeters},
-                                {"threshold", roadMaskSettings->threshold},
-                                {"softness", roadMaskSettings->softness},
-                                {"seed", roadMaskSettings->seed},
-                                {"breakupAmount", roadMaskSettings->breakupAmount},
-                                {"breakupScale", roadMaskSettings->breakupScaleMeters},
-                                {"strength", roadMaskSettings->strength},
-                                {"invert", roadMaskSettings->invert}};
-        } else if (const auto* marking = std::get_if<graph::RoadMarkingNodeSettings>(&node.settings)) {
-            item["roadMarking"] = {{"centerLineWidth", marking->centerLineWidthMeters},
-                                   {"edgeLineWidth", marking->edgeLineWidthMeters},
-                                   {"laneLineWidth", marking->laneLineWidthMeters},
-                                   {"centerLine", marking->centerLine},
-                                   {"centerLineDashed", marking->centerLineDashed},
-                                   {"edgeLines", marking->edgeLines},
-                                   {"edgeInset", marking->edgeInsetMeters},
-                                   {"laneLines", marking->laneLines},
-                                   {"dashLength", marking->dashLengthMeters},
-                                   {"dashGap", marking->dashGapMeters},
-                                   {"stopLines", marking->stopLines},
-                                   {"stopLineWidth", marking->stopLineWidthMeters},
-                                   {"lift", marking->liftMeters},
-                                   {"uvRepeat", marking->uvRepeatMeters},
-                                   {"arrows", marking->arrows},
-                                   {"arrowInterval", marking->arrowIntervalMeters},
-                                   {"arrowLength", marking->arrowLengthMeters},
-                                   {"uvAlongU", marking->uvAlongU}};
-            item["roadMarking"]["materials"] = json::array();
-            for (const auto& material : marking->materials)
-                item["roadMarking"]["materials"].push_back(material ? WriteLayer(*material, writeMaterial) : json());
-        } else if (const auto* path = std::get_if<graph::PathNodeSettings>(&node.settings)) {
-            item["path"] = WritePath(path->path);
         } else if (const auto* model = std::get_if<graph::ModelNodeSettings>(&node.settings)) {
             item["model"] = {{"model", writeModel ? writeModel(model->model) : json()},
                              {"position", json::array({model->position[0], model->position[1], model->position[2]})},
@@ -787,7 +513,6 @@ json WriteGraph(const graph::NodeGraph& graphData,
         links.push_back(std::move(item));
     }
     out["links"] = std::move(links);
-    out["roadNetwork"] = {{"leftHandTraffic", graphData.RoadNetwork().leftHandTraffic}};
     return out;
 }
 
@@ -799,7 +524,6 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                const std::function<uint64_t(const json&)>& readModel = {}) {
     std::vector<graph::Node> nodes;
     std::vector<graph::Link> links;
-    std::vector<std::pair<graph::GraphId, graph::GraphId>> legacyMaterialInputs;
     graph::GraphId maxId = 0;
 
     // **リンクの ID を先に見ておく。** ノードの種類にピンを足した後で古いファイルを
@@ -850,17 +574,6 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
             // 欠けているぶんは後で maxId から振り直す（リンクは繋がらないまま消える）。
             const json* inputIds = FindMember(item, "inputs");
             const json* outputIds = FindMember(item, "outputs");
-            // 旧Materialピンは末尾の入力。リンクを落とす前に接続先のSurface設定を移す。
-            const bool decalNode = created.kind == graph::NodeKind::Decal;
-            const char* materialKey = created.kind == graph::NodeKind::RoadMarking ? "roadMarking" :
-                (created.kind == graph::NodeKind::Crack ? "crack" : (decalNode ? "decal" : nullptr));
-            const size_t legacyIndex = decalNode ? 2 : 1;
-            const json* materialSettings = materialKey ? FindMember(item, materialKey) : nullptr;
-            const char* bindingKey = created.kind == graph::NodeKind::RoadMarking ? "materials" : "material";
-            if (materialKey && (!materialSettings || !FindMember(*materialSettings, bindingKey)) &&
-                inputIds && inputIds->is_array() && inputIds->size() > legacyIndex && (*inputIds)[legacyIndex].is_number_integer())
-                legacyMaterialInputs.emplace_back(created.id, (*inputIds)[legacyIndex].get<int>());
-
             size_t inputIndex = 0;
             size_t outputIndex = 0;
             for (const graph::PinDefinition& pin : definition->pins) {
@@ -904,125 +617,6 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.layer = ReadLayer(*layer, readMaterial);
                 }
                 created.settings = std::move(settings);
-            } else if (created.kind == graph::NodeKind::Road) {
-                graph::RoadNodeSettings settings;
-                if (const json* road = FindMember(item, "road"); road && road->is_object()) {
-                    settings.widthMeters = ReadFloat(*road, "width", settings.widthMeters);
-                    settings.lanesForward = static_cast<uint32_t>(std::clamp(ReadInt(*road, "lanesForward", static_cast<int>(settings.lanesForward)), 1, 8));
-                    settings.lanesBackward = static_cast<uint32_t>(std::clamp(ReadInt(*road, "lanesBackward", static_cast<int>(settings.lanesBackward)), 0, 8));
-                    settings.uvRepeatMeters = ReadFloat(*road, "uvRepeat", settings.uvRepeatMeters);
-                    settings.displacementMeters = std::clamp(ReadFloat(*road, "displacement", 0.0f), 0.0f, 5.0f);
-                    settings.uvAlongU = ReadBool(*road, "uvAlongU", settings.uvAlongU);
-                    if (const json* worldUv = FindMember(*road, "layerWorldUv"); worldUv && worldUv->is_array()) {
-                        for (size_t i = 0; i < worldUv->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*worldUv)[i].is_boolean()) settings.layerWorldUv[i] = (*worldUv)[i].get<bool>();
-                    }
-                    if (const json* repeat = FindMember(*road, "layerUvRepeat"); repeat && repeat->is_array()) {
-                        for (size_t i = 0; i < repeat->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*repeat)[i].is_number()) settings.layerUvRepeatMeters[i] = std::clamp((*repeat)[i].get<float>(), 0.1f, 100.0f);
-                    }
-                    if (const json* gate = FindMember(*road, "layerHeightGate"); gate && gate->is_array()) {
-                        for (size_t i = 0; i < gate->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*gate)[i].is_number_integer()) settings.layerHeightGate[i] = static_cast<uint32_t>(std::clamp((*gate)[i].get<int>(), 0, 2));
-                    }
-                    if (const json* gate = FindMember(*road, "layerHeightGateThreshold"); gate && gate->is_array()) {
-                        for (size_t i = 0; i < gate->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*gate)[i].is_number()) settings.layerHeightGateThreshold[i] = std::clamp((*gate)[i].get<float>(), 0.0f, 1.0f);
-                    }
-                    if (const json* gate = FindMember(*road, "layerHeightGateSoftness"); gate && gate->is_array()) {
-                        for (size_t i = 0; i < gate->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*gate)[i].is_number()) settings.layerHeightGateSoftness[i] = std::clamp((*gate)[i].get<float>(), 0.001f, 1.0f);
-                    }
-                    // 混ぜ方。キーが無い旧ファイルは「ハイトで競合」（以前の見た目のまま）。
-                    for (auto& mode : settings.layerBlendMode) mode = 1u;
-                    if (const json* modes = FindMember(*road, "layerBlendMode"); modes && modes->is_array()) {
-                        for (size_t i = 0; i < modes->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*modes)[i].is_number_integer()) settings.layerBlendMode[i] = static_cast<uint32_t>(std::clamp((*modes)[i].get<int>(), 0, 1));
-                    }
-                    settings.layerBlendRange = std::clamp(ReadFloat(*road, "layerBlendRange", settings.layerBlendRange), 0.0f, 1.0f);
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::Decal) {
-                graph::DecalNodeSettings settings;
-                if (const json* decal = FindMember(item, "decal"); decal && decal->is_object()) {
-                    if (const json* material = FindMember(*decal, "material"); material && material->is_object())
-                        settings.material = ReadLayer(*material, readMaterial);
-                    settings.heightMeters = ReadFloat(*decal, "heightMeters", settings.heightMeters);
-                    settings.imageWidthScale = ReadFloat(*decal, "imageWidthScale", settings.imageWidthScale);
-                    settings.imageLengthScale = ReadFloat(*decal, "imageLengthScale", settings.imageLengthScale);
-                    settings.showWireframe = ReadBool(*decal, "showWireframe", settings.showWireframe);
-                    settings.widthMeters = ReadFloat(*decal, "width", settings.widthMeters);
-                    settings.liftMeters = ReadFloat(*decal, "lift", settings.liftMeters);
-                    settings.uvRepeatMeters = ReadFloat(*decal, "uvRepeat", settings.uvRepeatMeters);
-                    settings.uvAlongU = ReadBool(*decal, "uvAlongU", settings.uvAlongU);
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::Crack) {
-                graph::CrackNodeSettings settings;
-                if (const json* crack = FindMember(item, "crack"); crack && crack->is_object()) {
-                    if (const json* material = FindMember(*crack, "material"); material && material->is_object())
-                        settings.material = ReadLayer(*material, readMaterial);
-                    static const char* const kCrackOrientationNames[] = {"longitudinal", "transverse", "mixed"};
-                    static const char* const kCrackPlacementNames[] = {"uniform", "wheelTracks", "edges"};
-                    settings.seed = static_cast<uint32_t>(std::max(0, ReadInt(*crack, "seed", static_cast<int>(settings.seed))));
-                    settings.densityPer100m = ReadFloat(*crack, "density", settings.densityPer100m);
-                    settings.lengthMinMeters = ReadFloat(*crack, "lengthMin", settings.lengthMinMeters);
-                    settings.lengthMaxMeters = ReadFloat(*crack, "lengthMax", settings.lengthMaxMeters);
-                    settings.orientation = static_cast<graph::CrackOrientation>(
-                        EnumValue(kCrackOrientationNames, *crack, "orientation", static_cast<uint32_t>(settings.orientation)));
-                    settings.transverseRatio = ReadFloat(*crack, "transverseRatio", settings.transverseRatio);
-                    settings.angleJitterDegrees = ReadFloat(*crack, "angleJitter", settings.angleJitterDegrees);
-                    settings.placement = static_cast<graph::CrackPlacement>(
-                        EnumValue(kCrackPlacementNames, *crack, "placement", static_cast<uint32_t>(settings.placement)));
-                    settings.trunkWidthMeters = ReadFloat(*crack, "trunkWidth", settings.trunkWidthMeters);
-                    settings.branchesMin = static_cast<uint32_t>(std::clamp(ReadInt(*crack, "branchesMin", static_cast<int>(settings.branchesMin)), 0, 12));
-                    settings.branchesMax = static_cast<uint32_t>(std::clamp(ReadInt(*crack, "branchesMax", static_cast<int>(settings.branchesMax)), 0, 12));
-                    settings.branchLengthRatio = ReadFloat(*crack, "branchLengthRatio", settings.branchLengthRatio);
-                    settings.branchWidthRatio = ReadFloat(*crack, "branchWidthRatio", settings.branchWidthRatio);
-                    settings.liftMeters = ReadFloat(*crack, "lift", settings.liftMeters);
-                    settings.uvRepeatMeters = ReadFloat(*crack, "uvRepeat", settings.uvRepeatMeters);
-                    settings.uvAlongU = ReadBool(*crack, "uvAlongU", settings.uvAlongU);
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::Shoulder) {
-                graph::ShoulderNodeSettings settings;
-                if (const json* shoulder = FindMember(item, "shoulder"); shoulder && shoulder->is_object()) {
-                    settings.widthMeters = ReadFloat(*shoulder, "width", settings.widthMeters);
-                    settings.crossSlopePercent = ReadFloat(*shoulder, "crossSlope", settings.crossSlopePercent);
-                    settings.stepHeightMeters = std::clamp(ReadFloat(*shoulder, "stepHeight", settings.stepHeightMeters), 0.0f, 0.5f);
-                    settings.stepWidthMeters = std::clamp(ReadFloat(*shoulder, "stepWidth", settings.stepWidthMeters), 0.005f, 1.0f);
-                    settings.uvRepeatMeters = ReadFloat(*shoulder, "uvRepeat", settings.uvRepeatMeters);
-                    settings.uvAlongU = ReadBool(*shoulder, "uvAlongU", settings.uvAlongU);
-                    settings.displacementMeters = std::clamp(ReadFloat(*shoulder, "displacement", settings.displacementMeters), 0.0f, 1.0f);
-                    if (const json* worldUv = FindMember(*shoulder, "layerWorldUv"); worldUv && worldUv->is_array()) {
-                        for (size_t i = 0; i < worldUv->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*worldUv)[i].is_boolean()) settings.layerWorldUv[i] = (*worldUv)[i].get<bool>();
-                    }
-                    if (const json* repeat = FindMember(*shoulder, "layerUvRepeat"); repeat && repeat->is_array()) {
-                        for (size_t i = 0; i < repeat->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*repeat)[i].is_number()) settings.layerUvRepeatMeters[i] = std::clamp((*repeat)[i].get<float>(), 0.1f, 100.0f);
-                    }
-                    if (const json* gate = FindMember(*shoulder, "layerHeightGate"); gate && gate->is_array()) {
-                        for (size_t i = 0; i < gate->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*gate)[i].is_number_integer()) settings.layerHeightGate[i] = static_cast<uint32_t>(std::clamp((*gate)[i].get<int>(), 0, 2));
-                    }
-                    if (const json* gate = FindMember(*shoulder, "layerHeightGateThreshold"); gate && gate->is_array()) {
-                        for (size_t i = 0; i < gate->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*gate)[i].is_number()) settings.layerHeightGateThreshold[i] = std::clamp((*gate)[i].get<float>(), 0.0f, 1.0f);
-                    }
-                    if (const json* gate = FindMember(*shoulder, "layerHeightGateSoftness"); gate && gate->is_array()) {
-                        for (size_t i = 0; i < gate->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*gate)[i].is_number()) settings.layerHeightGateSoftness[i] = std::clamp((*gate)[i].get<float>(), 0.001f, 1.0f);
-                    }
-                    // 混ぜ方。キーが無い旧ファイルは「ハイトで競合」（以前の見た目のまま）。
-                    for (auto& mode : settings.layerBlendMode) mode = 1u;
-                    if (const json* modes = FindMember(*shoulder, "layerBlendMode"); modes && modes->is_array()) {
-                        for (size_t i = 0; i < modes->size() && i < graph::kRoadMaterialSlots; ++i)
-                            if ((*modes)[i].is_number_integer()) settings.layerBlendMode[i] = static_cast<uint32_t>(std::clamp((*modes)[i].get<int>(), 0, 1));
-                    }
-                    settings.layerBlendRange = std::clamp(ReadFloat(*shoulder, "layerBlendRange", settings.layerBlendRange), 0.0f, 1.0f);
-                }
-                created.settings = settings;
             } else if (created.kind == graph::NodeKind::Model || created.kind == graph::NodeKind::Transform) {
                 // 位置・回転（X / Y / Z の度。数値 1 つなら Y だけ）・倍率は Model と Transform で共通。
                 float position[3] = {0.0f, 0.0f, 0.0f}, rotation[3] = {0.0f, 0.0f, 0.0f}, scale = 1.0f;
@@ -1070,64 +664,6 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     created.settings = settings;
                 }
 
-            } else if (created.kind == graph::NodeKind::RoadMask) {
-                graph::RoadMaskNodeSettings settings;
-                if (const json* mask = FindMember(item, "roadMask"); mask && mask->is_object()) {
-                    static const char* const kRoadMaskShapeNames[] = {"wheelTracks", "edgeFalloff", "lengthNoise", "constant", "worldNoise"};
-                    settings.shape = static_cast<graph::RoadMaskShape>(
-                        EnumValue(kRoadMaskShapeNames, *mask, "shape", static_cast<uint32_t>(settings.shape)));
-                    settings.laneOffsetMeters = ReadFloat(*mask, "laneOffset", settings.laneOffsetMeters);
-                    settings.trackSpacingMeters = ReadFloat(*mask, "trackSpacing", settings.trackSpacingMeters);
-                    settings.trackWidthMeters = ReadFloat(*mask, "trackWidth", settings.trackWidthMeters);
-                    settings.featherMeters = ReadFloat(*mask, "feather", settings.featherMeters);
-                    settings.bothLanes = ReadBool(*mask, "bothLanes", settings.bothLanes);
-                    // キーが無い旧ファイルは手入力のまま（既定の真にすると見た目が変わる）。
-                    settings.tracksFromLanes = ReadBool(*mask, "tracksFromLanes", false);
-                    settings.edgeWidthMeters = ReadFloat(*mask, "edgeWidth", settings.edgeWidthMeters);
-                    static const char* const kRoadMaskSideNames[] = {"both", "left", "right"};
-                    settings.edgeSide = static_cast<graph::RoadMaskSide>(
-                        EnumValue(kRoadMaskSideNames, *mask, "edgeSide", static_cast<uint32_t>(settings.edgeSide)));
-                    settings.noiseScaleMeters = ReadFloat(*mask, "noiseScale", settings.noiseScaleMeters);
-                    settings.threshold = ReadFloat(*mask, "threshold", settings.threshold);
-                    settings.softness = ReadFloat(*mask, "softness", settings.softness);
-                    settings.seed = static_cast<uint32_t>(std::max(0, ReadInt(*mask, "seed", static_cast<int>(settings.seed))));
-                    settings.breakupAmount = ReadFloat(*mask, "breakupAmount", settings.breakupAmount);
-                    settings.breakupScaleMeters = ReadFloat(*mask, "breakupScale", settings.breakupScaleMeters);
-                    settings.strength = ReadFloat(*mask, "strength", settings.strength);
-                    settings.invert = ReadBool(*mask, "invert", settings.invert);
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::RoadMarking) {
-                graph::RoadMarkingNodeSettings settings;
-                if (const json* marking = FindMember(item, "roadMarking"); marking && marking->is_object()) {
-                    if (const json* materials = FindMember(*marking, "materials"); materials && materials->is_array())
-                        for (size_t i = 0; i < settings.materials.size() && i < materials->size(); ++i)
-                            if ((*materials)[i].is_object()) settings.materials[i] = ReadLayer((*materials)[i], readMaterial);
-                    const float legacyWidth = ReadFloat(*marking, "lineWidth", settings.centerLineWidthMeters);
-                    settings.centerLineWidthMeters = ReadFloat(*marking, "centerLineWidth", legacyWidth);
-                    settings.edgeLineWidthMeters = ReadFloat(*marking, "edgeLineWidth", legacyWidth);
-                    settings.laneLineWidthMeters = ReadFloat(*marking, "laneLineWidth", legacyWidth);
-                    settings.centerLine = ReadBool(*marking, "centerLine", settings.centerLine);
-                    settings.centerLineDashed = ReadBool(*marking, "centerLineDashed", settings.centerLineDashed);
-                    settings.edgeLines = ReadBool(*marking, "edgeLines", settings.edgeLines);
-                    settings.edgeInsetMeters = ReadFloat(*marking, "edgeInset", settings.edgeInsetMeters);
-                    settings.laneLines = ReadBool(*marking, "laneLines", settings.laneLines);
-                    settings.dashLengthMeters = ReadFloat(*marking, "dashLength", settings.dashLengthMeters);
-                    settings.dashGapMeters = ReadFloat(*marking, "dashGap", settings.dashGapMeters);
-                    settings.stopLines = ReadBool(*marking, "stopLines", settings.stopLines);
-                    settings.stopLineWidthMeters = ReadFloat(*marking, "stopLineWidth", settings.stopLineWidthMeters);
-                    settings.liftMeters = ReadFloat(*marking, "lift", settings.liftMeters);
-                    settings.uvRepeatMeters = ReadFloat(*marking, "uvRepeat", settings.uvRepeatMeters);
-                    settings.arrows = ReadBool(*marking, "arrows", settings.arrows);
-                    settings.arrowIntervalMeters = ReadFloat(*marking, "arrowInterval", settings.arrowIntervalMeters);
-                    settings.arrowLengthMeters = ReadFloat(*marking, "arrowLength", settings.arrowLengthMeters);
-                    settings.uvAlongU = ReadBool(*marking, "uvAlongU", settings.uvAlongU);
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::Path) {
-                graph::PathNodeSettings settings;
-                settings.path = ReadPath(item, "path");
-                created.settings = std::move(settings);
             } else {
                 // Mesh Output は設定を持たない。
                 created.settings = std::monostate{};
@@ -1169,32 +705,8 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
     if (nodes.empty()) {
         return false;
     }
-    for (const auto& [nodeId, pinId] : legacyMaterialInputs) {
-        const auto link = std::find_if(links.begin(), links.end(), [&](const auto& value) { return value.endPin == pinId; });
-        if (link == links.end()) continue;
-        const compositor::MaterialLayer* layer = nullptr;
-        for (const auto& source : nodes) {
-            if (std::none_of(source.outputs.begin(), source.outputs.end(), [&](const auto& pin) { return pin.id == link->startPin; })) continue;
-            if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&source.settings)) layer = &settings->layer;
-            break;
-        }
-        if (!layer) continue;
-        for (auto& target : nodes) {
-            if (target.id != nodeId) continue;
-            if (auto* settings = std::get_if<graph::RoadMarkingNodeSettings>(&target.settings)) settings->materials.fill(*layer);
-            if (auto* settings = std::get_if<graph::DecalNodeSettings>(&target.settings)) settings->material = *layer;
-            if (auto* settings = std::get_if<graph::CrackNodeSettings>(&target.settings)) settings->material = *layer;
-        }
-    }
     // Replace が壊れたリンクの除去と次の採番の再構築を行う。
     graphData.Replace(std::move(nodes), std::move(links));
-    {
-        graph::RoadNetworkSettings roadNetwork;
-        if (const json* network = FindMember(node, "roadNetwork"); network != nullptr && network->is_object()) {
-            roadNetwork.leftHandTraffic = ReadBool(*network, "leftHandTraffic", roadNetwork.leftHandTraffic);
-        }
-        graphData.SetRoadNetwork(roadNetwork);
-    }
     return true;
 }
 
@@ -1588,12 +1100,6 @@ bool ReadJsonFile(const fs::path& path, const char* expectedFormat, int maxVersi
 
 bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
                  ProjectWorkspace* workspace) {
-    std::string layoutError;
-    if (!graph::ValidateSurfaceLayouts(refs.surfaceLayouts, layoutError) ||
-        !graph::ValidateSurfaceLayoutRoads(refs.surfaceLayouts, refs.graph, layoutError)) {
-        TG_LOG_ERROR("配置データを保存できません: %s", layoutError.c_str());
-        return false;
-    }
     // 裸のファイル名（親ディレクトリ無し）で保存すると相対パスが作れず、
     // 全参照が絶対パスで書かれてしまう。先に絶対化してから基準を取る。
     std::error_code absoluteError;
@@ -1696,37 +1202,6 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
         return found != modelIndex.end() ? json(found->second) : json();
     };
     document["graph"] = WriteGraph(refs.graph, writeMaterial, writeModel);
-    auto layouts = WriteSurfaceLayouts(refs.surfaceLayouts);
-    if (layouts.is_null()) { TG_LOG_ERROR("レイヤーマテリアルの移行に必要なIDを確保できません"); return false; }
-    for (auto& preset : layouts["layerMaterials"]) {
-        if (preset.contains("materialGraph")) for (auto& node : preset["materialGraph"]["nodes"]) {
-            auto& material = node["settings"]["material"];
-            const auto reference = writeMaterial(material.get<uint32_t>());
-            material = reference.is_null() ? json(0) : reference;
-        }
-        for (auto& material : preset["materials"]) {
-            const auto reference = writeMaterial(material["material"].get<uint32_t>());
-            material["material"] = reference.is_null() ? json(0) : reference;
-        }
-    }
-    for (auto& boundary : layouts["boundaryMaterials"]) for (const auto* key : {"mask", "height"}) {
-        const auto reference = writeTexture(boundary[key].get<uint32_t>());
-        boundary[key] = reference.is_null() ? json(0) : reference;
-    }
-    if (workspace != nullptr) {
-        // 共有アセットの置き場所と固定 ID（SaveSharedAssets が付けたもの）。SaveScene がこれを見てファイルへ分ける。
-        const auto identify = [](json& list, const auto& entries) {
-            for (json& value : list)
-                for (const auto& entry : entries)
-                    if (value["id"] == entry.id) {
-                        value["_assetPath"] = ToUtf8Portable(entry.assetPath);
-                        value["uid"] = entry.assetUid;
-                    }
-        };
-        identify(layouts["layerMaterials"], refs.surfaceLayouts.layerMaterials);
-        identify(layouts["boundaryMaterials"], refs.surfaceLayouts.boundaryMaterials);
-    }
-    document["surfaceLayouts"] = std::move(layouts);
 
     // 天球はマテリアルと同じく、構造ごと埋め込む（画像だけ相対パスの参照）。
     json skies = json::array();
@@ -1745,9 +1220,6 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
     document["activeSky"] = activeSkyIndex;
 
     document["preview"] = WritePreview(refs.renderer);
-    document["preview"]["surfaceBands"] = refs.previewSurfaceBands;
-    document["preview"]["connectSurfaceBands"] = refs.connectSurfaceBands;
-    document["preview"]["displaceConnectedBands"] = refs.displaceConnectedBands;
 
     if (workspace != nullptr) {
         if (!workspace->SaveScene(savePath, document)) {
@@ -1784,41 +1256,6 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
         return false;
     }
 
-    graph::SurfaceLayoutDocument pendingLayouts;
-    if (ReadInt(document, "version", 0) >= 17 && FindMember(document, "surfaceLayouts") == nullptr) {
-        TG_LOG_ERROR("版17の配置データが欠落しています（現在の文書は保持）");
-        return false;
-    }
-    if (const json* layouts = FindMember(document, "surfaceLayouts")) {
-        std::string error;
-        if (!ReadSurfaceLayouts(*layouts, pendingLayouts, error) || !graph::ExtractLayerMaterials(pendingLayouts, error)) {
-            TG_LOG_ERROR("配置データを読み込めません（現在の文書は保持）: %s", error.c_str());
-            return false;
-        }
-        // 共有アセットの置き場所と固定 ID（シーンの展開で入ったもの）。旧 .tgproj には無い。
-        const auto identify = [&](const char* key, auto& entries) {
-            const json* list = FindMember(*layouts, key);
-            if (list == nullptr || !list->is_array()) return;
-            for (const json& value : *list)
-                for (auto& entry : entries)
-                    if (value.is_object() && value.contains("id") && value["id"] == entry.id) {
-                        entry.assetPath = FromUtf8(ReadString(value, "_assetPath"));
-                        entry.assetUid = ReadString(value, "uid");
-                    }
-        };
-        identify("layerMaterials", pendingLayouts.layerMaterials);
-        identify("boundaryMaterials", pendingLayouts.boundaryMaterials);
-        if (!pendingLayouts.layouts.empty()) {
-            graph::NodeGraph validationGraph;
-            const auto* graphValue = FindMember(document, "graph");
-            if (!graphValue || !graphValue->is_object() ||
-                !ReadGraph(*graphValue, validationGraph, [](const json&) { return compositor::kNoMaterialAsset; }) ||
-                !graph::ValidateSurfaceLayoutRoads(pendingLayouts, validationGraph, error)) {
-                TG_LOG_ERROR("配置先Roadを確認できません（現在の文書は保持）: %s", error.c_str());
-                return false;
-            }
-        }
-    }
     const fs::path baseDir = path.parent_path();
 
     // 旧ファイルの手入力メッシュシーン（scene）は読まない。表示するメッシュは
@@ -1945,15 +1382,6 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
             const auto it = materialIds.find(value.get<int>());
             return (it != materialIds.end()) ? it->second : compositor::kNoMaterialAsset;
         };
-    for (auto& preset : pendingLayouts.layerMaterials) {
-        for (auto& material : preset.materials) material.material = readMaterial(json(material.material));
-        if (preset.materialGraph) for (auto& node : preset.materialGraph->nodes)
-            node.settings.material = readMaterial(json(node.settings.material));
-    }
-    for (auto& boundary : pendingLayouts.boundaryMaterials) {
-        boundary.mask = readTexture(json(boundary.mask)); boundary.height = readTexture(json(boundary.height));
-    }
-    refs.surfaceLayouts = std::move(pendingLayouts);
     // 旧形式の layers[]（版 3 以前）。移行用に一旦読み込んでおく。
     std::vector<compositor::MaterialLayer> legacyLayers;
     if (const json* layers = FindMember(document, "layers");
@@ -2002,9 +1430,6 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
     const json& previewNode =
         (preview != nullptr && preview->is_object()) ? *preview : emptyPreview;
     ReadPreview(previewNode, refs.renderer);
-    refs.previewSurfaceBands = ReadBool(previewNode, "surfaceBands", false);
-    refs.connectSurfaceBands = ReadBool(previewNode, "connectSurfaceBands", false);
-    refs.displaceConnectedBands = ReadBool(previewNode, "displaceConnectedBands", false);
 
     // 天球。無ければ preview 節から 1 つ作る（天球を入れる前のプロジェクト）。
     if (const json* skies = FindMember(document, "skies");
@@ -2063,12 +1488,6 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
     for (const renderer::SkyAsset& entry : refs.skies.Entries()) {
         if (!entry.assetUid.empty()) claimedUids.insert(entry.assetUid);
     }
-    for (const graph::LayerMaterial& entry : refs.surfaceLayouts.layerMaterials) {
-        if (!entry.assetUid.empty()) claimedUids.insert(entry.assetUid);
-    }
-    for (const compositor::BoundaryMaterial& entry : refs.surfaceLayouts.boundaryMaterials) {
-        if (!entry.assetUid.empty()) claimedUids.insert(entry.assetUid);
-    }
     if (refs.models != nullptr) {
         for (const renderer::ModelAsset& entry : *refs.models) {
             if (!entry.assetUid.empty()) claimedUids.insert(entry.assetUid);
@@ -2117,33 +1536,6 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
         asset->assetUid = ReadString(body, "uid");
         claimedUids.insert(asset->assetUid);
     }
-    // レイヤーマテリアル。本文は配置データの保存形式と同じで、マテリアルの参照だけを上で保存した
-    // .tgmat の固定 ID にする（SaveScene が作る本文と一致させ、中身が変わらなければ書き直さない）。
-    for (graph::LayerMaterial& material : refs.surfaceLayouts.layerMaterials) {
-        graph::SurfaceLayoutDocument single;
-        single.layerMaterials.push_back(material);
-        const json written = WriteSurfaceLayouts(single);
-        json body = written["layerMaterials"][0];
-        const auto materialRef = [&](json& value) {
-            const compositor::MaterialAsset* asset = refs.materials.Find(value.get<uint32_t>());
-            value = (asset != nullptr && !asset->assetPath.empty()) ? workspace.Reference(asset->assetPath) : json();
-            if (asset != nullptr && value.is_null()) valid = false;
-        };
-        for (json& layer : body["materials"]) materialRef(layer["material"]);
-        if (body.contains("materialGraph")) {
-            for (json& node : body["materialGraph"]["nodes"]) materialRef(node["settings"]["material"]);
-        }
-        body["uid"] = material.assetUid;
-        fs::path assetPath = placement(body, material.assetPath, "layer-material-asset", L"LayerMaterials",
-                                       material.name, ".tglayer");
-        if (!valid || !workspace.SaveAsset(assetPath, "layer-material-asset", body)) {
-            TG_LOG_ERROR("レイヤーマテリアルを保存できません: %s", material.name.c_str());
-            return false;
-        }
-        material.assetPath = assetPath;
-        material.assetUid = ReadString(body, "uid");
-        claimedUids.insert(material.assetUid);
-    }
     // モデル。FBX は元ファイルの固定 ID、スロットは上で保存した .tgmat の固定 ID で参照する
     // （SaveScene が作る本文と一致させ、中身が変わらなければ書き直さない）。
     if (refs.models != nullptr) {
@@ -2167,25 +1559,6 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
             model.assetUid = ReadString(body, "uid");
             claimedUids.insert(model.assetUid);
         }
-    }
-    // 境界マテリアル。画像は元ファイルの固定 ID で参照する。
-    for (compositor::BoundaryMaterial& material : refs.surfaceLayouts.boundaryMaterials) {
-        graph::SurfaceLayoutDocument single;
-        single.boundaryMaterials.push_back(material);
-        const json written = WriteSurfaceLayouts(single);
-        json body = written["boundaryMaterials"][0];
-        body["mask"] = writeTexture(material.mask);
-        body["height"] = writeTexture(material.height);
-        body["uid"] = material.assetUid;
-        fs::path assetPath = placement(body, material.assetPath, "boundary-material-asset", L"BoundaryMaterials",
-                                       material.name, ".tgboundary");
-        if (!valid || !workspace.SaveAsset(assetPath, "boundary-material-asset", body)) {
-            TG_LOG_ERROR("境界マテリアルを保存できません: %s", material.name.c_str());
-            return false;
-        }
-        material.assetPath = assetPath;
-        material.assetUid = ReadString(body, "uid");
-        claimedUids.insert(material.assetUid);
     }
     return valid;
 }
@@ -2231,88 +1604,6 @@ void AddExpandedLibraries(const json& document, rhi::Device& device, rhi::Pipeli
 }
 
 }  // namespace
-
-graph::SurfaceId LoadSharedSurfaceAsset(ProjectWorkspace& workspace, const std::filesystem::path& path,
-                                        rhi::Device& device, rhi::PipelineCache& pipelineCache,
-                                        compositor::TextureLibrary& textures, compositor::MaterialLibrary& materials,
-                                        graph::SurfaceLayoutDocument& layouts) {
-    if (!workspace.Scan()) {
-        return 0;
-    }
-    json header;
-    if (!workspace.Contains(path) || !ProjectWorkspace::ReadJson(path, header)) {
-        return 0;
-    }
-    const std::string assetUid = ReadString(header, "uid");
-    if (assetUid.empty()) {
-        return 0;
-    }
-    const bool isLayer = _wcsicmp(path.extension().c_str(), L".tglayer") == 0;
-    // 読み込み済みなら足さずにそれを使う（同じアセットを 2 つの番号で持たない）。
-    if (isLayer) {
-        for (const graph::LayerMaterial& entry : layouts.layerMaterials) {
-            if (entry.assetUid == assetUid) return entry.id;
-        }
-    } else {
-        for (const compositor::BoundaryMaterial& entry : layouts.boundaryMaterials) {
-            if (entry.assetUid == assetUid) return entry.id;
-        }
-    }
-    const char* key = isLayer ? "layerMaterials" : "boundaryMaterials";
-    json document;
-    document["surfaceLayouts"][key] = json::array(
-        {{{"id", 1}, {"asset", {{"uid", assetUid}, {"path", RelativePathString(path, workspace.Root())}}}}});
-    if (!workspace.Expand(document)) {
-        return 0;
-    }
-    // 本文は配置データの読み込み器で検査する。参照の番号はまだ文書内のもの。
-    const json& expanded = document.at("surfaceLayouts").at(key).at(0);
-    json value = {{"version", 6}, {"nextId", 2}, {"presets", json::array()}, {"layouts", json::array()},
-                  {"layerMaterials", json::array()}, {"boundaryMaterials", json::array()}};
-    value[key].push_back(expanded);
-    graph::SurfaceLayoutDocument parsed;
-    std::string error;
-    if (!ReadSurfaceLayouts(value, parsed, error)) {
-        TG_LOG_ERROR("アセットを読み込めません（%s）: %s", error.c_str(), ToUtf8Display(path).c_str());
-        return 0;
-    }
-    const graph::SurfaceId id = layouts.AllocateId();
-    if (id == 0) {
-        return 0;
-    }
-    std::unordered_map<int, compositor::TextureId> textureIds;
-    std::unordered_map<int, compositor::MaterialAssetId> materialIds;
-    AddExpandedLibraries(document, device, pipelineCache, textures, materials, textureIds, materialIds);
-    if (isLayer) {
-        const auto materialId = [&materialIds](uint32_t number) {
-            const auto found = materialIds.find(static_cast<int>(number));
-            return (found != materialIds.end()) ? found->second : compositor::kNoMaterialAsset;
-        };
-        graph::LayerMaterial material = parsed.layerMaterials.front();
-        for (graph::PresetMaterial& layer : material.materials) layer.material = materialId(layer.material);
-        if (material.materialGraph) {
-            for (graph::PresetNode& node : material.materialGraph->nodes) node.settings.material = materialId(node.settings.material);
-        }
-        material.id = id;
-        material.assetUid = assetUid;
-        material.assetPath = FromUtf8(ReadString(expanded, "_assetPath"));
-        layouts.layerMaterials.push_back(std::move(material));
-    } else {
-        const auto textureId = [&textureIds](uint32_t number) {
-            const auto found = textureIds.find(static_cast<int>(number));
-            return (found != textureIds.end()) ? found->second : compositor::kNoTexture;
-        };
-        compositor::BoundaryMaterial material = parsed.boundaryMaterials.front();
-        material.mask = textureId(material.mask);
-        material.height = textureId(material.height);
-        material.id = id;
-        material.assetUid = assetUid;
-        material.assetPath = FromUtf8(ReadString(expanded, "_assetPath"));
-        layouts.boundaryMaterials.push_back(std::move(material));
-    }
-    TG_LOG_INFO("アセットを読み込みました: %s", ToUtf8Display(path).c_str());
-    return id;
-}
 
 bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& path,
                      rhi::Device& device, rhi::PipelineCache& pipelineCache,

@@ -1,19 +1,12 @@
-#include "graph/Road.h"
-#include "graph/ConnectionPrototype.h"
-#include "graph/SurfaceLayoutEvaluation.h"
-#include "graph/SurfaceLayoutEditing.h"
 #include "core/Log.h"
 #include <chrono>
 // ノードグラフパネル。imgui-node-editor によるエディタと、
 // 選択中ノードのプロパティ（レイヤーパネルと共有）を持つ。
 //
 // エディタの作法（カード描画・丸ピン・ドット背景・リンクの作成 / 削除）は
-// terrain-editor のノードエディタ UI から移植した。ノードそのものは
-// このプロジェクト独自（サーフェス / シェイプ / 水面 / 出力）。
+// ノードエディタ UI から移植した。
 
 #include "app/Application.h"
-#include "graph/SurfaceBandGeometry.h"
-#include "app/RoadMaskUi.h"
 
 #include "app/ApplicationUiHelpers.h"
 #include "ui/UiStyle.h"
@@ -41,20 +34,8 @@ ImVec4 NodeAccentColor(graph::NodeKind kind) {
     switch (kind) {
         case graph::NodeKind::Surface:
             return ImVec4(0.55f, 0.66f, 0.58f, 1.0f);
-        case graph::NodeKind::Path:
-            return ImVec4(0.52f, 0.74f, 0.84f, 1.0f);
-        case graph::NodeKind::RoadMarking:
-            return ImVec4(0.80f, 0.80f, 0.76f, 1.0f);
-        case graph::NodeKind::RoadMask:
-            return ImVec4(0.78f, 0.66f, 0.50f, 1.0f);
-        case graph::NodeKind::Decal:
-            return ImVec4(0.72f, 0.60f, 0.76f, 1.0f);
-        case graph::NodeKind::Shoulder:
-            return ImVec4(0.70f, 0.64f, 0.52f, 1.0f);
         case graph::NodeKind::Merge:
             return ImVec4(0.62f, 0.70f, 0.66f, 1.0f);
-        case graph::NodeKind::Crack:
-            return ImVec4(0.66f, 0.58f, 0.62f, 1.0f);
         case graph::NodeKind::Model:
         case graph::NodeKind::Transform:
             return ImVec4(0.62f, 0.60f, 0.78f, 1.0f);
@@ -64,22 +45,12 @@ ImVec4 NodeAccentColor(graph::NodeKind kind) {
 }
 
 // ピンとリンクの色。**線が何を運んでいるかを色で見分ける。**
-// 値は terrain-editor に合わせてある（あちらの HeightField がこちらの Material）。
-// 緑とオレンジは明度が近く、色相だけが離れているので、
-// 暗い盤面でどちらも同じ強さで読める。
 ImVec4 PinTypeColor(graph::ValueType valueType) {
     switch (valueType) {
-        // パスは水色。線（点とエッジ）が流れる。緑 / オレンジと色相が離れていて、
-        // 明度は同じくらいなので暗い盤面で同じ強さで読める。
-        case graph::ValueType::Path:
-            return ImVec4(0.55f, 0.80f, 0.95f, 1.0f);
-        // マテリアルは緑。4 チャンネル一式（ハイトを含む）。
+        // メッシュは緑。
         case graph::ValueType::Mesh:
             return ImGui::GetStyleColorVec4(ImGuiCol_PlotLines);
-        // 道路空間マスクは茶色寄りのオレンジ。タイル空間のマスク（オレンジ）と区別する。
-        case graph::ValueType::RoadMask:
-            return ImVec4(0.80f, 0.56f, 0.34f, 1.0f);
-        // モデルは藤色。道路のメッシュ（Mesh）とは繋がらないことを色でも分ける。
+        // モデルは藤色。メッシュ（Mesh）とは繋がらないことを色でも分ける。
         case graph::ValueType::Model:
             return ImVec4(0.70f, 0.62f, 0.90f, 1.0f);
         // どちらも受ける入力（Merge / Mesh Output）と、何も繋がっていない Merge の出力は無彩色。
@@ -173,82 +144,6 @@ int ToGraphId(uintptr_t id) {
 
 }  // namespace
 
-// 材質スロットの行（Road と Shoulder で共通）。1 は下地、2〜4 は Mask 2〜4 で被覆する。
-// 座標と反復長はスロットごと。変更があれば真。
-bool Application::DrawMaterialSlotRows(const graph::Node& node, bool* layerWorldUv, float* layerUvRepeatMeters,
-                                       float& layerBlendRange, float defaultBlendRange,
-                                       uint32_t* layerHeightGate, float* layerHeightGateThreshold, float* layerHeightGateSoftness,
-                                       uint32_t* layerBlendMode) {
-    bool changed = false;
-    ui::SectionHeader("マテリアルスロット");
-    if (!ui::BeginPropertyTable("layerRows")) return false;
-    static const char* const kUvSpaceLabels[] = {"面に沿う", "ワールド XZ"};
-    std::vector<const graph::Pin*> materialPins;
-    std::vector<const graph::Pin*> maskPins;
-    for (const auto& pin : node.inputs) {
-        if (pin.valueType == graph::ValueType::Material) materialPins.push_back(&pin);
-        if (pin.valueType == graph::ValueType::RoadMask) maskPins.push_back(&pin);
-    }
-    for (int slot = 0; slot < graph::kRoadMaterialSlots; ++slot) {
-        char label[32];
-        std::snprintf(label, sizeof(label), "スロット %d", slot + 1);
-        const bool hasMaterial = slot < static_cast<int>(materialPins.size()) &&
-                                 m_graph.FindUpstreamNodeForPin(materialPins[slot]->id) != nullptr;
-        const bool hasMask = slot == 0 || (slot - 1 < static_cast<int>(maskPins.size()) &&
-                                          m_graph.FindUpstreamNodeForPin(maskPins[slot - 1]->id) != nullptr);
-        ui::PropertyValue(label, "%s", !hasMaterial ? "マテリアルなし" : (hasMask ? "有効" : "マスクなし（無効）"));
-        if (!hasMaterial) continue;
-        char spaceId[32];
-        std::snprintf(spaceId, sizeof(spaceId), "  座標##slot%d", slot);
-        int space = layerWorldUv[slot] ? 1 : 0;
-        if (ui::PropertyCombo(spaceId, &space, kUvSpaceLabels, IM_ARRAYSIZE(kUvSpaceLabels), 0,
-                              "面に沿う: 道路 UV。ワールド XZ: 位置の XZ 平面。路肩や地面と地続きにする層は XZ")) {
-            layerWorldUv[slot] = (space == 1);
-            changed = true;
-        }
-        if (slot > 0) {
-            char repeatId[32];
-            std::snprintf(repeatId, sizeof(repeatId), "  UV反復長##slot%d", slot);
-            changed |= ui::PropertyFloat(repeatId, &layerUvRepeatMeters[slot], 0.1f, 100.0f, 1.0f,
-                                         "このスロットのマテリアルで UV が 1 増える実距離", "%.2f m");
-            // 混ぜ方。マスクどおりが既定で、マスクを塗った所にそのまま出る。
-            static const char* const kBlendModeLabels[] = {"マスクどおり", "ハイトで競合"};
-            char modeId[32];
-            std::snprintf(modeId, sizeof(modeId), "  混ぜ方##slot%d", slot);
-            int mode = static_cast<int>(std::min(1u, layerBlendMode[slot]));
-            if (ui::PropertyCombo(modeId, &mode, kBlendModeLabels, IM_ARRAYSIZE(kBlendModeLabels), 0,
-                                  "マスクどおり: 被覆率がそのまま重み。境界だけ下地とのハイト差 × ブレンド幅で崩す。"
-                                  "ハイトで競合: 被覆率をハイトに足して勝った方が出る（砂利の粒だけ顔を出す表現）")) {
-                layerBlendMode[slot] = static_cast<uint32_t>(mode);
-                changed = true;
-            }
-            // 下地のハイトで絞る。Road Mask が「だいたいこの辺」、下地の凹凸が「その中のどこ」。
-            static const char* const kGateLabels[] = {"使わない", "下地の高い所", "下地の低い所"};
-            char gateId[32];
-            std::snprintf(gateId, sizeof(gateId), "  下地のハイト##slot%d", slot);
-            int gate = static_cast<int>(std::min(2u, layerHeightGate[slot]));
-            if (ui::PropertyCombo(gateId, &gate, kGateLabels, IM_ARRAYSIZE(kGateLabels), 0,
-                                  "スロット 1 のハイトで被覆率を絞る。高い所: 砂利の粒が顔を出す。低い所: 土や泥が溜まる")) {
-                layerHeightGate[slot] = static_cast<uint32_t>(gate);
-                changed = true;
-            }
-            if (layerHeightGate[slot] != 0u) {
-                char thresholdId[32], softnessId[32];
-                std::snprintf(thresholdId, sizeof(thresholdId), "  しきい値##gate%d", slot);
-                std::snprintf(softnessId, sizeof(softnessId), "  柔らかさ##gate%d", slot);
-                changed |= ui::PropertyFloat(thresholdId, &layerHeightGateThreshold[slot], 0.0f, 1.0f, 0.5f,
-                                             "下地のハイト（0〜1）のこの値を境にする", "%.2f");
-                changed |= ui::PropertyFloat(softnessId, &layerHeightGateSoftness[slot], 0.001f, 1.0f, 0.2f,
-                                             "境の遷移幅（ハイト 0〜1 の単位）", "%.2f");
-            }
-        }
-    }
-    changed |= ui::PropertyFloat("ブレンド幅", &layerBlendRange, 0.0f, 1.0f, defaultBlendRange,
-                                 "スロット同士をハイトで競合させるときの境界の柔らかさ。小さいほど凹凸なりにぎざぎざ", "%.2f");
-    ui::EndPropertyTable();
-    return changed;
-}
-
 namespace {
 
 // エディタへ渡してよい座標か。エディタは**知らないノードの位置を FLT_MAX で返す**ので、
@@ -263,10 +158,6 @@ bool IsValidNodePosition(float x, float y) {
 }  // namespace
 
 void Application::DestroyGraphEditor() {
-    if (m_presetNodeEditor) {
-        ed::DestroyEditor(m_presetNodeEditor);
-        m_presetNodeEditor = nullptr;
-    }
     if (m_nodeEditor != nullptr) {
         ed::DestroyEditor(m_nodeEditor);
         m_nodeEditor = nullptr;
@@ -293,7 +184,7 @@ void Application::RequestGraphNodePlacement(bool navigate) {
 // 結果を見ながら別のノードのプロパティをいじれる。
 void Application::SetPreviewGraphNode(graph::GraphId nodeId, graph::GraphId outputPin) {
     const graph::Node* node = m_graph.FindNode(nodeId);
-    // Mesh Output と、プレビューできない種類（Surface / Path）は「Mesh Output の鎖」に落とす。
+    // Mesh Output と、プレビューできない種類（Surface）は「Mesh Output の鎖」に落とす。
     const bool previewable = (node != nullptr && graph::IsPreviewableNodeKind(node->kind));
     m_previewGraphNode = previewable ? node->id : 0;
     // 見る出力。そのノードの出力ピンでなければ 0（＝最初の出力）に落とす。
@@ -309,97 +200,21 @@ void Application::SetPreviewGraphNode(graph::GraphId nodeId, graph::GraphId outp
 }
 
 void Application::SyncMeshGraph() {
-    // 途中のメッシュノード（Road / Lane Marking / Decal）を見ているときは、そのノードまでの鎖を出す。
+    // メッシュを作るノードを見ているときは、そのノードまでの鎖を出す。
     graph::GraphId previewMeshNode = 0;
     if (const graph::Node* node = m_graph.FindNode(m_previewGraphNode);
         node != nullptr && (graph::IsMeshNodeKind(node->kind) || graph::IsModelNodeKind(node->kind))) {
         previewMeshNode = node->id;
     }
     if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode) return;
-    const auto compileStart = std::chrono::steady_clock::now();
-    auto compiled = m_options.surfaceLayoutRoad != 0
-        ? graph::CompileSurfaceLayoutPreview(m_graph, m_surfaceLayouts, m_options.surfaceLayoutRoad)
-        : m_options.prototypeRoad != 0
-        ? graph::CompileConnectionPrototype(m_graph, m_options.prototypeRoad, m_options.prototypeGravel,
-                                            m_options.prototypeSidewalk, m_options.prototypeDisplacement)
-        : graph::CompileMeshGraphWithLayouts(m_graph, m_surfaceLayouts, previewMeshNode);
-    if (m_previewSurfaceBands) {
-        for (const auto& layout : m_surfaceLayouts.layouts) {
-            if (std::find(compiled.meshSources.begin(), compiled.meshSources.end(), layout.roadNode) == compiled.meshSources.end()) continue;
-            graph::SurfaceId leftBand = 0, rightBand = 0;
-            size_t leftCount = 0, rightCount = 0;
-            for (const auto& band : layout.bands) {
-                if (band.spans.empty()) continue;
-                if (band.side == graph::SurfaceSide::Left) { leftBand = band.id; ++leftCount; }
-                if (band.side == graph::SurfaceSide::Right) { rightBand = band.id; ++rightCount; }
-            }
-            const bool connectBoth = m_connectSurfaceBands && leftCount == 1 && rightCount == 1;
-            if (connectBoth) {
-                std::string error;
-                if (graph::ConnectSurfaceLayoutBands(compiled, m_graph, m_surfaceLayouts, layout.roadNode,
-                                                  leftBand, rightBand, error, m_displaceConnectedBands)) continue;
-                if (!compiled.error.empty()) compiled.error += " / ";
-                compiled.error += error;
-            }
-            for (const auto& band : layout.bands) {
-                if (band.side == graph::SurfaceSide::Road || band.spans.empty()) continue;
-                if (std::count_if(layout.bands.begin(), layout.bands.end(), [&](const auto& other) {
-                    return other.side == band.side && !other.spans.empty();
-                }) > 1) {
-                    if (!compiled.error.empty()) compiled.error += " / ";
-                    compiled.error += "沿道形状の試作は左右それぞれ1帯に対応します";
-                    continue;
-                }
-                auto preview = graph::CompileSurfaceBandPreview(m_graph, m_surfaceLayouts, layout.roadNode, band.id);
-                const auto selectedSide = m_surfaceBandSide == 0 ? graph::SurfaceSide::Left : graph::SurfaceSide::Right;
-                const bool hasSelectedSide = std::any_of(layout.bands.begin(), layout.bands.end(), [&](const auto& other) {
-                    return other.side == selectedSide && !other.spans.empty();
-                });
-                if (m_connectSurfaceBands && !connectBoth && (band.side == selectedSide || !hasSelectedSide) && preview.error.empty()) {
-                    std::string error;
-                    if (graph::ConnectSurfaceLayoutBands(compiled, m_graph, m_surfaceLayouts, layout.roadNode,
-                        band.side == graph::SurfaceSide::Left ? band.id : 0, band.side == graph::SurfaceSide::Right ? band.id : 0, error, m_displaceConnectedBands)) continue;
-                    if (!compiled.error.empty()) compiled.error += " / ";
-                    compiled.error += error;
-                }
-                if (preview.error.empty()) {
-                    const int offset = static_cast<int>(compiled.scene.meshes.size());
-                    for (auto& source : preview.scene.meshes[0].connectionSources) source += offset;
-                    for (auto& mesh : preview.scene.meshes) {
-                        compiled.scene.meshes.push_back(std::move(mesh)); compiled.meshSources.push_back(0);
-                    }
-                } else {
-                    if (!compiled.error.empty()) compiled.error += " / ";
-                    compiled.error += preview.error;
-                }
-            }
-        }
-    }
-    if (m_options.prototypeRoad != 0 || m_options.surfaceLayoutRoad != 0 || m_options.measurePreview) {
-        const double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - compileStart).count();
-        size_t vertices = 0, triangles = 0, maskBytes = 0;
-        for (const auto& mesh : compiled.scene.meshes) {
-            vertices += mesh.geometry.vertices.size();
-            triangles += mesh.geometry.indices.size() / 3;
-            maskBytes += mesh.roadMask.rgba.size();
-        }
-        TG_LOG_INFO("道路生成 (%s): %.2f ms, %zu 頂点, %zu 三角形, マスク %zu bytes",
-                    m_options.surfaceLayoutRoad != 0 ? "layout" : m_options.prototypeRoad != 0 ? "connection" : "ordinary", elapsed, vertices, triangles, maskBytes);
-        if (!compiled.error.empty()) TG_LOG_ERROR("道路生成: %s", compiled.error.c_str());
-    }
-    // 鎖が無くなったらシーンを空にする（グリッドと背景だけになる）。
-    bool uploaded = true;
-    if (compiled.active) {
-        uploaded = m_renderer.SetGeneratedMeshScene(m_device, compiled.scene);
-    } else if (m_meshGraphActive) {
+    // 岩の生成ノードはこれから実装する。いまはメッシュを作るノードが無いので、
+    // シーンは空のまま（モデルは Application が別に描く）。
+    if (m_meshGraphActive) {
         m_renderer.ClearMeshScene(m_device);
-    }
-    m_meshGraphError = compiled.error;
-    if (!uploaded) m_meshGraphError = "道路メッシュをGPUへ転送できませんでした";
-    if (uploaded) {
-        m_meshGraphActive = compiled.active;
+        m_meshGraphActive = false;
         m_meshHighlight = MeshHighlightState{};
     }
+    m_meshGraphError.clear();
     m_meshGraphRevision = m_graph.Revision();
     m_meshGraphPreviewNode = previewMeshNode;
 }
@@ -538,13 +353,7 @@ void Application::PasteGraphNodes(const ImVec2& viewCenter) {
     TG_LOG_INFO("ノードを貼り付けました: %zu 個", m_graphClipboard.size());
 }
 
-bool Application::IsGraphPinVisible(const graph::Pin& pin) const {
-    if (pin.valueType != graph::ValueType::Material && pin.valueType != graph::ValueType::RoadMask) return true;
-    for (const auto& layout : m_surfaceLayouts.layouts) {
-        if (layout.roadNode != pin.nodeId) continue;
-        for (const auto& band : layout.bands)
-            if (band.side == graph::SurfaceSide::Road && !band.spans.empty()) return false;
-    }
+bool Application::IsGraphPinVisible(const graph::Pin& /*pin*/) const {
     return true;
 }
 
@@ -845,7 +654,6 @@ void Application::DrawGraphEditor() {
             if (ed::AcceptDeletedItem()) {
                 const int nodeId = ToGraphId(deletedNodeId.Get());
                 if (m_graph.DeleteNode(nodeId)) {
-                    std::erase_if(m_surfaceLayouts.layouts, [nodeId](const auto& layout) { return layout.roadNode == nodeId; });
                     MarkDocumentChanged();
                     if (m_previewGraphNode == nodeId) {
                         m_previewGraphNode = 0;
@@ -912,26 +720,15 @@ void Application::DrawGraphEditor() {
             // ステータスバーに残す。追加が効いたかを画面で確かめられるようにする。
             TG_LOG_INFO("ノードを追加しました: %s", NodeDisplayName(*node));
         };
-        // 道路系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。互いには繋がらない。
-        ImGui::TextDisabled("道路");
-        addNodeMenuItem(graph::NodeKind::Road, "Road — Pathから道路面と左右境界を生成");
-        addNodeMenuItem(graph::NodeKind::RoadMarking, "Lane Marking — 道路面に白線の帯を生成");
-        addNodeMenuItem(graph::NodeKind::RoadMask, "Road Mask — 轍・端・ムラの道路空間マスク");
-        addNodeMenuItem(graph::NodeKind::Decal, "Decal — 面上のPathに沿って模様の帯を貼る");
-        addNodeMenuItem(graph::NodeKind::Shoulder, "Shoulder — 道路の境界から外側へ路肩を張る");
-        addNodeMenuItem(graph::NodeKind::Crack, "Crack — ひび割れの塊を乱数で配置する");
-        ImGui::Separator();
+        // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.tgmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
         ImGui::Separator();
-        addNodeMenuItem(graph::NodeKind::Merge, "Merge — 道路メッシュとモデルをまとめる（モデルだけなら Transform へ繋げる）");
-        addNodeMenuItem(graph::NodeKind::MeshOutput, "Mesh Output — 道路メッシュとモデルを表示");
+        addNodeMenuItem(graph::NodeKind::Merge, "Merge — メッシュとモデルをまとめる（モデルだけなら Transform へ繋げる）");
+        addNodeMenuItem(graph::NodeKind::MeshOutput, "Mesh Output — メッシュとモデルを表示");
         ImGui::Separator();
-        addNodeMenuItem(graph::NodeKind::Path, "Path — 実寸の3次元カーブを編集");
-        addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Road / Shoulder のスロットへ渡す");
-        // 旧地形ノード（Heightmap / Shape / Liquid / 侵食系 / Mask 系 / Output）はメニューから外した。
-        // 旧ファイルの読込のためにノードの種類は残っている。
+        addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Material スロットへ渡す");
         ImGui::EndPopup();
     }
     ed::Resume();
@@ -1032,7 +829,7 @@ void Application::DrawGraphPanel() {
             ui::EndPropertyTable();
         }
     } else {
-        ui::HintText("Path → Road → Mesh Output と繋ぐと道路がビューポートに出る");
+        ui::HintText("Mesh Output へ繋いだものがビューポートに出る");
     }
 
     float editorHeight = ui::Scaled(m_graphEditorHeight);
@@ -1060,16 +857,16 @@ void Application::DrawGraphPanel() {
             ui::EndPropertyTable();
         }
         if (previewMeshNode != nullptr) {
-            ui::HintText("このノードまでの道路メッシュを表示中。出力ピンのクリックで切り替わる。");
+            ui::HintText("このノードまでのメッシュを表示中。出力ピンのクリックで切り替わる。");
             if (ui::Button("Mesh Output へ戻す", ui::kWideButtonWidth)) {
                 SetPreviewGraphNode(0);
             }
         } else {
-            ui::HintText("Mesh Outputへ接続した道路を表示中。Pathを選択するとカーブを編集できます。");
+            ui::HintText("Mesh Output へ接続したメッシュを表示中。");
         }
     } else {
         ui::HintText("メッシュノードの出力ピンをクリック（またはノードをダブルクリック）で、"
-                     "そのノードまでの道路をビューポートに出す");
+                     "そのノードまでをビューポートに出す");
         ImGui::Spacing();
     }
 
@@ -1079,299 +876,17 @@ void Application::DrawGraphPanel() {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
                      "ピンをドラッグして接続、Ctrl+C / Ctrl+V でコピー");
     } else if (selected->kind == graph::NodeKind::Model || selected->kind == graph::NodeKind::Transform) {
-        // 置き方の変更は道路を作り直さない（MarkDirty しない）。描画は毎フレーム設定から行う。
+        // 置き方の変更はメッシュを作り直さない（MarkDirty しない）。描画は毎フレーム設定から行う。
         if (DrawModelNodeSettings(*selected)) m_documentDirty = true;
-    } else if (auto* road = std::get_if<graph::RoadNodeSettings>(&selected->settings)) {
-        if (DrawSurfaceLayoutSettings(selected->id)) { m_graph.MarkDirty(); MarkDocumentChanged(); }
-        const auto* activeBand = graph::FindRoadBand(m_surfaceLayouts, selected->id);
-        const bool hasLayout = activeBand && !activeBand->spans.empty();
-        ui::SectionHeader("道路の形状");
-        bool changed = false;
-        const graph::RoadNodeSettings defaults;
-        if (ui::BeginPropertyTable("roadRows")) {
-            changed |= ui::PropertyFloat("道路幅", &road->widthMeters, 0.1f, 50.0f,
-                defaults.widthMeters, "中心線から左右へ半分ずつ広げる全幅", "%.2f m");
-            {
-                int forward = static_cast<int>(road->lanesForward);
-                int backward = static_cast<int>(road->lanesBackward);
-                if (ui::PropertyInt("車線数（進行方向）", &forward, 1, 8, static_cast<int>(defaults.lanesForward),
-                                    "線形の向きへ進む車線の数。どちら側に並ぶかは走行側で決まる")) {
-                    road->lanesForward = static_cast<uint32_t>(forward);
-                    changed = true;
-                }
-                if (ui::PropertyInt("車線数（対向）", &backward, 0, 8, static_cast<int>(defaults.lanesBackward),
-                                    "対向車線の数。0 で一方通行（中央線は出ない）")) {
-                    road->lanesBackward = static_cast<uint32_t>(backward);
-                    changed = true;
-                }
-                ui::PropertyValue("車線幅", "%.2f m",
-                                  road->widthMeters / static_cast<float>(std::max(1u, road->lanesForward) + road->lanesBackward));
-            }
-            if (!hasLayout) changed |= ui::PropertyFloat("UV反復長", &road->uvRepeatMeters, 0.1f, 100.0f,
-                defaults.uvRepeatMeters, "UVが1増える実距離。道路の長さと幅の両方に適用する", "%.2f m");
-            {
-                static const char* const kUvAxisLabels[] = {"長さ方向 = V（縦）", "長さ方向 = U（横）"};
-                int axis = road->uvAlongU ? 1 : 0;
-                if (ui::PropertyCombo("UVの向き", &axis, kUvAxisLabels, IM_ARRAYSIZE(kUvAxisLabels), 0,
-                                      "テクスチャのどの軸を道路の長さ方向に沿わせるか。横長の素材は U")) {
-                    road->uvAlongU = (axis == 1);
-                    changed = true;
-                }
-            }
-            if (!hasLayout) changed |= ui::PropertyFloat("変位量", &road->displacementMeters, 0.0f, 1.0f,
-                defaults.displacementMeters,
-                "Materialのハイトで路面を法線方向へ押し出す量。ハイト0〜1の全幅がこの高さ（m）。"
-                "0なら形は変わらない。テセレーションはプレビュー設定の「道路」で", "%.3f m", 0, 0.005f);
-            ui::PropertyValue("走行側", "%s", m_graph.RoadNetwork().leftHandTraffic ? "左側通行" : "右側通行");
-            ui::EndPropertyTable();
-        }
-        // 材質スロット。1 は下地、2〜4 は Mask 2〜4 で被覆する。座標と反復長はスロットごと。
-        if (!hasLayout) changed |= DrawMaterialSlotRows(*selected, road->layerWorldUv, road->layerUvRepeatMeters,
-                                        road->layerBlendRange, defaults.layerBlendRange,
-                                        road->layerHeightGate, road->layerHeightGateThreshold, road->layerHeightGateSoftness,
-                                        road->layerBlendMode);
-        if (!hasLayout) ui::HintText("Material にSurfaceなどのResultを接続してマテリアルを適用。Material 2〜4 は Road Mask を Mask 2〜4 へ繋いだ所に出る。"
-                     "RoadSurfaceはMesh Outputへ、Left / Rightは進行方向に向かって左右の境界Path。走行側はプレビュー設定の「道路」で切り替える。");
-        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
-    } else if (auto* decal = std::get_if<graph::DecalNodeSettings>(&selected->settings)) {
-        bool changed = false;
-        const graph::DecalNodeSettings defaults;
-        if (ui::BeginPropertyTable("decalRows")) {
-            changed |= DrawMeshMaterialSlotRow("マテリアル", decal->material, m_materialLibrary);
-            changed |= ui::PropertyFloat("凹凸量", &decal->heightMeters, 0.0f, 1.0f, defaults.heightMeters,
-                                         "マテリアルのHeightを路面の凹凸に加算。黒は0、白は指定の高さ。細かな凹凸にはプレビュー設定のテセレーションを使う", "%.3f m");
-            changed |= ui::PropertyBool("帯ワイヤー", &decal->showWireframe, defaults.showWireframe, "この帯の分割前メッシュを重ねて表示する");
-            changed |= ui::PropertyFloat("画像幅倍率", &decal->imageWidthScale, 0.01f, 100.0f, defaults.imageWidthScale,
-                                         "帯の中心を基準に画像を幅方向へ拡大縮小。2で画像が2倍の大きさ。帯幅は変えない", "%.2f 倍");
-            changed |= ui::PropertyFloat("画像長さ倍率", &decal->imageLengthScale, 0.01f, 100.0f, defaults.imageLengthScale,
-                                         "帯の始点を基準に画像を長さ方向へ拡大縮小。UV反復長に掛ける倍率", "%.2f 倍");
-            changed |= ui::PropertyFloat("幅", &decal->widthMeters, 0.05f, 50.0f, defaults.widthMeters, "帯の幅", "%.2f m");
-            changed |= ui::PropertyFloat("浮かせ量", &decal->liftMeters, 0.0f, 0.1f, defaults.liftMeters,
-                                         "路面から法線方向へ持ち上げる量", "%.3f m");
-            changed |= ui::PropertyFloat("UV反復長", &decal->uvRepeatMeters, 0.05f, 100.0f, defaults.uvRepeatMeters,
-                                         "画像倍率1のときの長さ方向の反復距離。幅方向は帯幅に画像1枚が収まる", "%.2f m");
-            {
-                static const char* const kUvAxisLabels[] = {"長さ方向 = V（縦）", "長さ方向 = U（横）"};
-                int axis = decal->uvAlongU ? 1 : 0;
-                if (ui::PropertyCombo("UVの向き", &axis, kUvAxisLabels, IM_ARRAYSIZE(kUvAxisLabels), 0,
-                                      "テクスチャのどの軸を帯の長さ方向に沿わせるか")) {
-                    decal->uvAlongU = (axis == 1);
-                    changed = true;
-                }
-            }
-            ui::EndPropertyTable();
-        }
-        ui::HintText("RoadのRoadSurfaceと、Surfaceにその道路を繋いだPathを接続する。Pathは路面の上でCtrl＋クリックして引く。"
-                     "選択したマテリアルの不透明度で模様をくり抜き、出力のRoadSurfaceをLane MarkingかMesh Outputへ。");
-        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
-    } else if (auto* shoulder = std::get_if<graph::ShoulderNodeSettings>(&selected->settings)) {
-        bool changed = false;
-        const graph::ShoulderNodeSettings defaults;
-        if (ui::BeginPropertyTable("shoulderRows")) {
-            changed |= ui::PropertyFloat("幅", &shoulder->widthMeters, 0.1f, 50.0f, defaults.widthMeters,
-                                         "境界から外側へ張る幅", "%.2f m");
-            changed |= ui::PropertyFloat("横断勾配", &shoulder->crossSlopePercent, -50.0f, 50.0f, defaults.crossSlopePercent,
-                                         "外側へ向かって下がる割合。1 m 進んで何 cm 下がるか", "%.1f %%");
-            changed |= ui::PropertyFloat("段差", &shoulder->stepHeightMeters, 0.0f, 0.5f, defaults.stepHeightMeters,
-                                         "舗装端の段差。0 より大きいと境界の直後に面取り列を挟み、路肩全体をこの高さだけ下げる",
-                                         "%.3f m", 0, 0.005f);
-            if (shoulder->stepHeightMeters > 0.0f) {
-                changed |= ui::PropertyFloat("面取り幅", &shoulder->stepWidthMeters, 0.005f, 1.0f, defaults.stepWidthMeters,
-                                             "境界から段差の底までの横幅。小さいほど垂直に近い", "%.3f m", 0, 0.005f);
-            }
-            changed |= ui::PropertyFloat("UV反復長", &shoulder->uvRepeatMeters, 0.1f, 100.0f, defaults.uvRepeatMeters,
-                                         "UV が 1 増える実距離", "%.2f m");
-            {
-                static const char* const kUvAxisLabels[] = {"長さ方向 = V（縦）", "長さ方向 = U（横）"};
-                int axis = shoulder->uvAlongU ? 1 : 0;
-                if (ui::PropertyCombo("UVの向き", &axis, kUvAxisLabels, IM_ARRAYSIZE(kUvAxisLabels), 0,
-                                      "テクスチャのどの軸を路肩の長さ方向に沿わせるか")) {
-                    shoulder->uvAlongU = (axis == 1);
-                    changed = true;
-                }
-            }
-            changed |= ui::PropertyFloat("変位量", &shoulder->displacementMeters, 0.0f, 1.0f, defaults.displacementMeters,
-                                         "Materialのハイトで路肩を法線方向へ押し出す量。ハイト0〜1の全幅がこの高さ（m）。"
-                                         "境界で道路と同じマテリアル・同じ量にすると段が出ない", "%.3f m", 0, 0.005f);
-            ui::EndPropertyTable();
-        }
-        changed |= DrawMaterialSlotRows(*selected, shoulder->layerWorldUv, shoulder->layerUvRepeatMeters,
-                                        shoulder->layerBlendRange, defaults.layerBlendRange,
-                                        shoulder->layerHeightGate, shoulder->layerHeightGateThreshold, shoulder->layerHeightGateSoftness,
-                                        shoulder->layerBlendMode);
-        ui::HintText("PathにRoadのLeft / Right（または別のShoulderのOuter）を接続する。境界の頂点を共有するので道路と水密。"
-                     "マテリアルスロットとMask 2〜4はRoadと同じ。Road Maskの「側」は路肩では 右＝境界側、左＝外側。"
-                     "出力のRoadSurfaceをMesh Outputへ、Outerは次の路肩や縁石へ。走行側には依存しない。");
-        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
-    } else if (auto* crack = std::get_if<graph::CrackNodeSettings>(&selected->settings)) {
-        bool changed = false;
-        const graph::CrackNodeSettings defaults;
-        if (ui::BeginPropertyTable("crackRows")) {
-            changed |= DrawMeshMaterialSlotRow("マテリアル", crack->material, m_materialLibrary);
-            {
-                int seed = static_cast<int>(crack->seed);
-                if (ui::PropertyInt("シード", &seed, 0, 99999, static_cast<int>(defaults.seed), "変えると配置と形が変わる")) {
-                    crack->seed = static_cast<uint32_t>(std::max(0, seed));
-                    changed = true;
-                }
-            }
-            changed |= ui::PropertyFloat("密度", &crack->densityPer100m, 0.0f, 200.0f, defaults.densityPer100m,
-                                         "100 m あたりの塊の数の目安。別の塊と重ならない場所を探し、収まらない場合は数を減らす", "%.1f /100m");
-            changed |= ui::PropertyFloat("長さ（最小）", &crack->lengthMinMeters, 0.5f, 30.0f, defaults.lengthMinMeters,
-                                         "幹の長さの下限", "%.1f m");
-            changed |= ui::PropertyFloat("長さ（最大）", &crack->lengthMaxMeters, 0.5f, 30.0f, defaults.lengthMaxMeters,
-                                         "幹の長さの上限。横向きは車線幅が上限", "%.1f m");
-            if (crack->lengthMaxMeters < crack->lengthMinMeters) { crack->lengthMaxMeters = crack->lengthMinMeters; changed = true; }
-            {
-                static const char* const kOrientationLabels[] = {"縦（長さ方向）", "横（車線を横切る）", "混合"};
-                int orientation = static_cast<int>(crack->orientation);
-                if (ui::PropertyCombo("向き", &orientation, kOrientationLabels, IM_ARRAYSIZE(kOrientationLabels), 2,
-                                      "幹の向き。混合は割合で混ぜる")) {
-                    crack->orientation = static_cast<graph::CrackOrientation>(orientation);
-                    changed = true;
-                }
-                if (crack->orientation == graph::CrackOrientation::Mixed) {
-                    changed |= ui::PropertyFloat("横の割合", &crack->transverseRatio, 0.0f, 1.0f, defaults.transverseRatio,
-                                                 "混合のときに横向きになる割合", "%.2f");
-                }
-            }
-            changed |= ui::PropertyFloat("折れの強さ", &crack->angleJitterDegrees, 0.0f, 90.0f, defaults.angleJitterDegrees,
-                                         "幹の左右への折れの強さ。0で直線。折れの間隔は自動で決まり、枝は折れ点の外側から伸びる", "%.0f°");
-            {
-                static const char* const kPlacementLabels[] = {"一様", "轍寄り", "端寄り"};
-                int placement = static_cast<int>(crack->placement);
-                if (ui::PropertyCombo("横位置", &placement, kPlacementLabels, IM_ARRAYSIZE(kPlacementLabels), 0,
-                                      "塊の横位置の分布。轍寄りは Road の車線から決める")) {
-                    crack->placement = static_cast<graph::CrackPlacement>(placement);
-                    changed = true;
-                }
-            }
-            changed |= ui::PropertyFloat("幹の幅", &crack->trunkWidthMeters, 0.01f, 1.0f, defaults.trunkWidthMeters,
-                                         "幹の帯の幅。素材のアルファで割れ目の細さが決まるので、帯は少し広め", "%.3f m", 0, 0.005f);
-            {
-                int lo = static_cast<int>(crack->branchesMin);
-                int hi = static_cast<int>(crack->branchesMax);
-                if (ui::PropertyInt("枝の数（最小）", &lo, 0, 12, static_cast<int>(defaults.branchesMin), "幹から分かれる枝の本数の下限")) {
-                    crack->branchesMin = static_cast<uint32_t>(lo); changed = true;
-                }
-                if (ui::PropertyInt("枝の数（最大）", &hi, 0, 12, static_cast<int>(defaults.branchesMax), "枝の本数の上限。半分の枝がさらに 1 本の子枝を出す")) {
-                    crack->branchesMax = static_cast<uint32_t>(hi); changed = true;
-                }
-                if (crack->branchesMax < crack->branchesMin) { crack->branchesMax = crack->branchesMin; changed = true; }
-            }
-            changed |= ui::PropertyFloat("枝の長さ", &crack->branchLengthRatio, 0.05f, 2.0f, defaults.branchLengthRatio,
-                                         "幹の長さに対する枝の長さの比", "%.2f");
-            changed |= ui::PropertyFloat("枝の幅", &crack->branchWidthRatio, 0.05f, 1.0f, defaults.branchWidthRatio,
-                                         "幹の幅に対する枝の根元の幅の比。先端で 0 へ絞る", "%.2f");
-            changed |= ui::PropertyFloat("浮かせ量", &crack->liftMeters, 0.0f, 0.1f, defaults.liftMeters,
-                                         "路面から法線方向へ持ち上げる量", "%.3f m");
-            changed |= ui::PropertyFloat("UV反復長", &crack->uvRepeatMeters, 0.05f, 100.0f, defaults.uvRepeatMeters,
-                                         "帯の長さ方向で UV が 1 増える実距離。幅方向は 0〜1", "%.2f m");
-            {
-                static const char* const kUvAxisLabels[] = {"長さ方向 = V（縦）", "長さ方向 = U（横）"};
-                int axis = crack->uvAlongU ? 1 : 0;
-                if (ui::PropertyCombo("UVの向き", &axis, kUvAxisLabels, IM_ARRAYSIZE(kUvAxisLabels), 0,
-                                      "テクスチャのどの軸を帯の長さ方向に沿わせるか。1024×128 のような横長素材は U")) {
-                    crack->uvAlongU = (axis == 1);
-                    changed = true;
-                }
-            }
-            ui::EndPropertyTable();
-        }
-        ui::HintText("RoadのRoadSurfaceを接続すると、3〜6 m の枝分かれしたひび割れを乱数で置く。プロパティで割れ目のマテリアル（マスク抜き）を選ぶ。"
-                     "個別に置きたいものは面上のPath＋Decalで描く。出力のRoadSurfaceをMergeかMesh Outputへ。");
-        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
     } else if (selected->kind == graph::NodeKind::Merge) {
         if (ui::BeginPropertyTable("mergeRows")) {
             ui::PropertyValue("入力", "%zu 本（空き 1）", selected->inputs.size());
             ui::EndPropertyTable();
         }
-        ui::HintText("Road・Shoulder・Decal などのRoadSurfaceを繋ぐと、まとめて1つのRoadSurfaceにする。"
-                     "繋ぐたびに入力が1本増える。同じノード由来のメッシュは1回だけ積む。下流の白線・Decalは Mesh 1 の面に乗る。");
-    } else if (auto* roadMask = std::get_if<graph::RoadMaskNodeSettings>(&selected->settings)) {
-        bool changed = false;
-        if (ui::BeginPropertyTable("roadMaskRows")) {
-            changed |= DrawRoadMaskPropertyRows(*roadMask);
-            ui::EndPropertyTable();
-        }
-        ui::HintText("Mask を Road の Mask 2〜4 へ繋ぐと、対応する Material 2〜4 の被覆率になる。横位置と実距離で決まり、タイルは繰り返さない。");
-        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
-    } else if (auto* marking = std::get_if<graph::RoadMarkingNodeSettings>(&selected->settings)) {
-        bool changed = false;
-        const graph::RoadMarkingNodeSettings defaults;
-        if (ui::BeginPropertyTable("roadMarkingRows", 130.0f)) {
-            changed |= ui::PropertyBool("中央線", &marking->centerLine, defaults.centerLine,
-                "進行方向と対向の境に1本引く。Road の車線数で位置が決まる。一方通行なら出ない");
-            if (marking->centerLine) {
-                changed |= DrawMeshMaterialSlotRow("中央線のマテリアル", marking->materials[0], m_materialLibrary);
-                changed |= ui::PropertyFloat("中央線の幅", &marking->centerLineWidthMeters, 0.05f, 1.0f,
-                    defaults.centerLineWidthMeters, "中央線の帯の幅。実線・破線の両方に適用", "%.2f m");
-                static const char* const labels[] = {"実線", "破線"};
-                int style = marking->centerLineDashed ? 1 : 0;
-                if (ui::PropertyCombo("中央線の種類", &style, labels, IM_ARRAYSIZE(labels), 0,
-                    "中央線を実線または破線にする。破線の長さ・間隔は車線境界線と共通")) {
-                    marking->centerLineDashed = style == 1;
-                    changed = true;
-                }
-            }
-            changed |= ui::PropertyBool("外側線", &marking->edgeLines, defaults.edgeLines,
-                "左右の道路端の手前に1本ずつ引く");
-            if (marking->edgeLines) {
-                changed |= DrawMeshMaterialSlotRow("外側線のマテリアル", marking->materials[1], m_materialLibrary);
-                changed |= ui::PropertyFloat("外側線の幅", &marking->edgeLineWidthMeters, 0.05f, 1.0f,
-                    defaults.edgeLineWidthMeters, "左右の外側線に共通する帯の幅", "%.2f m");
-            }
-            changed |= ui::PropertyBool("車線境界線", &marking->laneLines, defaults.laneLines,
-                "同方向の車線の間に破線で引く。Road の車線数が片側 2 以上のときに出る");
-            if (marking->laneLines) {
-                changed |= DrawMeshMaterialSlotRow("車線境界線のマテリアル", marking->materials[2], m_materialLibrary);
-                changed |= ui::PropertyFloat("車線境界線の幅", &marking->laneLineWidthMeters, 0.05f, 1.0f,
-                    defaults.laneLineWidthMeters, "同方向の車線を分ける帯の幅", "%.2f m");
-            }
-            if (marking->laneLines || (marking->centerLine && marking->centerLineDashed)) {
-                changed |= ui::PropertyFloat("破線の長さ", &marking->dashLengthMeters, 0.1f, 50.0f,
-                    defaults.dashLengthMeters, "破線 1 本の長さ", "%.1f m");
-                changed |= ui::PropertyFloat("破線の間隔", &marking->dashGapMeters, 0.0f, 50.0f,
-                    defaults.dashGapMeters, "破線と破線の間の空き。0 で実線", "%.1f m");
-            }
-            changed |= ui::PropertyBool("停止線", &marking->stopLines, defaults.stopLines,
-                "Path の点に付けた停止線を、その向きの車線の幅いっぱいに引く");
-            if (marking->stopLines) {
-                changed |= DrawMeshMaterialSlotRow("停止線のマテリアル", marking->materials[3], m_materialLibrary);
-                changed |= ui::PropertyFloat("停止線の幅", &marking->stopLineWidthMeters, 0.1f, 2.0f,
-                    defaults.stopLineWidthMeters, "停止線の道路の長さ方向の幅", "%.2f m");
-            }
-            changed |= ui::PropertyFloat("端からの距離", &marking->edgeInsetMeters, 0.0f, 5.0f,
-                defaults.edgeInsetMeters, "道路端から外側線の中心までの距離", "%.2f m");
-            changed |= ui::PropertyFloat("浮かせ量", &marking->liftMeters, 0.0f, 0.1f,
-                defaults.liftMeters, "路面から法線方向へ持ち上げる量。0だと路面とちらつく", "%.3f m");
-            changed |= ui::PropertyFloat("UV反復長", &marking->uvRepeatMeters, 0.1f, 100.0f,
-                defaults.uvRepeatMeters, "帯の長さ方向でUVが1増える実距離。幅方向は0〜1", "%.2f m");
-            {
-                static const char* const kUvAxisLabels[] = {"長さ方向 = V（縦）", "長さ方向 = U（横）"};
-                int axis = marking->uvAlongU ? 1 : 0;
-                if (ui::PropertyCombo("UVの向き", &axis, kUvAxisLabels, IM_ARRAYSIZE(kUvAxisLabels), 0,
-                                      "テクスチャのどの軸を帯の長さ方向に沿わせるか。2048×256 のような横長の白線素材は U")) {
-                    marking->uvAlongU = (axis == 1);
-                    changed = true;
-                }
-            }
-            changed |= ui::PropertyBool("進行方向の矢印", &marking->arrows, defaults.arrows,
-                "各車線の中央に矢印を置く。進行方向の車線は線形の向き、対向車線は逆向き");
-            if (marking->arrows) {
-                changed |= DrawMeshMaterialSlotRow("矢印のマテリアル", marking->materials[4], m_materialLibrary);
-                changed |= ui::PropertyFloat("矢印の間隔", &marking->arrowIntervalMeters, 1.0f, 200.0f,
-                    defaults.arrowIntervalMeters, "矢印を置く間隔", "%.0f m");
-                changed |= ui::PropertyFloat("矢印の長さ", &marking->arrowLengthMeters, 0.5f, 20.0f,
-                    defaults.arrowLengthMeters, "矢印の全長。幅は道路幅から決める", "%.1f m");
-            }
-            ui::PropertyValue("走行側", "%s", m_graph.RoadNetwork().leftHandTraffic ? "左側通行" : "右側通行");
-            ui::EndPropertyTable();
-        }
-        ui::HintText("RoadのRoadSurfaceを接続し、出力のRoadSurfaceをMesh Outputへ。各線のマテリアルはプロパティで選択する。「なし」は白。走行側はプレビュー設定の「道路」で切り替える。");
-        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+        ui::HintText("メッシュやモデルを繋ぐと、まとめて 1 つにする。"
+                     "繋ぐたびに入力が 1 本増える。同じノード由来のメッシュは 1 回だけ積む。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
-        ui::HintText("RoadSurfaceを接続すると道路を表示する。複数のMesh Outputを同時に表示できる。");
+        ui::HintText("メッシュやモデルを接続すると表示する。複数の Mesh Output を同時に表示できる。");
     } else if (auto* settings = std::get_if<graph::LayerNodeSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("graphNodeBasicRows")) {
@@ -1381,11 +896,6 @@ void Application::DrawGraphPanel() {
         }
         changed |= DrawLayerSettings(settings->layer);
         if (changed) {
-            m_graph.MarkDirty();
-            MarkDocumentChanged();
-        }
-    } else if (std::get_if<graph::PathNodeSettings>(&selected->settings) != nullptr) {
-        if (DrawPathSettings(*selected)) {
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

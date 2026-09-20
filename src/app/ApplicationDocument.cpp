@@ -31,8 +31,6 @@ DocumentSnapshot Application::CaptureDocument() const {
     DocumentSnapshot snapshot;
     snapshot.graphNodes = m_graph.Nodes();
     snapshot.graphLinks = m_graph.Links();
-    snapshot.roadNetwork = m_graph.RoadNetwork();
-    snapshot.surfaceLayouts = m_surfaceLayouts;
     snapshot.selectedGraphNode = m_selectedGraphNode;
     snapshot.selectedMaterial = m_selectedMaterial;
     snapshot.models = m_models;
@@ -157,21 +155,7 @@ void Application::ApplyDocument(const DocumentSnapshot& snapshot) {
             model->model = 0;
     }
     m_graph.Replace(std::move(nodes), snapshot.graphLinks);
-    m_graph.SetRoadNetwork(snapshot.roadNetwork);
-    m_surfaceLayouts = snapshot.surfaceLayouts;
-    std::string materialError;
-    if (!graph::ExtractLayerMaterials(m_surfaceLayouts, materialError)) TG_LOG_ERROR("%s", materialError.c_str());
-    for (auto& boundary : m_surfaceLayouts.boundaryMaterials) {
-        boundary.mask = ValidTexture(boundary.mask); boundary.height = ValidTexture(boundary.height);
-    }
-    m_layerThumbnailsDirty = true;
     m_layerPreviewDirty = true;
-    for (auto& preset : m_surfaceLayouts.layerMaterials) {
-        for (auto& material : preset.materials)
-            if (!m_materialLibrary.Find(material.material)) material.material = compositor::kNoMaterialAsset;
-        if (preset.materialGraph) for (auto& node : preset.materialGraph->nodes)
-            if (!m_materialLibrary.Find(node.settings.material)) node.settings.material = compositor::kNoMaterialAsset;
-    }
     // ノードの位置も一緒に戻すので、エディタへ流し込み直す。視点は動かさない。
     RequestGraphNodePlacement(false);
 
@@ -183,15 +167,10 @@ void Application::ApplyDocument(const DocumentSnapshot& snapshot) {
 }
 
 void Application::MarkDocumentChanged() {
-    std::string materialError;
-    if (!graph::ExtractLayerMaterials(m_surfaceLayouts, materialError)) TG_LOG_ERROR("%s", materialError.c_str());
-    m_layerThumbnailsDirty = true;
     m_layerPreviewDirty = true;
     m_documentDirty = true;
     // マテリアルの変更はモデルの見た目にも効くので、サムネイルを描き直す。
     m_renderedModelThumbnails.clear();
-    // 保存したファイルと中身が変わったので、サムネイルをディスクへ残すのは次の保存まで待つ。
-    m_persistLayerThumbnails = false;
     // マテリアルの編集はグラフの改版に映らないので、シーンの材質を直接再評価させる
     // （グラフ自体の編集は Revision の変化でメッシュシーンが作り直される）。
     m_renderer.InvalidateSceneMaterials();

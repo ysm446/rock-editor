@@ -7,12 +7,10 @@
 #include "core/FrameLimiter.h"
 #include "core/Window.h"
 #include "graph/NodeGraph.h"
-#include "graph/Road.h"
 #include "app/AssetThumbnailCache.h"
 #include "app/UndoHistory.h"
 #include "io/AssetRelations.h"
 #include "io/ProjectWorkspace.h"
-#include "graph/SurfaceLayout.h"
 #include "io/AppSettings.h"
 #include "io/RecentFiles.h"
 #include "renderer/MaterialSphere.h"
@@ -83,21 +81,9 @@ struct StartupOptions {
     std::string modelNodeGizmo;
     // 起動直後に前へ出すパネル（ドックのタブ）の名前（--focus-panel <name>）。撮影用。
     std::string focusPanel;
-    // P0: Road / 砂利Surface / 歩道Surface の ID。通常のグラフ評価は変更しない。
-    graph::GraphId prototypeRoad = 0;
-    graph::GraphId surfaceLayoutRoad = 0;
-    graph::GraphId prototypeGravel = 0;
-    graph::GraphId prototypeSidewalk = 0;
-    bool prototypeDisplacement = true;
     bool measurePreview = false;
     // プロジェクト読込後に選択するノード。スクリーンショット検証用。
     graph::GraphId selectNode = 0;
-    graph::SurfaceId editPreset = 0;
-    graph::SurfaceId editBoundary = 0;
-    graph::PathElementId selectPathPoint = 0;
-    std::vector<graph::PathElementId> selectPathPoints;
-    // 線形の編集モード（0 = 制御点、1 = 縦断、2 = バンク）と選択するポイント。スクリーンショット検証用。
-    int profileMode = 0;
     bool testDrag = false;
     bool testLayerThumbnailCache = false;
     bool testDragShift = false;
@@ -129,8 +115,8 @@ private:
     void DrawLightingPanel();
     // 実行状況の情報ウィンドウ（ウィンドウ > 情報）。常設ドックには置かない。
     void DrawInfoWindow();
-    // ノードグラフパネル。Path / Road / Surface などを繋ぎ、
-    // Mesh Output へ届いた鎖を道路メッシュにしてビューポートに出す。
+    // ノードグラフパネル。Surface / Model などを繋ぎ、
+    // Mesh Output へ届いた鎖をメッシュにしてビューポートに出す。
     void DrawGraphPanel();
     // エディタのコンテキストを破棄する。Shutdown から呼ぶ。
     void DestroyGraphEditor();
@@ -143,13 +129,6 @@ private:
     // グラフのノード 1 枚。カード・ピン・リンクの当たり判定を描く。
     void DrawGraphNode(const graph::Node& node);
     bool IsGraphPinVisible(const graph::Pin& pin) const;
-    // Road ノードの区間と沿道（路面 / 左沿道 / 右沿道のタブ、その中に区間のタブ）。変更があれば true。
-    bool DrawSurfaceLayoutSettings(graph::GraphId roadId);
-    bool DrawRoadsideTab(graph::GraphId roadId, graph::SurfaceSide side);
-    bool DrawRoadSpanTab(graph::GraphId roadId);
-    void DrawSurfacePresetEditor();
-    void DrawSurfacePresetGraphEditor();
-    bool DrawSurfacePresetGraph(graph::LayerMaterial& preset);
     void DrawGraphBackground(const ImVec2& min, const ImVec2& max);
     bool DrawLayerSettings(compositor::MaterialLayer& layer);
     // グラフの変更をメッシュシーンへ反映する。フレームの頭（フレームの外）で呼ぶ。
@@ -168,11 +147,6 @@ private:
     // 「Mesh Output の鎖」（0）に落とす。
     // outputPin は**どの出力を見るか**。0 なら最初の出力。
     void SetPreviewGraphNode(graph::GraphId nodeId, graph::GraphId outputPin = 0);
-    // 材質スロット（座標・反復長・ブレンド幅）の行。Road と Shoulder で共通。変更があれば真。
-    bool DrawMaterialSlotRows(const graph::Node& node, bool* layerWorldUv, float* layerUvRepeatMeters,
-                              float& layerBlendRange, float defaultBlendRange,
-                              uint32_t* layerHeightGate, float* layerHeightGateThreshold, float* layerHeightGateSoftness,
-                              uint32_t* layerBlendMode);
     void DrawMaterialLibraryPanel();
     // 一覧の右クリックメニュー（追加 / 複製 / 削除 / 読み込み / 書き出し）。
     // target が kNoMaterialAsset なら、対象の要る項目は出さない。
@@ -240,10 +214,10 @@ private:
         DirectX::XMFLOAT3 axes[3]{};
     };
     bool ModelNodeGizmoFrame(const std::vector<VisibleModel>& visible, ModelNodeGizmo& out);
-    // カーソル位置の地面（道路メッシュ、無ければ高さ planeY の水平面）。当たらなければ偽。
+    // カーソル位置の地面（メッシュ、無ければ高さ planeY の水平面）。当たらなければ偽。
     bool PickGround(const ImVec2& mouse, const ImVec2& viewportMin, const ImVec2& viewportMax, float planeY,
                     bool useMeshes, DirectX::XMFLOAT3& point) const;
-    // Path 未選択のときのモデルのホバー・クリック選択（Model ノードを選ぶ）・ギズモ（W 移動 / E 回転）・
+    // モデルのホバー・クリック選択（Model ノードを選ぶ）・ギズモ（W 移動 / E 回転）・
     // 本体のドラッグ（水平移動）・Delete。この入力を使ったら真（メッシュの選択へ渡さない）。
     bool HandleModelInstanceInput(bool itemActive, bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax);
     // 選んでいる Model / Transform ノードのギズモを ImGui で重ね、範囲の枠をレンダラの深度付きの線で出す。
@@ -266,8 +240,6 @@ private:
     void DrawAssetBrowser();
     void RefreshAssetBrowser();
     void ProcessAssetWork();
-    // 保存した共有レイヤーマテリアルのサムネイルをディスクへ残す（m_persistLayerThumbnails）。フレームの外で呼ぶ。
-    void PersistLayerThumbnails();
     void DrawSceneSwitchDialog();
     void DrawAssetDeleteDialog();
     // 現在のシーンがそのファイルを使っているか（削除の可否）。
@@ -330,7 +302,7 @@ private:
     void ProcessPendingFileWork();
     // 中身を空にして作り直す。プロジェクトを開く前と「新規」で使う。
     void ResetProject();
-    // ウィンドウタイトルを「プロジェクト名 - Road Editor」に揃える。
+    // ウィンドウタイトルを「プロジェクト名 - Rock Editor」に揃える。
     void UpdateWindowTitle();
     // このテクスチャを使っている場所の一覧（削除の確認に出す）。
     std::vector<std::string> CollectTextureUsers(compositor::TextureId id) const;
@@ -362,7 +334,7 @@ private:
         bool dragging = false;
         double gizmoUntil = 0.0;
     };
-    // Path 未選択時のメッシュのホバーと選択（Scene().meshes の添字。hovered は -1 で無し）。
+    // メッシュのホバーと選択（Scene().meshes の添字。hovered は -1 で無し）。
     // レンダラが外周を重ね描きし、F キーのフォーカス先になる。シーンを作り直したら選択は消える。
     // 空からのドラッグは画面上の矩形で複数選択。Shift で追加、Esc で開始前へ戻す。
     struct MeshHighlightState {
@@ -386,37 +358,11 @@ private:
     void DrawLightGizmo(const renderer::LightSettings& light, const LightInteraction& interaction,
                         const renderer::Camera& camera, const ImVec2& viewportMin, const ImVec2& viewportMax);
 
-    // --- パスの編集（ApplicationPathEdit.cpp） --------------------------------
-    // 編集の対象になる Path ノード。グラフで Path ノードを選んでいるときだけ返す
-    // （選択がビューポートの操作モードを決める）。
-    graph::Node* CurrentPathNode();
-    // ビューポート上の入力をパスの編集へ渡す。Path ノードが選ばれているときだけ呼ぶ。
-    // 変更があれば文書の変更を記録する。
-    void HandlePathInput(graph::Node& node, bool itemActive, bool itemHovered,
-                         const ImVec2& viewportMin, const ImVec2& viewportMax);
-    // パスの点と線をビューポートへ重ねて描く（ImGui。深度テストはしない）。
-    // 縦断 / バンクの編集モード。制御点の代わりに線形上のポイントを扱う。
-    void HandlePathProfileInput(graph::Node& node, bool itemHovered, const ImVec2& viewportMin,
-                                const ImVec2& viewportMax);
-    void DrawPathProfileOverlay(const graph::Node& node, ImDrawList* drawList,
-                                const ImVec2& viewportMin, const ImVec2& viewportMax);
-    void DrawPathOverlay(const graph::Node& node, const ImVec2& viewportMin,
-                         const ImVec2& viewportMax);
-    // カーソル位置をパスの座標へ投影する。実寸のパスは選択した点の高さの水平面、
-    // 面上のパスは道路面との交点（横位置 / 実距離）。当たらなければ偽。
-    bool PickTerrainUv(const ImVec2& mouse, const ImVec2& viewportMin, const ImVec2& viewportMax,
-                       float& outU, float& outV) const;
     // カーソル位置からカメラのレイ（ワールド座標、方向は単位長）。ビューポートが潰れていれば偽。
     bool ViewportRay(const ImVec2& mouse, const ImVec2& viewportMin, const ImVec2& viewportMax,
                      DirectX::XMFLOAT3& outOrigin, DirectX::XMFLOAT3& outDirection) const;
-    // パスの座標（x, z, y）をワールド座標へ。面上のパスは道路面から起こす。
-    DirectX::XMFLOAT3 PathWorldPosition(float u, float v, float heightOffsetMeters) const;
-    bool SelectedPathFocusTarget(DirectX::XMFLOAT3& target) const;
     // 選択メッシュの境界ボックスの中心。選択が無ければ偽。
     bool SelectedMeshFocusTarget(DirectX::XMFLOAT3& target) const;
-    // Path ノードのプロパティ（グラフパネルのプロパティ欄から呼ぶ）。変更があれば true。
-    bool DrawPathSettings(graph::Node& node);
-
     Window m_window;
     rhi::Device m_device;
     rhi::ShaderCompiler m_shaderCompiler;
@@ -425,58 +371,14 @@ private:
     renderer::PreviewRenderer m_layerPreview;
     bool m_layerPreviewInitialized = false;
     bool m_layerPreviewDirty = true;
-    graph::SurfaceId m_layerPreviewPreset = 0;
-    float m_layerPreviewMeters = 4.0f;
-    int m_selectedPresetLayer = 0;
-    bool m_selectedPresetMask = false;
-    bool m_layerPreviewDisplacement = true;
-    int m_layerPreviewView = 0;
-    void ProcessLayerPreview();
-    // 境界マテリアルの編集ウィンドウ。アセットの帯でダブルクリックすると開く。
-    void DrawBoundaryMaterialEditor();
-    // レイヤーマテリアル / 境界マテリアルをシーンから外す（ファイルは残す）。配置で使っていれば外さない。
-    bool RemoveLayerMaterialFromScene(graph::SurfaceId id);
-    bool RemoveBoundaryMaterialFromScene(graph::SurfaceId id);
-    graph::SurfaceId m_editBoundaryMaterial = 0;
-    void ProcessLayerThumbnails();
-    void RenderLayerThumbnails(ID3D12GraphicsCommandList* commandList);
-    struct LayerThumbnail {
-        graph::SurfaceId id = 0;
-        rhi::GpuTexture texture;
-        bool dirty = true;
-        bool ready = false;
-        std::string contentKey;
-    };
-    std::vector<LayerThumbnail> m_layerThumbnails;
-    renderer::PreviewRenderer m_layerThumbnailRenderer;
-    bool m_layerThumbnailInitialized = false;
-    bool m_layerThumbnailsDirty = true;
-    uint64_t m_layerThumbnailTextureRevision = 0;
-    graph::SurfaceId m_layerThumbnailActive = 0;
-    int m_layerThumbnailFrames = 0;
-    // 保存した共有レイヤーマテリアルのサムネイルを .terrain-graph/thumbnails へ残す要求。
-    // 帯は未読み込みの .tglayer を描画できないので、読み込み済みのものから作っておく。
-    // 保存の直後に立て、文書が変わったら下ろす（保存したファイルと違う絵を残さない）。
-    bool m_persistLayerThumbnails = false;
     // マテリアルプレビューの球。窓を開いている間だけ描く。
     renderer::MaterialSphere m_materialSphere;
     // 天球プレビューの球。同じく窓を開いている間だけ描く。
     renderer::SkySphere m_skySphere;
     // --- ノードグラフ -------------------------------------------------------
-    // 道路はグラフが唯一の入口。Mesh Output へ届いた鎖をメッシュシーンにして
+    // グラフが唯一の入口。Mesh Output へ届いた鎖をメッシュシーンにして
     // レンダラへ渡す（SyncMeshGraph）。材質の合成はメッシュごとにレンダラ側で評価する。
-    graph::SurfaceLayoutDocument m_surfaceLayouts;
     graph::NodeGraph m_graph = graph::NodeGraph::CreateDefault();
-    graph::SurfaceId m_surfaceLayoutSpan = 0;
-    int m_surfaceLayoutLayer = 0;
-    graph::SurfaceId m_editSurfacePreset = 0;
-    std::string m_surfacePresetError;
-    bool m_previewSurfaceBands = false;
-    bool m_connectSurfaceBands = false;
-    bool m_displaceConnectedBands = false;
-    int m_surfaceBandSide = 0;
-    int m_surfaceBandCreateRole = 0;
-    int m_surfaceBandSpan = 0;
     graph::GraphId m_selectedGraphNode = 0;
     // エディタで選ばれているノード全部。コピーはこれを見る
     // （プロパティに出すのは先頭の 1 つ = m_selectedGraphNode）。
@@ -515,9 +417,6 @@ private:
     graph::GraphId m_graphPressedPin = 0;
     ImVec2 m_graphPressedPinPos{};
     ax::NodeEditor::EditorContext* m_nodeEditor = nullptr;
-    ax::NodeEditor::EditorContext* m_presetNodeEditor = nullptr;
-    graph::SurfaceId m_presetEditorId = 0;
-    uint32_t m_selectedPresetNode = 0;
     // グラフパネル内の「エディタ / プロパティ」境界の高さ（96 DPI 基準）。
     float m_graphEditorHeight = 380.0f;
     // 位置をエディタへ流し込むべきノード。作成・読み込みのときに積む。
@@ -601,100 +500,6 @@ private:
     LightInteraction m_viewportLightInteraction;
     LightInteraction m_layerLightInteraction;
 
-    // パスの編集の状態。ノードが変わったら捨てる。
-    // 点 / エッジの ID はそのパスの中でしか意味を持たないので、毎フレーム実在を確かめる。
-    struct PathEditState {
-        graph::GraphId nodeId = 0;
-        // 選択している点。プロパティの編集と Delete の対象で、**伸ばす起点**でもある
-        // （Ctrl + クリックは先頭の点から伸びる）。
-        std::vector<graph::PathElementId> selected;
-        // 選択しているエッジ。1 本（クリック）か鎖（ダブルクリック）。
-        // 点の選択とは排他（Delete の意味を曖昧にしないため）。
-        std::vector<graph::PathElementId> selectedEdges;
-        // 鎖を選んだときの、その内側の点（両端を除く）。Delete で一緒に消す。
-        std::vector<graph::PathElementId> selectedStrandInterior;
-        // ホバー中の点 / エッジ（エッジは最寄りの位置 t も）。
-        graph::PathElementId hoverPoint = 0;
-        graph::PathElementId hoverEdge = 0;
-        float hoverEdgeT = 0.0f;
-        // ドラッグ中の点。押した位置から動いたら移動、動かなければクリック。
-        graph::PathElementId dragPoint = 0;
-        bool dragging = false;
-        bool dragMoved = false;
-        ImVec2 pressPos{};
-        bool boxPending = false;
-        bool boxSelecting = false;
-        bool boxAdditive = false;
-        ImVec2 boxStart{};
-        ImVec2 boxEnd{};
-        std::vector<graph::PathElementId> boxPreviousPoints;
-        std::vector<graph::PathElementId> boxPreviousEdges;
-        std::vector<graph::PathElementId> boxPreviousInterior;
-
-        // ドラッグ中の吸着先（点が優先、無ければエッジ）。
-        graph::PathElementId snapPoint = 0;
-        graph::PathElementId snapEdge = 0;
-        float snapEdgeT = 0.0f;
-        // 移動ギズモ。選択（点の集合 / 鎖）の重心に置き、X（u）/ Z（v）の軸と中央の
-        // 平面ハンドルで選択をまとめて動かす。gizmoAxis は 0 = X、1 = Z、2 = Y、3 = 平面、-1 = 無し。
-        int gizmoHover = -1;
-        int gizmoAxis = -1;
-        bool gizmoDragging = false;
-        ImVec2 gizmoPressPos{};
-        ImVec2 gizmoAxisDirection{};
-        float gizmoUnitsPerPixel = 0.0f;
-        // 平面ハンドルで掴んだときの作業面上の位置。動かす量はここからの差。
-        float gizmoPressU = 0.0f;
-        float gizmoPressV = 0.0f;
-        // 掴んだときの各点の位置。差分を足すのではなく、ここから置き直す（丸め誤差を溜めない）。
-        struct GizmoStart {
-            graph::PathElementId id = 0;
-            float x = 0.0f;
-            float z = 0.0f;
-            float y = 0.0f;
-        };
-        std::vector<GizmoStart> gizmoStart;
-        // 右クリックしたときの対象（メニューを描くフレームでは状況が変わっているため控える）。
-        graph::PathElementId menuPoint = 0;
-        graph::PathElementId menuEdge = 0;
-        float menuEdgeT = 0.0f;
-        bool menuOnTerrain = false;
-        float menuU = 0.0f;
-        float menuV = 0.0f;
-        // 道路線形の編集モード。0 = 制御点、1 = 縦断ポイント、2 = バンクポイント。
-        static constexpr int kProfilePoints = 0;
-        static constexpr int kProfileVertical = 1;
-        static constexpr int kProfileBank = 2;
-        int profileMode = kProfilePoints;
-        // 選択 / ホバー中の縦断・バンクポイント。線に沿って u だけを動かす。
-        graph::PathElementId selectedProfile = 0;
-        graph::PathElementId hoverProfile = 0;
-        bool profileDragging = false;
-        // 手動バンクの回転リング。掴んだときの θ と角度から差分で回す。
-        bool ringHover = false;
-        bool ringDragging = false;
-        float ringStartTheta = 0.0f;
-        float ringStartAngle = 0.0f;
-    };
-    PathEditState m_pathEdit;
-    // 面上のパス（Surface に道路を繋いだ Path）の道路面。グラフの改版ごとに評価し直す。
-    // PathWorldPosition が const なので lazily 更新する。
-    struct SurfaceBinding {
-        graph::GraphId pathNode = 0;
-        graph::GraphId roadNode = 0;
-        uint64_t revision = 0;
-        bool valid = false;
-        graph::RoadGeometry road;
-    };
-    mutable SurfaceBinding m_surfaceBinding;
-    // 選択中の Path が面上のパスなら、その道路面。無ければ nullptr。
-    const graph::RoadGeometry* SurfacePathRoad(const graph::Node& pathNode) const;
-    // カーソルのレイと道路面の交点を道路座標（横位置, 実距離）にする。
-    bool PickSurface(const graph::RoadGeometry& road, const ImVec2& mouse, const ImVec2& viewportMin,
-                     const ImVec2& viewportMax, float& outLateral, float& outDistance) const;
-    // パスのクリップボード（アプリ内）。鎖や点の集合をコピーして、カーソルの所へ貼る。
-    // 別の Path ノードへも貼れる。
-    graph::PathClip m_pathClipboard;
     int m_selectedTexture = 0;
     // 拡大プレビューで出すチャンネル。0 = RGB、1..4 = R / G / B / A。
     // ORD のように 1 枚へ複数のマップを詰めたテクスチャの中身を確かめるためのもの。

@@ -42,16 +42,8 @@ tg::StartupOptions ParseCommandLine() {
             options.projectRoot = argv[++i];
         } else if (argument == L"--inspect-asset-delete" && (i + 1) < argc) {
             options.inspectAssetDelete = argv[++i];
-        } else if (argument == L"--connection-prototype" && (i + 3) < argc) {
-            options.prototypeRoad = ::_wtoi(argv[++i]);
-            options.prototypeGravel = ::_wtoi(argv[++i]);
-            options.prototypeSidewalk = ::_wtoi(argv[++i]);
-        } else if (argument == L"--surface-layout-preview" && (i + 1) < argc) {
-            options.surfaceLayoutRoad = ::_wtoi(argv[++i]);
         } else if (argument == L"--measure-preview") {
             options.measurePreview = true;
-        } else if (argument == L"--connection-prototype-flat") {
-            options.prototypeDisplacement = false;
         } else if (argument == L"--test-layer-thumbnail-cache") {
             options.testLayerThumbnailCache = true;
         } else if (argument == L"--test-drag" && (i + 4) < argc) {
@@ -70,17 +62,8 @@ tg::StartupOptions ParseCommandLine() {
             options.testDoubleClick = true;
         } else if (argument == L"--test-delete") {
             options.testDelete = true;
-        } else if (argument == L"--select-path-point" && (i + 1) < argc) {
-            options.selectPathPoint = ::_wtoi(argv[++i]);
-            options.selectPathPoints.push_back(options.selectPathPoint);
-        } else if (argument == L"--profile-mode" && (i + 1) < argc) {
-            options.profileMode = ::_wtoi(argv[++i]);
         } else if (argument == L"--select-node" && (i + 1) < argc) {
             options.selectNode = ::_wtoi(argv[++i]);
-        } else if (argument == L"--edit-preset" && (i + 1) < argc) {
-            options.editPreset = static_cast<tg::graph::SurfaceId>(::_wtoi(argv[++i]));
-        } else if (argument == L"--edit-boundary" && (i + 1) < argc) {
-            options.editBoundary = static_cast<tg::graph::SurfaceId>(::_wtoi(argv[++i]));
         } else if (argument == L"--import-model" && (i + 1) < argc) {
             options.importModel = argv[++i];
         } else if (argument == L"--gizmo-rotate") {

@@ -6,10 +6,7 @@
 
 #include "TestSupport.h"
 
-void RunRoadTests();
 void RunShadowCascadeTests();
-void RunConnectionPrototypeTests();
-void RunSurfaceLayoutTests();
 void RunMeshSceneTests();
 void RunFrameLimiterTests();
 void RunNodeGraphTests();
@@ -18,10 +15,7 @@ void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
 
 int main() {
-    RunRoadTests();
     RunShadowCascadeTests();
-    RunConnectionPrototypeTests();
-    RunSurfaceLayoutTests();
     RunMeshSceneTests();
     RunUiInteractionTests();
     RunUndoHistoryTests();
