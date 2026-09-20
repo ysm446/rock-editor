@@ -107,6 +107,7 @@ set(rock_sources
     src/crack/JointSet.cpp
     src/crack/PartialCut.cpp
     src/fracture/PlaneSplit.cpp
+    src/fracture/MultiSplit.cpp
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/geometry/BaseRock.cpp
@@ -298,6 +299,7 @@ add_executable(rock_editor_tests
     tests/JointSetTests.cpp
     tests/PartialCutTests.cpp
     tests/FractureTests.cpp
+    tests/MultiSplitTests.cpp
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
     src/renderer/Camera.cpp
@@ -330,6 +332,7 @@ add_executable(rock_editor_tests
     src/crack/JointSet.cpp
     src/crack/PartialCut.cpp
     src/fracture/PlaneSplit.cpp
+    src/fracture/MultiSplit.cpp
     src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/geometry/BaseRock.cpp

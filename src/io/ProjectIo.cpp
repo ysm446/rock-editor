@@ -477,8 +477,16 @@ json WriteGraph(const graph::NodeGraph& graphData,
                 chunks.push_back({{"locked", chunk.locked},
                                   {"position", chunk.position},
                                   {"rotation", chunk.rotationDegrees}});
-            item["fracture"] = {
-                {"center", fracture->center}, {"rotation", fracture->rotationDegrees}, {"chunks", chunks}};
+            json jointChunks = json::object();
+            for (const auto& [key, chunk] : fracture->jointChunks)
+                jointChunks[key] = {{"locked", chunk.locked},
+                                    {"position", chunk.position},
+                                    {"rotation", chunk.rotationDegrees}};
+            item["fracture"] = {{"center", fracture->center},
+                                {"rotation", fracture->rotationDegrees},
+                                {"chunks", chunks},
+                                {"useJointSets", fracture->useJointSets},
+                                {"jointChunks", jointChunks}};
         } else if (const auto* crack = std::get_if<crack::CrackSettings>(&node.settings)) {
             item["crack"] = {{"center", crack->center},     {"rotation", crack->rotationDegrees},
                              {"extentU", crack->extentU},   {"extentV", crack->extentV},
@@ -655,6 +663,16 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                                rotation = ReadFloat3(*v, "rotation", {});
                     settings.center = {center.x, center.y, center.z};
                     settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    settings.useJointSets = ReadBool(*v, "useJointSets", false);
+                    if (const json* chunks = FindMember(*v, "jointChunks"); chunks && chunks->is_object())
+                        for (const auto& [key, c] : chunks->items()) {
+                            if (!c.is_object()) continue;
+                            auto& chunk = settings.jointChunks[key];
+                            chunk.locked = ReadBool(c, "locked", true);
+                            const auto p = ReadFloat3(c, "position", {}), r = ReadFloat3(c, "rotation", {});
+                            chunk.position = {p.x, p.y, p.z};
+                            chunk.rotationDegrees = {r.x, r.y, r.z};
+                        }
                     if (const json* chunks = FindMember(*v, "chunks"); chunks && chunks->is_array())
                         for (size_t i = 0; i < std::min(size_t(2), chunks->size()); ++i) {
                             const auto& c = (*chunks)[i];

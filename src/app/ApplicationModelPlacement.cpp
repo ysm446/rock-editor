@@ -370,9 +370,17 @@ bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
     graph::Node* node = m_graph.FindMutableNode(nodeId);
     if (node == nullptr) return false;
     if (auto* fracture = std::get_if<fracture::FractureSettings>(&node->settings)) {
-        auto& chunk = fracture->chunks[static_cast<size_t>(m_selectedChunk - 1)];
-        if (chunk.locked) return false;
-        out = {chunk.position.data(), chunk.rotationDegrees.data(), nullptr};
+        fracture::ChunkSettings* chunk = nullptr;
+        if (fracture->useJointSets) {
+            for (const auto& ref : m_rockMeshReferences)
+                if (ref.source == nodeId && ref.chunk == m_selectedChunk && !ref.key.empty()) {
+                    const auto found = fracture->jointChunks.find(ref.key);
+                    if (found != fracture->jointChunks.end()) chunk = &found->second;
+                }
+        } else if (m_selectedChunk >= 1 && m_selectedChunk <= 2)
+            chunk = &fracture->chunks[m_selectedChunk - 1];
+        if (!chunk || chunk->locked) return false;
+        out = {chunk->position.data(), chunk->rotationDegrees.data(), nullptr};
         return true;
     }
     if (auto* model = std::get_if<graph::ModelNodeSettings>(&node->settings)) {
@@ -390,10 +398,20 @@ bool Application::NodeGizmoFrame(graph::GraphId nodeId, XMFLOAT3& pivot, XMFLOAT
     const graph::Node* node = m_graph.FindNode(nodeId);
     if (node && node->kind == graph::NodeKind::Fracture) {
         const auto& settings = std::get<fracture::FractureSettings>(node->settings);
-        const auto& chunk = settings.chunks[static_cast<size_t>(m_selectedChunk - 1)];
-        if (chunk.locked || !m_meshGraphError.empty() || !m_meshGraphActive) return false;
+        if (!m_meshGraphError.empty() || !m_meshGraphActive) return false;
         for (const auto& ref : m_rockMeshReferences)
             if (ref.source == nodeId && ref.chunk == m_selectedChunk) {
+                fracture::ChunkSettings chunk;
+                if (settings.useJointSets) {
+                    if (ref.key.empty()) return false;
+                    if (const auto found = settings.jointChunks.find(ref.key);
+                        found != settings.jointChunks.end())
+                        chunk = found->second;
+                } else {
+                    if (!ref.key.empty() || m_selectedChunk < 1 || m_selectedChunk > 2) return false;
+                    chunk = settings.chunks[m_selectedChunk - 1];
+                }
+                if (chunk.locked) return false;
                 pivot = {ref.pivot.x + chunk.position[0], ref.pivot.y + chunk.position[1],
                          ref.pivot.z + chunk.position[2]};
                 XMStoreFloat4x4(&parent, XMMatrixIdentity());

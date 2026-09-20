@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <string>
+#include <map>
 #include "geometry/Mesh.h"
 
 namespace rock::fracture {
@@ -13,6 +14,8 @@ struct FractureSettings {
     std::array<float, 3> center{};
     std::array<float, 3> rotationDegrees{};
     std::array<ChunkSettings, 2> chunks;
+    bool useJointSets = false;
+    std::map<std::string, ChunkSettings> jointChunks;
 };
 struct SplitResult {
     // 0 は平面の負側、1 は正側。双方とも元の座標系を使う。

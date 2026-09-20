@@ -145,6 +145,7 @@ private:
         graph::GraphId source = 0;
         int chunk = 0;
         geometry::Vec3 pivot;
+        std::string key;
     };
     std::vector<RockMeshReference> m_rockMeshReferences;
     int m_selectedChunk = 1;

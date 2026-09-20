@@ -1,4 +1,5 @@
 #include "graph/RockEvaluator.h"
+#include "fracture/MultiSplit.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,7 +26,17 @@ void Append(RockEvaluation& target, const RockEvaluation& source) {
                 return other.source == item.source && other.chunk == item.chunk;
             }))
             target.rocks.push_back(item);
-    append(target.fractures, source.fractures);
+    for (const auto& item : source.fractures)
+        if (std::none_of(target.fractures.begin(), target.fractures.end(), [&](const auto& other) {
+                return other.source == item.source && other.negative == item.negative &&
+                       other.positive == item.positive;
+            }))
+            target.fractures.push_back(item);
+    for (const auto& item : source.jointPlanes)
+        if (std::none_of(target.jointPlanes.begin(), target.jointPlanes.end(), [&](const auto& other) {
+                return other.source == item.source && other.index == item.index;
+            }))
+            target.jointPlanes.push_back(item);
     for (const auto& item : source.cracks)
         if (std::none_of(target.cracks.begin(), target.cracks.end(), [&](const auto& other) {
                 return other.source == item.source && other.index == item.index;
@@ -77,9 +88,11 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             std::string error;
             if (!crack::BuildJointSet(*settings, patches, error))
                 return finish(Failure(id, "Joint Set", error));
-            if (settings->showGuide)
-                for (size_t i = 0; i < patches.size(); ++i)
-                    result.cracks.push_back({id, patches[i], static_cast<int>(i)});
+            for (size_t i = 0; i < patches.size(); ++i) {
+                const GeneratedCrack generated{id, patches[i], static_cast<int>(i)};
+                result.jointPlanes.push_back(generated);
+                if (settings->showGuide) result.cracks.push_back(generated);
+            }
         } else if (node->kind == NodeKind::Crack) {
             const auto* settings = std::get_if<crack::CrackSettings>(&node->settings);
             const auto* upstream =
@@ -113,22 +126,52 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             if (result.hasModels || result.rocks.size() != 1 || result.rocks.front().chunk != 0)
                 return finish(
                     Failure(id, "Fracture", "未分割の岩1個を接続してください。再帰分割は未対応です"));
-            crack::CrackSettings plane;
-            plane.center = settings->center;
-            plane.rotationDegrees = settings->rotationDegrees;
-            crack::CrackPatch frame;
-            std::string error;
-            if (!crack::BuildCrackPatch(plane, frame, error)) return finish(Failure(id, "Fracture", error));
-            auto split = fracture::SplitByPlane(result.rocks.front().mesh, frame.center, frame.normal);
-            if (!split.error.empty()) return finish(Failure(id, "Fracture", split.error));
             const auto parent = result.rocks.front().source;
+            std::string error;
+            std::vector<fracture::SplitPiece> pieces;
+            if (settings->useJointSets) {
+                std::vector<fracture::SplitPlane> planes;
+                for (const auto& joint : result.jointPlanes)
+                    planes.push_back({joint.patch.center, joint.patch.normal,
+                                      std::to_string(joint.source) + ":" + std::to_string(joint.index)});
+                auto split = fracture::SplitByPlanes(result.rocks.front().mesh, planes);
+                if (!split.error.empty()) return finish(Failure(id, "Fracture", split.error));
+                for (const auto& connection : split.connections) {
+                    const auto& plane = split.planes[connection.plane];
+                    const auto joint = std::find_if(
+                        result.jointPlanes.begin(), result.jointPlanes.end(), [&](const auto& p) {
+                            return std::to_string(p.source) + ":" + std::to_string(p.index) == plane.key;
+                        });
+                    result.fractures.push_back({id, parent, plane.center, plane.normal, connection.area,
+                                                static_cast<int>(connection.negative + 1),
+                                                static_cast<int>(connection.positive + 1), joint->source,
+                                                joint->index});
+                }
+                pieces = std::move(split.pieces);
+            } else {
+                crack::CrackSettings plane;
+                plane.center = settings->center;
+                plane.rotationDegrees = settings->rotationDegrees;
+                crack::CrackPatch frame;
+                if (!crack::BuildCrackPatch(plane, frame, error))
+                    return finish(Failure(id, "Fracture", error));
+                auto split = fracture::SplitByPlane(result.rocks.front().mesh, frame.center, frame.normal);
+                if (!split.error.empty()) return finish(Failure(id, "Fracture", split.error));
+                result.fractures.push_back({id, parent, frame.center, frame.normal, split.sectionArea});
+                for (auto& mesh : split.meshes) pieces.push_back({std::move(mesh), {}});
+            }
             result.rocks.clear();
-            // 上流の有限亀裂ガイドは分割・移動後の形状を表さない。上流プレビューで確認する。
             result.cracks.clear();
+            result.jointPlanes.clear();
             result.cuts.clear();
-            result.fractures.push_back({id, parent, frame.center, frame.normal, split.sectionArea});
-            for (int side = 0; side < 2; ++side) {
-                const auto& transform = settings->chunks[side];
+            for (size_t side = 0; side < pieces.size(); ++side) {
+                auto& piece = pieces[side];
+                fracture::ChunkSettings transform;
+                if (!settings->useJointSets)
+                    transform = settings->chunks[side];
+                else if (const auto found = settings->jointChunks.find(piece.key);
+                         found != settings->jointChunks.end())
+                    transform = found->second;
                 crack::CrackSettings rotation;
                 rotation.center = transform.position;
                 rotation.rotationDegrees = transform.rotationDegrees;
@@ -136,11 +179,11 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
                 if (!crack::BuildCrackPatch(rotation, basis, error))
                     return finish(Failure(id, "Fracture", error));
                 geometry::MeshInfo info;
-                geometry::InspectMesh(split.meshes[side], info);
+                geometry::InspectMesh(piece.mesh, info);
                 const geometry::Vec3 pivot{(info.minimum.x + info.maximum.x) * 0.5f,
                                            (info.minimum.y + info.maximum.y) * 0.5f,
                                            (info.minimum.z + info.maximum.z) * 0.5f};
-                for (auto& p : split.meshes[side].positions) {
+                for (auto& p : piece.mesh.positions) {
                     const float x = p.x - pivot.x, y = p.y - pivot.y, z = p.z - pivot.z;
                     p = {pivot.x + basis.tangentU.x * x + basis.tangentV.x * y + basis.normal.x * z +
                              transform.position[0],
@@ -150,13 +193,13 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
                              transform.position[2]};
                 }
                 geometry::MeshInfo transformed;
-                if (!geometry::InspectMesh(split.meshes[side], transformed) || !transformed.closed ||
+                if (!geometry::InspectMesh(piece.mesh, transformed) || !transformed.closed ||
                     transformed.components != 1 ||
                     std::abs(transformed.volume - info.volume) > info.volume * 1e-4)
                     return finish(Failure(id, "Fracture",
                                           "移動・回転後の精度を保てません。移動量を小さくしてください"));
-                result.rocks.push_back({id, std::move(split.meshes[side]), std::nullopt, side + 1, parent,
-                                        transform.locked, pivot});
+                result.rocks.push_back({id, std::move(piece.mesh), std::nullopt, static_cast<int>(side + 1),
+                                        parent, transform.locked, pivot, piece.key});
             }
         } else if (node->kind == NodeKind::Model || node->kind == NodeKind::Transform) {
             result.hasModels = true;

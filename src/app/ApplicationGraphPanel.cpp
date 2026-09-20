@@ -215,10 +215,12 @@ void Application::SyncMeshGraph() {
     for (const auto& rock : evaluated.rocks) {
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(rock.mesh);
-        mesh.material.baseColor = rock.chunk == 1   ? DirectX::XMFLOAT3{0.28f, 0.39f, 0.48f}
-                                  : rock.chunk == 2 ? DirectX::XMFLOAT3{0.48f, 0.34f, 0.24f}
-                                                    : DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
-        m_rockMeshReferences.push_back({rock.source, rock.chunk, rock.pivot});
+        const DirectX::XMFLOAT3 colors[] = {{0.28f, 0.39f, 0.48f}, {0.48f, 0.34f, 0.24f},
+                                            {0.35f, 0.46f, 0.32f}, {0.49f, 0.43f, 0.29f},
+                                            {0.40f, 0.33f, 0.46f}, {0.30f, 0.46f, 0.45f}};
+        mesh.material.baseColor =
+            rock.chunk > 0 ? colors[(rock.chunk - 1) % 6] : DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
+        m_rockMeshReferences.push_back({rock.source, rock.chunk, rock.pivot, rock.key});
         mesh.material.roughness = 0.8f;
         scene.meshes.push_back(std::move(mesh));
     }
@@ -925,19 +927,32 @@ void Application::DrawGraphPanel() {
         const float zero[3] = {0, 0, 0};
         bool changed = false;
         if (ui::BeginPropertyTable("fractureRows")) {
-            changed |= ui::PropertyFloat3Input("平面中心 (m)", edited.center.data(), zero) != 0;
-            changed |= ui::PropertyFloat3Input("平面回転 (度)", edited.rotationDegrees.data(), zero) != 0;
+            changed |= ui::PropertyBool("Joint Set で分割", &edited.useJointSets, false);
+            if (!edited.useJointSets) {
+                changed |= ui::PropertyFloat3Input("平面中心 (m)", edited.center.data(), zero) != 0;
+                changed |= ui::PropertyFloat3Input("平面回転 (度)", edited.rotationDegrees.data(), zero) != 0;
+            }
             ui::EndPropertyTable();
         }
-        ui::HintText("平面で岩全体を2片に分けます。初期の法線は +Z。Crack の有限範囲や深さは延長しません。");
-        if (const auto report = std::find_if(m_fractureReports.begin(), m_fractureReports.end(),
-                                             [&](const auto& r) { return r.source == selected->id; });
-            report != m_fractureReports.end()) {
-            if (ui::BeginPropertyTable("fractureReportRows")) {
-                ui::PropertyValue("親ノード", "#%d", report->parent);
-                ui::PropertyValue("分割面積 (m²)", "%.4f", report->sectionArea);
-                ui::EndPropertyTable();
+        if (edited.useJointSets)
+            ui::HintText(
+                "上流の全 Joint Set "
+                "の中心・向きを無限平面として使い、岩全体を完全分割します。半幅・Depth・Persistence・Aperture"
+                " とガイド表示は分割に影響しません。最大32平面・128片です。");
+        else
+            ui::HintText(
+                "平面で岩全体を2片に分けます。初期の法線は +Z。Crack の有限範囲や深さは延長しません。");
+        size_t connections = 0;
+        double area = 0;
+        for (const auto& report : m_fractureReports)
+            if (report.source == selected->id) {
+                ++connections;
+                area += report.sectionArea;
             }
+        if (connections && ui::BeginPropertyTable("fractureReportRows")) {
+            ui::PropertyValue("共有断面数", "%d", static_cast<int>(connections));
+            ui::PropertyValue("合計面積 (m²)", "%.4f", area);
+            ui::EndPropertyTable();
         }
         const auto selectChunk = [&](int chunk) {
             m_selectedChunk = chunk;
@@ -946,18 +961,41 @@ void Application::DrawGraphPanel() {
                 if (m_rockMeshReferences[i].source == selected->id && m_rockMeshReferences[i].chunk == chunk)
                     m_meshHighlight.selected.push_back(static_cast<int>(i));
         };
-        if (ImGui::RadioButton("Chunk 1 (- / 青)", m_selectedChunk == 1)) selectChunk(1);
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Chunk 2 (+ / 茶)", m_selectedChunk == 2)) selectChunk(2);
-        auto& chunk = edited.chunks[static_cast<size_t>(m_selectedChunk - 1)];
-        if (ui::BeginPropertyTable("chunkRows")) {
-            ui::PropertyValue("Chunk ID", "%d:%d", selected->id, m_selectedChunk);
-            changed |= ui::PropertyBool("Locked", &chunk.locked, true);
-            ImGui::BeginDisabled(chunk.locked);
-            changed |= ui::PropertyFloat3Input("移動 (m)", chunk.position.data(), zero) != 0;
-            changed |= ui::PropertyFloat3Input("回転 (度)", chunk.rotationDegrees.data(), zero) != 0;
-            ImGui::EndDisabled();
-            ui::EndPropertyTable();
+        const RockMeshReference* chosen = nullptr;
+        std::vector<const RockMeshReference*> chunks;
+        for (const auto& ref : m_rockMeshReferences)
+            if (ref.source == selected->id && ref.chunk > 0 && (edited.useJointSets == !ref.key.empty())) {
+                chunks.push_back(&ref);
+                if (ref.chunk == m_selectedChunk) chosen = &ref;
+            }
+        if (!chosen && !chunks.empty()) {
+            chosen = chunks.front();
+            selectChunk(chosen->chunk);
+        }
+        if (chosen) {
+            const std::string label =
+                "Chunk " + std::to_string(chosen->chunk) + " / " + std::to_string(chunks.size());
+            if (ImGui::BeginCombo("片の選択", label.c_str())) {
+                for (const auto* ref : chunks) {
+                    const std::string name = "Chunk " + std::to_string(ref->chunk);
+                    if (ImGui::Selectable(name.c_str(), ref->chunk == m_selectedChunk)) {
+                        selectChunk(ref->chunk);
+                        chosen = ref;
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            auto& chunk =
+                edited.useJointSets ? edited.jointChunks[chosen->key] : edited.chunks[chosen->chunk - 1];
+            if (ui::BeginPropertyTable("chunkRows")) {
+                ui::PropertyValue("Chunk ID", "%d:%d", selected->id, chosen->chunk);
+                changed |= ui::PropertyBool("Locked", &chunk.locked, true);
+                ImGui::BeginDisabled(chunk.locked);
+                changed |= ui::PropertyFloat3Input("移動 (m)", chunk.position.data(), zero) != 0;
+                changed |= ui::PropertyFloat3Input("回転 (度)", chunk.rotationDegrees.data(), zero) != 0;
+                ImGui::EndDisabled();
+                ui::EndPropertyTable();
+            }
         }
         ui::HintText(
             "Locked は現在の配置を固定します。解除すると個別に移動・回転できます。W: 移動 / E: "
