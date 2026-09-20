@@ -3,8 +3,8 @@
 岩をノードグラフで生成する、Windows 向けのプロシージャルオーサリングツール。
 プロジェクト名は **rock-editor**、実行ファイルは **rock_editor.exe**。
 
-母岩 → 節理 → 岩塊 → 二次破砕 → 浸食 → 表面、という岩の構造を意識した階層的生成を目指す。
-仕様は [docs/spec.md](docs/spec.md) を出発点とする。
+母岩 → 節理 → 亀裂 → 部分破断 → 完全破断 → 岩塊 → 風化 → 表面、という岩の構造を意識した階層的生成を目指す。
+仕様は [docs/rock_generator_spec_v2.md](docs/rock_generator_spec_v2.md) を出発点とする。
 
 ## 現在の状態
 
@@ -80,7 +80,9 @@ rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
 
 ## ドキュメント
 
-- [岩生成エディタの仕様](docs/spec.md)
+- [ドキュメント案内・設計と検証資料](docs/README.md)
+
+- [岩生成エディタの仕様](docs/rock_generator_spec_v2.md)
 - [目的と完成形](docs/plan/goals.md)
 - [実装計画](docs/plan/plan.md)
 - [進捗と検証状況](docs/plan/progress.md)

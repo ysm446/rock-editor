@@ -1,7 +1,20 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-20 21:33
+更新日時: 2026-09-20 22:06
+
+## 今回の整理と現在地
+
+v2 原仕様に合わせて目的・実装計画を更新し、ドキュメント案内、設計整理、検証計画を追加した。完全分割より先に有限亀裂と Rock Bridge を検証する計画へ変更した。
+今回は資料の整理のみ。ソースを確認したが、ビルド・テスト・起動の再実行はしていない。下記の過去の成功記録とは区別する。
+
+| 区分 | 現在の状態 |
+| --- | --- |
+| アプリ基盤 | DX12 / ImGui、モデル表示、グラフ編集、素材・アセット・保存基盤あり |
+| 岩生成 | Base Rock / Joint Set / Crack / Fracture / Chunk 編集は未実装 |
+| メッシュ接続 | SyncMeshGraph は生成シーンを空に保つ。描画用 MeshData はある |
+| 岩用評価・保存 | 新しいデータ型、CPU 評価、dirty/cache、seed と岩ノードの保存は未実装 |
+| 次の作業 | [計画](plan.md) の P0 基盤確認 → P1 Box 表示 |
 
 ## 完了
 
@@ -25,7 +38,7 @@ road-editor（旧 terrain-graph）を岩生成エディタの土台にするた�
 - `tools/make_connection_prototype.py`
 - ノードの種類：Road / Lane Marking / Road Mask / Decal / Shoulder / Crack / Path
 - 値の型：Path / RoadMask
-- レイヤーマテリアル（.tglayer）と境界マテリアル（.tgboundary）の仕組み全体
+- レイヤーマテリアル（.tglayer）と境界マテリアル（.tgboundary）の編集・アセット機能（描画用の関連型・属性には残存あり）
 - 旧形式（.tgproj / .mmproj / .mmmat）の読み込み互換
 
 **残したもの**
@@ -59,12 +72,14 @@ Debug ビルドとテスト（`rock_editor_tests`）が通り、アプリが起�
 
 ## 未完了
 
-- 岩の生成ノードは 1 つも無い。[plan.md](plan.md) の「2. メッシュ基盤」から始める。
+- 岩の生成ノードは 1 つも無い。[plan.md](plan.md) の P0/P1 から始める。
 - `SyncMeshGraph()` はメッシュを作るノードが無いため、当面シーンを空に保つだけの実装。
   Base Rock / Fracture を入れるときにここを本実装へ置き換える。
 - Merge / Mesh Output は型の受け渡しだけが生きていて、メッシュを実際に積む経路は無い。
 
 ## 注意点
+
+- src/renderer/MeshData.h には roadUv、道路・境界材質関連属性が残る。岩用トポロジーとは分離し、残存部分の全面整理を岩生成の前提作業にはしない。
 
 - **`data/` は改名の対象外**（依頼で「触らない」と決めたため）。
   中身は road-editor 時代のまま（`project.tgproj`、`.terrain-graph/`、

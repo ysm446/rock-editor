@@ -1,54 +1,63 @@
-# plan — 実装方針と優先順位
+# plan — v2 仕様に基づく実装計画
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-20 20:05
+更新日時: 2026-09-20 22:04
 
 ## 方針
 
-- 形状は Stage 1 として **三角メッシュの平面クリップ**で作る。SDF / voxel は Stage 2。
-- ジオメトリのアルゴリズムと描画を分ける。ノード評価と UI を分ける。
-- 乱数は決定的。すべての生成ノードが seed を持つ。
-- ジオメトリ関数には単体テストを書く（平面と三角形の交差、メッシュのクリップ、
-  切断面のポリゴン生成、岩塊の体積、隣接、節理面の生成）。
+[v2 原仕様](../rock_generator_spec_v2.md) の §§48–53 を軸に、既存アプリへ機能を追加する。旧計画の完全分割優先を改め、有限亀裂と Rock Bridge の検証を先に置く。CPU / Mesh を第一段階とし、SDF や物理ソルバは後続とする。
 
-## 優先順位
+既存ノードグラフは最初から使う。原仕様 M9 はグラフ新設ではなく、一連の岩生成ノードとキャッシュを仕上げる工程として扱う。各段階に設定 UI・保存/読込・Undo・テストを含める。
 
-### 1. 土台の整理（完了）
+## 依存順と完了条件
 
-道路・地形に特化したコードを撤去し、アプリ名と保存形式を rock-editor に揃える。
-詳細は [progress.md](progress.md)。
+P 番号は本計画の作業単位。原仕様の Milestone 番号とは別。P0 → P1 → P2 → P3 → P4 で最初のプロトタイプ、P5 → P6 → P7 → P8 で MVP を完成させる。
 
-### 2. メッシュ基盤
+| 段階 | 作業 | 完了条件 | 原仕様 |
+| --- | --- | --- | --- |
+| P0 基盤確認 | 既存ビルド・テスト・起動を再確認。CPU メッシュ境界、座標、許容誤差、失敗時の扱いを決める | 回帰結果と検証規約を記録 | M0、§53 |
+| P1 Box 表示 | CPU メッシュ、Base Rock 評価、SyncMeshGraph から描画への接続 | Base Rock → Mesh Output で閉じた Box を表示。寸法・seed 編集、Undo、保存復元 | M1 の Box |
+| P2 有限パッチ | CrackPatch の中心・向き・有限範囲・depth・persistence・aperture と半透明表示 | 面の移動・回転、範囲・深さの変更が見える | M2、M3 の可視化 |
+| P3 部分亀裂と Bridge | Box の単一・直線状パッチから、開口・内部壁・亀裂終端をメッシュ化 | 途中で止まる亀裂が見え、閉じた1連結体と正の厚さの Bridge が残る | M3–4 |
+| P4 完全分割と操作 | 平面分割・切断面生成・連結成分判定・Chunk と接続情報。選択とギズモを接続 | 2つの closed mesh、個別選択・移動・回転、Locked 保持、保存再現 | M5–6、§§51–52 |
+| P5 母岩と節理 | RoundedBox / Sphere / Ellipsoid、弱い BaseNoise、Joint Set と2～3系統の組合せ | 母岩が閉じ、seed による方向・間隔の再現、曲面・交差亀裂・完全分割が成立 | M1 残り、M7–8 |
+| P6 ノード処理完成 | Select / Remove / Keep / Chunk Transform、dirty 伝播・キャッシュ・安定 ID、プリセット | 上流変更が下流に反映し、未変更枝は再評価しない。岩塊抽出をノードだけで再現 | M9、§§19–22、39–41 |
+| P7 欠けと表面 | Chip、メッシュ整理、既存 Surface と Triplanar の接続 | 欠けても不正メッシュにならず、BaseColor / Normal / Roughness / Height / AO を調整できる | M10–11、§§23、36–38 |
+| P8 書き出しと受入 | OBJ 出力、出力範囲・座標・法線・材質の扱いを明示 | 選択/可視 Chunk を別ビューアで読み直せる。MVP 受入が通る | §45 |
 
-- `geometry/Mesh`：頂点・インデックス・法線・AABB を持つ CPU メッシュ。
-- `SplitMeshByPlane()`：平面 1 枚でメッシュを 2 つに割り、切断面を張る。
-- ここまでを単体テストで固める。
+## 次の実装単位
 
-### 3. Base Rock ノード
+最初の実装範囲は P0 と P1。
 
-Box / Sphere / Ellipsoid / RoundedBox と弱いノイズ変形。Mesh Output へ繋いで表示する。
+1. Debug ビルド、既存 CTest、起動を確認し、基盤の問題を記録する。
+2. geometry/ に CPU メッシュ、AABB、法線生成、閉包・体積・連結性の検証を追加する。
+3. Base Rock の Box 設定と評価を既存 NodeSettings / 定義テーブルへ追加する。
+4. renderer::MeshData への変換を用意し、Mesh Output と途中プレビューから描画する。
+5. 寸法・seed の UI、ProjectIo、Undo を接続し、保存後の Box 再現を確認する。
 
-### 4. Fracture
+その後 P2/P3 で部分亀裂方式の成立性を検証する。
 
-- Joint Set ノード（方向・間隔・ばらつき・seed）と、節理面の半透明表示。
-- Fracture ノード（平面列で母岩を分割）と、岩塊ごとのデバッグ配色。
-- Chunk Graph（隣接と履歴）。
+## 技術上の検証関門
 
-### 5. Chunk の編集
+P3 が最大の不確実性。無限平面クリップだけでは有限亀裂と Bridge を作れない。最初は Box 表面から入る有限幅の単一切り込みを対象とし、交線の挿入・局所再三角形化・亀裂壁と終端の閉包を試作する。正の幅で形状と連結性を確かめ、幅ゼロは潜在亀裂のメタデータ/デバッグ表示として区別する。
 
-Select Chunk（Random / Largest / Center / ByVolume / Manual）と Chunk Transform。
+P3 で閉包・連結性を満たせなければ P4 へ進まず、対象制約と方式を見直す。P5 で曲面と複数パッチの交差へ広げる。線や色によるパッチ表示だけでは部分亀裂の完成としない。
 
-### 6. Chip / Surface / Export
+完全分割では頂点上・辺上・同一平面、極小片、複数切断ループを検証する。不正形状を下流へ渡さず、対象ノードと原因を表示する。Chunk 数・三角形数には上限と診断を設け、具体値は P5 の測定で決める。
 
-角の面取り、Triplanar と Megascans 系テクスチャ、OBJ 書き出し。
+## 原仕様内の段階差の整理
 
-## 保留（MVP 後）
+- §12 の Secondary Fracture は Stage C、§49 は Post-MVP。初回 MVP は一次破断を優先し、Secondary Voronoi / 再帰破砕は後続とする。
+- §26 は低周波の破断面ノイズを MVP、§49 は fracture surface noise を Post-MVP とする。P4 は平面で成立性を確認し、低周波ノイズは P7 の追加候補とする。MVP 必須にするかは閉包と両側の整合を検証して決める。
+- Groove / Erosion は全体フローにはあるが M0–11 にはない。独立ノードは MVP 後、有限亀裂の基盤は MVP に含める。
+- OBJ は M0–11 にないが §45 の MVP 要件なので P8 に含める。
+- §44 の JSON version: 2 は例。現在の保存版は1であり、実際の変更と互換方針に応じて更新する。
 
-Secondary Voronoi、階層的 fracture、Groove / Crack、SDF ブーリアンと浸食、
-自動 UV、Dual Contouring、LOD、GPU compute。
+## MVP 後
 
-## 引き継いだ土台で使えるもの
+1. 局所 Joint / Secondary Voronoi、世代階層、Debris、独立 Groove / procedural Erosion。
+2. Sparse / Adaptive SDF、曲面・分岐亀裂、複雑な浸食、remeshing、Dual Contouring の比較。
+3. 自動 UV、材質ベイク、glTF / FBX、LOD、必要に応じた GPU compute。
+4. 接触・摩擦・重力による Locked 判定、Terrain Editor との連携。
 
-ノードグラフ（追加・接続・コピー・アンドゥ・保存）、Surface ノードによる PBR マテリアル合成、
-天球と IBL、モデルの取り込みと配置、ルートフォルダによるアセット管理、
-ビューポート（軌道カメラ、グリッド、ワイヤーフレーム、メッシュの選択と強調）。
+予定日は置かず、各段階の受入結果で進める。[設計整理](../reference/architecture.md) と [検証計画](../reference/validation.md) を判断基準にする。

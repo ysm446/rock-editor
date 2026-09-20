@@ -1,41 +1,40 @@
-# goals — プロジェクトの目的と完成形
+# goals — 目的と完成形
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-20 20:05
+更新日時: 2026-09-20 22:04
 
 ## 目的
 
-Windows 向けのプロシージャル岩生成エディタを作る。
-単純な母岩にノードを繋いで、節理で割る・岩塊を選ぶ・ずらす・欠けさせる・浸食させる、
-という処理を積み重ね、ゲーム等で使えるメッシュを生成する。
+Windows 11 / x64 向けのプロシージャル岩生成エディタを作る。母岩に節理を定義し、亀裂が進む範囲、まだつながる部分、完全に分離した岩塊を編集して、ゲーム等で使える岩アセットを生成する。原文は [v2 仕様](../rock_generator_spec_v2.md)。
 
-詳しい仕様は [spec.md](../spec.md) にある。ここは要点だけを置く。
-
-## 完成形
+## 完成時の流れ
 
 ```text
-Mother Rock → Joint Set → Primary Fracture → Chunk Graph
-→ Chunk Selection / Offset → Secondary Fracture → Chip / Groove
-→ Erosion → Mesh Cleanup → UV / Triplanar → Surface → Export
+母岩 → 節理 → 亀裂 → 部分破断（Rock Bridge が残る）
+     → 必要に応じた完全破断 → 岩塊の選択・抽出・移動
+     → 二次破砕 → 欠け・溝・浸食 → メッシュ整理
+     → Triplanar / UV → 表面ディテール → 書き出し
 ```
 
-- 非破壊のノードグラフで、上流を変えると下流が追従する。
-- 同じグラフと同じ seed なら同じ岩になる（決定的な乱数）。
-- 形状はメッシュで作り、微細な凹凸はテクスチャ（Height / Normal / Roughness）で足す。
+`Crack` は有限亀裂と未破断部、`Fracture` は完全分離の判定と Chunk 化を扱う。完全に分離してもその場に留まる Locked 状態を持つ。MVP では物理計算せずフラグで保持する。
 
 ## 重視する価値
 
-- **単なるノイズ変形にしない。** 「岩がどう割れて塊になり、風化したか」の順番を保つ。
-- 途中の結果（節理面、岩塊の色分け、破断面）が目で見えること。
-- まず CPU 実装。GPU 化や voxel は後段。
+- 主破砕は方向性を持つ Joint Set に基づく。Voronoi は二次破砕に使う。
+- 深さ、persistence、Rock Bridge を目視し、途中結果を確かめながら編集できる。
+- 非破壊ノードグラフと seed により、上流を編集でき、保存・再読み込みで結果を再現できる。
+- Macro は実ジオメトリ、Meso はメッシュや将来の SDF、Micro は主に Height / Normal / Roughness / AO で作る。
+- ジオメトリ・描画・UI・評価を分離し、CPU とメッシュによる検証を先に進める。
 
-## 対象外（MVP）
+## 到達点
 
-リアルタイム物理破壊、FEM 破壊、地質シミュレーション、GPU voxel ソルバ。
-ただし拡張できる設計にする。
+最初のプロトタイプは Box に有限亀裂を作り、未破断部を残し、明示的な完全分割後に2つの Chunk を個別選択・移動・回転できること。seed と設定を保存して同じ結果を再現する。
 
-## 土台
+MVP は4種類の母岩、複数 Joint Set、岩塊の抽出・編集、Chip、Triplanar による表面表示、OBJ 書き出しまで。順序と境界は [実装計画](plan.md)、合否は [検証計画](../reference/validation.md) に置く。
 
-road-editor（旧 terrain-graph）のアプリ基盤を引き継ぐ。
-DX12 レンダラ、Dear ImGui、ノードグラフ、マテリアル合成、アセット管理は流用し、
-道路・地形に特化した部分は撤去した（[progress.md](progress.md)）。
+## 対象外と将来
+
+FEM / DEM、原子・地質シミュレーション、リアルタイム物理破壊、水・雪のシミュレーション、GPU voxel solver は MVP 対象外。
+SDF、Secondary Voronoi、再帰破砕、物理的な Locked 判定、自動 UV、LOD、glTF / FBX 書き出し、地形統合は後続段階。
+
+C++20 / DirectX 12 / Dear ImGui / CMake の既存基盤を利用する。ノード編集、PBR 素材、モデル配置、アセット管理、保存、Undo は引き継ぐ。現在の状態は [進捗](progress.md) を参照する。
