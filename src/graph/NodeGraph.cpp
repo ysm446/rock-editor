@@ -203,7 +203,7 @@ bool NodeGraph::CanCreateLink(GraphId startPin, GraphId endPin) const {
         return false;
     }
     // Merge へ繋ぐと出力の型が変わることがある。下流がその型を受けられなければ繋がない
-    // （モデルだけを Transform へ渡している Merge に道路を足す、など）。
+    // （モデルだけを Transform へ渡している Merge にメッシュを足す、など）。
     if (const Node* consumer = FindNode(end->nodeId); consumer != nullptr && consumer->kind == NodeKind::Merge) {
         const ValueType next = MergeTypeWith(*consumer, end->id, startType, 0);
         if (!DownstreamAccepts(*consumer, next, 0)) return false;

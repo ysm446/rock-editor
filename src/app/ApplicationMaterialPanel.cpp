@@ -226,14 +226,14 @@ bool Application::DrawMaterialProperties(compositor::MaterialAsset& asset) {
         changed |= ui::PropertyFloat("不透明度", &asset.opacityValue, 0.0f, 1.0f,
                                      kDefaultAsset.opacityValue, "マップが無いときの値",
                                      "%.2f");
-        // 合成モードは材質の属性。白線などの帯メッシュを描くときに効き、道路面では常に不透明。
+        // 合成モードは材質の属性。薄い帯メッシュを描くときに効き、下に何も無い面では常に不透明。
         static const char* const kBlendModeLabels[] = {"不透明", "マスク抜き", "半透明"};
         int blendMode = static_cast<int>(asset.blendMode);
         if (ui::PropertyCombo("合成", &blendMode, kBlendModeLabels, IM_ARRAYSIZE(kBlendModeLabels),
                               static_cast<int>(kDefaultAsset.blendMode),
                               "不透明度の扱い。マスク抜きはしきい値未満をくり抜く（深度と影はそのまま）。"
                               "半透明は不透明度でそのまま合成し、影は落とさない。"
-                              "白線などの帯メッシュで効き、道路面では無視する")) {
+                              "薄い帯メッシュで効き、下に何も無い面では無視する")) {
             asset.blendMode = static_cast<compositor::BlendMode>(blendMode);
             changed = true;
         }

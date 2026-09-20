@@ -30,31 +30,11 @@ constexpr const char* kProjectFormat = "rock-editor.project";
 constexpr const char* kMaterialFormat = "rock-editor.material";
 // 形式を変えたら上げる。読み込み側は「これ以下なら読める」として扱う。
 //
-// 2: ハイトに gain を追加し、base の意味を変えた（h = base + (src - 0.5) * gain）。
-//    キーが増えただけに見えるが base の解釈が変わっているので、古いビルドに
-//    読ませると黙って違う絵が出る。それを断れるように版を上げている。
-// 3: レイヤーに kind（surface / shape / liquid）を追加した。古いビルドはキーを
-//    無視してシェイプや水面をサーフェスとして合成し、黙って違う絵を出すため版を上げる。
-//    kind の無い旧ファイルは全レイヤーをサーフェスとして読む。
-// プロジェクトの版。4 で `layers` 節を廃止し、グラフ (`graph`) を唯一の合成にした
-// （旧ファイルの layers はグラフへ移行して読む）。
-// 5: 任意のメッシュシーン（手入力の scene。現在は読み飛ばす）。
-// 8: road / meshOutput ノード。9: Road の Material 入力。10: roadMarking ノード。
-// 11: Path の縦断ポイント・バンクポイント。旧ビルドが線形を平坦・水平に読むことを防ぐ。
-// 12: Road の材質スロット 2〜4 と roadMask ノード。旧ビルドがスロット 2〜4 のリンクを捨てて下地だけを出すことを防ぐ。
-// 13: Path の Surface 入力（Mesh 型）と surfaceSpace、decal ノード。
-// 14: shoulder ノード。旧ビルドが路肩を読み飛ばして Outer 以降のリンクを失うことを防ぐ。
-// 15: merge ノード（入力数が可変）。旧ビルドが Merge を読み飛ばして Mesh Output との接続を失うことを防ぐ。
-// 16: crack ノード。
-// 17: 埋込プリセットと道路・沿道の配置記述。旧ビルドによる消失を防ぐ。
-// 24: 中央線・外側線・車線境界線の線幅を独立させる。
-// 25: 白線・Decal・CrackのMaterial入力をプロパティへ移す。
-// 26: Decalのハイト加算・画像倍率・帯ワイヤーフレーム。
-// 27: モデル（models）。旧ビルドが読み飛ばして保存し直し、モデルとスロットの割り当てを失うことを防ぐ。
-// 28: model / transform ノードと、道路・モデルの両方を受ける Merge / Mesh Output。旧ビルドが接続を失うことを防ぐ。
-constexpr int kProjectFormatVersion = 28;
-// マテリアル単体 (.rockmat) の版。中身は変わっていないので 3 のまま。
-constexpr int kMaterialFormatVersion = 3;
+// 1: rock-editor としての最初の形式。road-editor 時代の terrain-graph.* とは
+//    互換を持たない（形式の識別子が違うので、そもそも読み込みで弾かれる）。
+constexpr int kProjectFormatVersion = 1;
+// マテリアル単体 (.rockmat) の版。
+constexpr int kMaterialFormatVersion = 1;
 
 // --- 文字列とパス ---------------------------------------------------------
 //
@@ -710,37 +690,6 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
     return true;
 }
 
-// 旧形式（版 3 以前）の layers[] をグラフへ移行する。
-// 下から上のレイヤー列を Surface の「下地」チェーンとして繋ぐ。
-// 旧地形のノード（Shape / Liquid / Output）は無くなったので、種類はすべて Surface にする。
-graph::NodeGraph MigrateLayersToGraph(std::vector<compositor::MaterialLayer> layers) {
-    graph::NodeGraph migrated;
-    if (layers.empty()) {
-        return graph::NodeGraph::CreateDefault();
-    }
-    graph::GraphId previousOutput = 0;
-    float x = 60.0f;
-    for (compositor::MaterialLayer& layer : layers) {
-        const graph::GraphId nodeId = migrated.CreateNode(graph::NodeKind::Surface);
-        graph::Node* node = migrated.FindMutableNode(nodeId);
-        if (node == nullptr) {
-            continue;
-        }
-        if (auto* settings = std::get_if<graph::LayerNodeSettings>(&node->settings)) {
-            settings->layer = std::move(layer);
-        }
-        node->posX = x;
-        node->posY = 120.0f;
-        node->positionValid = true;
-        x += 240.0f;
-        if (previousOutput != 0 && !node->inputs.empty()) {
-            migrated.CreateLink(previousOutput, node->inputs.front().id);
-        }
-        previousOutput = node->outputs.empty() ? 0 : node->outputs.front().id;
-    }
-    return migrated;
-}
-
 // --- プレビューの設定 -----------------------------------------------------
 
 // 天球アセット（M5b-2）で HDRI のパスが preview から抜けたため、パスの解決は不要になった。
@@ -1382,45 +1331,19 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
             const auto it = materialIds.find(value.get<int>());
             return (it != materialIds.end()) ? it->second : compositor::kNoMaterialAsset;
         };
-    // 旧形式の layers[]（版 3 以前）。移行用に一旦読み込んでおく。
-    std::vector<compositor::MaterialLayer> legacyLayers;
-    if (const json* layers = FindMember(document, "layers");
-        layers != nullptr && layers->is_array()) {
-        for (const json& node : *layers) {
-            if (!node.is_object()) {
-                continue;
-            }
-            legacyLayers.push_back(ReadLayer(node, readMaterial));
-        }
-    }
-
-    // グラフの決め方。
-    //   版 4 以降: graph 節が唯一の合成（無ければ既定へ戻す）。
-    //   版 3 以前: 「プレビューに適用」（apply）がオンで保存されていれば graph 節を、
-    //             そうでなければ layers[] をグラフへ移行して使う
-    //             （当時プレビューに出ていた側を正とする）。
-    const int version = ReadInt(document, "version", 0);
+    // graph 節が唯一の合成。無ければ既定（Surface 1 つ）へ戻す。
     const json* graphNode = FindMember(document, "graph");
     bool graphLoaded = false;
     if (graphNode != nullptr && graphNode->is_object()) {
-        const bool legacyApply = ReadBool(*graphNode, "apply", version >= 4);
-        if (version >= 4 || legacyApply || legacyLayers.empty()) {
-            const std::function<uint64_t(const json&)> readModel = [&modelIds](const json& value) -> uint64_t {
-                if (!value.is_number_integer()) return 0;
-                const auto found = modelIds.find(value.get<int>());
-                return found != modelIds.end() ? found->second : 0;
-            };
-            graphLoaded = ReadGraph(*graphNode, refs.graph, readMaterial, readModel);
-        }
+        const std::function<uint64_t(const json&)> readModel = [&modelIds](const json& value) -> uint64_t {
+            if (!value.is_number_integer()) return 0;
+            const auto found = modelIds.find(value.get<int>());
+            return found != modelIds.end() ? found->second : 0;
+        };
+        graphLoaded = ReadGraph(*graphNode, refs.graph, readMaterial, readModel);
     }
     if (!graphLoaded) {
-        if (!legacyLayers.empty()) {
-            ROCK_LOG_INFO("旧形式のレイヤーをノードグラフへ移行しました（%zu 枚）",
-                        legacyLayers.size());
-            refs.graph = MigrateLayersToGraph(std::move(legacyLayers));
-        } else {
-            refs.graph = graph::NodeGraph::CreateDefault();
-        }
+        refs.graph = graph::NodeGraph::CreateDefault();
     }
 
     // preview が無い（または壊れている）プロジェクトでも必ず既定値で埋める。

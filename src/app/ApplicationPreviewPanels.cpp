@@ -1,5 +1,5 @@
 // プレビュー設定パネルと「ライティング」パネル。
-// どちらも道路の中身ではなく、見え方（レンダラ側の設定）を扱う。
+// どちらもシーンの中身ではなく、見え方（レンダラ側の設定）を扱う。
 
 #include "app/Application.h"
 
@@ -45,11 +45,11 @@ void Application::DrawMaterialPanel() {
                                   "画面上で 1 辺がこの長さ（px）を超えたら割る。小さいほど細かく、負荷は二乗で増える",
                                   "%.0f px", 0, 1.0f);
             }
-            // 道路の材質（スロット 1〜4）を合成する解像度。タイル 1 枚ぶんなので、反復長が短いほど細部が出る。
+            // 材質（スロット 1〜4）を合成する解像度。タイル 1 枚ぶんなので、反復長が短いほど細部が出る。
             int resolution = ResolutionIndex(m_renderer.MaterialResolution());
             if (ui::PropertyCombo("合成解像度", &resolution, kResolutionLabels, IM_ARRAYSIZE(kResolutionLabels),
                                   ResolutionIndex(renderer::kPreviewDefaults.materialResolution),
-                                  "道路のマテリアルを合成する解像度（タイル 1 枚ぶん）。上げるほど細部が出るが重くなる")) {
+                                  "マテリアルを合成する解像度（タイル 1 枚ぶん）。上げるほど細部が出るが重くなる")) {
                 m_renderer.RequestMaterialResolution(kResolutionValues[resolution]);
             }
             ui::EndPropertyTable();
@@ -131,8 +131,8 @@ void Application::DrawMaterialPanel() {
             ui::PropertyFloat("ミニチュア", &dof.miniatureScale, 1.0f, 10000.0f,
                               kDefaultDof.miniatureScale,
                               "1 で実物大。上げるほど模型を撮った計算になり、"
-                              "同じレンズでもボケが強くなる。実寸のままだと長い道路は"
-                              "遠すぎて 1 画素もボケない。数百 m の道路を引きで見るなら "
+                              "同じレンズでもボケが強くなる。実寸のままだと大きなものは"
+                              "遠すぎて 1 画素もボケない。数百 m の範囲を引きで見るなら "
                               "100〜1000 が目安",
                               "1 : %.0f", ImGuiSliderFlags_Logarithmic);
             ui::PropertyFloat("ボケの強さ", &dof.blurScale, 0.25f, 16.0f, kDefaultDof.blurScale,
@@ -228,7 +228,7 @@ void Application::DrawLightingPanel() {
                 ui::PropertyFloat("ミー異方性", &sky.eccentricity, 0.0f, 0.95f, skyDefaults.eccentricity,
                                   "ミー散乱の異方性（g）。大きいほど太陽付近の光が鋭く集中する", "%.2f");
                 ui::PropertyFloat("地表の基準標高", &sky.altitude, 0.0f, 10000.0f, skyDefaults.altitude,
-                                  "道路の原点の海抜高度（m）。空と光を計算する基準で、道路やカメラは動かない", "%.0f m");
+                                  "シーンの原点の海抜高度（m）。空と光を計算する基準で、メッシュやカメラは動かない", "%.0f m");
                 int lowerHemisphere = static_cast<int>(sky.lowerHemisphere);
                 static const char* const kLowerHemisphereLabels[] = {"空の延長", "地面反射"};
                 if (ui::PropertyCombo("下半球", &lowerHemisphere, kLowerHemisphereLabels, 2,
@@ -239,7 +239,7 @@ void Application::DrawLightingPanel() {
                 }
                 ui::PropertyFloat("グラウンドアルベド", &sky.groundAlbedo, 0.0f, 1.0f, skyDefaults.groundAlbedo,
                                   "地面反射で日光と空の光を反射する割合（空の延長では下半球の明るさ）。\n"
-                                  "大気の多重散乱にも効く。道路のマテリアルの色は変えない", "%.2f");
+                                  "大気の多重散乱にも効く。マテリアルの色は変えない", "%.2f");
                 ui::EndPropertyTable();
             }
             ui::SectionHeader("環境光");

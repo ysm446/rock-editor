@@ -121,7 +121,7 @@ bool Application::Initialize(const StartupOptions& options) {
         return false;
     }
     m_renderer.EnableDiagnostics(m_options.measurePreview);
-    // 置いたモデルは道路のメッシュシーンとは別に、レンダラの本描画とシャドウパスの中で描く。
+    // 置いたモデルはメッシュシーンとは別に、レンダラの本描画とシャドウパスの中で描く。
     m_renderer.drawSceneExtras = [this](ID3D12GraphicsCommandList* list, const renderer::SceneDrawContext& context) {
         DrawSceneModels(list, context);
     };

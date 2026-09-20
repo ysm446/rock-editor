@@ -255,7 +255,7 @@ graph::GraphId Application::PlaceModel(uint64_t modelId, const XMFLOAT3& positio
     settings.position[2] = position.z;
     m_graphNodesToPlace.push_back(nodeId);
 
-    // Mesh Output へ繋ぐ。無ければ作る。既に別のもの（道路など）が繋がっていれば Merge でまとめる。
+    // Mesh Output へ繋ぐ。無ければ作る。既に別のものが繋がっていれば Merge でまとめる。
     graph::GraphId outputId = 0;
     for (const graph::Node& candidate : m_graph.Nodes())
         if (candidate.kind == graph::NodeKind::MeshOutput) { outputId = candidate.id; break; }
@@ -527,7 +527,7 @@ bool Application::PickGround(const ImVec2& mouse, const ImVec2& viewportMin, con
     const XMVECTOR rayDirection = XMLoadFloat3(&direction);
     float nearest = FLT_MAX;
     if (useMeshes && m_renderer.HasMeshScene()) {
-        // 道路・路肩などの面の上へ置く（変位前の形。白線などの帯も面として扱う）。
+        // メッシュの面の上へ置く（変位前の形。薄い帯も面として扱う）。
         for (const auto& mesh : m_renderer.Scene().meshes) {
             if (mesh.materialOnly) continue;
             const auto& vertices = mesh.geometry.vertices;

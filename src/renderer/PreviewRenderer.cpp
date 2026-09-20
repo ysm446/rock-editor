@@ -629,10 +629,10 @@ void PreviewRenderer::ProcessPendingWork(rhi::Device& device,
         m_materialResolution = m_requestedMaterialResolution;
         for (auto& material : m_sceneMaterials) {
             if (material.evaluator && !material.evaluator->Resize(device, m_materialResolution))
-                ROCK_LOG_WARN("道路マテリアルの解像度を変更できませんでした");
+                ROCK_LOG_WARN("マテリアルの解像度を変更できませんでした");
             for (auto& layer : material.layerEvaluators) {
                 if (layer && !layer->Resize(device, m_materialResolution))
-                    ROCK_LOG_WARN("道路レイヤーの解像度を変更できませんでした");
+                    ROCK_LOG_WARN("レイヤーの解像度を変更できませんでした");
             }
         }
     }

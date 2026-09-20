@@ -351,7 +351,7 @@ void Application::DrawModelPreviewWindow() {
             const auto target = m_renderer.GetCamera().Target();
             PlaceModel(asset.id, {target.x, 0.0f, target.z});
         }
-        ui::HintText("Model ノードを作って Mesh Output へ繋ぐ。アセットの帯からビューポートへドラッグすると、落とした所（道路の面か地面）に置く");
+        ui::HintText("Model ノードを作って Mesh Output へ繋ぐ。アセットの帯からビューポートへドラッグすると、落とした所（メッシュの面か地面）に置く");
         const bool unassigned = std::any_of(asset.materials.begin(), asset.materials.end(), [&](auto id) {
             return m_materialLibrary.Find(id) == nullptr;
         });

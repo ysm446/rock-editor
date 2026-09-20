@@ -41,7 +41,7 @@ bool Application::DrawLayerSettings(compositor::MaterialLayer& layer) {
             changed |= ui::PropertyFloat("AO", &layer.ambientOcclusion, 0.0f, 1.0f,
                                          defaults.ambientOcclusion, nullptr, "%.2f");
         }
-        // UV スケール（タイル内の反復）は旧地形の合成用。道路ではスロットの UV 反復長が決めるので出さない。
+        // UV スケール（タイル内の反復）は旧地形の合成用。いまはスロットの UV 反復長が決めるので出さない。
         ui::EndPropertyTable();
     }
     if (layer.material != compositor::kNoMaterialAsset) {
