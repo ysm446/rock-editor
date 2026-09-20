@@ -763,6 +763,7 @@ void Application::DrawGraphEditor() {
         };
         // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
         ImGui::TextDisabled("モデル");
+        addNodeMenuItem(graph::NodeKind::JointSet, "Joint Set — 方向と間隔を持つ有限パッチ列");
         addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
         addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂の表示と Box の部分切断");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
@@ -963,6 +964,38 @@ void Application::DrawGraphPanel() {
             "回転。回転中心は分割直後の各片の外接箱中心です。");
         if (changed) {
             *fracture = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* joint = std::get_if<crack::JointSetSettings>(&selected->settings)) {
+        auto edited = *joint;
+        const float zero[3] = {0, 0, 0};
+        bool changed = false;
+        if (ui::BeginPropertyTable("jointRows")) {
+            changed |= ui::PropertyBool("ガイド表示", &edited.showGuide, true);
+            changed |= ui::PropertyFloat3Input("中心 (m)", edited.center.data(), zero) != 0;
+            changed |= ui::PropertyFloat3Input("回転 (度)", edited.rotationDegrees.data(), zero) != 0;
+            changed |= ui::PropertyFloat("間隔 (m)", &edited.spacing, 0.001f, 1000, 0.6f);
+            changed |= ui::PropertyFloat("位置ばらつき", &edited.spacingVariance, 0, 0.49f, 0.15f);
+            changed |= ui::PropertyFloat("角度ばらつき (度)", &edited.angleVariance, 0, 30, 5);
+            changed |= ui::PropertyFloat("オフセット (m)", &edited.offset, -10000, 10000, 0);
+            changed |= ui::PropertyInt("本数", &edited.count, 1, 64, 3);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 0);
+            changed |= ui::PropertyFloat("半幅 U (m)", &edited.extentU, 0.001f, 1000, 1.2f);
+            changed |= ui::PropertyFloat("半幅 V (m)", &edited.extentV, 0.001f, 1000, 1.2f);
+            changed |= ui::PropertyFloat("Depth (m)", &edited.depth, 0, 2000, 1.6f);
+            changed |= ui::PropertyFloat("Persistence", &edited.persistence, 0, 1, 0.6f);
+            changed |= ui::PropertyFloat("Aperture (m)", &edited.aperture, 0, 100, 0.02f);
+            ui::EndPropertyTable();
+        }
+        ui::HintText(
+            "有限パッチ列のガイドです。母岩はまだ切断しません。Joint Set "
+            "を直列につなぐと複数方向を重ねられます。");
+        ui::HintText(
+            "初期の法線は +Z。位置ばらつきは間隔に対する各中心のずれ、角度ばらつきはローカル U/V "
+            "軸ごとの傾き上限です。");
+        if (changed) {
+            *joint = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

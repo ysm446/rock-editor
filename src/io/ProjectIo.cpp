@@ -456,7 +456,22 @@ json WriteGraph(const graph::NodeGraph& graphData,
             outputs.push_back(pin.id);
         }
         item["outputs"] = std::move(outputs);
-        if (const auto* fracture = std::get_if<fracture::FractureSettings>(&node.settings)) {
+        if (const auto* joint = std::get_if<crack::JointSetSettings>(&node.settings)) {
+            item["jointSet"] = {{"center", joint->center},
+                                {"rotation", joint->rotationDegrees},
+                                {"spacing", joint->spacing},
+                                {"spacingVariance", joint->spacingVariance},
+                                {"angleVariance", joint->angleVariance},
+                                {"offset", joint->offset},
+                                {"count", joint->count},
+                                {"seed", joint->seed},
+                                {"extentU", joint->extentU},
+                                {"extentV", joint->extentV},
+                                {"depth", joint->depth},
+                                {"persistence", joint->persistence},
+                                {"aperture", joint->aperture},
+                                {"showGuide", joint->showGuide}};
+        } else if (const auto* fracture = std::get_if<fracture::FractureSettings>(&node.settings)) {
             json chunks = json::array();
             for (const auto& chunk : fracture->chunks)
                 chunks.push_back({{"locked", chunk.locked},
@@ -612,7 +627,28 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 }
             }
 
-            if (created.kind == graph::NodeKind::Fracture) {
+            if (created.kind == graph::NodeKind::JointSet) {
+                crack::JointSetSettings settings;
+                if (const json* v = FindMember(item, "jointSet"); v && v->is_object()) {
+                    const auto center = ReadFloat3(*v, "center", {}),
+                               rotation = ReadFloat3(*v, "rotation", {});
+                    settings.center = {center.x, center.y, center.z};
+                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    settings.spacing = ReadFloat(*v, "spacing", settings.spacing);
+                    settings.spacingVariance = ReadFloat(*v, "spacingVariance", settings.spacingVariance);
+                    settings.angleVariance = ReadFloat(*v, "angleVariance", settings.angleVariance);
+                    settings.offset = ReadFloat(*v, "offset", settings.offset);
+                    settings.count = ReadInt(*v, "count", settings.count);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
+                    settings.extentU = ReadFloat(*v, "extentU", settings.extentU);
+                    settings.extentV = ReadFloat(*v, "extentV", settings.extentV);
+                    settings.depth = ReadFloat(*v, "depth", settings.depth);
+                    settings.persistence = ReadFloat(*v, "persistence", settings.persistence);
+                    settings.aperture = ReadFloat(*v, "aperture", settings.aperture);
+                    settings.showGuide = ReadBool(*v, "showGuide", settings.showGuide);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::Fracture) {
                 fracture::FractureSettings settings;
                 if (const json* v = FindMember(item, "fracture"); v && v->is_object()) {
                     const auto center = ReadFloat3(*v, "center", {}),

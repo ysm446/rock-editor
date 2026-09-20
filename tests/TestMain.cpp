@@ -9,6 +9,7 @@
 void RunPartialCutTests();
 void RunFractureTests();
 void RunCrackTests();
+void RunJointSetTests();
 void RunRockTests();
 void RunBaseRockTests();
 void RunShadowCascadeTests();
@@ -23,6 +24,7 @@ int main() {
     RunPartialCutTests();
     RunFractureTests();
     RunCrackTests();
+    RunJointSetTests();
     RunRockTests();
     RunBaseRockTests();
     RunShadowCascadeTests();

@@ -1,21 +1,31 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-20 23:29
+更新日時: 2026-09-20 23:43
 
 ## 現在地
 
-P5 前半の母岩4形状と弱い BaseNoise を実装した。曲面・ノイズ付き母岩も Fracture の入力にできる。次は [計画](plan.md) の P5 後半：Joint Set と複数節理。写真に対する見た目の目標は [外観目標](../reference/visual-target.md) に記録。
+P5 前半の母岩4形状と弱い BaseNoise を実装した。曲面・ノイズ付き母岩も Fracture の入力にできる。Joint Set の有限パッチ列と複数方向のガイド表示も追加した。次は [計画](plan.md) の P5 後半：多片分割と複数節理の実切断。写真に対する見た目の目標は [外観目標](../reference/visual-target.md) に記録。
 
 | 区分 | 現在の状態 |
 | --- | --- |
 | アプリ基盤 | DX12 / ImGui、モデル表示、グラフ編集、素材・アセット・保存基盤あり |
-| 岩生成 | Base Rock の Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズと Seed の編集に対応。有限亀裂の表示と、軸に沿う単一の部分切断・Rock Bridge に対応。単一平面による完全分割と2片の操作に対応 |
+| 岩生成 | Base Rock の Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズと Seed の編集に対応。有限亀裂と Joint Set の複数方向ガイド表示、軸に沿う単一の部分切断・Rock Bridge に対応。単一平面による完全分割と2片の操作に対応 |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。枝単位キャッシュは P6 |
-| 次の作業 | P5 後半：Joint Set、複数系統の分割、曲面/交差亀裂 |
+| 次の作業 | P5 後半：Joint Set の多片分割、曲面/交差亀裂 |
 
 ## 完了
+
+### 2026-09-20 Joint Set の有限パッチ列（P5 後半の表示基盤）
+
+- `crack/JointSet` と Joint Set ノードを追加。1～64本のパッチを基準法線方向に配置し、位置とローカル U/V 軸の傾きを固定ハッシュと Seed で再現する。
+- 設定パネルで中心・回転・間隔・位置/角度ばらつき・オフセット・本数・Seed・半幅・深さ・Persistence・Aperture・表示を編集。保存/読込と Undo/Redo に接続。
+- 複数系統の直列接続、途中プレビュー、合流時のパッチ単位の重複排除に対応。ガイド表示は母岩の実形状を変更しない。
+- 向き/配置、決定性、最大本数とばらつき、有限範囲、不正設定、母岩不変、直列/合流、Undo/Redo の自動テストが成功。Debug / Release ビルドと CTest が成功。
+- Release で1系統/2系統、表示切替、Seed 違い、設定省略時の既定値、不正本数の診断を目視確認。保存→読込→再保存で全設定と接続が一致。検証素材は `build/p5-joint-validation/`、実行ファイルは `build/p5-joint-release/`。実マウスによる通し操作と Debug の描画確認は未実施。
+
+**残る範囲**：Joint Set による実切断・多片分割、continuity/roughness、曲面/交差部分亀裂。Fracture は Joint Set のパッチ列をまだ使わず、従来の独立した単一平面で分割する。
 
 ### 2026-09-20 母岩形状と弱い BaseNoise（P5 前半）
 
@@ -145,7 +155,7 @@ Debug ビルドとテスト（`rock_editor_tests`）が通り、アプリが起�
 ## 未完了
 
 - 完全分割の穴・複数ループ・多片対応。部分切断の任意角度・一般メッシュ・複数交差対応。
-- Joint Set、枝単位キャッシュ、Chip、Triplanar、OBJ。
+- Joint Set の実分割、枝単位キャッシュ、Chip、Triplanar、OBJ。
 - P1 の Box は無地表示。Surface 接続と岩用 UV/Triplanar は未対応。既存の Transform ノードはモデル専用のまま。
 - グラフからの寸法変更・Undo/Redo は自動テスト、Chunk ギズモは CLI 入力注入で確認。実マウス操作による一連の編集操作は未検証。
 

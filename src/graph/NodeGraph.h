@@ -2,6 +2,7 @@
 
 #include "compositor/MaterialLayer.h"
 #include "crack/CrackPatch.h"
+#include "crack/JointSet.h"
 #include "geometry/BaseRock.h"
 #include "fracture/PlaneSplit.h"
 #include "renderer/ModelAsset.h"
@@ -50,6 +51,7 @@ enum class NodeKind : uint32_t {
     BaseRock = 34,
     Crack = 35,
     Fracture = 36,
+    JointSet = 37,
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
@@ -131,9 +133,9 @@ struct CompiledGraph {
 };
 
 // 設定を持たないノード（Mesh Output）は std::monostate。
-using NodeSettings =
-    std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings, TransformNodeSettings,
-                 BaseRockNodeSettings, crack::CrackSettings, fracture::FractureSettings, std::monostate>;
+using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings,
+                                  TransformNodeSettings, BaseRockNodeSettings, crack::CrackSettings,
+                                  fracture::FractureSettings, crack::JointSetSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;

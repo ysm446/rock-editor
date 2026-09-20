@@ -26,7 +26,11 @@ void Append(RockEvaluation& target, const RockEvaluation& source) {
             }))
             target.rocks.push_back(item);
     append(target.fractures, source.fractures);
-    append(target.cracks, source.cracks);
+    for (const auto& item : source.cracks)
+        if (std::none_of(target.cracks.begin(), target.cracks.end(), [&](const auto& other) {
+                return other.source == item.source && other.index == item.index;
+            }))
+            target.cracks.push_back(item);
     append(target.cuts, source.cuts);
     target.hasModels |= source.hasModels;
 }
@@ -59,6 +63,23 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
                                       ? std::optional{settings->size}
                                       : std::nullopt;
             result.rocks.push_back({id, std::move(mesh), uncutBox});
+        } else if (node->kind == NodeKind::JointSet) {
+            const auto* settings = std::get_if<crack::JointSetSettings>(&node->settings);
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream)
+                return finish(Failure(id, "Joint Set", "Mesh 入力を接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty())
+                return finish(Failure(id, "Joint Set", "母岩の Mesh を接続してください"));
+            std::vector<crack::CrackPatch> patches;
+            std::string error;
+            if (!crack::BuildJointSet(*settings, patches, error))
+                return finish(Failure(id, "Joint Set", error));
+            if (settings->showGuide)
+                for (size_t i = 0; i < patches.size(); ++i)
+                    result.cracks.push_back({id, patches[i], static_cast<int>(i)});
         } else if (node->kind == NodeKind::Crack) {
             const auto* settings = std::get_if<crack::CrackSettings>(&node->settings);
             const auto* upstream =

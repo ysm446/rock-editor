@@ -18,6 +18,7 @@ struct GeneratedRock {
 struct GeneratedCrack {
     GraphId source = 0;
     crack::CrackPatch patch;
+    int index = 0;  // 同じ Joint Set 内のパッチ番号。Crack は0。
 };
 struct GeneratedCut {
     GraphId source = 0;
