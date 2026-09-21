@@ -95,6 +95,9 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(decimate->targetTriangles); add(decimate->maxError); add(decimate->creaseWeight);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
         add(uv->resolution); add(uv->padding); add(uv->quality);
+    } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
+        // 反転は画像を変えない（使う側で掛ける）ので含めない。
+        add(occlusion->type); add(occlusion->distance); add(occlusion->samples); add(occlusion->resolution); add(occlusion->low); add(occlusion->high);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
                node->kind != NodeKind::UvUnwrap && node->kind != NodeKind::MaterialBake &&
                node->kind != NodeKind::ApplyMaterial && node->kind != NodeKind::MeshOutput) return std::nullopt;
@@ -108,6 +111,14 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
             if (node->kind == NodeKind::ApplyMaterial && pin.valueType == ValueType::Material)
                 if (const auto* surface = graph.FindUpstreamNodeForPin(pin.id))
                     if (const auto* layer = std::get_if<LayerNodeSettings>(&surface->settings)) add(layer->layer.enabled);
+            // 形状マスクの画像は下流の結果（rock.maskImages）に残る。マスクのノードの設定と、その入力メッシュで決まる。
+            if (const auto* shape = graph.FindUpstreamNodeForPin(pin.id); shape && shape->kind == NodeKind::ShapeMask) {
+                if (usesHeight) add(std::get<geometry::ShapeMaskSettings>(shape->settings).invert);
+                const auto maskKey = VolumeKey(graph, shape->id, heightKeys, depth + 1, false);
+                if (!maskKey) return std::nullopt;
+                add(maskKey->size()); key += *maskKey;
+                continue;
+            }
             if (usesHeight) {
                 const auto* source = graph.FindUpstreamNodeForPin(pin.id);
                 if (source) {
@@ -165,7 +176,8 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate ||
-                                 node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace;
+                                 node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace ||
+                                 node->kind == NodeKind::ShapeMask;
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id, heightKeys) : std::nullopt;
         if (persistentKey) {
             const auto found = persistent->entries.find(id);
@@ -193,6 +205,20 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         };
         if (IsPieceNodeKind(node->kind)) {
             return finish(EvaluatePieceNode(graph, *node, persistent, [&](GraphId upstream) { return evaluate(upstream, depth+1); }, stop));
+        } else if (node->kind == NodeKind::ShapeMask) {
+            const auto* settings = std::get_if<geometry::ShapeMaskSettings>(&node->settings);
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream) return finish(Failure(id, "Shape Mask", "UV付きのMeshを接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            report(id, 0, 0);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.size() != 1 || result.rocks[0].volume)
+                return finish(Failure(id, "Shape Mask", "UV付きの生成メッシュを1つ接続してください（UV Unwrapの出力）"));
+            std::string error;
+            auto image = geometry::ShapeMask(result.rocks[0].mesh, *settings, error, stop, [&](int p) { report(id, 0, p); });
+            if (!error.empty()) return finish(Failure(id, "Shape Mask", error));
+            result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
+            result.rocks[0].previewMaskInvert = settings->invert;
         } else if (node->kind == NodeKind::ApplyMaterial) {
             const auto* upstream = graph.FindUpstreamNodeForPin(node->inputs[0].id);
             const auto* material = graph.FindUpstreamNodeForPin(node->inputs[1].id);
@@ -205,7 +231,17 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 return finish(Failure(id, "Apply Material", "生成メッシュが必要です"));
             if (const auto* layer = std::get_if<LayerNodeSettings>(&material->settings); layer && !layer->layer.enabled)
                 return finish(result);
-            if (mask) {
+            std::shared_ptr<const geometry::MaskImage> shapeMask;
+            if (mask && mask->kind == NodeKind::ShapeMask) {
+                const auto masked = evaluate(mask->id, depth + 1);
+                if (!masked.error.empty()) return finish(masked);
+                shapeMask = masked.rocks[0].previewMask;
+                // マスクはUVで貼る。マスクを作ったメッシュと同じアトラスのUVを持つメッシュにだけ使える。
+                for (const auto& rock : result.rocks)
+                    if (!geometry::HasValidUvs(rock.mesh) || rock.mesh.uvWidth != masked.rocks[0].mesh.uvWidth ||
+                        rock.mesh.uvHeight != masked.rocks[0].mesh.uvHeight)
+                        return finish(Failure(id, "Apply Material", "Shape MaskのMeshと同じUVのMeshを接続してください（同じUV Unwrapの出力から分ける）"));
+            } else if (mask) {
                 const auto* settings = std::get_if<MaterialMaskSettings>(&mask->settings);
                 if (!settings || !std::isfinite(settings->value) || settings->value < 0 || settings->value > 1 ||
                     !std::isfinite(settings->repeatMeters) || settings->repeatMeters < .001f || settings->repeatMeters > 10000)
@@ -213,10 +249,12 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             }
             for (auto& rock : result.rocks) {
                 if (rock.volume) return finish(Failure(id, "Apply Material", "Volume to Meshを通してください"));
-                if (!mask) rock.materials.clear();
+                if (!mask) { rock.materials.clear(); rock.maskImages.clear(); }
                 else if (rock.materials.empty() && rock.materialSource) rock.materials.push_back({rock.materialSource, 0});
                 if (rock.materials.size() >= 8) return finish(Failure(id, "Apply Material", "素材の重ね合わせは8段までです"));
                 rock.materials.push_back({material->id, mask ? mask->id : 0});
+                if (shapeMask) rock.maskImages[mask->id] = shapeMask;
+                rock.previewMask.reset();
                 rock.materialSource = 0;
                 rock.bakeSource = 0;
             }
@@ -261,7 +299,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                         if (mask && mask->texture && !heights->masks.contains(binding.mask))
                             return finish(Failure(id, name, "マスク画像を読み込めません"));
                         if (!geometry::HasValidUvs(rock.mesh) && (found->second.mapping.method == compositor::MappingMethod::UV ||
-                            (mask && mask->texture && !mask->triplanar)))
+                            (mask && mask->texture && !mask->triplanar) || rock.maskImages.contains(binding.mask)))
                             return finish(Failure(id, name, "UV投影には先にUV Unwrapが必要です。UVなしではTriplanarを使用してください"));
                     }
                     const bool wrap = heights->surfaces.at(bindings.front().surface).mapping.method == compositor::MappingMethod::Triplanar;
@@ -270,6 +308,13 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                         for (const auto& binding : bindings) {
                             const auto* maskNode = graph.FindNode(binding.mask);
                             const auto* mask = maskNode ? std::get_if<MaterialMaskSettings>(&maskNode->settings) : nullptr;
+                            // 形状マスクは画像をUVで読み、定数のマスクとして渡す。
+                            compositor::MaterialMask shape;
+                            if (const auto image = rock.maskImages.find(binding.mask); image != rock.maskImages.end()) {
+                                shape.value = image->second->Sample(uv.u, uv.v);
+                                shape.invert = std::get<geometry::ShapeMaskSettings>(maskNode->settings).invert;
+                                mask = &shape;
+                            }
                             h = heights->Sample(binding.surface, mask, binding.mask, p, n, uv, h, wrap);
                         }
                         return h;
@@ -293,6 +338,8 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 geometry::Mesh combined;
                 for (const auto& rock : result.rocks) {
                     if (rock.volume) return finish(Failure(id, "UV Unwrap", "先にVolume to Meshへ接続してください"));
+                    // 展開し直すとUVが変わり、形状マスクの画像と合わなくなる。
+                    if (!rock.maskImages.empty()) return finish(Failure(id, "UV Unwrap", "Shape Maskを使う素材は、UV Unwrapの後で適用してください"));
                     const auto offset = static_cast<uint32_t>(combined.positions.size());
                     combined.positions.insert(combined.positions.end(), rock.mesh.positions.begin(), rock.mesh.positions.end());
                     for (auto face : rock.mesh.triangles) { for (auto& i : face) i += offset; combined.triangles.push_back(face); }
@@ -333,6 +380,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 const auto* surface = graph.FindUpstreamNodeForPin(node->inputs[1].id);
                 if (surface) {
                     result.rocks[0].materials.clear();
+                    result.rocks[0].maskImages.clear();
                     result.rocks[0].materialSource = surface->id;
                 } else if (result.rocks[0].materials.empty() && !result.rocks[0].materialSource)
                     return finish(Failure(id, "Material Bake", "Apply Materialを通すかMaterialにSurfaceを接続してください"));
@@ -549,7 +597,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (node->kind == NodeKind::MeshOutput && node->inputs.size() > 1) {
                 const auto* surface = graph.FindUpstreamNodeForPin(node->inputs[1].id);
                 if (surface && surface->kind == NodeKind::Surface)
-                    for (auto& rock : result.rocks) { rock.materialSource = surface->id; rock.materials.clear(); rock.bakeSource = 0; }
+                    for (auto& rock : result.rocks) { rock.materialSource = surface->id; rock.materials.clear(); rock.maskImages.clear(); rock.bakeSource = 0; }
             }
         }
         return finish(result);

@@ -310,12 +310,15 @@ void Application::DrawBakedTextureTiles(const graph::MaterialBakeSettings& bake)
 void Application::SyncMeshGraph() {
     if (m_uvLastSelectedNode != m_selectedGraphNode) {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
-            previous && previous->kind == graph::NodeKind::UvUnwrap && m_previewGraphNode == previous->id)
+            previous && (previous->kind == graph::NodeKind::UvUnwrap || previous->kind == graph::NodeKind::ShapeMask) &&
+            m_previewGraphNode == previous->id)
             SetPreviewGraphNode(m_uvPreviousPreviewNode, m_uvPreviousPreviewPin);
         m_pieceSelectionEditing = false;
         m_pieceGizmoId = -1;
         m_uvLastSelectedNode = m_selectedGraphNode;
-        if (const auto* node = m_graph.FindNode(m_selectedGraphNode); node && node->kind == graph::NodeKind::UvUnwrap) {
+        // UV Unwrap は選ぶとUVチェッカー、Shape Mask は選ぶとマスクを貼った入力メッシュを出す。選択を外すと元のプレビューへ戻す。
+        if (const auto* node = m_graph.FindNode(m_selectedGraphNode);
+            node && (node->kind == graph::NodeKind::UvUnwrap || node->kind == graph::NodeKind::ShapeMask)) {
             m_uvPreviousPreviewNode = m_previewGraphNode;
             m_uvPreviousPreviewPin = m_previewGraphPin;
             SetPreviewGraphNode(node->id);
@@ -333,7 +336,8 @@ void Application::SyncMeshGraph() {
         // 計算中であることも表示できない。
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
                n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate ||
-               n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace;
+               n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace ||
+               n.kind == graph::NodeKind::ShapeMask;
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
     const std::string geometryKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
@@ -404,6 +408,7 @@ void Application::SyncMeshGraph() {
     m_piecePreview = evaluated.pieces;
     m_pointPreview = evaluated.points;
     renderer::MeshScene scene;
+    for (auto& entry : m_shapeMaskTextures) entry.used = false;
     m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();
     m_rockTriangleCounts.clear();
@@ -438,6 +443,12 @@ void Application::SyncMeshGraph() {
             m_meshGraphError = "岩メッシュを描画へ転送できませんでした";
         }
     }
+    // 新しいシーンを渡し終えてから、使われなくなった形状マスクのテクスチャを捨てる。
+    std::erase_if(m_shapeMaskTextures, [&](const auto& entry) {
+        if (entry.used) return false;
+        m_textureLibrary.Remove(m_device, entry.texture);
+        return true;
+    });
     m_meshGraphRevision = m_graph.Revision();
     m_meshGraphPreviewNode = previewMeshNode;
 }
@@ -1001,6 +1012,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Material スロットへ渡す");
         addNodeMenuItem(graph::NodeKind::ApplyMaterial, "Apply Material — マスクで素材を適用");
         addNodeMenuItem(graph::NodeKind::MaterialMask, "Material Mask — 定数・画像マスク");
+        addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（オクルージョン / 上向き度 / 高さ）");
         addNodeMenuItem(graph::NodeKind::MaterialBake, "Material Bake — UVへ材質を焼き付ける");
         ImGui::EndPopup();
     }
@@ -1519,6 +1531,57 @@ void Application::DrawGraphPanel() {
         }
         ui::HintText("画像未指定なら定数。画像はリニアのRを使用。反復幅はUV時はUV単位、Triplanar時はメートルです。");
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+    } else if (auto* shape = std::get_if<geometry::ShapeMaskSettings>(&selected->settings)) {
+        auto edited = *shape;
+        bool changed = false;
+        const bool occlusion = edited.type == geometry::ShapeMaskType::Occlusion;
+        if (ui::BeginPropertyTable("shapeMaskRows")) {
+            const char* types[] = {"オクルージョン（溝・割れ目）", "上向き度", "高さ"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 2);
+            if (ui::PropertyCombo("種類", &type, types, 3, 0)) {
+                edited.type = static_cast<geometry::ShapeMaskType>(type);
+                changed = true;
+            }
+            const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+            int resolutionIndex = 0;
+            while ((128 << resolutionIndex) < edited.resolution && resolutionIndex < 5) ++resolutionIndex;
+            if (ui::PropertyCombo("マスク解像度", &resolutionIndex, resolutions, 6, 3)) {
+                edited.resolution = 128 << resolutionIndex;
+                changed = true;
+            }
+            if (occlusion) {
+                changed |= ui::PropertyFloat("距離 (m)", &edited.distance, .01f, 5, .3f,
+                                             "この距離までにある形を遮蔽として数えます。小さいと細い溝だけ、大きいと広いくぼみまで白くなります。");
+                changed |= ui::PropertyInt("サンプル数", &edited.samples, geometry::kMinOcclusionSamples, geometry::kMaxOcclusionSamples, 32,
+                                           "画素ごとに飛ばすレイの数。多いほど階調がなめらかになり、時間がかかります。");
+            }
+            changed |= ui::PropertyFloat("下限", &edited.low, 0, 1, .2f, "元の値がこれ以下の所を黒（0）にします。");
+            changed |= ui::PropertyFloat("上限", &edited.high, 0, 1, .8f, "元の値がこれ以上の所を白（1）にします。");
+            changed |= ui::PropertyBool("反転", &edited.invert, false);
+            ui::EndPropertyTable();
+        }
+        if (EvaluatingNode() == selected->id) {
+            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
+            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
+                               EvaluationProgressText().c_str());
+        }
+        ui::HintText("UV付きのMesh（UV Unwrapの出力）を接続し、MaskをApply Materialへつなぎます。マスクはそのUVに対応する画像で、"
+                     "Apply MaterialのMeshには同じUV Unwrapの出力（またはその下流）を接続します。選択中は、マスクを白黒で貼って表示します。");
+        if (occlusion)
+            ui::HintText("オクルージョン：白は周りを形に囲まれた所（溝・割れ目・入隅）、黒は開けた面。CPUで計算し、解像度とサンプル数が大きいほど時間がかかります。");
+        else if (edited.type == geometry::ShapeMaskType::Direction)
+            ui::HintText("上向き度：白は上（+Y）を向いた面、灰色は垂直な面、黒は下を向いた面。下限と上限で「どこから上面とみなすか」を決めます。");
+        else
+            ui::HintText("高さ：白は形の最上部、黒は最下部。反転すると接地側の汚れに使えます。");
+        if (changed) {
+            edited.distance = std::clamp(edited.distance, .001f, 1000.0f);
+            edited.samples = std::clamp(edited.samples, geometry::kMinOcclusionSamples, geometry::kMaxOcclusionSamples);
+            edited.low = std::clamp(edited.low, 0.0f, .999f);
+            edited.high = std::clamp(edited.high, edited.low + .001f, 1.0f);
+            *shape = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
     } else if (selected->kind == graph::NodeKind::MaterialBake) {
         ui::HintText("UV付きのMeshを接続します。Apply Materialの素材を焼き付けます。MaterialにSurfaceを接続すると全面を置換します。");
         auto& bake = std::get<graph::MaterialBakeSettings>(selected->settings);

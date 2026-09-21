@@ -68,10 +68,14 @@ constexpr std::array<PinDefinition, 2> kPiecesMeshPins = {{{PinKind::Input, Valu
 constexpr std::array<PinDefinition, 4> kApplyPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Input, ValueType::Mask, "Mask"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+// 形状から作るマスク。UV付きのメッシュを受けて、そのUVに対応するマスクを出す。
+constexpr std::array<PinDefinition, 2> kShapeMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Output, ValueType::Mask, "Mask"}}};
 constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 27> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 28> kNodeDefinitions = {{
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
+    {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
     {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
     {NodeKind::VoronoiFracture, "voronoiFracture", "Voronoi Fracture", kVoronoiPins},
     {NodeKind::PieceSelect, "pieceSelect", "Piece Select", kSelectPins},
@@ -138,7 +142,9 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::VolumeNoise ||
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
-           kind == NodeKind::Decimate || kind == NodeKind::Subdivide || kind == NodeKind::Displace;
+           kind == NodeKind::Decimate || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
+           // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
+           kind == NodeKind::ShapeMask;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -448,6 +454,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::DecimateSettings{};
     } else if (kind == NodeKind::MaterialMask) {
         node.settings = MaterialMaskSettings{};
+    } else if (kind == NodeKind::ShapeMask) {
+        node.settings = geometry::ShapeMaskSettings{};
     } else if (kind == NodeKind::MaterialBake) {
         node.settings = MaterialBakeSettings{};
     } else if (kind == NodeKind::VolumeToMesh) {

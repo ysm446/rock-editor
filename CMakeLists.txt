@@ -396,3 +396,5 @@ target_sources(rock_editor PRIVATE tests/GpuAoTests.cpp)
 target_sources(rock_editor PRIVATE src/geometry/Displace.cpp src/graph/MaterialHeight.cpp src/app/ApplicationDisplace.cpp)
 target_sources(rock_editor_tests PRIVATE src/geometry/Displace.cpp src/graph/MaterialHeight.cpp)
 target_sources(rock_editor_tests PRIVATE tests/DisplaceTests.cpp)
+
+target_sources(rock_editor_tests PRIVATE tests/ShapeMaskTests.cpp)

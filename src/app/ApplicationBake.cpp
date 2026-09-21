@@ -44,6 +44,13 @@ std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const 
         add(valid);
         if (!valid)
             return;
+        // Shape Mask の画像はファイルを持たない。画素そのものを含める。
+        for (const auto& entry : m_shapeMaskTextures)
+            if (entry.texture == id) {
+                add(entry.image->width); add(entry.image->height);
+                bytes(entry.image->pixels.data(), entry.image->pixels.size());
+                return;
+            }
         // IDや絶対パスに依存させない。保存・ルート移動後も同じ画像なら一致する。
         std::ifstream stream(image->path, std::ios::binary);
         char buffer[16384];
@@ -101,8 +108,45 @@ std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const 
     return out.str();
 }
 
+compositor::TextureId Application::ShapeMaskTextureFor(const std::shared_ptr<const geometry::MaskImage>& image) {
+    if (!image || !image->width || !image->height) return compositor::kNoTexture;
+    for (auto& entry : m_shapeMaskTextures)
+        if (entry.image == image && m_textureLibrary.Find(entry.texture)) { entry.used = true; return entry.texture; }
+    LdrImage rgba;
+    rgba.width = image->width; rgba.height = image->height;
+    rgba.pixels.resize(image->pixels.size() * 4);
+    for (size_t i = 0; i < image->pixels.size(); ++i) {
+        const uint8_t v = image->pixels[i];
+        rgba.pixels[i * 4] = rgba.pixels[i * 4 + 1] = rgba.pixels[i * 4 + 2] = v;
+        rgba.pixels[i * 4 + 3] = 255;
+    }
+    const auto id = m_textureLibrary.AddTransient(m_device, m_pipelineCache, "Shape Mask（一時）", rgba);
+    if (id) m_shapeMaskTextures.push_back({image, id, true});
+    return id;
+}
+
 void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::GeneratedRock &rock,
                                     bool useBaked) {
+    if (rock.previewMask) {
+        // Shape Mask を見ているとき。黒の全面の上に、マスクで白を重ねる（既存の素材の合成をそのまま使う）。
+        const auto texture = ShapeMaskTextureFor(rock.previewMask);
+        for (int stage = 0; stage < 2; ++stage) {
+            renderer::SceneMesh::AppliedMaterial applied;
+            auto layer = compositor::MaterialStack::MakeBaseLayer();
+            layer.material = compositor::kNoMaterialAsset;
+            const float c = stage == 0 ? 0.0f : 1.0f;
+            layer.baseColor = {c, c, c};
+            layer.roughness = 1; layer.metallic = 0; layer.ambientOcclusion = 1;
+            layer.heightSource = compositor::ValueSource::Constant;
+            applied.stack.Layers() = {layer};
+            applied.stack.SetTerrainScale(1, 0);
+            if (stage == 1) { applied.mask.texture = texture; applied.mask.invert = rock.previewMaskInvert; }
+            mesh.appliedMaterials.push_back(std::move(applied));
+        }
+        mesh.materialStack = mesh.appliedMaterials[0].stack;
+        mesh.mapping = mesh.appliedMaterials[0].mapping;
+        return;
+    }
     if (!rock.materials.empty()) {
         for (const auto& binding : rock.materials) {
             const auto* node = m_graph.FindNode(binding.surface);
@@ -119,6 +163,13 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
             applied.stack.SetTerrainScale(applied.mapping.repeatMeters, 0);
             if (const auto* mask = m_graph.FindNode(binding.mask))
                 if (const auto* settings = std::get_if<graph::MaterialMaskSettings>(&mask->settings)) applied.mask = *settings;
+            if (const auto image = rock.maskImages.find(binding.mask); image != rock.maskImages.end()) {
+                // 形状マスク。画像をUVでそのまま貼る（反復なし）。
+                applied.mask = {};
+                applied.mask.texture = ShapeMaskTextureFor(image->second);
+                if (const auto* node = m_graph.FindNode(binding.mask))
+                    if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) applied.mask.invert = shape->invert;
+            }
             mesh.appliedMaterials.push_back(std::move(applied));
         }
         if (!mesh.appliedMaterials.empty()) {

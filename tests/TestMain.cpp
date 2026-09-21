@@ -28,11 +28,13 @@ void RunProjectWorkspaceTests();
 
 void RunApplyMaterialTests();
 void RunDisplaceTests();
+void RunShapeMaskTests();
 int main(int argc, char** argv) {
     RunDisplaceTests();
     if (argc == 2 && std::strcmp(argv[1], "--displace-only") == 0)
         return rock::tests::g_failures == 0 ? 0 : 1;
     RunApplyMaterialTests();
+    RunShapeMaskTests();
     RunPieceTests();
     RunMeshVolumeTests();
     RunRockTests();

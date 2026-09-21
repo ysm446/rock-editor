@@ -1,0 +1,586 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "randomBoxes",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "randomBoxes": {
+          "count": 6,
+          "size": [
+            2.4,
+            1.8,
+            2.0
+          ],
+          "sizeVariation": 0.5,
+          "spread": 0.8,
+          "rotation": 20,
+          "seed": 11
+        }
+      },
+      {
+        "id": 3,
+        "kind": "toVolume",
+        "inputs": [
+          4
+        ],
+        "outputs": [
+          5
+        ],
+        "position": [
+          260,
+          0
+        ],
+        "toVolume": {
+          "resolution": 96
+        }
+      },
+      {
+        "id": 17,
+        "kind": "scatterPoints",
+        "inputs": [
+          18
+        ],
+        "outputs": [
+          19
+        ],
+        "position": [
+          260,
+          220
+        ],
+        "pieces": {
+          "count": 14,
+          "seed": 4,
+          "version": 1
+        }
+      },
+      {
+        "id": 40,
+        "kind": "baseRock",
+        "inputs": [],
+        "outputs": [
+          41
+        ],
+        "position": [
+          0,
+          220
+        ],
+        "baseRock": {
+          "size": [
+            3.4,
+            3.0,
+            3.2
+          ],
+          "seed": 0,
+          "shape": "box",
+          "subdivisions": 8,
+          "roundness": 0.25,
+          "noiseStrength": 0,
+          "noiseScale": 2
+        }
+      },
+      {
+        "id": 6,
+        "kind": "planeCuts",
+        "inputs": [
+          7
+        ],
+        "outputs": [
+          8
+        ],
+        "position": [
+          520,
+          0
+        ],
+        "planeCuts": {
+          "count": 5,
+          "scope": "global",
+          "radius": 0.2,
+          "seed": 3,
+          "depthMin": 0.08,
+          "depthMax": 0.22,
+          "distribution": "directional",
+          "systems": 3,
+          "rotation": [
+            18,
+            30,
+            -12
+          ],
+          "spread": 14,
+          "blend": 0.0
+        }
+      },
+      {
+        "id": 20,
+        "kind": "volumeCrack",
+        "inputs": [
+          21,
+          22
+        ],
+        "outputs": [
+          23
+        ],
+        "position": [
+          780,
+          0
+        ],
+        "volumeCrack": {
+          "width": 0.035,
+          "depth": 0.22,
+          "variation": 0.7,
+          "noise": 0.5,
+          "noiseScale": 3.0,
+          "seed": 2
+        }
+      },
+      {
+        "id": 9,
+        "kind": "planeCuts",
+        "inputs": [
+          10
+        ],
+        "outputs": [
+          11
+        ],
+        "position": [
+          1040,
+          0
+        ],
+        "planeCuts": {
+          "count": 256,
+          "scope": "local",
+          "radius": 0.12,
+          "seed": 8,
+          "depthMin": 0.15,
+          "depthMax": 0.45,
+          "distribution": "isotropic",
+          "systems": 2,
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "spread": 12,
+          "blend": 0.0
+        }
+      },
+      {
+        "id": 12,
+        "kind": "volumeToMesh",
+        "inputs": [
+          13
+        ],
+        "outputs": [
+          14
+        ],
+        "position": [
+          1560,
+          0
+        ],
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 15,
+        "kind": "meshOutput",
+        "inputs": [
+          16
+        ],
+        "outputs": [],
+        "position": [
+          3100,
+          0
+        ]
+      },
+      {
+        "id": 50,
+        "kind": "volumeNoise",
+        "inputs": [
+          51
+        ],
+        "outputs": [
+          52
+        ],
+        "position": [
+          1300,
+          0
+        ],
+        "volumeNoise": {
+          "type": "facet",
+          "amount": 0.02,
+          "scale": 10.0,
+          "octaves": 2,
+          "warp": 0.02,
+          "warpScale": 2.5,
+          "seed": 1
+        }
+      },
+      {
+        "id": 400,
+        "kind": "decimate",
+        "inputs": [
+          401
+        ],
+        "outputs": [
+          402
+        ],
+        "position": [
+          1820,
+          0
+        ],
+        "decimate": {
+          "targetTriangles": 30000,
+          "maxError": 0.004,
+          "creaseWeight": 1.0
+        }
+      },
+      {
+        "id": 410,
+        "kind": "uvUnwrap",
+        "inputs": [
+          411
+        ],
+        "outputs": [
+          412
+        ],
+        "position": [
+          2080,
+          0
+        ],
+        "uvUnwrap": {
+          "resolution": 1024,
+          "padding": 4,
+          "quality": 1
+        }
+      },
+      {
+        "id": 200,
+        "kind": "applyMaterial",
+        "inputs": [
+          201,
+          202,
+          203
+        ],
+        "outputs": [
+          204
+        ],
+        "position": [
+          2340,
+          0
+        ]
+      },
+      {
+        "id": 210,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          211
+        ],
+        "position": [
+          2080,
+          240
+        ],
+        "layer": {
+          "name": "Weathered",
+          "baseColor": [
+            0.3,
+            0.29,
+            0.27
+          ],
+          "roughness": 0.85,
+          "ambientOcclusion": 1.0,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar"
+          }
+        }
+      },
+      {
+        "id": 220,
+        "kind": "applyMaterial",
+        "inputs": [
+          221,
+          222,
+          223
+        ],
+        "outputs": [
+          224
+        ],
+        "position": [
+          2600,
+          0
+        ]
+      },
+      {
+        "id": 230,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          231
+        ],
+        "position": [
+          2340,
+          240
+        ],
+        "layer": {
+          "name": "Rust",
+          "baseColor": [
+            0.35,
+            0.12,
+            0.03
+          ],
+          "roughness": 0.7,
+          "ambientOcclusion": 1.0,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar"
+          }
+        }
+      },
+      {
+        "id": 240,
+        "kind": "shapeMask",
+        "inputs": [
+          241
+        ],
+        "outputs": [
+          242
+        ],
+        "position": [
+          2340,
+          480
+        ],
+        "shapeMask": {
+          "type": "occlusion",
+          "resolution": 1024,
+          "low": 0.25,
+          "high": 0.7,
+          "invert": false,
+          "distance": 0.25,
+          "samples": 32
+        }
+      },
+      {
+        "id": 250,
+        "kind": "applyMaterial",
+        "inputs": [
+          251,
+          252,
+          253
+        ],
+        "outputs": [
+          254
+        ],
+        "position": [
+          2860,
+          0
+        ]
+      },
+      {
+        "id": 260,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          261
+        ],
+        "position": [
+          2600,
+          240
+        ],
+        "layer": {
+          "name": "Dust",
+          "baseColor": [
+            0.55,
+            0.52,
+            0.45
+          ],
+          "roughness": 0.95,
+          "ambientOcclusion": 1.0,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar"
+          }
+        }
+      },
+      {
+        "id": 270,
+        "kind": "shapeMask",
+        "inputs": [
+          271
+        ],
+        "outputs": [
+          272
+        ],
+        "position": [
+          2600,
+          480
+        ],
+        "shapeMask": {
+          "type": "direction",
+          "resolution": 1024,
+          "low": 0.8,
+          "high": 0.95,
+          "invert": false,
+          "distance": 0.3,
+          "samples": 32
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": 60,
+        "start": 2,
+        "end": 4
+      },
+      {
+        "id": 61,
+        "start": 41,
+        "end": 18
+      },
+      {
+        "id": 62,
+        "start": 5,
+        "end": 7
+      },
+      {
+        "id": 63,
+        "start": 8,
+        "end": 21
+      },
+      {
+        "id": 64,
+        "start": 19,
+        "end": 22
+      },
+      {
+        "id": 65,
+        "start": 23,
+        "end": 10
+      },
+      {
+        "id": 90,
+        "start": 11,
+        "end": 51
+      },
+      {
+        "id": 91,
+        "start": 52,
+        "end": 13
+      },
+      {
+        "id": 300,
+        "start": 14,
+        "end": 401
+      },
+      {
+        "id": 301,
+        "start": 402,
+        "end": 411
+      },
+      {
+        "id": 302,
+        "start": 412,
+        "end": 201
+      },
+      {
+        "id": 303,
+        "start": 211,
+        "end": 202
+      },
+      {
+        "id": 304,
+        "start": 204,
+        "end": 221
+      },
+      {
+        "id": 305,
+        "start": 231,
+        "end": 222
+      },
+      {
+        "id": 306,
+        "start": 412,
+        "end": 241
+      },
+      {
+        "id": 307,
+        "start": 242,
+        "end": 223
+      },
+      {
+        "id": 308,
+        "start": 224,
+        "end": 251
+      },
+      {
+        "id": 309,
+        "start": 261,
+        "end": 252
+      },
+      {
+        "id": 310,
+        "start": 412,
+        "end": 271
+      },
+      {
+        "id": 311,
+        "start": 272,
+        "end": 253
+      },
+      {
+        "id": 312,
+        "start": 254,
+        "end": 16
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 6.5,
+      "fovY": 0.785398,
+      "pitch": 0.35,
+      "yaw": 0.7
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0
+}

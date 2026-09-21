@@ -21,6 +21,11 @@ struct GeneratedRock {
     std::vector<MaterialBinding> materials;
     GraphId materialSource = 0;
     GraphId bakeSource = 0;
+    // 形状から作ったマスク（Shape Mask）。マスクのノード → このメッシュのUVに対応する画像。
+    std::map<GraphId, std::shared_ptr<const geometry::MaskImage>> maskImages;
+    // マスクのノード自身を評価した結果。入力メッシュに、このマスクを白黒のテクスチャとして貼って見せる。
+    std::shared_ptr<const geometry::MaskImage> previewMask;
+    bool previewMaskInvert = false;
     int pieceId = -1;
     bool pieceSelected = false;
 };

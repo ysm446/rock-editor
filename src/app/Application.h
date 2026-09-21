@@ -194,6 +194,14 @@ private:
     // ベイク結果の画像（BaseColor / Normal / RoughnessMetallicAO / Height）。「テクスチャを出力…」で書き出す元。
     // ファイルへは自動で保存しない。プロジェクトを開き直すと消える。
     std::unordered_map<graph::GraphId, std::array<LdrImage, 4>> m_bakeImages;
+    // Shape Mask の画像を載せた一時テクスチャ。評価結果の画像（共有）ごとに1枚。使われなくなったら SyncMeshGraph が捨てる。
+    struct ShapeMaskTexture {
+        std::shared_ptr<const geometry::MaskImage> image;
+        compositor::TextureId texture = compositor::kNoTexture;
+        bool used = false;
+    };
+    std::vector<ShapeMaskTexture> m_shapeMaskTextures;
+    compositor::TextureId ShapeMaskTextureFor(const std::shared_ptr<const geometry::MaskImage>& image);
     // フォルダを選んで、ベイク結果の PNG を書き出す。
     // directory が空ならフォルダを選ぶダイアログを出す。
     void ExportBakedTextures(graph::GraphId id, std::filesystem::path directory = {});

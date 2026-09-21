@@ -1,7 +1,10 @@
 #include "geometry/BakeOcclusion.h"
+#include "geometry/ShapeMask.h"
 #include "geometry/UvUnwrap.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <execution>
 #include <numeric>
 #include <numbers>
 namespace rock::geometry {
@@ -180,5 +183,154 @@ bool BakeOcclusion(const Mesh &mesh, float distance, int samples, float strength
             }
     }
     return true;
+}
+float MaskImage::Sample(float u, float v) const {
+    if (!width || !height || pixels.size() != size_t(width) * height || !std::isfinite(u) || !std::isfinite(v))
+        return 0;
+    const float x = std::clamp(u, 0.f, 1.f) * width - .5f, y = std::clamp(v, 0.f, 1.f) * height - .5f;
+    const int ix = int(std::floor(x)), iy = int(std::floor(y));
+    const float tx = x - ix, ty = y - iy;
+    const auto at = [&](int a, int b) {
+        return pixels[size_t(std::clamp(b, 0, int(height) - 1)) * width + std::clamp(a, 0, int(width) - 1)] / 255.f;
+    };
+    return std::lerp(std::lerp(at(ix, iy), at(ix + 1, iy), tx), std::lerp(at(ix, iy + 1), at(ix + 1, iy + 1), tx), ty);
+}
+MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::string &error,
+                    std::stop_token stop, const std::function<void(int)> &progress) {
+    error.clear();
+    const int resolution = settings.resolution;
+    const bool occlusion = settings.type == ShapeMaskType::Occlusion;
+    if ((settings.type != ShapeMaskType::Occlusion && settings.type != ShapeMaskType::Direction &&
+         settings.type != ShapeMaskType::Height) ||
+        !std::isfinite(settings.distance) || settings.distance < .001f || settings.distance > 1000 ||
+        settings.samples < kMinOcclusionSamples || settings.samples > kMaxOcclusionSamples ||
+        resolution < kMinShapeMaskResolution || resolution > kMaxShapeMaskResolution ||
+        (resolution & (resolution - 1)) != 0 || !std::isfinite(settings.low) || !std::isfinite(settings.high) ||
+        settings.low < 0 || settings.high > 1 || settings.high - settings.low < .001f) {
+        error = "Shape Maskの設定が不正です";
+        return {};
+    }
+    MeshInfo info;
+    if (!HasValidUvs(mesh) || !InspectMesh(mesh, info)) {
+        error = "UV付きのMeshが必要です。先にUV Unwrapを通してください";
+        return {};
+    }
+    const size_t width = size_t(resolution), height = size_t(resolution);
+    Bvh bvh;
+    bvh.triangles.reserve(mesh.triangles.size());
+    for (auto f : mesh.triangles) {
+        V a = Convert(mesh.positions[f[0]]), b = Convert(mesh.positions[f[1]]), c = Convert(mesh.positions[f[2]]);
+        bvh.triangles.push_back({a, b, c, Min(a, Min(b, c)), Max(a, Max(b, c)), (a + b + c) * (1. / 3)});
+    }
+    // レイを飛ばすのは遮蔽だけ。
+    if (occlusion) {
+        bvh.order.resize(bvh.triangles.size());
+        std::iota(bvh.order.begin(), bvh.order.end(), 0);
+        bvh.Build(0, bvh.order.size());
+    }
+    // 画素の中心がどの面のどこに当たるかを先に決める。辺を共有する面が同じ画素へ書くので、ここは直列にして
+    // 結果を再現させる。重いレイの計算だけを後で並列にする。
+    struct Texel { uint32_t face; float b, c; };
+    constexpr uint32_t kNoFace = UINT32_MAX;
+    std::vector<Texel> texels(width * height, Texel{kNoFace, 0, 0});
+    const auto cross = [](double ax, double ay, double bx, double by) { return ax * by - ay * bx; };
+    for (size_t f = 0; f < mesh.triangles.size(); ++f) {
+        const auto uv = mesh.cornerUvs[f];
+        const double area = cross(uv[1].u - uv[0].u, uv[1].v - uv[0].v, uv[2].u - uv[0].u, uv[2].v - uv[0].v);
+        if (std::abs(area) < 1e-16)
+            continue;
+        const int x0 = std::max(0, int(std::floor(std::min({uv[0].u, uv[1].u, uv[2].u}) * width))),
+                  x1 = std::min(int(width) - 1, int(std::ceil(std::max({uv[0].u, uv[1].u, uv[2].u}) * width)));
+        const int y0 = std::max(0, int(std::floor(std::min({uv[0].v, uv[1].v, uv[2].v}) * height))),
+                  y1 = std::min(int(height) - 1, int(std::ceil(std::max({uv[0].v, uv[1].v, uv[2].v}) * height)));
+        for (int y = y0; y <= y1; ++y)
+            for (int x = x0; x <= x1; ++x) {
+                const double u = (x + .5) / width - uv[0].u, v = (y + .5) / height - uv[0].v;
+                const double b = cross(u, v, uv[2].u - uv[0].u, uv[2].v - uv[0].v) / area,
+                             c = cross(uv[1].u - uv[0].u, uv[1].v - uv[0].v, u, v) / area;
+                if (b < 0 || c < 0 || b + c > 1)
+                    continue;
+                texels[size_t(y) * width + x] = {uint32_t(f), float(b), float(c)};
+            }
+    }
+    const V extent = Convert(info.maximum) - Convert(info.minimum);
+    const double distance = settings.distance;
+    const double bias = std::min(distance * 1e-3, std::max({extent.x, extent.y, extent.z}) * 1e-6);
+    MaskImage image;
+    image.width = uint32_t(width);
+    image.height = uint32_t(height);
+    image.pixels.assign(width * height, 0);
+    std::vector<size_t> rows(height);
+    std::iota(rows.begin(), rows.end(), size_t(0));
+    std::atomic<size_t> done{0};
+    std::atomic<bool> cancelled{false};
+    std::for_each(std::execution::par, rows.begin(), rows.end(), [&](size_t y) {
+        if (stop.stop_requested()) {
+            cancelled = true;
+            return;
+        }
+        for (size_t x = 0; x < width; ++x) {
+            const auto texel = texels[y * width + x];
+            if (texel.face == kNoFace)
+                continue;
+            const auto &t = bvh.triangles[texel.face];
+            const V n = Unit(Cross(t.b - t.a, t.c - t.a));
+            const V surface = t.a + (t.b - t.a) * double(texel.b) + (t.c - t.a) * double(texel.c);
+            double ratio = 0;
+            if (settings.type == ShapeMaskType::Direction) {
+                ratio = (n.y + 1) * .5;
+            } else if (settings.type == ShapeMaskType::Height) {
+                ratio = extent.y > 0 ? (surface.y - double(info.minimum.y)) / extent.y : 0;
+            } else {
+                const V tangent = Unit(Cross(std::abs(n.y) < .9 ? V{0, 1, 0} : V{1, 0, 0}, n)), bitangent = Cross(n, tangent);
+                const V p = surface + n * bias;
+                int occluded = 0;
+                for (int sample = 0; sample < settings.samples; ++sample) {
+                    const double r = std::sqrt((sample + .5) / settings.samples), phi = sample * 2.399963229728653;
+                    const V direction =
+                        tangent * (r * std::cos(phi)) + bitangent * (r * std::sin(phi)) + n * std::sqrt(1 - r * r);
+                    occluded += bvh.Hit(p, direction, distance, texel.face);
+                }
+                ratio = double(occluded) / settings.samples;
+            }
+            const double level = std::clamp((ratio - settings.low) / double(settings.high - settings.low), 0., 1.);
+            image.pixels[y * width + x] = uint8_t(std::lround(255 * level));
+        }
+        if (progress)
+            progress(int(++done * 95 / height));
+    });
+    if (cancelled || stop.stop_requested()) {
+        error = "Shape Maskをキャンセルしました";
+        return {};
+    }
+    // 島の無い画素を、縦横の歩数で最も近い島の値で埋める（幅優先）。
+    std::vector<size_t> frontier, next;
+    std::vector<uint8_t> filled(width * height, 0);
+    for (size_t i = 0; i < texels.size(); ++i)
+        if (texels[i].face != kNoFace) {
+            filled[i] = 1;
+            frontier.push_back(i);
+        }
+    while (!frontier.empty()) {
+        next.clear();
+        for (const size_t i : frontier) {
+            const size_t x = i % width, y = i / width;
+            const auto visit = [&](bool valid, size_t j) {
+                if (!valid || filled[j])
+                    return;
+                filled[j] = 1;
+                image.pixels[j] = image.pixels[i];
+                next.push_back(j);
+            };
+            visit(x > 0, i - 1);
+            visit(x + 1 < width, i + 1);
+            visit(y > 0, i - width);
+            visit(y + 1 < height, i + width);
+        }
+        frontier.swap(next);
+    }
+    if (progress)
+        progress(100);
+    return image;
 }
 } // namespace rock::geometry

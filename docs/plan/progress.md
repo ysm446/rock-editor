@@ -1,9 +1,20 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 05:15
+更新日時: 2026-09-22 06:30
 
 ## 現在地
+
+### 2026-09-22 Shape Mask
+
+- ユーザー依頼「マスクノードを作成。まずはオクルージョン」への対応。[設計メモ](../reference/rock-shaping-nodes.md) の 6 として **Shape Mask** を追加。入力は Mesh（UV付き）、出力は Mask で、Apply Material の Mask へつなぐ。種類はオクルージョン（溝・割れ目・入隅が白）/ 上向き度 / 高さ。設定はマスク解像度（128〜4096）、距離・サンプル数（オクルージョンのみ）、下限/上限、反転。保存名 `shapeMask`（種類は名前で保存）、右クリックメニュー（材質）、設定欄と進捗バー、保存/読込、Undo/Redo（既存スナップショット）に接続。仕様は [Shape Mask](../reference/shape-mask.md)、サンプルは `examples/shape-mask/`。
+- **経緯**：最初は入力の無い Occlusion Mask とし、最終メッシュの頂点ごとに求めた値を頂点シェーダ経由で渡す形で作った。ユーザー指摘を受けて3点を改めた。(1) Mesh（UV付き）を明示的な入力にする。(2) オクルージョン専用ではなく、形状からマスクを作るノードの中で種類を選ぶ。(3) 選択時はマスクをテクスチャとして貼った状態でプレビューする。頂点マスクのためのシェーダ・頂点バッファ・`HeightSample` の変更は取り除いた（コミット前の作業内での差し替え）。
+- **仕組み**：マスクは入力メッシュのUVに対応する1チャンネルの画像（`geometry::MaskImage`）。評価スレッドの CPU で、画素の表面の点ごとに値を求め（オクルージョンは形状AOの参照実装と同じ BVH とレイ。行ごとに並列）、島の無い画素を最も近い島の値で埋める。Apply Material が `GeneratedRock::maskImages` で下流へ運び、アプリが一時テクスチャにして既存の「画像マスク・UV」として渡す。**シェーダの変更は無く**、プレビュー・ベイク・Displace（CPU で画像をUVで読む）が同じマスクを使う。Field 型は入れていない。
+- **選択時の表示**：Shape Mask を Mesh 系のプレビュー対象に加え、UV Unwrap のチェッカーと同じ仕組みで、選ぶとそのノードをプレビューし、外すと元へ戻す。評価結果は入力メッシュに `previewMask` を付けたもので、黒の全面＋マスクで白の2段の素材として描く。
+- **キャッシュと整合**：Shape Mask をボリューム系と同じ内容キーのキャッシュへ追加（反転はキーに含めず、切り替えで再計算しない）。Apply Material より下流のキャッシュのキーに、つないだ Shape Mask のキーを含める（Displace は反転も）。ベイクの指紋には画像の画素を含める。UVの無いメッシュ・アトラス寸法の違うメッシュへの適用、Shape Mask 適用後の UV Unwrap は診断する。全面置換でマスク画像も外れる。一時テクスチャは画像ごとに1枚で、使われなくなったら `SyncMeshGraph` が捨て、プロジェクトの切り替えで一覧を捨てる。
+- 単体テスト49項目を追加（`tests/ShapeMaskTests.cpp`）。壁の足元が 0.5、距離による減衰と打ち切り、再現性、下限/上限、反転が画像を変えないこと、解像度、島の外の埋め、上向き度と高さの値、画像の線形補間、不正な設定9種・UV無し・取消・進捗、ノード定義と型制約、未接続とUV無しの診断、選択時プレビュー用の結果、Apply Material への受け渡しと1回だけの計算、反転 / 種類 / 上流の変更、下流キャッシュの無効化、再UV展開・UV無しへの適用の診断、全面置換、Displace（高さのマスクで上だけ動く、反転がキーに入る、再利用）、Undo/Redo を確認。Release / Debug とも全2,755項目が成功（Debug はテストのみビルド。Debug のアプリ本体は未ビルド）。
+- Release 実アプリ（`build/statusbar/rock_editor.exe`。通常の exe は起動中でロックされていた）でサンプルを開き、割れ目に錆色、上面に埃色が載ること、オクルージョンと上向き度の Shape Mask を `--select-node` で選ぶとプレビューが「Shape Mask」へ切り替わり白黒のマスクが貼られること、設定欄が種類に応じて変わることを確認。Material Bake を足した検証シーンをコマンドラインからベイク・出力し、「ベイク済み（UVで表示中）」の表示がベイク前と一致すること、`--save-project` で2つの `shapeMask` の設定と接続が残り、一時テクスチャが保存されないことを確認。画面は `data/test/claude-session-2026-09-22/screens/shape-mask/`。読み込みから表示まで約26秒（15万三角形の UV Unwrap が大半）。実マウスでの選択・選択解除・スライダー操作・メニュー・Undo/Redo の手動確認は未実施。
+- 制限：UVが必要（先に Decimate → UV Unwrap）。オクルージョンは CPU 計算で、4096² や多サンプルは遅い。遮蔽物は入力メッシュだけ。曲率・切断面の種類、マスクどうしの合成、マスク画像の書き出しは無い。テクスチャ一覧に「Shape Mask（一時）」が出る。サンプルで Decimate の目標 30,000 に対して出力が 150,001 三角形だった（形のずれの上限で止まっている可能性。今回の変更とは別で未調査）。
 
 ### 2026-09-22 詳細メッシュのキャッシュ
 
@@ -226,8 +237,8 @@
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
 | ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる |
-| 材質 | Apply Material / Material Mask、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
-| 次の作業 | 形を作る4ノードが揃った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、形状からの材質マスク（色の決め手。Field 型の判断を含む）、Volume Smooth、ディテールの焼き込みが候補 |
+| 材質 | Apply Material / Material Mask / Shape Mask（オクルージョン・上向き度・高さ）、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
+| 次の作業 | 形を作る4ノードと Shape Mask が入った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、Shape Mask の種類の追加（曲率 / 切断面）とマスクの合成、Volume Smooth、ディテールの焼き込みが候補 |
 
 ## 完了
 

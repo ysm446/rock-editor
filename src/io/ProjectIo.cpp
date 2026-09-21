@@ -489,6 +489,11 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings)) {
             item["materialMask"] = {{"texture", writeTexture(mask->texture)}, {"value", mask->value},
                 {"repeatMeters", mask->repeatMeters}, {"invert", mask->invert}, {"triplanar", mask->triplanar}};
+        } else if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) {
+            const char* type = shape->type == geometry::ShapeMaskType::Direction ? "direction"
+                             : shape->type == geometry::ShapeMaskType::Height  ? "height" : "occlusion";
+            item["shapeMask"] = {{"type", type}, {"resolution", shape->resolution}, {"low", shape->low}, {"high", shape->high},
+                {"invert", shape->invert}, {"distance", shape->distance}, {"samples", shape->samples}};
         } else if (const auto* bake = std::get_if<graph::MaterialBakeSettings>(&node.settings)) {
             // ベイク結果は一時的なもので、保存しない。開き直したら未ベイクへ戻る。指紋だけ残すと、結果が無いのに
             // 「ベイク済み」と判定されるので、材質を書けないときは指紋も書かない。
@@ -712,6 +717,22 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.repeatMeters = std::clamp(ReadFloat(*v, "repeatMeters", 1), .001f, 10000.f);
                     settings.invert = ReadBool(*v, "invert", false);
                     settings.triplanar = ReadBool(*v, "triplanar", false);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::ShapeMask) {
+                geometry::ShapeMaskSettings settings;
+                if (const json* v = FindMember(item, "shapeMask"); v && v->is_object()) {
+                    const std::string type = ReadString(*v, "type");
+                    settings.type = type == "direction" ? geometry::ShapeMaskType::Direction
+                                  : type == "height"    ? geometry::ShapeMaskType::Height : geometry::ShapeMaskType::Occlusion;
+                    // 2のべき乗へ切り上げる（UV Unwrap の解像度と同じ扱い）。
+                    settings.resolution = std::clamp(geometry::NormalizeUvResolution(ReadInt(*v, "resolution", settings.resolution)),
+                                                     geometry::kMinShapeMaskResolution, geometry::kMaxShapeMaskResolution);
+                    settings.low = std::clamp(ReadFloat(*v, "low", settings.low), 0.f, .999f);
+                    settings.high = std::clamp(ReadFloat(*v, "high", settings.high), settings.low + .001f, 1.f);
+                    settings.invert = ReadBool(*v, "invert", false);
+                    settings.distance = std::clamp(ReadFloat(*v, "distance", settings.distance), .001f, 1000.f);
+                    settings.samples = std::clamp(ReadInt(*v, "samples", settings.samples), geometry::kMinOcclusionSamples, geometry::kMaxOcclusionSamples);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::MaterialBake) {
