@@ -167,8 +167,8 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
                 // 形状マスク。画像をUVでそのまま貼る（反復なし）。
                 applied.mask = {};
                 applied.mask.texture = ShapeMaskTextureFor(image->second);
-                if (const auto* node = m_graph.FindNode(binding.mask))
-                    if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) applied.mask.invert = shape->invert;
+                if (const auto* maskNode = m_graph.FindNode(binding.mask))
+                    if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&maskNode->settings)) applied.mask.invert = shape->invert;
             }
             mesh.appliedMaterials.push_back(std::move(applied));
         }

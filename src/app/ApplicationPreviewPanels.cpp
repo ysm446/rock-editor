@@ -191,6 +191,18 @@ void Application::DrawLightingPanel() {
             }
             ui::EndPropertyTable();
         }
+        ui::SectionHeader("スクリーンスペースAO");
+        if (ui::BeginPropertyTable("ssaoRows")) {
+            auto& ao = m_renderer.Ssao();
+            const renderer::SsaoSettings defaults;
+            ui::PropertyBool("有効", &ao.enabled, defaults.enabled,
+                "画面内の深度から凹部の陰影をGPUで計算。表示専用で、テクスチャには焼き込まない");
+            if (ao.enabled) {
+                ui::PropertyFloat("半径", &ao.radius, 0.001f, 10.0f, defaults.radius, "遮蔽を探す距離", "%.3f m", ImGuiSliderFlags_Logarithmic);
+                ui::PropertyFloat("強さ", &ao.strength, 0.0f, 3.0f, defaults.strength, nullptr, "%.2f");
+            }
+            ui::EndPropertyTable();
+        }
         const bool atmospheric = m_renderer.AtmosphericMode();
         if (!atmospheric) ui::HintText("作業用IBLで確認中。シーンの太陽・大気の設定は保持されている");
         renderer::LightSettings& light = m_renderer.Light();

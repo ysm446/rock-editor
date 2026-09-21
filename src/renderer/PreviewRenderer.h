@@ -113,11 +113,18 @@ enum class ApertureShape : uint32_t {
     Octagon = 3,
 };
 
-// 被写界深度。**ビューポートの見え方だけの設定**で、合成結果には一切効かない。
+// スクリーンスペースAO。表示専用でベイク結果には影響しない。
 //
 // レンズの値は増やさない。焦点距離はカメラの画角から、F 値は露出の絞りから取る。
 // 被写界深度のためだけに同じ意味の値をもう一組持つと、どちらが効いているのか
 // 分からなくなる（露出とレンズが食い違った絵になる）。
+struct SsaoSettings {
+    bool enabled = false;
+    float radius = 0.2f;
+    float strength = 1.0f;
+};
+
+// 被写界深度。ビューポートの見え方だけの設定。
 struct DofSettings {
     bool enabled = false;
     // **注視点までの距離をピント面にする。** 軌道カメラなので、見ているものが
@@ -307,6 +314,8 @@ public:
         m_requestedShadowResolution = (resolution == 1024 || resolution == 2048 || resolution == 4096)
             ? resolution : kPreviewDefaults.shadowResolution;
     }
+    SsaoSettings& Ssao() { return m_ssao; }
+    const SsaoSettings& Ssao() const { return m_ssao; }
     DofSettings& Dof() { return m_dof; }
     const DofSettings& Dof() const { return m_dof; }
     // 実際にピント面として使う距離。注視点に合わせる設定ならカメラの距離。
@@ -410,6 +419,8 @@ private:
     bool m_skyboxBlur = kPreviewDefaults.skyboxBlur;
     bool m_shadowEnabled = kPreviewDefaults.shadowEnabled;
     DofSettings m_dof;
+    SsaoSettings m_ssao;
+    rhi::GpuTexture m_sceneColorAo;
     RenderStats m_stats;
     PreviewDiagnostics m_diagnostics;
     bool m_tessellationEnabled = kPreviewDefaults.tessellationEnabled;

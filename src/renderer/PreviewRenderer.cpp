@@ -817,6 +817,7 @@ void PreviewRenderer::ResetSettings() {
     m_skylightIntensity = kDefaultSkylightIntensity;
     m_exposure = ExposureSettings{};
     m_dof = DofSettings{};
+    m_ssao = SsaoSettings{};
 
     // 表示モードはプロジェクトに保存しないが、ここでは戻す。
     // ハイトやラフネスを覗いたまま「新規」を押すと、
@@ -873,7 +874,7 @@ float PreviewRenderer::BoundingRadius() const {
 }
 
 void PreviewRenderer::ReleaseTargets(rhi::Device& device) {
-    rhi::GpuTexture* targets[] = {&m_sceneColor, &m_sceneColorDof, &m_depth, &m_output};
+    rhi::GpuTexture* targets[] = {&m_sceneColor, &m_sceneColorDof, &m_sceneColorAo, &m_depth, &m_output};
     for (rhi::GpuTexture* target : targets) {
         if (!target->IsValid()) {
             continue;
@@ -939,6 +940,8 @@ bool PreviewRenderer::Resize(rhi::Device& device, uint32_t width, uint32_t heigh
     dofDesc.allowUnorderedAccess = true;
     dofDesc.createSrv = true;
     dofDesc.initialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    dofDesc.debugName = L"SceneColorAo";
+    if (!device.Allocator().CreateTexture2D(dofDesc, m_sceneColorAo)) return false;
     dofDesc.debugName = L"SceneColorDof";
     if (!device.Allocator().CreateTexture2D(dofDesc, m_sceneColorDof)) {
         return false;
@@ -1566,6 +1569,24 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     // 飽和してから広がり、玉ボケの芯が白く潰れる。
     // チャンネルを覗く表示には掛けない（値そのものを見るための表示）。
     uint32_t tonemapSourceIndex = m_sceneColor.SrvIndex();
+    if (m_ssao.enabled && IsShadedView(displayView)) {
+        if (auto* pipeline = pipelineCache.GetCompute(L"ScreenSpaceAo.hlsl", L"CsMain")) {
+            TransitionIfNeeded(commandList, m_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            TransitionIfNeeded(commandList, m_sceneColorAo, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            struct Constants {
+                uint32_t source, depth, output, width, height;
+                float nearZ, farZ, tanHalfFov, radius, strength;
+            } ao{m_sceneColor.SrvIndex(), m_depth.SrvIndex(), m_sceneColorAo.UavIndex(), m_width, m_height,
+                 m_camera.NearZ(), m_camera.FarZ(), std::tan(m_camera.FovY() * 0.5f),
+                 std::clamp(m_ssao.radius, 0.001f, 10.0f), std::clamp(m_ssao.strength, 0.0f, 3.0f)};
+            commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
+            commandList->SetPipelineState(pipeline);
+            commandList->SetComputeRoot32BitConstants(0, sizeof(ao)/sizeof(uint32_t), &ao, 0);
+            commandList->Dispatch(rhi::DispatchCount(m_width), rhi::DispatchCount(m_height), 1);
+            TransitionIfNeeded(commandList, m_sceneColorAo, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            tonemapSourceIndex = m_sceneColorAo.SrvIndex();
+        }
+    }
     ID3D12PipelineState* dofPipeline =
         (m_dof.enabled && IsShadedView(displayView) && m_sceneColorDof.IsValid())
             ? pipelineCache.GetCompute(L"DepthOfField.hlsl", L"CsMain")
@@ -1578,7 +1599,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
         TransitionIfNeeded(commandList, m_sceneColorDof, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
         DofConstants dofConstants = {};
-        dofConstants.sourceIndex = m_sceneColor.SrvIndex();
+        dofConstants.sourceIndex = tonemapSourceIndex;
         dofConstants.depthIndex = m_depth.SrvIndex();
         dofConstants.outputIndex = m_sceneColorDof.UavIndex();
         dofConstants.width = m_width;

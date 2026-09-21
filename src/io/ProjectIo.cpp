@@ -953,6 +953,7 @@ json WritePreview(renderer::PreviewRenderer& renderer) {
     node["materialResolution"] = renderer.MaterialResolution();
     node["showSkybox"] = renderer.ShowSkybox();
     node["skyboxBlur"] = renderer.SkyboxBlur();
+    node["screenSpaceAo"] = {{"enabled", renderer.Ssao().enabled}, {"radius", renderer.Ssao().radius}, {"strength", renderer.Ssao().strength}};
     node["shadow"] = renderer.ShadowEnabled();
     node["shadowResolution"] = renderer.ShadowResolution();
     node["shadowCascadeCount"] = renderer.ShadowCascadeCount();
@@ -1053,6 +1054,13 @@ void ReadPreview(const json& node, renderer::PreviewRenderer& renderer) {
         return (member != nullptr && member->is_object()) ? *member : emptySection;
     };
 
+    {
+        const auto& ao = section("screenSpaceAo");
+        const renderer::SsaoSettings defaults;
+        renderer.Ssao().enabled = ReadBool(ao, "enabled", defaults.enabled);
+        renderer.Ssao().radius = std::clamp(ReadFloat(ao, "radius", defaults.radius), 0.001f, 10.0f);
+        renderer.Ssao().strength = std::clamp(ReadFloat(ao, "strength", defaults.strength), 0.0f, 3.0f);
+    }
     {
         const json& camera = section("camera");
         renderer::CameraState state;
