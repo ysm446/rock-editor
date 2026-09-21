@@ -237,10 +237,6 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
     }
 
     // ノード設定欄が閉じていても、生成できない理由をビューポートで確認できるようにする。
-    if (m_pieceUpdating) {
-        ImGui::SetCursorScreenPos(ImVec2(viewportMin.x + margin, viewportMin.y + margin + ui::Scaled(32.0f)));
-        ImGui::TextUnformatted("更新中…前回の結果を表示しています");
-    }
     if (!m_meshGraphError.empty()) {
         const float padding = ui::Scaled(8.0f);
         const float wrap = std::max(1.0f, viewportMax.x - viewportMin.x - 2 * (margin + padding));

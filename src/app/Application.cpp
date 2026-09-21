@@ -769,6 +769,11 @@ void Application::DrawStatusBar() {
                 ImGui::TextDisabled("マテリアルを評価中…");
                 ImGui::TextDisabled("|");
             }
+            // 形状の評価は別スレッドで走る。終わるまでビューポートの絵は前回のまま。
+            if (m_pieceUpdating) {
+                ImGui::TextDisabled("更新中…前回の結果を表示しています");
+                ImGui::TextDisabled("|");
+            }
 
             if (m_status.valid) {
                 const auto age = std::chrono::duration<float>(
