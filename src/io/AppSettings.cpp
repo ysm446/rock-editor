@@ -88,6 +88,9 @@ void AppSettings::Load() {
 
     if (const auto display = document.find("display");
         display != document.end() && display->is_object()) {
+        if (const auto method = display->find("sdfPreviewMethod"); method != display->end() && method->is_string())
+            m_display.sdfPreviewMethod = method->get<std::string>() == "dualContouring"
+                ? geometry::VolumeMeshingMethod::DualContouring : geometry::VolumeMeshingMethod::MarchingTetrahedra;
         if (const auto vsync = display->find("vsync");
             vsync != display->end() && vsync->is_boolean()) {
             m_display.vsync = vsync->get<bool>();
@@ -160,6 +163,8 @@ bool AppSettings::Save() const {
     display["showReferenceGrid"] = m_display.showReferenceGrid;
     display["showUvChecker"] = m_display.showUvChecker;
     display["smoothShading"] = m_display.smoothShading;
+    display["sdfPreviewMethod"] = m_display.sdfPreviewMethod == geometry::VolumeMeshingMethod::DualContouring
+        ? "dualContouring" : "marchingTetrahedra";
     display["showAssetBand"] = m_display.showAssetBand;
     display["frameRateLimit"] = m_display.frameRateLimit;
     display["inactiveFrameRateLimit"] = m_display.inactiveFrameRateLimit;

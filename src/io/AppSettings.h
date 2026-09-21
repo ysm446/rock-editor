@@ -1,4 +1,5 @@
 #pragma once
+#include "geometry/Volume.h"
 
 #include <filesystem>
 
@@ -45,6 +46,8 @@ struct DisplaySettings {
     bool showUvChecker = false;
     // 岩メッシュの法線を、折れ角つきで平均して滑らかに見せるか。偽なら面法線（面ごとの陰影）。
     bool smoothShading = false;
+    // Volumeを直接表示するときだけ使用。Volume to Meshの出力方式とは独立。
+    geometry::VolumeMeshingMethod sdfPreviewMethod = geometry::VolumeMeshingMethod::MarchingTetrahedra;
     // アセットの帯（ルートのフォルダ階層とその中身）を出すか。畳むとビューポートが縦に広がる。
     bool showAssetBand = true;
     // 前面にあるときの FPS 上限。0 で上限なし。

@@ -83,7 +83,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
     return key;
 }
 }  // namespace
-RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvaluationCache* persistent) {
+RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvaluationCache* persistent,
+                            geometry::VolumeMeshingMethod previewMethod) {
     if (persistent) {
         std::erase_if(persistent->entries, [&](const auto& item) {
             const auto key = VolumeKey(graph, item.first);
@@ -337,21 +338,22 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         return finish(result);
     };
     // Volume の外皮は描画へ渡す最後にだけ抽出する。下流の評価にはグリッドを渡す。
-    const auto preparePreview = [persistent](RockEvaluation result) {
+    const auto preparePreview = [persistent, previewMethod](RockEvaluation result) {
         if (!result.error.empty()) return result;
         for (auto& rock : result.rocks) {
             if (!rock.volume) continue;
             if (persistent) {
                 const auto found = persistent->surfaces.find(rock.source);
-                if (found != persistent->surfaces.end() && found->second.volume == rock.volume) {
+                if (found != persistent->surfaces.end() && found->second.volume == rock.volume &&
+                    found->second.method == previewMethod) {
                     rock.mesh = found->second.mesh;
                     continue;
                 }
             }
             std::string error;
-            rock.mesh = geometry::VolumeSurface(*rock.volume, error);
+            rock.mesh = geometry::VolumeSurface(*rock.volume, error, previewMethod);
             if (!error.empty()) return Failure(rock.source, "Volume Preview", error);
-            if (persistent) persistent->surfaces[rock.source] = {rock.volume, rock.mesh};
+            if (persistent) persistent->surfaces[rock.source] = {rock.volume, rock.mesh, previewMethod};
         }
         return result;
     };

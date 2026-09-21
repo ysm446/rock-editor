@@ -58,9 +58,11 @@ struct RockEvaluationCache {
     struct Surface {
         std::shared_ptr<const geometry::VolumeGrid> volume;
         geometry::Mesh mesh;
+        geometry::VolumeMeshingMethod method = geometry::VolumeMeshingMethod::MarchingTetrahedra;
     };
     std::map<GraphId, Surface> surfaces;
 };
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview = 0,
-                            RockEvaluationCache* persistent = nullptr);
+                            RockEvaluationCache* persistent = nullptr,
+                            geometry::VolumeMeshingMethod previewMethod = geometry::VolumeMeshingMethod::MarchingTetrahedra);
 }  // namespace rock::graph

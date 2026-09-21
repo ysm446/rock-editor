@@ -1,13 +1,20 @@
 # Volume to Mesh の変換方式
 
 作成日時: 2026-09-21 17:04
-更新日時: 2026-09-21 17:04
+更新日時: 2026-09-21 17:18
 
 ## 方針
 
 同じ `VolumeGrid` から、従来の Marching Tetrahedra と Dual Contouring を選べるようにする。ノードの初期値と旧シーンの動作は従来方式。上流の直方体や解析関数に戻らず、入力されたSDFだけを使う。描画のスムーズシェーディングは両方式に共通で、メッシュ抽出とは別の設定。
 
+## 共通のSDFプレビュー
+
+「プレビュー設定 → SDFプレビュー（共通）→ 変換方式」で、Volume を直接表示する際の方式を選ぶ。To Volume / Volume Transform の出力ピンと、Volume を直接接続した Mesh Output に共通で適用する。Volume to Mesh を通した結果は、そのノードの方式に従う。
+
+共通設定はアプリの `display.sdfPreviewMethod` に保存する。既定は Marching Tetrahedra。シーンのデータや Undo 履歴には含めない。切り替え時は内部SDFを再利用し、方式を含む外皮キャッシュの判定により表示用メッシュを再生成する。To Volume の解像度は引き続き内部グリッドの細かさを指定する。
+
 ## Dual Contouring の実装
+
 
 基本となる交点・法線のQEFと双対接続は [Juほか, Dual Contouring of Hermite Data (2002)](https://www.cs.rice.edu/~jwarren/papers/dualcontour.pdf) を参照。原論文の適応八分木・簡略化は実装していない。
 

@@ -27,6 +27,20 @@ void Application::DrawMaterialPanel() {
     // **ここでは前面を要求しない。** レイヤーと同じ枠のタブなので、
     // 両方が要求すると後から描いたほうが勝ち、既定の前面が定まらない。
     if (ImGui::Begin("プレビュー設定")) {
+        ui::SectionHeader("SDFプレビュー（共通）");
+        if (ui::BeginPropertyTable("sdfPreviewRows")) {
+            auto& display = m_settings.Display();
+            int method = static_cast<int>(display.sdfPreviewMethod);
+            const char* methods[] = {"Marching Tetrahedra", "Dual Contouring"};
+            if (ui::PropertyCombo("変換方式", &method, methods, 2, 0,
+                                  "To Volume / Volume Transform など、Volumeを直接表示する際の共通設定")) {
+                display.sdfPreviewMethod = static_cast<geometry::VolumeMeshingMethod>(method);
+                m_settings.Save();
+            }
+            ui::EndPropertyTable();
+        }
+        ui::HintText("Volume to Mesh の出力は、ノード側の変換方式で表示します。この設定はアプリに保存されます。");
+
         ui::SectionHeader("メッシュ");
         if (ui::BeginPropertyTable("previewMeshRows")) {
             // 分割の仕方をここで決める。

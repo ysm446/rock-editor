@@ -214,10 +214,13 @@ void Application::SyncMeshGraph() {
         previewMeshNode = node->id;
     }
     if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
-        m_meshGraphSmoothShading == m_settings.Display().smoothShading)
+        m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
+        m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod)
         return;
     m_meshGraphSmoothShading = m_settings.Display().smoothShading;
-    const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache);
+    m_meshGraphSdfPreviewMethod = m_settings.Display().sdfPreviewMethod;
+    const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache,
+                                               m_settings.Display().sdfPreviewMethod);
     renderer::MeshScene scene;
     m_rockMeshReferences.clear();
     for (const auto& rock : evaluated.rocks) {

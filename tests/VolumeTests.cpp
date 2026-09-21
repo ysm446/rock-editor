@@ -501,6 +501,40 @@ void RunVolumeTests() {
               direct.rocks[0].volume == directAgain.rocks[0].volume &&
               direct.rocks[0].mesh.positions == directAgain.rocks[0].mesh.positions,
           "Volume直接プレビューもSDFと外皮を再利用");
+    tests::Section("SDFプレビューの共通変換方式");
+    const auto sameMesh = [](const geometry::Mesh& a, const geometry::Mesh& b) {
+        return a.positions == b.positions && a.triangles == b.triangles;
+    };
+    const auto dualMethod = geometry::VolumeMeshingMethod::DualContouring;
+    for (const auto node : {toVolume, transform}) {
+        const auto tetraPreview = graph::EvaluateRocks(moveGraph, node, &cache);
+        const auto dualPreview = graph::EvaluateRocks(moveGraph, node, &cache, dualMethod);
+        Check(tetraPreview.error.empty() && dualPreview.error.empty() && !dualPreview.rocks.empty(),
+              "To VolumeとVolume Transformの共通プレビュー方式を切り替え");
+        if (!tetraPreview.rocks.empty() && !dualPreview.rocks.empty()) {
+            const auto& volumeData = dualPreview.rocks[0].volume;
+            const auto expected = geometry::VolumeSurface(*volumeData, error, dualMethod);
+            Check(volumeData == tetraPreview.rocks[0].volume &&
+                      sameMesh(expected, dualPreview.rocks[0].mesh) &&
+                      !sameMesh(tetraPreview.rocks[0].mesh, dualPreview.rocks[0].mesh),
+                  "SDFを再利用し、共通設定どおりの外皮だけを再生成");
+            const auto reverted = graph::EvaluateRocks(moveGraph, node, &cache);
+            Check(!reverted.rocks.empty() && sameMesh(reverted.rocks[0].mesh, tetraPreview.rocks[0].mesh),
+                  "方式を戻しても別方式の外皮キャッシュを使わない");
+        }
+    }
+    const auto explicitTetra = graph::EvaluateRocks(moveGraph, 0, &cache);
+    const auto explicitWithDualPreview = graph::EvaluateRocks(moveGraph, 0, &cache, dualMethod);
+    Check(!explicitTetra.rocks.empty() && !explicitWithDualPreview.rocks.empty() &&
+              sameMesh(explicitTetra.rocks[0].mesh, explicitWithDualPreview.rocks[0].mesh),
+          "共通プレビューを変更してもVolume to Meshの出力は変わらない");
+    Check(moveGraph.CreateLink(out(transform), in(viewer)), "VolumeをMesh Outputへ直接接続");
+    const auto outputPreview = graph::EvaluateRocks(moveGraph, 0, &cache, dualMethod);
+    const auto transformPreview = graph::EvaluateRocks(moveGraph, transform, &cache, dualMethod);
+    Check(!outputPreview.rocks.empty() && !transformPreview.rocks.empty() &&
+              sameMesh(outputPreview.rocks[0].mesh, transformPreview.rocks[0].mesh),
+          "Mesh OutputへのVolume直接接続にも共通設定を適用");
+    Check(moveGraph.CreateLink(out(toMesh), in(viewer)), "Mesh Outputの明示的な変換を復元");
     moveGraph.DeleteNode(boxSource);
     Check(compare() && !cache.entries.contains(boxSource) && !cache.entries.contains(toVolume),
           "上流削除時はキャッシュを破棄して入力エラーを返す");

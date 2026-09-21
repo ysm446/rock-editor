@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 17:04
+更新日時: 2026-09-21 17:18
 
 ## 未リリース
+
+- 「プレビュー設定」に「SDFプレビュー（共通）」を追加。To Volume / Volume Transform などの Volume 直接表示に使う変換方式を選べる。設定はアプリに保存し、切り替え時は内部SDFを再利用する。Volume to Mesh の出力は引き続きノード側の方式に従う。
 
 - Volume to Mesh に「変換方式」を追加。従来の Marching Tetrahedra と Dual Contouring を選択できる。方式の保存・読込・Undo/Redo・キャッシュ更新に対応し、旧シーンは従来方式を維持する。比較用シーンを `examples/volume-meshing/` に追加。
 

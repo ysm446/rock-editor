@@ -138,6 +138,7 @@ private:
     uint64_t m_meshGraphRevision = 0;
     // 法線を頂点に焼くので、表示設定の切り替えでもメッシュを作り直す。
     bool m_meshGraphSmoothShading = false;
+    geometry::VolumeMeshingMethod m_meshGraphSdfPreviewMethod = geometry::VolumeMeshingMethod::MarchingTetrahedra;
     // 直近にメッシュシーンへ出した「途中のメッシュノード」。0 なら Mesh Output の鎖。
     graph::GraphId m_meshGraphPreviewNode = 0;
     bool m_meshGraphActive = false;
