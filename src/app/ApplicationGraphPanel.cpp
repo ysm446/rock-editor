@@ -1478,13 +1478,13 @@ void Application::DrawGraphPanel() {
                     shown = true;
                 }
             if (shown && triangles > size_t(edited.targetTriangles) + size_t(edited.targetTriangles) / 20)
-                ui::HintText("現在の出力: %zu 三角形。目標に届いていません。形のずれの上限を上げる（0 で上限なし）と、さらに減ります。", triangles);
+                ui::HintText("現在の出力: %zu 三角形。目標に届いていません。形のずれの上限やUVの継ぎ目の保護によって削減が制限されます。", triangles);
             else if (shown)
                 ui::HintText("現在の出力: %zu 三角形", triangles);
         }
         ui::HintText("形をできるだけ保ったまま三角形を減らします（QEM による辺の縮約）。平らな場所は大きく減り、稜線や割れ目の縁は残ります。"
                      "UV Unwrap の前に置くと、展開が大幅に速くなります。");
-        ui::HintText("入力は閉じたメッシュです。面の裏返りや穴を作る縮約は行いません。細かい凹凸は失われ、UV は引き継ぎません。");
+        ui::HintText("入力は閉じたメッシュです。面の裏返りや穴を作る縮約は行いません。細かい凹凸は失われます。UVの島の境界を固定し、内部のUVを補間して保持します。");
         if (changed) {
             edited.targetTriangles = std::clamp(edited.targetTriangles, geometry::MinDecimateTriangles, geometry::MaxDecimateTriangles);
             edited.maxError = std::clamp(edited.maxError, 0.0f, 0.1f);

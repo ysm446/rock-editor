@@ -473,7 +473,9 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 rock.mesh = std::move(reduced);
                 // 直方体の集まりという由来は、形を変えた時点で失われる（To Volume の解析的な高速経路に渡さない）。
                 rock.boxes.reset();
+                rock.meshHistory.push_back(rock.source);
                 rock.source = id;
+                rock.bakeSource = 0;
                 done += before;
             }
         } else if (node->kind == NodeKind::VolumeNoise) {

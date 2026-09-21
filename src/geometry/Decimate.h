@@ -21,7 +21,7 @@ struct DecimateSettings {
 // 0～100 の進み具合。ワーカースレッドから呼ばれる。
 using DecimateProgress = std::function<void(int percent)>;
 // 入力は閉じた向き付きの多様体メッシュ（全ての辺が2面に共有される）。出力も同じ性質を保つ。
-// 連結成分の数は変わらない。UV は引き継がない（UV Unwrap の前に置く）。
+// 連結成分の数は変わらない。UVの境界を保護し、内部を補間して引き継ぐ（展開済みメッシュにも対応）。
 // 面の裏返り・非多様体化・成分の消滅を起こす縮約は行わないので、目標に届かないことがある。
 Mesh DecimateMesh(const Mesh& input, const DecimateSettings& settings, std::string& error,
                   std::stop_token stop = {}, const DecimateProgress& progress = {});

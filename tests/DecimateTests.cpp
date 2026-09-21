@@ -2,6 +2,8 @@
 #include "geometry/BaseRock.h"
 #include "geometry/BoxCluster.h"
 #include "geometry/Decimate.h"
+#include "geometry/Displace.h"
+#include <map>
 #include "geometry/UvUnwrap.h"
 #include "geometry/Volume.h"
 #include "graph/RockEvaluator.h"
@@ -48,9 +50,59 @@ void RunDecimateTests() {
           "閉じた球面の頂点数と面数の関係（V = F/2 + 2）を保つ");
     Check(std::abs(reducedInfo.volume - sphereInfo.volume) < sphereInfo.volume * .02 && MaxRadialError(reduced, 1) < .02,
           "1/6 に減らしても体積と表面の位置をほぼ保つ");
-    Check(reduced.cornerUvs.empty() && reduced.uvCharts.empty() && reduced.uvWidth == 0, "UV は引き継がない");
+    Check(reduced.cornerUvs.empty() && reduced.uvCharts.empty() && reduced.uvWidth == 0, "UVのない入力はUVなしのまま");
     const auto again = geometry::DecimateMesh(sphere, s, error);
     Check(again.positions == reduced.positions && again.triangles == reduced.triangles, "同じ入力から同じ結果を得る");
+
+    // UV島を固定した平面では、削減してもテクスチャの面積と配置を維持する。
+    geometry::UvUnwrapSettings atlasSettings; atlasSettings.resolution = 256;
+    const auto atlas = geometry::UnwrapMesh(geometry::MakeBox({2,2,2}), atlasSettings, error);
+    const auto denseAtlas = geometry::SubdivideMesh(atlas, {3}, error);
+    auto uvSettings = s; uvSettings.targetTriangles = 100;
+    const auto uvReduced = geometry::DecimateMesh(denseAtlas, uvSettings, error);
+    Check(error.empty() && geometry::HasValidUvs(uvReduced) && uvReduced.triangles.size() < denseAtlas.triangles.size(),
+          "UV付きメッシュを実際に削減し、有効なUVを保持する");
+    Check(uvReduced.uvWidth == 256 && uvReduced.uvHeight == 256 && uvReduced.uvCharts.size() == uvReduced.triangles.size(),
+          "アトラス寸法と面ごとの島IDを保持する");
+    const auto areas = [](const geometry::Mesh& mesh) {
+        std::map<uint32_t,double> result;
+        for (size_t f=0; f<mesh.cornerUvs.size(); ++f) {
+            const auto& uv=mesh.cornerUvs[f];
+            result[mesh.uvCharts[f]] += (double(uv[1].u)-uv[0].u)*(double(uv[2].v)-uv[0].v)
+                                      -(double(uv[1].v)-uv[0].v)*(double(uv[2].u)-uv[0].u);
+        }
+        return result;
+    };
+    const auto oldAreas=areas(denseAtlas), newAreas=areas(uvReduced);
+    bool sameAreas=oldAreas.size()==newAreas.size();
+    for (const auto& [chart,area]:oldAreas) sameAreas &= newAreas.contains(chart) && std::abs(newAreas.at(chart)-area)<1e-6;
+    Check(sameAreas, "削減前後で各UV島の面積と向きを保持する");
+    bool mappingPreserved=true;
+    for (size_t f=0; f<uvReduced.triangles.size(); ++f) {
+        size_t ref=0;
+        while (ref<atlas.uvCharts.size() && atlas.uvCharts[ref]!=uvReduced.uvCharts[f]) ++ref;
+        if (ref==atlas.uvCharts.size()) { mappingPreserved=false; continue; }
+        const auto& t=atlas.cornerUvs[ref];
+        const double det=double(t[1].u-t[0].u)*(t[2].v-t[0].v)-double(t[1].v-t[0].v)*(t[2].u-t[0].u);
+        for (int k=0;k<3;++k) {
+            const auto uvPoint=uvReduced.cornerUvs[f][k];
+            const double du=uvPoint.u-t[0].u,dv=uvPoint.v-t[0].v;
+            const double w1=(du*(t[2].v-t[0].v)-dv*(t[2].u-t[0].u))/det;
+            const double w2=((t[1].u-t[0].u)*dv-(t[1].v-t[0].v)*du)/det;
+            const auto p0=atlas.positions[atlas.triangles[ref][0]],p1=atlas.positions[atlas.triangles[ref][1]],p2=atlas.positions[atlas.triangles[ref][2]];
+            const auto actual=uvReduced.positions[uvReduced.triangles[f][k]];
+            mappingPreserved &= std::abs(actual.x-(p0.x+w1*(p1.x-p0.x)+w2*(p2.x-p0.x)))<1e-5 &&
+                                std::abs(actual.y-(p0.y+w1*(p1.y-p0.y)+w2*(p2.y-p0.y)))<1e-5 &&
+                                std::abs(actual.z-(p0.z+w1*(p1.z-p0.z)+w2*(p2.z-p0.z)))<1e-5;
+        }
+    }
+    Check(mappingPreserved, "平面の全出力頂点でUVと位置の対応を維持する");
+    uvSettings.targetTriangles = 10000;
+    const auto uvIdentity=geometry::DecimateMesh(denseAtlas,uvSettings,error);
+    Check(uvIdentity.cornerUvs==denseAtlas.cornerUvs && uvIdentity.uvCharts==denseAtlas.uvCharts,
+          "削減不要の場合もUVをそのまま返す");
+    auto invalidUv=denseAtlas; invalidUv.cornerUvs.pop_back();
+    Check(geometry::DecimateMesh(invalidUv,uvSettings,error).positions.empty() && !error.empty(), "不完全なUVを診断する");
 
     // 入力が目標以下なら形を変えない。
     s.targetTriangles = 20000;
@@ -253,4 +305,28 @@ void RunDecimateTests() {
     const auto fewer = graph::EvaluateRocks(g, decimate, &cache);
     Check(fewer.error.empty() && fewer.rocks[0].mesh.triangles.size() < evaluated.rocks[0].mesh.triangles.size(),
           "設定の変更で作り直す");
+    graph::NodeGraph layered;
+    const auto b=layered.CreateNode(graph::NodeKind::BaseRock), u=layered.CreateNode(graph::NodeKind::UvUnwrap),
+        lower=layered.CreateNode(graph::NodeKind::ApplyMaterial), upper=layered.CreateNode(graph::NodeKind::ApplyMaterial),
+        surface1=layered.CreateNode(graph::NodeKind::Surface), surface2=layered.CreateNode(graph::NodeKind::Surface),
+        mask=layered.CreateNode(graph::NodeKind::ShapeMask), sub=layered.CreateNode(graph::NodeKind::Subdivide),
+        dec=layered.CreateNode(graph::NodeKind::Decimate);
+    const auto wire=[&](auto from,auto to,int pin=0) {layered.CreateLink(layered.FindNode(from)->outputs[0].id,layered.FindNode(to)->inputs[pin].id);};
+    std::get<geometry::UvUnwrapSettings>(layered.FindMutableNode(u)->settings).resolution=128;
+    auto& maskSettings=std::get<geometry::ShapeMaskSettings>(layered.FindMutableNode(mask)->settings);
+    maskSettings.type=geometry::ShapeMaskType::Height; maskSettings.resolution=128;
+    std::get<geometry::SubdivideSettings>(layered.FindMutableNode(sub)->settings).levels=3;
+    std::get<geometry::DecimateSettings>(layered.FindMutableNode(dec)->settings).targetTriangles=100;
+    wire(b,u); wire(u,lower); wire(surface1,lower,1); wire(lower,upper); wire(surface2,upper,1);
+    wire(u,mask); wire(mask,upper,2); wire(upper,sub); wire(sub,dec);
+    graph::RockEvaluationCache layerCache;
+    const auto layeredInput=graph::EvaluateRocks(layered,sub,&layerCache);
+    const auto layeredOutput=graph::EvaluateRocks(layered,dec,&layerCache);
+    Check(layeredInput.error.empty() && layeredOutput.error.empty() && layeredOutput.rocks.size()==1 &&
+          layeredOutput.rocks[0].materials==layeredInput.rocks[0].materials && layeredOutput.rocks[0].materials.size()==2 &&
+          layeredOutput.rocks[0].maskImages==layeredInput.rocks[0].maskImages &&
+          geometry::HasValidUvs(layeredOutput.rocks[0].mesh) &&
+          layeredOutput.rocks[0].mesh.triangles.size()<layeredInput.rocks[0].mesh.triangles.size(),
+          "UV展開とShape Maskで塗り分けた2素材を削減後も保持する");
+
 }

@@ -1,4 +1,5 @@
 #include "geometry/Decimate.h"
+#include "geometry/UvUnwrap.h"
 
 #include <algorithm>
 #include <cmath>
@@ -65,6 +66,7 @@ struct Candidate {
     double cost = 0;
     uint32_t a = 0, b = 0, versionA = 0, versionB = 0;
     P position{};
+    Mesh::Uv uv{};
 };
 // 誤差の小さい縮約から取り出す。同じ誤差は頂点番号で順序を決め、結果を再現できるようにする。
 struct Later {
@@ -81,12 +83,16 @@ struct Simplifier {
         Quadric quadric;
         std::vector<uint32_t> faces;
         uint32_t version = 0;
-        bool alive = true, moved = false;
+        bool alive = true, moved = false, seam = false;
+        Mesh::Uv uv{};
     };
     struct Face {
         std::array<uint32_t, 3> v{};
         bool alive = true;
+        std::array<Mesh::Uv, 3> uv{};
+        uint32_t chart = 0;
     };
+    bool hasUvs = false;
     std::vector<Vertex> vertices;
     std::vector<Face> faces;
     std::priority_queue<Candidate, std::vector<Candidate>, Later> queue;
@@ -106,6 +112,7 @@ struct Simplifier {
     }
     void Push(uint32_t a, uint32_t b) {
         if (a > b) std::swap(a, b);
+        if (hasUvs && (vertices[a].seam || vertices[b].seam)) return;
         Quadric q = vertices[a].quadric;
         q.Add(vertices[b].quadric);
         const P &pa = vertices[a].position, &pb = vertices[b].position;
@@ -129,6 +136,15 @@ struct Simplifier {
                     c.cost = cost;
                     c.position = p;
                 }
+        }
+        if (hasUvs) {
+            // UVと位置を同じ辺上の比率で補間する。島の境界頂点は動かさない。
+            const P delta = Sub(pb, pa);
+            const double t = std::clamp(Dot(Sub(c.position, pa), delta) / std::max(Dot(delta, delta), 1e-30), 0.0, 1.0);
+            for (int k = 0; k < 3; ++k) c.position[k] = pa[k] + t * delta[k];
+            c.uv = {std::lerp(vertices[a].uv.u, vertices[b].uv.u, float(t)),
+                    std::lerp(vertices[a].uv.v, vertices[b].uv.v, float(t))};
+            c.cost = q.Cost(c.position);
         }
         c.cost = std::max(c.cost, 0.0);
         c.priority = c.cost + kEdgeLengthPriority * edge * edge * q.weight;
@@ -173,6 +189,16 @@ struct Simplifier {
                 worstBefore = std::min(worstBefore, quality(vertices[face.v[0]].position, vertices[face.v[1]].position,
                                                             vertices[face.v[2]].position, lengthBefore));
                 if (hasA && hasB) continue;  // この2面は消える。
+                if (hasUvs) {
+                    auto afterUv = face.uv;
+                    for (int k = 0; k < 3; ++k)
+                        if (face.v[k] == c.a || face.v[k] == c.b) afterUv[k] = c.uv;
+                    const auto area = [](const auto& uv) {
+                        return double(uv[1].u-uv[0].u)*(uv[2].v-uv[0].v) - double(uv[1].v-uv[0].v)*(uv[2].u-uv[0].u);
+                    };
+                    const double beforeArea = area(face.uv), afterArea = area(afterUv);
+                    if (std::abs(afterArea) < 1e-16 || beforeArea * afterArea <= 0 || std::abs(afterArea) < std::abs(beforeArea) * .05) return false;
+                }
                 P corner[3];
                 for (int k = 0; k < 3; ++k)
                     corner[k] = (face.v[k] == c.a || face.v[k] == c.b) ? c.position : vertices[face.v[k]].position;
@@ -202,6 +228,11 @@ struct Simplifier {
                     if (v == c.b) v = c.a;
                 keep.faces.push_back(f);
             }
+        }
+        if (hasUvs) {
+            for (const auto f : keep.faces)
+                for (int k = 0; k < 3; ++k) if (faces[f].v[k] == c.a) faces[f].uv[k] = c.uv;
+            keep.uv = c.uv;
         }
         gone.faces.clear();
         gone.alive = false;
@@ -240,13 +271,12 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
         error = "閉じた、外向きの面を持つMeshが必要です";
         return {};
     }
-    if (input.triangles.size() <= size_t(s.targetTriangles)) {
-        // 減らす必要がない。UV だけ外して形はそのまま返す（出力の性質を入力の面数に依らず揃える）。
-        Mesh same;
-        same.positions = input.positions;
-        same.triangles = input.triangles;
-        return same;
+    const bool hasUvs = !input.cornerUvs.empty();
+    if ((hasUvs && !HasValidUvs(input)) || (!input.uvCharts.empty() && input.uvCharts.size() != input.triangles.size())) {
+        error = "Decimateの入力UVが不正です";
+        return {};
     }
+    if (input.triangles.size() <= size_t(s.targetTriangles)) return input;
     // 誤差の比較と行列の条件を寸法に依らなくするため、最長辺を 1 にした座標で計算する。
     const double scale =
         std::max({double(info.maximum.x) - info.minimum.x, double(info.maximum.y) - info.minimum.y,
@@ -256,6 +286,7 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
         return {};
     }
     Simplifier mesh;
+    mesh.hasUvs = hasUvs;
     mesh.vertices.resize(input.positions.size());
     for (size_t i = 0; i < input.positions.size(); ++i) {
         const auto& p = input.positions[i];
@@ -272,6 +303,15 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
     edges.reserve(input.triangles.size() * 3);
     for (uint32_t f = 0; f < input.triangles.size(); ++f) {
         mesh.faces[f].v = input.triangles[f];
+        if (hasUvs) {
+            mesh.faces[f].uv = input.cornerUvs[f];
+            if (!input.uvCharts.empty()) mesh.faces[f].chart = input.uvCharts[f];
+            for (int k = 0; k < 3; ++k) {
+                auto& vertex = mesh.vertices[input.triangles[f][k]];
+                if (!vertex.faces.empty() && vertex.uv != input.cornerUvs[f][k]) vertex.seam = true;
+                vertex.uv = input.cornerUvs[f][k];
+            }
+        }
         const P normal = mesh.Normal(mesh.faces[f]);
         const double twiceArea = Length(normal);
         const P unit{normal[0] / twiceArea, normal[1] / twiceArea, normal[2] / twiceArea};
@@ -290,6 +330,9 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
     const double creaseCosine = std::cos(40.0 * std::numbers::pi / 180);
     for (size_t i = 0; i + 1 < edges.size(); i += 2) {
         const uint32_t a = uint32_t(edges[i].key >> 32), b = uint32_t(edges[i].key);
+        if (hasUvs && mesh.faces[edges[i].face].chart != mesh.faces[edges[i+1].face].chart) {
+            mesh.vertices[a].seam = mesh.vertices[b].seam = true;
+        }
         if (s.creaseWeight > 0) {
             // 折れ角の大きい辺には、辺を含んで各面に垂直な平面を足す。辺に沿ってしか動けなくなり、稜線が残る。
             const P n0 = mesh.Normal(mesh.faces[edges[i].face]), n1 = mesh.Normal(mesh.faces[edges[i + 1].face]);
@@ -340,6 +383,7 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
         return {};
     }
     Mesh out;
+    if (hasUvs) { out.uvWidth = input.uvWidth; out.uvHeight = input.uvHeight; }
     std::vector<uint32_t> remap(mesh.vertices.size(), UINT32_MAX);
     out.triangles.reserve(alive);
     for (const auto& face : mesh.faces) {
@@ -359,6 +403,10 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
             triangle[k] = index;
         }
         out.triangles.push_back(triangle);
+        if (hasUvs) {
+            out.cornerUvs.push_back(face.uv);
+            if (!input.uvCharts.empty()) out.uvCharts.push_back(face.chart);
+        }
     }
     MeshInfo result;
     if (!InspectMesh(out, result) || !result.closed || result.volume <= 0 || result.components != info.components) {
