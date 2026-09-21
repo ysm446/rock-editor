@@ -47,8 +47,8 @@ constexpr std::array<PinDefinition, 1> kBaseRockPins = {{{PinKind::Output, Value
 
 constexpr std::array<PinDefinition, 2> kMeshFilterPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<PinDefinition, 1> kRandomBoxesPins = {{{PinKind::Output, ValueType::Boxes, "Boxes"}}};
-constexpr std::array<PinDefinition, 2> kToVolumePins = {{{PinKind::Input, ValueType::Boxes, "Boxes"},
+constexpr std::array<PinDefinition, 1> kRandomBoxesPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<PinDefinition, 2> kToVolumePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 2> kVolumeTransformPins = {
     {{PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Volume, "Volume"}}};

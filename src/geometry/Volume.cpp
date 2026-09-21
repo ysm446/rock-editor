@@ -288,39 +288,6 @@ Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod 
         error = "閉じた表面を抽出できません。解像度か直方体の寸法・配置を調整してください";
         return {};
     }
-    if (info.components > 1) {
-        // 外皮と内部空洞の壁は別の表面成分でも同じ固体。空洞を勝手に埋めない。
-        // 正の体積の外皮が複数なら、解像度で細い接続が失われたので診断する。
-        std::vector<uint32_t> parents(mesh.positions.size());
-        std::iota(parents.begin(), parents.end(), 0);
-        const auto root = [&](uint32_t id) {
-            while (parents[id] != id) {
-                parents[id] = parents[parents[id]];
-                id = parents[id];
-            }
-            return id;
-        };
-        for (const auto& t : mesh.triangles) {
-            parents[root(t[1])] = root(t[0]);
-            parents[root(t[2])] = root(t[0]);
-        }
-        std::unordered_map<uint32_t, double> volumes;
-        const auto reference = mesh.positions.front();
-        for (const auto& t : mesh.triangles) {
-            const auto a = mesh.positions[t[0]], b = mesh.positions[t[1]], c = mesh.positions[t[2]];
-            const double ax = double(a.x) - reference.x, ay = double(a.y) - reference.y,
-                         az = double(a.z) - reference.z, bx = double(b.x) - reference.x,
-                         by = double(b.y) - reference.y, bz = double(b.z) - reference.z,
-                         cx = double(c.x) - reference.x, cy = double(c.y) - reference.y,
-                         cz = double(c.z) - reference.z;
-            volumes[root(t[0])] +=
-                (ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx)) / 6;
-        }
-        if (std::count_if(volumes.begin(), volumes.end(), [](const auto& v) { return v.second > 0; }) != 1) {
-            error = "解像度によって塊の細い接続が失われました。解像度を上げるか直方体を厚くしてください";
-            return {};
-        }
-    }
     return mesh;
 }
 }  // namespace rock::geometry

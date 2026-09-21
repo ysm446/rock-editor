@@ -170,9 +170,9 @@ void RunVolumeTests() {
                merge = graph.CreateNode(graph::NodeKind::Merge);
     const auto from = [&](auto id) { return graph.FindNode(id)->outputs[0].id; };
     const auto to = [&](auto id) { return graph.FindNode(id)->inputs[0].id; };
-    Check(!graph.CanCreateLink(from(source), to(meshInput)) && !graph.CanCreateLink(from(volume), to(meshInput)) &&
-              !graph.CanCreateLink(from(volume), to(merge)),
-          "Boxes/Volume を Mesh と偽って渡さない");
+    Check(graph.CanCreateLink(from(source), to(meshInput)) && graph.CanCreateLink(from(source), to(merge)) &&
+              !graph.CanCreateLink(from(volume), to(meshInput)) && !graph.CanCreateLink(from(volume), to(merge)),
+          "Random BoxesはMeshを出力し、VolumeはMeshと区別する");
     Check(graph.CreateLink(from(source), to(volume)) && graph.CreateLink(from(volume), to(output)),
           "Random Boxes → To Volume → Mesh Output を接続");
     std::get<geometry::VolumeSettings>(graph.FindMutableNode(volume)->settings).resolution = 24;
@@ -209,8 +209,8 @@ void RunVolumeTests() {
     tests::Section("Volume to Mesh の変換・接続・Undo");
     const auto converter = graph.CreateNode(graph::NodeKind::VolumeToMesh);
     Check(!graph.CanCreateLink(from(source), to(converter)) &&
-              !graph.CanCreateLink(from(converter), to(volume)),
-          "変換ノードは Volume 入力と Mesh 出力を区別");
+              graph.CanCreateLink(from(converter), to(volume)),
+          "Volume to Meshの出力はTo Volumeへ再変換できる（循環は禁止）");
     const auto missing = graph::EvaluateRocks(graph, converter);
     Check(missing.rocks.empty() && missing.error.find("Volume to Mesh") != std::string::npos,
           "未接続の入力を対象ノード名付きで診断");

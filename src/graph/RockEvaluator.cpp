@@ -37,6 +37,12 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         add(s->count); add(s->size); add(s->sizeVariation); add(s->spread); add(s->rotation); add(s->seed);
         return key;
     }
+    if (const auto* s = std::get_if<geometry::BaseRockSettings>(&node->settings)) {
+        add(s->size); add(s->seed); add(s->shape); add(s->subdivisions);
+        add(s->roundness); add(s->noiseStrength); add(s->noiseScale);
+        return key;
+    }
+    const auto pose = [&](const geometry::PiecePose& p) { add(p.position); add(p.rotation); add(p.scale); };
     if (node->kind == NodeKind::ToVolume) {
         const auto* s = std::get_if<geometry::VolumeSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -49,12 +55,37 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         const auto* s = std::get_if<geometry::VolumeToMeshSettings>(&node->settings);
         const auto method = s ? s->method : geometry::VolumeMeshingMethod::MarchingTetrahedra;
         add(method);
-    } else return std::nullopt;
-    const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
-    if (!upstream) return std::nullopt;
-    const auto parent = VolumeKey(graph, upstream->id, depth + 1);
-    if (!parent) return std::nullopt;
-    key += *parent;
+    } else if (const auto* scatter = std::get_if<geometry::ScatterSettings>(&node->settings)) {
+        add(scatter->count); add(scatter->seed); add(scatter->version);
+    } else if (const auto* voronoi = std::get_if<geometry::VoronoiSettings>(&node->settings)) {
+        add(voronoi->rotation); add(voronoi->stretch); add(voronoi->version);
+    } else if (const auto* selection = std::get_if<geometry::PieceSelectSettings>(&node->settings)) {
+        add(selection->mode); add(selection->outerFaces); add(selection->seed); add(selection->minimum); add(selection->maximum);
+        add(selection->minVolume); add(selection->maxVolume); add(selection->fraction); add(selection->invert); add(selection->producer); add(selection->generation);
+        add(selection->ids.size()); for (auto value : selection->ids) add(value);
+    } else if (const auto* filter = std::get_if<geometry::PieceFilterSettings>(&node->settings)) {
+        add(filter->keep);
+    } else if (const auto* transform = std::get_if<geometry::PieceTransformSettings>(&node->settings)) {
+        pose(transform->pose); add(transform->individual); add(transform->producer); add(transform->generation); add(transform->overrides.size());
+        for (const auto& value : transform->overrides) { add(value.id); pose(value.pose); }
+    } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
+        add(uv->resolution); add(uv->padding); add(uv->quality);
+    } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
+               node->kind != NodeKind::UvUnwrap && node->kind != NodeKind::MaterialBake &&
+               node->kind != NodeKind::MeshOutput) return std::nullopt;
+    for (const auto& pin : node->inputs) {
+        if (pin.valueType == ValueType::Material) {
+            if (node->kind == NodeKind::MaterialBake) add(graph.FindUpstreamPin(pin.id));
+            continue;
+        }
+        const auto* upstream = graph.FindUpstreamNodeForPin(pin.id);
+        add(pin.id);
+        const GraphId source = upstream ? upstream->id : 0; add(source);
+        if (!upstream) continue;
+        const auto parent = VolumeKey(graph, upstream->id, depth + 1);
+        if (!parent) return std::nullopt;
+        key += *parent;
+    }
     return key;
 }
 }  // namespace
@@ -82,7 +113,9 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             return Failure(id, "Graph", "循環または評価深さの上限を検出しました");
         const auto* node = graph.FindNode(id);
         if (!node) return {};
-        const auto persistentKey = persistent ? VolumeKey(graph, id) : std::nullopt;
+        const bool volumeCache = node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
+                                 node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeToMesh;
+        const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id) : std::nullopt;
         if (persistentKey) {
             const auto found = persistent->entries.find(id);
             if (found != persistent->entries.end()) return found->second.result;
@@ -107,7 +140,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (node->kind == NodeKind::UvUnwrap) {
                 geometry::Mesh combined;
                 for (const auto& rock : result.rocks) {
-                    if (rock.volume || rock.boxes) return finish(Failure(id, "UV Unwrap", "先にVolume to Meshへ接続してください"));
+                    if (rock.volume) return finish(Failure(id, "UV Unwrap", "先にVolume to Meshへ接続してください"));
                     const auto offset = static_cast<uint32_t>(combined.positions.size());
                     combined.positions.insert(combined.positions.end(), rock.mesh.positions.begin(), rock.mesh.positions.end());
                     for (auto face : rock.mesh.triangles) { for (auto& i : face) i += offset; combined.triangles.push_back(face); }
@@ -153,13 +186,26 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         } else if (node->kind == NodeKind::ToVolume) {
             const auto* settings = std::get_if<geometry::VolumeSettings>(&node->settings);
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
-            if (!settings || !upstream) return finish(Failure(id, "To Volume", "Random Boxes の Boxes 出力を接続してください"));
+            if (!settings || !upstream) return finish(Failure(id, "To Volume", "Mesh出力を接続してください"));
             const auto input = evaluate(upstream->id, depth + 1);
             if (!input.error.empty()) return finish(input);
-            if (input.rocks.size() != 1 || !input.rocks[0].boxes)
-                return finish(Failure(id, "To Volume", "直方体の集合が必要です"));
+            if (input.hasModels || input.rocks.empty())
+                return finish(Failure(id, "To Volume", "閉じたMeshが必要です。Modelは直接変換できません"));
+            geometry::Mesh combined;
+            std::vector<geometry::OrientedBox> boxes;
+            bool allBoxes = true;
+            for (const auto& rock : input.rocks) {
+                if (rock.volume) return finish(Failure(id, "To Volume", "Mesh入力が必要です"));
+                allBoxes &= bool(rock.boxes);
+                if (rock.boxes) boxes.insert(boxes.end(), rock.boxes->begin(), rock.boxes->end());
+                const auto offset = static_cast<uint32_t>(combined.positions.size());
+                combined.positions.insert(combined.positions.end(), rock.mesh.positions.begin(), rock.mesh.positions.end());
+                for (auto face : rock.mesh.triangles) { for (auto& index : face) index += offset; combined.triangles.push_back(face); }
+            }
             std::string error;
-            auto volume = geometry::BoxesToVolume(*input.rocks[0].boxes, *settings, error);
+            auto volume = allBoxes && boxes.size() <= 32
+                ? geometry::BoxesToVolume(boxes, *settings, error)
+                : geometry::MeshToVolume(combined, *settings, error, stop);
             if (!error.empty()) return finish(Failure(id, "To Volume", error));
             GeneratedRock rock;
             rock.source = id;

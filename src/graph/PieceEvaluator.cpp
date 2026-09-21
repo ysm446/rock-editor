@@ -21,7 +21,7 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
         return first;
     std::string error;
     if (node.kind == NodeKind::ScatterPoints || node.kind == NodeKind::VoronoiFracture) {
-        if (first.hasModels || first.rocks.size() != 1 || first.rocks[0].volume || first.rocks[0].boxes)
+        if (first.hasModels || first.rocks.size() != 1 || first.rocks[0].volume)
             return fail("単一の凸Meshを接続してください");
         const auto &mesh = first.rocks[0].mesh;
         std::string key;

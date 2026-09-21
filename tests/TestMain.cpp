@@ -7,6 +7,7 @@
 #include "TestSupport.h"
 
 void RunPieceTests();
+void RunMeshVolumeTests();
 void RunRockTests();
 void RunBaseRockTests();
 void RunVolumeTests();
@@ -21,6 +22,7 @@ void RunProjectWorkspaceTests();
 
 int main() {
     RunPieceTests();
+    RunMeshVolumeTests();
     RunRockTests();
     RunBaseRockTests();
     RunVolumeTests();

@@ -1,5 +1,6 @@
 #pragma once
 #include "geometry/BoxCluster.h"
+#include <stop_token>
 
 namespace rock::geometry {
 struct VolumeSettings {
@@ -30,6 +31,9 @@ struct VolumeTransformSettings {
 };
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
+// 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。
+VolumeGrid MeshToVolume(const Mesh& mesh, const VolumeSettings& settings, std::string& error,
+                        std::stop_token stop = {});
 // 格子を作り直して移動・回転・拡大する。セル間隔は倍率に比例させ、解像度を保つ。
 VolumeGrid TransformVolume(const VolumeGrid& grid, const VolumeTransformSettings& settings,
                            std::string& error);

@@ -230,7 +230,9 @@ void Application::SyncMeshGraph() {
         previewMeshNode = node->id;
     }
     m_uvCheckerPreview = previewMeshNode && m_graph.FindNode(previewMeshNode)->kind == graph::NodeKind::UvUnwrap;
-    const bool hasPieces = std::any_of(m_graph.Nodes().begin(), m_graph.Nodes().end(), [](const auto& n) { return graph::IsPieceNodeKind(n.kind); });
+    const bool hasPieces = std::any_of(m_graph.Nodes().begin(), m_graph.Nodes().end(), [](const auto& n) {
+        return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume;
+    });
     const std::string taskKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(m_selectedGraphNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
     if ((!hasPieces || m_pieceCompletedKey == taskKey) && m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
@@ -831,6 +833,7 @@ void Application::DrawGraphEditor() {
         // 扱う型ごとに分けて並べる。見出しは出力する型（変換ノードは変換後の型）で選ぶ。
         ImGui::TextDisabled("メッシュ（ポリゴン）");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Shape — 基本形状と弱いノイズ");
+        addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体メッシュを重ねて塊を作る");
         addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
@@ -843,8 +846,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::PiecesToMesh, "Pieces to Mesh — UV・材質工程へ変換");
         ImGui::Separator();
         ImGui::TextDisabled("ボリューム");
-        addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体を重ねて塊を作る");
-        addNodeMenuItem(graph::NodeKind::ToVolume, "To Volume — 直方体の塊をボリュームに変換");
+        addNodeMenuItem(graph::NodeKind::ToVolume, "To Volume — メッシュをボリュームに変換");
         addNodeMenuItem(graph::NodeKind::VolumeTransform, "Volume Transform — ボリュームを移動・回転・拡大");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
@@ -1021,7 +1023,7 @@ void Application::DrawGraphPanel() {
             ui::EndPropertyTable();
         }
         ui::HintText("直方体を互いに重ねて塊を作ります。同じ Seed で同じ形になります。基準寸法は最初の直方体の大きさです。");
-        ui::HintText("Boxes を To Volume に接続すると、重なりを一体化した外側の表面を表示します。出力ピンをクリックすると変換前を比較できます。");
+        ui::HintText("MeshをTo Volumeに接続すると、重なりを一体化した外側の表面を表示します。UV UnwrapやMergeにも接続できます。");
         if (changed) {
             *boxes = edited;
             m_graph.MarkDirty();
@@ -1034,7 +1036,8 @@ void Application::DrawGraphPanel() {
             changed |= ui::PropertyInt("解像度", &edited.resolution, 16, 96, 48);
             ui::EndPropertyTable();
         }
-        ui::HintText("Random Boxes の重なりを一つのボリュームへ変換します。Volume を Volume to Mesh に接続すると、表面を Mesh として取り出せます。");
+        ui::HintText("閉じたMeshをボリュームに変換します。Random Boxes、Base Shape、Pieces to Meshなどを接続できます。重なった外向きの立体は和集合になります。");
+        ui::HintText("穴の開いたメッシュや不正な面の向きは診断します。Volume to Meshへ接続すると、表面をMeshとして取り出せます。");
         ui::HintText("解像度は最長辺の分割数です。高くすると角や細い形を保ちやすくなり、処理時間も増えます。");
         if (changed) {
             *volume = edited;
@@ -1156,7 +1159,7 @@ void Application::DrawGraphPanel() {
         else ui::HintText("未ベイク。ノードの出力をプレビューして状態を確認してください。");
         ui::HintText("UV Unwrapのアトラス寸法でPNGを4枚生成し、ルート内のBakesへ保存します。形状・材質・スムーズシェーディングを変えたら再ベイクしてください。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
-        ui::HintText("メッシュ・モデル・Boxes・Volume を接続すると表示する。複数の Mesh Output を同時に表示できる。");
+        ui::HintText("メッシュ・モデル・Volumeを接続すると表示する。複数のMesh Outputを同時に表示できる。");
         ui::HintText("MaterialにSurfaceを接続すると、生成メッシュに材質を適用します。UVのない岩にはSurfaceでTriplanarを選びます。モデルの材質はモデル側で設定します。");
     } else if (auto* settings = std::get_if<graph::LayerNodeSettings>(&selected->settings)) {
         bool changed = false;

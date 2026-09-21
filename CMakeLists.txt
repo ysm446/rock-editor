@@ -375,3 +375,5 @@ target_sources(rock_editor PRIVATE src/graph/PieceEvaluator.cpp)
 target_sources(rock_editor_tests PRIVATE src/graph/PieceEvaluator.cpp)
 
 target_sources(rock_editor PRIVATE src/app/ApplicationPiecePanel.cpp)
+target_sources(rock_editor PRIVATE src/geometry/MeshVolume.cpp)
+target_sources(rock_editor_tests PRIVATE src/geometry/MeshVolume.cpp tests/MeshVolumeTests.cpp)

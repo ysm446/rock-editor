@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 21:20
+更新日時: 2026-09-21 21:43
 
 ## 未リリース
+
+- Random BoxesをMesh出力、To VolumeをMesh入力へ統一。Base ShapeやPieces to Meshから閉じたメッシュをボリューム化できる。直方体の高速経路を維持し、一般メッシュのBVH距離計算、凹形状・穴・空洞・重複・分離ピース、非同期評価と上流キャッシュ無効化に対応。旧シーンの接続は維持する。
 
 - Scatter Points / Voronoi Fracture / Piece Select / Piece Filter / Piece Transform / Pieces to Meshを追加。凸形状を方向付きVoronoiで分割し、色分け、外面・範囲・体積・ランダム・手動による選別、削除/抽出、個別配置、UV/ベイクへ接続できる。重い分割は非同期評価とキャッシュを使用。選択IDの保存・Undoと、上流変更時の無効化に対応。サンプルは `examples/voronoi-pieces/`。
 
