@@ -244,8 +244,8 @@ uint64_t MeshFingerprint(const Mesh &m) {
 PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &error, std::stop_token stop) {
     error.clear();
     PointSet out;
-    if (s.version != 1 || s.count < 2 || s.count > 128) {
-        error = "点数は2〜128、アルゴリズムはversion 1が必要です";
+    if (s.version != 1 || s.count < 2 || s.count > MaxScatterPoints) {
+        error = "点数は2〜" + std::to_string(MaxScatterPoints) + "、アルゴリズムはversion 1が必要です";
         return {};
     }
     Poly poly;
@@ -299,8 +299,8 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
                                 int producer, std::string &error, std::stop_token stop) {
     error.clear();
     if (points.source != MeshFingerprint(mesh) || points.positions.size() < 2 ||
-        points.positions.size() > 128 || s.version != 1) {
-        error = "同じMeshから生成した2〜128点のScatter Pointsが必要です";
+        points.positions.size() > MaxScatterPoints || s.version != 1) {
+        error = "同じMeshから生成した2〜" + std::to_string(MaxScatterPoints) + "点のScatter Pointsが必要です";
         return {};
     }
     for (auto v : s.rotation)

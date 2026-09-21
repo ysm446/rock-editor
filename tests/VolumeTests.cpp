@@ -10,6 +10,44 @@ void RunVolumeTests() {
     using namespace rock;
     using tests::Check;
     tests::Section("直方体の塊とボリューム");
+    // sample.rockscene: 232分割から外面に触れない79片を抽出。
+    // 曖昧なセル面の2本の輪郭を1辺に潰すと、4面が接続して閉包検証で失敗する。
+    {
+        using namespace geometry;
+        std::string local;
+        const auto source = MakeBox({2, 3, 2});
+        const auto points = ScatterPoints(source, {232, 1}, local);
+        const auto pieces = FractureVoronoi(source, points, {}, 63, local);
+        PieceSelectSettings select;
+        select.mode = PieceSelectMode::Outer;
+        select.invert = true;
+        const auto selected = SelectPieces(pieces, select, local);
+        const auto kept = FilterPieces(pieces, selected, true, local);
+        Check(local.empty() && kept.pieces.size() == 79, "sample interior pieces reproduced");
+        for (int resolution : {64, 96}) {
+            const auto grid = MeshToVolume(PiecesMesh(kept), {resolution}, local);
+            Check(local.empty() && !grid.values.empty(), "sample volume succeeds");
+            const auto surface = VolumeSurface(grid, local, VolumeMeshingMethod::DualContouring);
+            MeshInfo info;
+            Check(local.empty() && InspectMesh(surface, info) && info.closed && info.volume > 0,
+                  "sample DC preserves distinct shared-face contours");
+        }
+        // 全符号配置。両方向の面接続と、鞍点がゼロになる同値ケースも通す。
+        bool allClosed = true;
+        for (int mask = 1; mask < 256; ++mask) {
+            VolumeGrid grid;
+            grid.spacing = 1;
+            grid.dimensions = {4, 4, 4};
+            grid.values.assign(64, 1);
+            for (int c = 0; c < 8; ++c)
+                grid.values[grid.Index(1 + (c & 1), 1 + ((c >> 1) & 1), 1 + ((c >> 2) & 1))] =
+                    mask & (1 << c) ? -1.f : 1.f;
+            const auto surface = VolumeSurface(grid, local, VolumeMeshingMethod::DualContouring);
+            MeshInfo info;
+            allClosed &= local.empty() && InspectMesh(surface, info) && info.closed && info.volume > 0;
+        }
+        Check(allClosed, "all cell sign patterns yield closed DC surfaces");
+    }
     geometry::BoxClusterSettings s;
     std::string error;
     const auto boxes = geometry::MakeBoxCluster(s, error);

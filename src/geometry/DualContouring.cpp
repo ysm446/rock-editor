@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
 
 namespace rock::geometry {
 namespace {
@@ -189,20 +190,97 @@ Mesh ExtractDualContour(const VolumeGrid& g, std::string& error) {
                 vertices[cellIndex(x, y, z)] = static_cast<uint32_t>(cellVertices.size());
                 cellVertices.push_back(ids);
             }
-    const auto quad = [&](std::array<uint32_t, 4> ids, bool forward) {
+    // 曖昧な共有面には2本の輪郭がある。同じセル頂点の組につながっても
+    // 別の辺として保持するため、輪郭ごとの面上の中間点を共有する。
+    std::unordered_map<uint64_t, uint32_t> faceVertices;
+    const auto faceVertex = [&](const std::array<uint32_t, 3>& a,
+                                const std::array<uint32_t, 3>& b, size_t edgeStart, size_t edgeEnd) {
+        int axis = 0;
+        while (a[axis] == b[axis]) ++axis;
+        auto base = a;
+        base[axis] = std::max(a[axis], b[axis]);
+        const int u = (axis + 1) % 3, v = (axis + 2) % 3;
+        size_t samples[4];
+        Vec3 positions[4];
+        double values[4];
+        for (int c = 0; c < 4; ++c) {
+            auto p = base;
+            p[u] += c == 1 || c == 2;
+            p[v] += c == 2 || c == 3;
+            samples[c] = g.Index(p[0], p[1], p[2]);
+            positions[c] = g.Position(p[0], p[1], p[2]);
+            values[c] = g.values[samples[c]];
+        }
+        int current = -1;
+        for (int c = 0; c < 4; ++c) {
+            const int next = (c + 1) % 4;
+            if ((values[c] < 0) == (values[next] < 0)) return absent;
+            if (std::min(samples[c], samples[next]) == std::min(edgeStart, edgeEnd) &&
+                std::max(samples[c], samples[next]) == std::max(edgeStart, edgeEnd)) current = c;
+        }
+        if (current < 0) return absent;
+        const double denominator = values[0] - values[1] + values[2] - values[3];
+        const double center = denominator != 0
+            ? (values[0] * values[2] - values[1] * values[3]) / denominator
+            : (values[0] + values[1] + values[2] + values[3]) * .25;
+        int partner = -1;
+        for (int c = 0; c < 4; ++c)
+            if ((values[c] < 0) != (center < 0)) {
+                const int previous = (c + 3) % 4;
+                if (current == c) partner = previous;
+                if (current == previous) partner = c;
+            }
+        const uint64_t key = uint64_t(samples[0]) * 12 + axis * 4 + std::min(current, partner);
+        if (const auto found = faceVertices.find(key); found != faceVertices.end()) return found->second;
+        Point midpoint{};
+        for (int e : {current, partner}) {
+            const int next = (e + 1) % 4;
+            const double t = values[e] / (values[e] - values[next]);
+            const auto p = positions[e], q = positions[next];
+            midpoint[0] += (p.x + (double(q.x) - p.x) * t) * .5;
+            midpoint[1] += (p.y + (double(q.y) - p.y) * t) * .5;
+            midpoint[2] += (p.z + (double(q.z) - p.z) * t) * .5;
+        }
+        const auto id = static_cast<uint32_t>(mesh.positions.size());
+        mesh.positions.push_back({float(midpoint[0]), float(midpoint[1]), float(midpoint[2])});
+        faceVertices.emplace(key, id);
+        return id;
+    };
+    const auto quad = [&](std::array<uint32_t, 4> ids, std::array<uint32_t, 4> mids, bool forward) {
         if (std::find(ids.begin(), ids.end(), absent) != ids.end()) return false;
-        if (!forward) std::swap(ids[1], ids[3]);
-        const auto distance = [&](int a, int b) {
-            const auto p = mesh.positions[ids[a]], q = mesh.positions[ids[b]];
-            return double(p.x - q.x) * (p.x - q.x) + double(p.y - q.y) * (p.y - q.y) +
-                   double(p.z - q.z) * (p.z - q.z);
-        };
-        if (distance(0, 2) <= distance(1, 3)) {
-            mesh.triangles.push_back({ids[0], ids[1], ids[2]});
-            mesh.triangles.push_back({ids[0], ids[2], ids[3]});
+        if (!forward) {
+            std::swap(ids[1], ids[3]);
+            std::reverse(mids.begin(), mids.end());
+        }
+        if (std::any_of(mids.begin(), mids.end(), [&](auto id) { return id != absent; })) {
+            Point center{};
+            for (auto id : ids) {
+                const auto p = mesh.positions[id];
+                center[0] += p.x * .25; center[1] += p.y * .25; center[2] += p.z * .25;
+            }
+            const auto middle = static_cast<uint32_t>(mesh.positions.size());
+            mesh.positions.push_back({float(center[0]), float(center[1]), float(center[2])});
+            for (int c = 0; c < 4; ++c) {
+                const auto a = ids[c], b = ids[(c + 1) % 4];
+                if (mids[c] == absent) mesh.triangles.push_back({a, b, middle});
+                else {
+                    mesh.triangles.push_back({a, mids[c], middle});
+                    mesh.triangles.push_back({mids[c], b, middle});
+                }
+            }
         } else {
-            mesh.triangles.push_back({ids[0], ids[1], ids[3]});
-            mesh.triangles.push_back({ids[1], ids[2], ids[3]});
+            const auto distance = [&](int a, int b) {
+                const auto p = mesh.positions[ids[a]], q = mesh.positions[ids[b]];
+                return double(p.x - q.x) * (p.x - q.x) + double(p.y - q.y) * (p.y - q.y) +
+                       double(p.z - q.z) * (p.z - q.z);
+            };
+            if (distance(0, 2) <= distance(1, 3)) {
+                mesh.triangles.push_back({ids[0], ids[1], ids[2]});
+                mesh.triangles.push_back({ids[0], ids[2], ids[3]});
+            } else {
+                mesh.triangles.push_back({ids[0], ids[1], ids[3]});
+                mesh.triangles.push_back({ids[1], ids[2], ids[3]});
+            }
         }
         return true;
     };
@@ -221,17 +299,22 @@ Mesh ExtractDualContour(const VolumeGrid& g, std::string& error) {
                         error = "Dual Contouring の表面が格子の外周に接しています。外側に余白が必要です";
                         return {};
                     }
-                    std::array<uint32_t, 4> ids;
+                    std::array<uint32_t, 4> ids, mids;
+                    std::array<std::array<uint32_t, 3>, 4> cells;
                     for (int c = 0; c < 4; ++c) {
                         uint32_t cell[3] = {x, y, z};
                         cell[u] -= c == 0 || c == 3;
                         cell[v] -= c == 0 || c == 1;
+                        cells[c] = {cell[0], cell[1], cell[2]};
                         const auto cellId = vertices[cellIndex(cell[0], cell[1], cell[2])];
                         const int corner = int(x - cell[0]) | (int(y - cell[1]) << 1) | (int(z - cell[2]) << 2);
                         const int edge = EdgeIndex(corner, corner | (1 << axis));
                         ids[c] = cellId == absent ? absent : cellVertices[cellId][edge];
                     }
-                    if (!quad(ids, value < 0)) {
+                    for (int c = 0; c < 4; ++c)
+                        mids[c] = faceVertex(cells[c], cells[(c + 1) % 4], g.Index(x, y, z),
+                                             g.Index(x + (axis == 0), y + (axis == 1), z + (axis == 2)));
+                    if (!quad(ids, mids, value < 0)) {
                         error = "Dual Contouring のセル接続を構築できません";
                         return {};
                     }

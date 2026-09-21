@@ -5,6 +5,7 @@
 #include <stop_token>
 
 namespace rock::geometry {
+inline constexpr int MaxScatterPoints = 512;
 struct ScatterSettings {
     int count = 24;
     uint32_t seed = 1;

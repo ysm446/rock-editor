@@ -11,7 +11,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
         ui::HintText("更新中…表示は前回の結果です。選択・ベイクは完了後に操作できます。");
     if (auto *scatter = std::get_if<geometry::ScatterSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("scatter")) {
-            changed |= ui::PropertyInt("点数", &scatter->count, 2, 128, 24);
+            changed |= ui::PropertyInt("点数", &scatter->count, 2, geometry::MaxScatterPoints, 24);
             int seed = int(scatter->seed);
             if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
                 scatter->seed = uint32_t(seed);

@@ -52,6 +52,23 @@ void RunPieceTests() {
     }
     auto box = MakeBox({2, 2, 2});
     std::string error;
+    auto maximum = ScatterPoints(box, {MaxScatterPoints, 5}, error);
+    Check(error.empty() && maximum.positions.size() == MaxScatterPoints, "maximum scatter count");
+    auto maximumPieces = FractureVoronoi(box, maximum, {}, 1, error);
+    Check(error.empty() && maximumPieces.pieces.size() == MaxScatterPoints, "maximum Voronoi count");
+    double maximumVolume = 0;
+    for (const auto& piece : maximumPieces.pieces) {
+        MeshInfo info;
+        Check(InspectMesh(*piece.mesh, info) && info.closed && info.volume > 0,
+              "maximum count pieces remain closed");
+        maximumVolume += info.volume;
+    }
+    Check(std::abs(maximumVolume - 8) < .00016, "maximum count conserves volume");
+    ScatterPoints(box, {MaxScatterPoints + 1, 5}, error);
+    Check(!error.empty(), "scatter rejects excess count");
+    maximum.positions.push_back({0, 0, 0});
+    FractureVoronoi(box, maximum, {}, 1, error);
+    Check(!error.empty(), "Voronoi rejects excess count");
     PointSet points;
     points.source = MeshFingerprint(box);
     points.positions = {{-.5f, 0, 0}, {.5f, 0, 0}};
