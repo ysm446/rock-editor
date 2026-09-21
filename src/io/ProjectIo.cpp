@@ -486,6 +486,14 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
+        } else if (const auto* noise = std::get_if<geometry::VolumeNoiseSettings>(&node.settings)) {
+            item["volumeNoise"] = {{"type", geometry::VolumeNoiseTypeName(noise->type)},
+                                   {"amount", noise->amount},
+                                   {"scale", noise->scale},
+                                   {"octaves", noise->octaves},
+                                   {"warp", noise->warp},
+                                   {"warpScale", noise->warpScale},
+                                   {"seed", noise->seed}};
         } else if (const auto* crack = std::get_if<geometry::VolumeCrackSettings>(&node.settings)) {
             item["volumeCrack"] = {{"width", crack->width},       {"depth", crack->depth},
                                    {"variation", crack->variation}, {"noise", crack->noise},
@@ -715,6 +723,18 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.position = {position.x, position.y, position.z};
                     settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
                     settings.scale = ReadFloat(*v, "scale", settings.scale);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeNoise) {
+                geometry::VolumeNoiseSettings settings;
+                if (const json* v = FindMember(item, "volumeNoise"); v && v->is_object()) {
+                    settings.type = geometry::ParseVolumeNoiseType(ReadString(*v, "type", "facet"));
+                    settings.amount = ReadFloat(*v, "amount", settings.amount);
+                    settings.scale = ReadFloat(*v, "scale", settings.scale);
+                    settings.octaves = ReadInt(*v, "octaves", settings.octaves);
+                    settings.warp = ReadFloat(*v, "warp", settings.warp);
+                    settings.warpScale = ReadFloat(*v, "warpScale", settings.warpScale);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeCrack) {

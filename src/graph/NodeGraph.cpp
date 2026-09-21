@@ -69,7 +69,7 @@ constexpr std::array<PinDefinition, 4> kApplyPins = {{{PinKind::Input, ValueType
     {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Input, ValueType::Mask, "Mask"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 23> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 24> kNodeDefinitions = {{
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
@@ -86,6 +86,7 @@ constexpr std::array<NodeDefinition, 23> kNodeDefinitions = {{
     {NodeKind::VolumeBoolean, "volumeBoolean", "Volume Boolean", kVolumeBooleanPins},
     {NodeKind::PlaneCuts, "planeCuts", "Plane Cuts", kVolumeTransformPins},
     {NodeKind::VolumeCrack, "volumeCrack", "Volume Crack", kVolumeCrackPins},
+    {NodeKind::VolumeNoise, "volumeNoise", "Volume Noise", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::BaseRock, "baseRock", "Base Shape", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
@@ -131,6 +132,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
            kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeBoolean ||
            kind == NodeKind::PlaneCuts || kind == NodeKind::VolumeCrack ||
+           kind == NodeKind::VolumeNoise ||
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial;
 }
@@ -420,6 +422,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::PlaneCutsSettings{};
     } else if (kind == NodeKind::VolumeCrack) {
         node.settings = geometry::VolumeCrackSettings{};
+    } else if (kind == NodeKind::VolumeNoise) {
+        node.settings = geometry::VolumeNoiseSettings{};
     } else if (kind == NodeKind::ScatterPoints) {
         node.settings = geometry::ScatterSettings{};
     } else if (kind == NodeKind::VoronoiFracture) {

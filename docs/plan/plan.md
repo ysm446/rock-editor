@@ -1,7 +1,7 @@
 # plan — v2 仕様に基づく実装計画
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 01:58
+更新日時: 2026-09-22 02:28
 
 ## 方針
 
@@ -44,7 +44,8 @@ P 番号は本計画の作業単位。原仕様の Milestone 番号とは別。P
 - 追加済み: `Volume Boolean`（和・交差・差、なめらかさ）。仕様は [Volume Boolean](../reference/volume-boolean.md)。
 - 追加済み: `Plane Cuts`（平面の群による面取りと欠け。全体 / 局所、等方 / 主方向）。仕様は [Plane Cuts](../reference/plane-cuts.md)。Field 型は入れず、単体のノードとして実装した。
 - 追加済み: `Volume Crack`（点の群の Voronoi 境界に沿う割れ目。V 字の断面、割れ目ごとのばらつき、ゆらぎ）。仕様は [Volume Crack](../reference/volume-crack.md)。幅のゆらぎはノード内のノイズで持ち、Field 型は入れていない。
-- 2026-09-22 のユーザー依頼で、参考画像のような岩に必要な処理を [設計メモ](../reference/rock-shaping-nodes.md) に整理した。形を作る 1〜3（Boolean / Plane Cuts / Crack）は実装済み。次の候補は Volume Displace / Noise → Volume Smooth → 形状からの材質マスク。Field（スカラー場）型は、材質マスク（ノイズ・曲率・AO を Volume と Material の両方へ渡す段階）で改めて判断する。
+- 追加済み: `Volume Noise`（なめらか / セル状 / 小面のノイズで表面を削る。歪みで平面と直線的な割れ目を崩す）。仕様は [Volume Noise](../reference/volume-noise.md)。
+- 2026-09-22 のユーザー依頼で、参考画像のような岩に必要な処理を [設計メモ](../reference/rock-shaping-nodes.md) に整理した。形を作る 1〜4（Boolean / Plane Cuts / Crack / Noise）は実装済み。次の候補は、形状からの材質マスク（色）→ Volume Smooth → ディテールの焼き込み。Field（スカラー場）型は、材質マスクに着手する段階で判断する。
 - その他の候補: 平面を境に片側だけずらす断層ノード、軸ごとの倍率。
 - ノードの右クリックメニューは扱う型ごとに分ける（メッシュ / ボリューム / モデル / 共通 / 材質）。
 

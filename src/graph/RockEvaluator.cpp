@@ -51,6 +51,11 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         const auto* s = std::get_if<geometry::VolumeTransformSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->position); add(s->rotationDegrees); add(s->scale);
+    } else if (node->kind == NodeKind::VolumeNoise) {
+        const auto* s = std::get_if<geometry::VolumeNoiseSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->type); add(s->amount); add(s->scale); add(s->octaves); add(s->warp); add(s->warpScale);
+        add(s->seed);
     } else if (node->kind == NodeKind::VolumeCrack) {
         const auto* s = std::get_if<geometry::VolumeCrackSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -133,6 +138,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         const bool volumeCache = node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
+                                 node->kind == NodeKind::VolumeNoise ||
                                  node->kind == NodeKind::VolumeToMesh;
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id) : std::nullopt;
         if (persistentKey) {
@@ -280,6 +286,23 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             GeneratedRock rock;
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(moved));
+            result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::VolumeNoise) {
+            const auto* settings = std::get_if<geometry::VolumeNoiseSettings>(&node->settings);
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream)
+                return finish(Failure(id, "Volume Noise", "Volume 出力を接続してください"));
+            const auto input = evaluate(upstream->id, depth + 1);
+            if (!input.error.empty()) return finish(input);
+            if (input.rocks.size() != 1 || !input.rocks[0].volume)
+                return finish(Failure(id, "Volume Noise", "ボリュームが必要です"));
+            std::string error;
+            auto noisy = geometry::NoiseVolume(*input.rocks[0].volume, *settings, error);
+            if (!error.empty()) return finish(Failure(id, "Volume Noise", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(noisy));
             result.rocks.push_back(std::move(rock));
         } else if (node->kind == NodeKind::VolumeCrack) {
             const auto* settings = std::get_if<geometry::VolumeCrackSettings>(&node->settings);

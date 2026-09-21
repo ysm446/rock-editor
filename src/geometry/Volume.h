@@ -92,6 +92,22 @@ struct VolumeCrackSettings {
     float noiseScale = 3;
     int seed = 1;
 };
+// Volume Noise。表面をノイズで削り、サンプル位置をずらして直線的な面や割れ目を崩す。
+enum class VolumeNoiseType { Smooth, Cellular, Facet };
+const char* VolumeNoiseTypeName(VolumeNoiseType type);
+// 不明な名前は Smooth として読む。
+VolumeNoiseType ParseVolumeNoiseType(std::string_view name);
+struct VolumeNoiseSettings {
+    VolumeNoiseType type = VolumeNoiseType::Facet;
+    // 削る量の最大。形の最長辺に対する比。0～0.2。削る方向にだけ効き、形は広がらない。
+    float amount = .02f;
+    float scale = 8;  // 最長辺あたりのノイズの山の数。0.5～64。
+    int octaves = 2;  // 細かさを倍にしながら重ねる数。1～5。
+    // 歪み。サンプル位置をずらす量の最大（最長辺に対する比。0～0.2）と、その細かさ（0.5～16）。
+    float warp = 0;
+    float warpScale = 2;
+    int seed = 1;
+};
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
 // 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。
@@ -113,6 +129,9 @@ VolumeGrid CutVolume(const VolumeGrid& grid, const PlaneCutsSettings& settings, 
 // 点は2～512個。形の外にあってもよい。格子（範囲・セル間隔）は入力のまま。
 VolumeGrid CrackVolume(const VolumeGrid& grid, const std::vector<Vec3>& points,
                        const VolumeCrackSettings& settings, std::string& error);
+// 歪みが 0 なら格子は入力のまま。歪みがあると、表面が動く量だけ外側へ広げる。
+// 加工でできた浮いた小片と閉じた空洞は除く。
+VolumeGrid NoiseVolume(const VolumeGrid& grid, const VolumeNoiseSettings& settings, std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
 Mesh VolumeSurface(const VolumeGrid& grid, std::string& error,
                    VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra);

@@ -867,6 +867,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
         addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 点の群の境界に沿って割れ目を彫る");
+        addNodeMenuItem(graph::NodeKind::VolumeNoise, "Volume Noise — 表面をノイズで削り、直線的な面を崩す");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1062,6 +1063,41 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は最長辺の分割数です。高くすると角や細い形を保ちやすくなり、処理時間も増えます。");
         if (changed) {
             *volume = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* noise = std::get_if<geometry::VolumeNoiseSettings>(&selected->settings)) {
+        auto edited = *noise;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeNoiseRows")) {
+            const char* types[] = {"なめらか", "セル状（丸い盛り上がり）", "小面（割れ肌）"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 2);
+            if (ui::PropertyCombo("種類", &type, types, 3, 2)) {
+                edited.type = static_cast<geometry::VolumeNoiseType>(type);
+                changed = true;
+            }
+            changed |= ui::PropertyFloat("量", &edited.amount, 0, .2f, .02f,
+                                         "削る量の最大。形の最長辺に対する比です。削る方向にだけ効き、形は広がりません。");
+            changed |= ui::PropertyFloat("細かさ", &edited.scale, .5f, 64, 8,
+                                         "最長辺あたりのノイズの山の数。セル間隔より細かい凹凸は格子で潰れます。");
+            changed |= ui::PropertyInt("重ねる数", &edited.octaves, 1, 5, 2,
+                                       "細かさを倍、量を半分にしながら重ねる数。");
+            changed |= ui::PropertyFloat("歪み", &edited.warp, 0, .2f, 0,
+                                         "サンプル位置をずらす量の最大。平面や直線的な割れ目を波打たせます。");
+            changed |= ui::PropertyFloat("歪みの細かさ", &edited.warpScale, .5f, 16, 2);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("表面をノイズで削ります。「小面」はセルごとの平面で段差のある割れ肌、「セル状」は丸い盛り上がりと谷、「なめらか」は緩やかな起伏になります。");
+        ui::HintText("「歪み」は形そのものをゆらし、Plane Cuts の平面や Volume Crack の直線的な割れ目を崩します。格子を作り直すので、境界がセル1個ぶん程度なまります。"
+                     "歪みがあると、その分だけ格子が広がります。浮いた小片と閉じた空洞は自動で除きます。");
+        if (changed) {
+            edited.amount = std::clamp(edited.amount, 0.0f, 0.2f);
+            edited.scale = std::clamp(edited.scale, 0.5f, 64.0f);
+            edited.octaves = std::clamp(edited.octaves, 1, 5);
+            edited.warp = std::clamp(edited.warp, 0.0f, 0.2f);
+            edited.warpScale = std::clamp(edited.warpScale, 0.5f, 16.0f);
+            *noise = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

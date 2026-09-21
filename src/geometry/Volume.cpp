@@ -117,6 +117,36 @@ float ValueNoise(float x, float y, float z, uint64_t seed) {
     return mix(mix(mix(corner(0, 0, 0), corner(1, 0, 0), tx), mix(corner(0, 1, 0), corner(1, 1, 0), tx), ty),
                mix(mix(corner(0, 0, 1), corner(1, 0, 1), tx), mix(corner(0, 1, 1), corner(1, 1, 1), tx), ty), tz);
 }
+// 格子の外周から届かない外部（閉じた空洞）のうち、加工で新しくできたものを加工前の値へ戻す。
+// before は同じ格子の加工前の値。加工前から外部だった空洞（内向きの殻）は残す。
+void FillNewVoids(VolumeGrid& grid, const std::vector<float>& before) {
+    std::vector<uint8_t> reached(grid.values.size(), 0);
+    std::vector<size_t> stack;
+    const size_t nx = grid.dimensions[0], ny = grid.dimensions[1], nz = grid.dimensions[2];
+    const auto visit = [&](size_t next) {
+        if (grid.values[next] < 0 || reached[next]) return;
+        reached[next] = 1;
+        stack.push_back(next);
+    };
+    for (size_t z = 0; z < nz; ++z)
+        for (size_t y = 0; y < ny; ++y)
+            for (size_t x = 0; x < nx; ++x)
+                if (x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz)
+                    visit((z * ny + y) * nx + x);
+    while (!stack.empty()) {
+        const size_t index = stack.back();
+        stack.pop_back();
+        const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
+        if (x > 0) visit(index - 1);
+        if (x + 1 < nx) visit(index + 1);
+        if (y > 0) visit(index - nx);
+        if (y + 1 < ny) visit(index + nx);
+        if (z > 0) visit(index - nx * ny);
+        if (z + 1 < nz) visit(index + nx * ny);
+    }
+    for (size_t i = 0; i < grid.values.size(); ++i)
+        if (grid.values[i] >= 0 && !reached[i] && before[i] < 0) grid.values[i] = before[i];
+}
 // 右手系 Z → X → Y。Model と同じ向きに回す。
 Vec3 Rotate(Vec3 p, const std::array<float, 3>& degrees) {
     const float x = degrees[0] * std::numbers::pi_v<float> / 180;
@@ -780,34 +810,143 @@ VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, con
         return {};
     }
     // 重なった立体から作ったボリュームは、内部に残る面の近くでも距離が小さい。そこは表面と
-    // 同じ幅で彫られ、外へつながらない空洞になる。格子の外周から届かない彫り跡は埋め戻す。
-    std::vector<uint8_t> reached(out.values.size(), 0);
-    std::vector<size_t> stack;
-    const size_t nx = out.dimensions[0], ny = out.dimensions[1], nz = out.dimensions[2];
-    const auto visit = [&](size_t next) {
-        if (out.values[next] < 0 || reached[next]) return;
-        reached[next] = 1;
-        stack.push_back(next);
-    };
-    for (size_t z = 0; z < nz; ++z)
-        for (size_t y = 0; y < ny; ++y)
-            for (size_t x = 0; x < nx; ++x)
-                if (x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz)
-                    visit((z * ny + y) * nx + x);
-    while (!stack.empty()) {
-        const size_t index = stack.back();
-        stack.pop_back();
-        const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
-        if (x > 0) visit(index - 1);
-        if (x + 1 < nx) visit(index + 1);
-        if (y > 0) visit(index - nx);
-        if (y + 1 < ny) visit(index + nx);
-        if (z > 0) visit(index - nx * ny);
-        if (z + 1 < nz) visit(index + nx * ny);
+    // 同じ幅で彫られ、外へつながらない空洞になる。
+    FillNewVoids(out, g.values);
+    return out;
+}
+const char* VolumeNoiseTypeName(VolumeNoiseType type) {
+    switch (type) {
+        case VolumeNoiseType::Cellular: return "cellular";
+        case VolumeNoiseType::Facet: return "facet";
+        default: return "smooth";
     }
-    // 入力にもとからある空洞（内向きの殻）は残す。
-    for (size_t i = 0; i < out.values.size(); ++i)
-        if (out.values[i] >= 0 && !reached[i] && g.values[i] < 0) out.values[i] = g.values[i];
+}
+VolumeNoiseType ParseVolumeNoiseType(std::string_view name) {
+    if (name == "cellular") return VolumeNoiseType::Cellular;
+    if (name == "facet") return VolumeNoiseType::Facet;
+    return VolumeNoiseType::Smooth;
+}
+namespace {
+// セル状のノイズ。各格子セルに特徴点を1つ置き、最も近い特徴点から値を作る。どちらも 0～1。
+// Cellular は特徴点までの距離（丸い盛り上がりと、その間の谷）。
+// Facet は特徴点ごとのランダムな平面（平らな小面と、セルの境での段差）。
+float CellNoise(float x, float y, float z, uint64_t seed, bool facet) {
+    const float fx = std::floor(x), fy = std::floor(y), fz = std::floor(z);
+    float best = std::numeric_limits<float>::max(), bx = 0, by = 0, bz = 0;
+    uint64_t bestKey = 0;
+    for (int dz = -1; dz <= 1; ++dz)
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+                const int64_t ix = int64_t(fx) + dx, iy = int64_t(fy) + dy, iz = int64_t(fz) + dz;
+                const uint64_t key = seed ^ (uint64_t(ix) * 0x8DA6B343ull) ^ (uint64_t(iy) * 0xD8163841ull) ^
+                                     (uint64_t(iz) * 0xCB1AB31Full);
+                const float px = float(ix) + float(HashUnit(key)), py = float(iy) + float(HashUnit(key ^ 0x51ull)),
+                            pz = float(iz) + float(HashUnit(key ^ 0xA3ull));
+                const float d = (x - px) * (x - px) + (y - py) * (y - py) + (z - pz) * (z - pz);
+                if (d < best) {
+                    best = d;
+                    bestKey = key;
+                    bx = px;
+                    by = py;
+                    bz = pz;
+                }
+            }
+    if (!facet) return std::min(std::sqrt(best), 1.f);
+    const float h = 1 - 2 * float(HashUnit(bestKey ^ 0x1F3ull)), r = std::sqrt(std::max(0.f, 1 - h * h)),
+                phi = 2 * std::numbers::pi_v<float> * float(HashUnit(bestKey ^ 0x2E7ull));
+    const float along = (x - bx) * r * std::cos(phi) + (y - by) * r * std::sin(phi) + (z - bz) * h;
+    return .5f + .5f * std::clamp(along * 1.5f, -1.f, 1.f);
+}
+}  // namespace
+VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (s.type != VolumeNoiseType::Smooth && s.type != VolumeNoiseType::Cellular && s.type != VolumeNoiseType::Facet) {
+        error = "不明なノイズの種類です";
+        return {};
+    }
+    if (!range(s.amount, 0, .2f) || !range(s.warp, 0, .2f)) {
+        error = "ノイズの量と歪みは 0～0.2 にしてください";
+        return {};
+    }
+    if (!range(s.scale, .5f, 64) || !range(s.warpScale, .5f, 16)) {
+        error = "細かさは 0.5～64、歪みの細かさは 0.5～16 にしてください";
+        return {};
+    }
+    if (s.octaves < 1 || s.octaves > 5) {
+        error = "重ねる数は 1～5 にしてください";
+        return {};
+    }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    const float amount = s.amount * longest, warp = s.warp * longest;
+    // 歪みは表面を外へも動かす。外周を空に保てるよう、動く量だけ格子を広げる。
+    const uint32_t pad = warp > 0 ? uint32_t(std::ceil(warp * 1.75f / g.spacing)) + 1 : 0;
+    VolumeGrid out;
+    out.spacing = g.spacing;
+    out.origin = {g.origin.x - float(pad) * g.spacing, g.origin.y - float(pad) * g.spacing,
+                  g.origin.z - float(pad) * g.spacing};
+    for (int i = 0; i < 3; ++i) {
+        if (uint64_t(g.dimensions[i]) + 2 * pad > kMaxGridPointsPerAxis) {
+            error = "歪みで広げた格子が各軸192点の上限を超えます。歪みを減らすか、上流の解像度を下げてください";
+            return {};
+        }
+        out.dimensions[i] = g.dimensions[i] + 2 * pad;
+    }
+    out.values.resize(size_t(out.dimensions[0]) * out.dimensions[1] * out.dimensions[2]);
+    std::vector<float> before(out.values.size());
+    const float threshold = out.spacing * 1e-4f;
+    const uint64_t seed = uint64_t(uint32_t(s.seed)) << 40;
+    const float frequency = s.scale / longest, warpFrequency = s.warpScale / longest;
+    // 表面からこれより離れた点は、どう加工しても同じ側に残り、隣の点も同じ側にある。
+    const float band = warp * 1.75f + amount + 2 * g.spacing;
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const size_t index = out.Index(x, y, z);
+        const auto p = out.Position(x, y, z);
+        const bool onInput = x >= pad && y >= pad && z >= pad && x - pad < g.dimensions[0] &&
+                             y - pad < g.dimensions[1] && z - pad < g.dimensions[2];
+        float value = onInput ? g.values[g.Index(x - pad, y - pad, z - pad)] : SampleVolume(g, p);
+        before[index] = value;
+        if (std::abs(value) < band) {
+            if (warp > 0) {
+                const float wx = p.x * warpFrequency, wy = p.y * warpFrequency, wz = p.z * warpFrequency;
+                const Vec3 moved{p.x + (ValueNoise(wx, wy, wz, seed ^ 0x11ull) - .5f) * 2 * warp,
+                                 p.y + (ValueNoise(wx, wy, wz, seed ^ 0x22ull) - .5f) * 2 * warp,
+                                 p.z + (ValueNoise(wx, wy, wz, seed ^ 0x33ull) - .5f) * 2 * warp};
+                value = SampleVolume(g, moved);
+            }
+            if (amount > 0) {
+                float noise = 0, weight = 0, gain = 1, f = frequency;
+                for (int octave = 0; octave < s.octaves; ++octave, gain *= .5f, f *= 2) {
+                    const uint64_t octaveSeed = seed ^ (uint64_t(octave + 1) * 0x9E37ull);
+                    const float n = s.type == VolumeNoiseType::Smooth
+                                        ? ValueNoise(p.x * f, p.y * f, p.z * f, octaveSeed)
+                                        : CellNoise(p.x * f, p.y * f, p.z * f, octaveSeed,
+                                                    s.type == VolumeNoiseType::Facet);
+                    noise += n * gain;
+                    weight += gain;
+                }
+                // 削る方向にだけ効かせる。形は広がらない。
+                value += amount * noise / weight;
+            }
+        }
+        out.values[index] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
+    if (!inside) {
+        error = "ノイズで削った結果に内部が残りません。量を減らしてください";
+        return {};
+    }
+    // 細かいノイズは、浮いた小片や閉じた空洞を作ることがある。
+    KeepLargestComponent(out);
+    FillNewVoids(out, before);
     return out;
 }
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {

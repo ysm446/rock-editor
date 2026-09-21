@@ -1,9 +1,18 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 01:58
+更新日時: 2026-09-22 02:28
 
 ## 現在地
+
+### 2026-09-22 Volume Noise
+
+- [設計メモ](../reference/rock-shaping-nodes.md) の4番目（Volume Displace / Noise）として **Volume Noise** を追加。距離場へ `d + 量 × ノイズ(0〜1)` を足して表面を削る。削る方向に限るので形は広がらず、外周は空のまま保たれる。種類は、なめらか（値ノイズ）、セル状（Worley F1）、小面（最も近い特徴点ごとのランダムな平面。セルの中は平らで境が段差になる）。重ねる数 1〜5。歪み（domain warp）はサンプル位置を3本の値ノイズでずらし、平面と直線的な割れ目を波打たせる。歪みがあると、表面が動く量だけ格子を広げる。量と歪みは形の最長辺に対する比。保存名 `volumeNoise`、右クリックメニュー、設定欄、保存/読込、Undo/Redo（既存スナップショット）、ボリューム枝のキャッシュに接続。仕様は [Volume Noise](../reference/volume-noise.md)、サンプルは `examples/volume-noise/`。
+- 表面から「歪み × 1.75 + 量 + 2セル」より離れた格子点は結果が変わらないので計算を省く。浮いた小片の除去（Plane Cuts）と、新しくできた閉じた空洞の埋め戻し（Volume Crack）を共通の関数にして使う。
+- テストの前に実画面で3種類を見比べた。面取り → 割れ目 → 稜線の欠けの後ろに置くと、歪みが割れ目と面取りの直線を波打たせ、小面のノイズが平らな面を割れ肌にする。ここまでの4ノードで、形は参考画像の Macro と Meso の層にかなり近づいた。色と Micro（材質マスク、焼き込み）は未着手。
+- 単体テスト54項目を追加（`tests/VolumeNoiseTests.cpp`）。量と歪みが 0 のときの恒等、3種類それぞれの閉包・1成分・格子の不変・形を広げないこと・削る深さと体積・再現性、重ねる数、最も細かく深い設定で小片と空洞を残さないこと、歪みの体積・格子の拡張・動く量・平面が波打つこと、上限と不正設定の拒否、グラフの型制約とキャッシュを確認。Release/Debug ビルドと全2,630項目が成功。
+- Release 実アプリでサンプルの3種類の表示、設定欄、`--save-project` による保存で設定と9本の接続が残ることを確認。検証は `build/statusbar/rock_editor.exe`。実マウスでのメニュー操作と Undo/Redo の手動確認は未実施。
+- 制限：セル間隔より細かい凹凸は格子で潰れる（目安は細かさ ≤ 解像度 ÷ 4）。歪みは境界をセル1個ぶん程度なまらせる。盛り上げる方向のノイズと段化（Terrace）は無い。面の向きや曲率で量を変えることはできない（Field 型が要る）。
 
 ### 2026-09-22 Volume Crack
 
@@ -151,9 +160,9 @@
 | 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
-| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる |
+| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる |
 | 材質 | Apply Material / Material Mask、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
-| 次の作業 | [設計メモ](../reference/rock-shaping-nodes.md) の順に、Volume Displace / Noise（直線的な割れ目と平らな面を崩す）、Volume Smooth、形状からの材質マスクが候補 |
+| 次の作業 | 形を作る4ノードが揃った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、形状からの材質マスク（色の決め手。Field 型の判断を含む）、Volume Smooth、ディテールの焼き込みが候補 |
 
 ## 完了
 
