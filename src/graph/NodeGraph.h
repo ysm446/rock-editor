@@ -140,11 +140,11 @@ struct CompiledGraph {
     std::vector<GraphId> layerSources;
 };
 
-// 設定を持たないノード（Mesh Output / Volume to Mesh）は std::monostate。
+// 設定を持たないノード（Mesh Output）は std::monostate。
 using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings,
                                   TransformNodeSettings, BaseRockNodeSettings, crack::CrackSettings,
                                   fracture::FractureSettings, crack::JointSetSettings, geometry::BoxClusterSettings, geometry::VolumeSettings,
-                                  geometry::VolumeTransformSettings, std::monostate>;
+                                  geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;

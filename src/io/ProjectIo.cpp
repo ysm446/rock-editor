@@ -500,6 +500,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                    {"rotation", boxes->rotation}, {"seed", boxes->seed}};
         } else if (const auto* volume = std::get_if<geometry::VolumeSettings>(&node.settings)) {
             item["toVolume"] = {{"resolution", volume->resolution}};
+        } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
+            item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
+                ? "dualContouring" : "marchingTetrahedra"}};
         } else if (const auto* moved = std::get_if<geometry::VolumeTransformSettings>(&node.settings)) {
             item["volumeTransform"] = {{"position", moved->position},
                                        {"rotation", moved->rotationDegrees},
@@ -712,6 +715,13 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.applyCut = ReadBool(*v, "applyCut", false);
                     settings.meshCut = ReadBool(*v, "meshCut", false);
                     settings.showBridge = ReadBool(*v, "showBridge", true);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeToMesh) {
+                geometry::VolumeToMeshSettings settings;
+                if (const json* v = FindMember(item, "volumeToMesh"); v && v->is_object()) {
+                    if (ReadString(*v, "method", "marchingTetrahedra") == "dualContouring")
+                        settings.method = geometry::VolumeMeshingMethod::DualContouring;
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::RandomBoxes) {

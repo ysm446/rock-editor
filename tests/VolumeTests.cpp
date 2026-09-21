@@ -39,6 +39,13 @@ void RunVolumeTests() {
         for (const auto p : surface.positions)
             nearSurface &= std::abs(geometry::BoxUnionField(p, sample)) < grid.spacing * 1.8f;
         Check(nearSurface, "抽出点は和集合の外皮付近（内部の重複面は出さない）");
+        const auto dual = geometry::VolumeSurface(grid, error, geometry::VolumeMeshingMethod::DualContouring);
+        geometry::MeshInfo dualInfo;
+        Check(error.empty(), error.empty() ? "Dual Contouring で和集合を抽出" : error.c_str());
+        Check(geometry::InspectMesh(dual, dualInfo) && dualInfo.closed && dualInfo.volume > 0 &&
+                  std::abs(dualInfo.volume - info.volume) < info.volume * .05,
+              "Dual Contouring は閉包と和集合の体積を保つ");
+        Check(dual.triangles.size() < surface.triangles.size(), "Dual Contouring は少ない三角形で表面を表現");
         bool borderOutside = true;
         for (uint32_t z = 0; z < grid.dimensions[2]; ++z)
             for (uint32_t y = 0; y < grid.dimensions[1]; ++y)
@@ -62,6 +69,12 @@ void RunVolumeTests() {
               maxInfo.components == 2 && maxInfo.volume > 0,
           "最大設定では内部空洞の境界も含む閉じた和集合を抽出");
     Check(maxGrid.values.size() <= 102u * 102u * 102u, "格子のメモリ量を上限内に保つ");
+    const auto maxDual = geometry::VolumeSurface(maxGrid, error, geometry::VolumeMeshingMethod::DualContouring);
+    geometry::MeshInfo maxDualInfo;
+    Check(error.empty(), error.empty() ? "Dual Contouring の最大設定" : error.c_str());
+    Check(geometry::InspectMesh(maxDual, maxDualInfo) && maxDualInfo.closed && maxDualInfo.components > 1 &&
+              std::abs(maxDualInfo.volume - maxInfo.volume) < maxInfo.volume * .02,
+          "Dual Contouring は内部空洞を埋めず体積を保つ");
     s = {};
     s.count = 1;
     s.rotation = 0;
@@ -100,6 +113,53 @@ void RunVolumeTests() {
     Check(geometry::BoxesToVolume(boxes, {100000}, error).values.empty() && !error.empty(),
           "格子確保前に解像度上限を診断");
     Check(geometry::VolumeSurface({}, error).positions.empty() && !error.empty(), "空のグリッドを拒否");
+    Check(geometry::VolumeSurface({}, error, geometry::VolumeMeshingMethod::DualContouring).positions.empty() &&
+              !error.empty(), "Dual Contouring でも空のグリッドを拒否");
+    Check(geometry::VolumeSurface(grid, error, static_cast<geometry::VolumeMeshingMethod>(99)).positions.empty() &&
+              !error.empty(), "不明な変換方式を拒否");
+
+    tests::Section("Dual Contouring の解析形状");
+    for (float angle : {0.f, 15.f, 37.f}) {
+        auto angled = cube;
+        const float radians = angle * 3.14159265358979323846f / 180;
+        angled[0].axes = {geometry::Vec3{std::cos(radians), 0, -std::sin(radians)},
+                         geometry::Vec3{0, 1, 0}, geometry::Vec3{std::sin(radians), 0, std::cos(radians)}};
+        const auto samples = geometry::BoxesToVolume(angled, {24}, error);
+        const auto dual = geometry::VolumeSurface(samples, error, geometry::VolumeMeshingMethod::DualContouring);
+        geometry::MeshInfo dualInfo;
+        Check(error.empty() && geometry::InspectMesh(dual, dualInfo) && dualInfo.closed &&
+                  std::abs(dualInfo.volume - 8) < .4, "斜めのBoxも閉包と解析体積を保つ");
+        const auto same = geometry::VolumeSurface(samples, error, geometry::VolumeMeshingMethod::DualContouring);
+        Check(dual.positions == same.positions && dual.triangles == same.triangles, "Dual Contouring の決定性");
+        bool nearSurface = !dual.positions.empty();
+        for (const auto& p : dual.positions)
+            nearSurface &= std::abs(geometry::BoxUnionField(p, angled)) < samples.spacing;
+        Check(nearSurface, "角の頂点が元のBox表面から1セル以上飛び出さない");
+    }
+    geometry::VolumeGrid sphere;
+    sphere.dimensions = {25, 25, 25};
+    sphere.spacing = .1f;
+    sphere.origin = {-1.2f, -1.2f, -1.2f};
+    sphere.values.resize(25 * 25 * 25);
+    for (uint32_t z = 0; z < 25; ++z) for (uint32_t y = 0; y < 25; ++y) for (uint32_t x = 0; x < 25; ++x) {
+        const auto p = sphere.Position(x, y, z);
+        sphere.values[sphere.Index(x,y,z)] = std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z) - .93f;
+    }
+    const auto dualSphere = geometry::VolumeSurface(sphere, error, geometry::VolumeMeshingMethod::DualContouring);
+    geometry::MeshInfo sphereInfo;
+    Check(error.empty() && geometry::InspectMesh(dualSphere, sphereInfo) && sphereInfo.closed &&
+              std::abs(sphereInfo.volume - 4.0/3 * 3.141592653589793 * .93*.93*.93) < .08,
+          "球のSDFから曲面と解析体積を再現");
+    auto shell = sphere;
+    for (auto& value : shell.values) {
+        const float radius = value + .93f;
+        value = std::max(radius - .93f, .45f - radius);
+    }
+    const auto dualShell = geometry::VolumeSurface(shell, error, geometry::VolumeMeshingMethod::DualContouring);
+    geometry::MeshInfo shellInfo;
+    Check(error.empty() && geometry::InspectMesh(dualShell, shellInfo) && shellInfo.closed && shellInfo.components == 2 &&
+              std::abs(shellInfo.volume - 4.0/3 * 3.141592653589793 * (.93*.93*.93 - .45*.45*.45)) < .1,
+          "球殻は内壁を外向きに反転し空洞の解析体積を保つ");
 
     tests::Section("Boxes / Volume の型・評価・Undo");
     graph::NodeGraph graph;
@@ -179,6 +239,35 @@ void RunVolumeTests() {
               converted.rocks[0].mesh.positions == volumeBefore.rocks[0].mesh.positions &&
               converted.rocks[0].mesh.triangles == volumeBefore.rocks[0].mesh.triangles,
           "上流グリッドを変えず従来の Volume プレビューと同じ表面を生成");
+    DocumentSnapshot tetraSnapshot;
+    tetraSnapshot.graphNodes = graph.Nodes();
+    tetraSnapshot.graphLinks = graph.Links();
+    graph::RockEvaluationCache methodCache;
+    graph::EvaluateRocks(graph, 0, &methodCache);
+    const auto sharedVolume = methodCache.entries.at(volume).result.rocks[0].volume;
+    std::get<geometry::VolumeToMeshSettings>(graph.FindMutableNode(converter)->settings).method =
+        geometry::VolumeMeshingMethod::DualContouring;
+    const auto dualConverted = graph::EvaluateRocks(graph, 0, &methodCache);
+    const auto dualFresh = graph::EvaluateRocks(graph);
+    Check(dualConverted.error.empty() && dualConverted.rocks.size() == 1 && dualFresh.rocks.size() == 1 &&
+              dualConverted.rocks[0].mesh.positions == dualFresh.rocks[0].mesh.positions &&
+              dualConverted.rocks[0].mesh.triangles != converted.rocks[0].mesh.triangles &&
+              methodCache.entries.at(volume).result.rocks[0].volume == sharedVolume,
+          "方式変更はメッシュだけ再生成し上流SDFを再利用");
+    DocumentSnapshot dualSnapshot;
+    dualSnapshot.graphNodes = graph.Nodes();
+    dualSnapshot.graphLinks = graph.Links();
+    UndoHistory methodHistory;
+    methodHistory.Push(tetraSnapshot, 0);
+    const auto tetraRestored = methodHistory.Undo(dualSnapshot);
+    graph.Replace(tetraRestored.graphNodes, tetraRestored.graphLinks);
+    Check(graph::EvaluateRocks(graph, 0, &methodCache).rocks[0].mesh.positions == converted.rocks[0].mesh.positions,
+          "Undoで変換方式と従来メッシュを復元");
+    const auto dualRestored = methodHistory.Redo(tetraRestored);
+    graph.Replace(dualRestored.graphNodes, dualRestored.graphLinks);
+    Check(graph::EvaluateRocks(graph, 0, &methodCache).rocks[0].mesh.positions == dualConverted.rocks[0].mesh.positions,
+          "RedoでDual Contouringのメッシュを復元");
+    graph.Replace(tetraSnapshot.graphNodes, tetraSnapshot.graphLinks);
     DocumentSnapshot withConversion;
     withConversion.graphNodes = graph.Nodes();
     withConversion.graphLinks = graph.Links();

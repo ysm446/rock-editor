@@ -70,7 +70,11 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         const auto* s = std::get_if<geometry::VolumeTransformSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->position); add(s->rotationDegrees); add(s->scale);
-    } else if (node->kind != NodeKind::VolumeToMesh) return std::nullopt;
+    } else if (node->kind == NodeKind::VolumeToMesh) {
+        const auto* s = std::get_if<geometry::VolumeToMeshSettings>(&node->settings);
+        const auto method = s ? s->method : geometry::VolumeMeshingMethod::MarchingTetrahedra;
+        add(method);
+    } else return std::nullopt;
     const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
     if (!upstream) return std::nullopt;
     const auto parent = VolumeKey(graph, upstream->id, depth + 1);
@@ -166,7 +170,9 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (input.rocks.size() != 1 || !input.rocks[0].volume)
                 return finish(Failure(id, "Volume to Mesh", "ボリュームが必要です"));
             std::string error;
-            auto mesh = geometry::VolumeSurface(*input.rocks[0].volume, error);
+            const auto* settings = std::get_if<geometry::VolumeToMeshSettings>(&node->settings);
+            auto mesh = geometry::VolumeSurface(*input.rocks[0].volume, error,
+                settings ? settings->method : geometry::VolumeMeshingMethod::MarchingTetrahedra);
             if (!error.empty()) return finish(Failure(id, "Volume to Mesh", error));
             GeneratedRock rock;
             rock.source = id;

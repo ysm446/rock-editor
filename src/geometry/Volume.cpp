@@ -1,4 +1,5 @@
 #include "geometry/Volume.h"
+#include "geometry/DualContouring.h"
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
@@ -195,7 +196,7 @@ VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s
     }
     return out;
 }
-Mesh VolumeSurface(const VolumeGrid& g, std::string& error) {
+Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {
     error.clear();
     const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];
     if (!ValidGrid(g)) {
@@ -203,73 +204,81 @@ Mesh VolumeSurface(const VolumeGrid& g, std::string& error) {
         return {};
     }
     Mesh mesh;
-    std::unordered_map<uint64_t, uint32_t> crossings;
-    // 全セルで同じ体対角を使う6四面体。隣接セルの面の分割も一致する。
-    constexpr int corners[8][3] = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0},
-                                   {0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}};
-    constexpr int tetrahedra[6][4] = {{0, 1, 2, 6}, {0, 2, 3, 6}, {0, 3, 7, 6},
-                                      {0, 7, 4, 6}, {0, 4, 5, 6}, {0, 5, 1, 6}};
-    const auto position = [&](uint32_t id) { return g.Position(id % nx, (id / nx) % ny, id / (nx * ny)); };
-    const auto intersection = [&](uint32_t a, uint32_t b) {
-        if (a > b) std::swap(a, b);
-        const uint64_t key = (uint64_t(a) << 32) | b;
-        if (const auto found = crossings.find(key); found != crossings.end()) return found->second;
-        const auto p = position(a), q = position(b);
-        const double t = double(g.values[a]) / (double(g.values[a]) - g.values[b]);
-        const auto id = static_cast<uint32_t>(mesh.positions.size());
-        mesh.positions.push_back(
-            {float(p.x + (q.x - p.x) * t), float(p.y + (q.y - p.y) * t), float(p.z + (q.z - p.z) * t)});
-        crossings.emplace(key, id);
-        return id;
-    };
-    const auto face = [&](uint32_t a, uint32_t b, uint32_t c, Vec3 outward) {
-        const auto p = mesh.positions[a], q = mesh.positions[b], r = mesh.positions[c];
-        const double ux = double(q.x) - p.x, uy = double(q.y) - p.y, uz = double(q.z) - p.z,
-                     vx = double(r.x) - p.x, vy = double(r.y) - p.y, vz = double(r.z) - p.z;
-        if ((uy * vz - uz * vy) * outward.x + (uz * vx - ux * vz) * outward.y +
-                (ux * vy - uy * vx) * outward.z <
-            0)
-            std::swap(b, c);
-        mesh.triangles.push_back({a, b, c});
-    };
-    for (uint32_t z = 0; z + 1 < nz; ++z)
-        for (uint32_t y = 0; y + 1 < ny; ++y)
-            for (uint32_t x = 0; x + 1 < nx; ++x) {
-                uint32_t cell[8];
-                bool negative = false, positive = false;
-                for (int c = 0; c < 8; ++c) {
-                    cell[c] = static_cast<uint32_t>(
-                        g.Index(x + corners[c][0], y + corners[c][1], z + corners[c][2]));
-                    negative |= g.values[cell[c]] < 0;
-                    positive |= g.values[cell[c]] >= 0;
-                }
-                if (!negative || !positive) continue;
-                for (const auto& tet : tetrahedra) {
-                    uint32_t in[4], out[4];
-                    int ni = 0, no = 0;
-                    for (auto c : tet) {
-                        if (g.values[cell[c]] < 0)
-                            in[ni++] = cell[c];
-                        else
-                            out[no++] = cell[c];
+    if (method == VolumeMeshingMethod::DualContouring) {
+        mesh = ExtractDualContour(g, error);
+        if (!error.empty()) return {};
+    } else if (method == VolumeMeshingMethod::MarchingTetrahedra) {
+        std::unordered_map<uint64_t, uint32_t> crossings;
+        // 全セルで同じ体対角を使う6四面体。隣接セルの面の分割も一致する。
+        constexpr int corners[8][3] = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0},
+                                       {0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}};
+        constexpr int tetrahedra[6][4] = {{0, 1, 2, 6}, {0, 2, 3, 6}, {0, 3, 7, 6},
+                                          {0, 7, 4, 6}, {0, 4, 5, 6}, {0, 5, 1, 6}};
+        const auto position = [&](uint32_t id) { return g.Position(id % nx, (id / nx) % ny, id / (nx * ny)); };
+        const auto intersection = [&](uint32_t a, uint32_t b) {
+            if (a > b) std::swap(a, b);
+            const uint64_t key = (uint64_t(a) << 32) | b;
+            if (const auto found = crossings.find(key); found != crossings.end()) return found->second;
+            const auto p = position(a), q = position(b);
+            const double t = double(g.values[a]) / (double(g.values[a]) - g.values[b]);
+            const auto id = static_cast<uint32_t>(mesh.positions.size());
+            mesh.positions.push_back(
+                {float(p.x + (q.x - p.x) * t), float(p.y + (q.y - p.y) * t), float(p.z + (q.z - p.z) * t)});
+            crossings.emplace(key, id);
+            return id;
+        };
+        const auto face = [&](uint32_t a, uint32_t b, uint32_t c, Vec3 outward) {
+            const auto p = mesh.positions[a], q = mesh.positions[b], r = mesh.positions[c];
+            const double ux = double(q.x) - p.x, uy = double(q.y) - p.y, uz = double(q.z) - p.z,
+                         vx = double(r.x) - p.x, vy = double(r.y) - p.y, vz = double(r.z) - p.z;
+            if ((uy * vz - uz * vy) * outward.x + (uz * vx - ux * vz) * outward.y +
+                    (ux * vy - uy * vx) * outward.z <
+                0)
+                std::swap(b, c);
+            mesh.triangles.push_back({a, b, c});
+        };
+        for (uint32_t z = 0; z + 1 < nz; ++z)
+            for (uint32_t y = 0; y + 1 < ny; ++y)
+                for (uint32_t x = 0; x + 1 < nx; ++x) {
+                    uint32_t cell[8];
+                    bool negative = false, positive = false;
+                    for (int c = 0; c < 8; ++c) {
+                        cell[c] = static_cast<uint32_t>(
+                            g.Index(x + corners[c][0], y + corners[c][1], z + corners[c][2]));
+                        negative |= g.values[cell[c]] < 0;
+                        positive |= g.values[cell[c]] >= 0;
                     }
-                    if (ni == 0 || no == 0) continue;
-                    const auto p = position(in[0]), q = position(out[0]);
-                    const Vec3 outward{q.x - p.x, q.y - p.y, q.z - p.z};
-                    if (ni == 1)
-                        face(intersection(in[0], out[0]), intersection(in[0], out[1]),
-                             intersection(in[0], out[2]), outward);
-                    else if (no == 1)
-                        face(intersection(in[0], out[0]), intersection(in[1], out[0]),
-                             intersection(in[2], out[0]), outward);
-                    else {
-                        const auto a = intersection(in[0], out[0]), b = intersection(in[0], out[1]),
-                                   c = intersection(in[1], out[1]), d = intersection(in[1], out[0]);
-                        face(a, b, c, outward);
-                        face(a, c, d, outward);
+                    if (!negative || !positive) continue;
+                    for (const auto& tet : tetrahedra) {
+                        uint32_t in[4], out[4];
+                        int ni = 0, no = 0;
+                        for (auto c : tet) {
+                            if (g.values[cell[c]] < 0)
+                                in[ni++] = cell[c];
+                            else
+                                out[no++] = cell[c];
+                        }
+                        if (ni == 0 || no == 0) continue;
+                        const auto p = position(in[0]), q = position(out[0]);
+                        const Vec3 outward{q.x - p.x, q.y - p.y, q.z - p.z};
+                        if (ni == 1)
+                            face(intersection(in[0], out[0]), intersection(in[0], out[1]),
+                                 intersection(in[0], out[2]), outward);
+                        else if (no == 1)
+                            face(intersection(in[0], out[0]), intersection(in[1], out[0]),
+                                 intersection(in[2], out[0]), outward);
+                        else {
+                            const auto a = intersection(in[0], out[0]), b = intersection(in[0], out[1]),
+                                       c = intersection(in[1], out[1]), d = intersection(in[1], out[0]);
+                            face(a, b, c, outward);
+                            face(a, c, d, outward);
+                        }
                     }
                 }
-            }
+    } else {
+        error = "不明なボリュームのメッシュ変換方式です";
+        return {};
+    }
     MeshInfo info;
     if (!InspectMesh(mesh, info)) {
         error = "表面に細すぎる三角形が生じました。解像度を調整してください";

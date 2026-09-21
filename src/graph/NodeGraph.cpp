@@ -383,6 +383,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeSettings{};
     } else if (kind == NodeKind::VolumeTransform) {
         node.settings = geometry::VolumeTransformSettings{};
+    } else if (kind == NodeKind::VolumeToMesh) {
+        node.settings = geometry::VolumeToMeshSettings{};
     } else if (kind == NodeKind::JointSet) {
         node.settings = crack::JointSetSettings{};
     } else if (kind == NodeKind::Fracture) {

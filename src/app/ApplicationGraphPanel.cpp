@@ -1219,8 +1219,23 @@ void Application::DrawGraphPanel() {
         ui::HintText("メッシュやモデルを繋ぐと、まとめて 1 つにする。"
                      "繋ぐたびに入力が 1 本増える。同じノード由来のメッシュは 1 回だけ積む。");
     } else if (selected->kind == graph::NodeKind::VolumeToMesh) {
+        const auto* settings = std::get_if<geometry::VolumeToMeshSettings>(&selected->settings);
+        int method = settings ? static_cast<int>(settings->method) : 0;
+        const char* methods[] = {"Marching Tetrahedra", "Dual Contouring"};
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeToMeshRows")) {
+            changed = ui::PropertyCombo("変換方式", &method, methods, 2, 0);
+            ui::EndPropertyTable();
+        }
+        if (changed) {
+            selected->settings = geometry::VolumeToMeshSettings{static_cast<geometry::VolumeMeshingMethod>(method)};
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
         ui::HintText("Volume の表面を三角形メッシュへ変換します。Mesh 出力を Mesh Output や Merge に接続できます。");
-        ui::HintText("解像度は上流の To Volume で調整します。このノードには追加の設定はありません。");
+        ui::HintText("解像度は上流の To Volume で調整します。Marching Tetrahedra は従来方式、Dual Contouring は角や稜線を保つために頂点位置を調整する方式です。");
+        if (method == 1)
+            ui::HintText("Dual Contouring は格子から交点・法線を推定します。細部や角の再現には入力の解像度も影響します。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
         ui::HintText("メッシュ・モデル・Boxes・Volume を接続すると表示する。複数の Mesh Output を同時に表示できる。");
     } else if (auto* settings = std::get_if<graph::LayerNodeSettings>(&selected->settings)) {

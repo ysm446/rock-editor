@@ -5,6 +5,10 @@ namespace rock::geometry {
 struct VolumeSettings {
     int resolution = 48;  // 母岩の最長辺のセル数。16～96。
 };
+enum class VolumeMeshingMethod { MarchingTetrahedra, DualContouring };
+struct VolumeToMeshSettings {
+    VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra;
+};
 struct VolumeGrid {
     Vec3 origin;
     float spacing = 0;
@@ -30,5 +34,6 @@ VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSett
 VolumeGrid TransformVolume(const VolumeGrid& grid, const VolumeTransformSettings& settings,
                            std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
-Mesh VolumeSurface(const VolumeGrid& grid, std::string& error);
+Mesh VolumeSurface(const VolumeGrid& grid, std::string& error,
+                   VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra);
 }  // namespace rock::geometry

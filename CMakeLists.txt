@@ -114,6 +114,7 @@ set(rock_sources
     src/geometry/BaseRock.cpp
     src/geometry/BoxCluster.cpp
     src/geometry/Volume.cpp
+    src/geometry/DualContouring.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
     src/graph/NodeGraph.cpp
@@ -345,6 +346,7 @@ add_executable(rock_editor_tests
     src/geometry/BaseRock.cpp
     src/geometry/BoxCluster.cpp
     src/geometry/Volume.cpp
+    src/geometry/DualContouring.cpp
     src/graph/RockEvaluator.cpp
     src/renderer/RockMesh.cpp
     src/graph/NodeGraph.cpp

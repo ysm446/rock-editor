@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 15:36
+更新日時: 2026-09-21 17:06
 
 ## 現在地
 
@@ -15,12 +15,21 @@
 | --- | --- |
 | アプリ基盤 | DX12 / ImGui、モデル表示、グラフ編集、素材・アセット・保存基盤あり |
 | 岩生成 | Base Rock の Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズと Seed の編集に対応。有限亀裂と Joint Set の複数方向ガイド表示、Box の軸に沿う部分切断・Rock Bridge 計測と、曲面の有限長部分溝に対応。単一平面/Joint Set による完全分割と各片の操作に対応 |
-| メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応 |
+| メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
 | ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる |
 | 次の作業 | ボリューム上の操作を増やす。平面を境にずらす断層ノードが候補（方針未決） |
 
 ## 完了
+
+### 2026-09-21 Volume to Mesh に Dual Contouring を追加
+
+- 「変換方式」で Marching Tetrahedra（既定・従来方式）と Dual Contouring を選択する。設定・保存・読込・Undo/Redoに接続。方式をキャッシュキーへ含め、切り替え時も上流SDFを再利用する。設定のない旧シーンは従来方式。
+- Dual Contouring は入力SDFの格子から交点・法線を推定し、セル内に制約したQEFで頂点を求める。セル内で分離した表面には別頂点を配置し、曖昧な面の接続を両セルで揃える。最終的な閉包・向き・体積の検証は共通処理。詳細と制約は [メッシュ変換方式](../reference/volume-meshing.md)。
+- Debug/Releaseビルド成功、Debug CTest（1/1、38.16秒）、Release単体テスト全項目成功。複数Seed・最大32箱/解像度96・内部空洞・斜めBox・球・球殻・決定性・不正入力・方式変更・キャッシュ・Undo/Redoを検証。
+- Release実画面で両方式と設定欄を表示し、Dual Contouringの保存→再読込→再保存でグラフが一致。解像度48の同じ変換サンプルで描画統計の三角形数222,561→72,161。実マウスによるメニュー操作の通し確認は未実施。比較画像・保存ファイルは `build/dual-contouring/validation/`。
+- 比較用シーンは `examples/volume-meshing/`。実行ファイルは `build/dual-contouring/rock_editor.exe`。起動中の通常Release版は置き換えていない。
+- 格子で失われた細部や再サンプル誤差は残る。角が完全な直線になる保証はなく、セル程度の小さな穴・接続のトポロジーは方式間で変わる場合がある。適応格子・簡略化・一般的な自己交差検出は未対応。
 
 ### 2026-09-21 スムーズシェーディングとワイヤーフレームの削除
 
