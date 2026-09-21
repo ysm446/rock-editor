@@ -142,4 +142,58 @@ void RunUvTests() {
     tests::Check(image.pixels[(3 * 7 + 5) * 4] == 200 && image.pixels[(3 * 7 + 6) * 4 + 3] == 0 &&
                      image.pixels[(3 * 7 + 3) * 4] == 200,
                  "指定幅だけ色を伸ばし元の被覆画素を保持する");
+
+    tests::Section("UV展開の進捗とキャンセル");
+    {
+        const auto progressBox = geometry::MakeBox({2, 1, 1.5f});
+        geometry::UvUnwrapSettings settings;
+        settings.resolution = 256;
+        std::string progressError;
+        const auto plain = geometry::UnwrapMesh(progressBox, settings, progressError);
+        int calls = 0, lastPercent = -1;
+        bool sawCharts = false, sawPack = false, inRange = true;
+        const auto reported = geometry::UnwrapMesh(progressBox, settings, progressError, {}, [&](geometry::UvUnwrapStage stage, int percent) {
+            ++calls;
+            lastPercent = percent;
+            inRange &= percent >= 0 && percent <= 100;
+            sawCharts |= stage == geometry::UvUnwrapStage::ComputeCharts;
+            sawPack |= stage == geometry::UvUnwrapStage::PackCharts;
+        });
+        tests::Check(progressError.empty() && calls > 0 && sawCharts && sawPack && inRange && lastPercent == 100,
+                     "島への分割と配置の段階を、0〜100の進み具合とともに通知する");
+        tests::Check(reported.cornerUvs.size() == plain.cornerUvs.size() &&
+                         std::equal(reported.cornerUvs.begin(), reported.cornerUvs.end(), plain.cornerUvs.begin(),
+                                    [](const auto& a, const auto& b) {
+                                        return a[0].u == b[0].u && a[0].v == b[0].v && a[1].u == b[1].u &&
+                                               a[1].v == b[1].v && a[2].u == b[2].u && a[2].v == b[2].v;
+                                    }),
+                     "進捗を受け取っても展開結果は変わらない");
+        std::stop_source stopped;
+        stopped.request_stop();
+        const auto cancelled = geometry::UnwrapMesh(progressBox, settings, progressError, stopped.get_token());
+        tests::Check(!progressError.empty() && cancelled.cornerUvs.empty(), "キャンセル済みなら展開せずにエラーを返す");
+        // 途中のキャンセル。最初の通知で止める。
+        std::stop_source midway;
+        const auto interrupted = geometry::UnwrapMesh(progressBox, settings, progressError, midway.get_token(),
+                                                      [&](geometry::UvUnwrapStage, int) { midway.request_stop(); });
+        tests::Check(!progressError.empty() && interrupted.cornerUvs.empty(), "途中でキャンセルすると不完全な結果を返さない");
+
+        // 評価器は、計算中のノードと段階を進捗へ書く。
+        graph::NodeGraph g;
+        const auto shape = g.CreateNode(graph::NodeKind::BaseRock), unwrapNode = g.CreateNode(graph::NodeKind::UvUnwrap);
+        g.CreateLink(g.FindNode(shape)->outputs[0].id, g.FindNode(unwrapNode)->inputs[0].id);
+        std::get<geometry::UvUnwrapSettings>(g.FindMutableNode(unwrapNode)->settings).resolution = 256;
+        graph::RockEvaluationProgress progress;
+        graph::RockEvaluationCache progressCache;
+        const auto evaluated = graph::EvaluateRocks(g, unwrapNode, &progressCache, geometry::VolumeMeshingMethod::MarchingTetrahedra, {},
+                                                    &progress);
+        tests::Check(evaluated.error.empty() && progress.node.load() == 0 && progress.percent.load() == -1,
+                     "評価が終わると、計算中のノードは無しへ戻る");
+        std::stop_source evaluationStop;
+        evaluationStop.request_stop();
+        const auto stoppedEvaluation = graph::EvaluateRocks(g, unwrapNode, nullptr,
+                                                            geometry::VolumeMeshingMethod::MarchingTetrahedra,
+                                                            evaluationStop.get_token(), &progress);
+        tests::Check(!stoppedEvaluation.error.empty(), "キャンセルした評価は結果を返さない");
+    }
 }

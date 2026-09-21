@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <string>
 #include <memory>
 #include <map>
@@ -43,8 +44,15 @@ struct RockEvaluationCache {
     struct UvEntry { geometry::Mesh input, output; geometry::UvUnwrapSettings settings; };
     std::map<GraphId, UvEntry> uvs;
 };
+// 別スレッドで走る評価が、いま計算しているノードと段階を UI へ伝える。UI は読むだけ。
+struct RockEvaluationProgress {
+    std::atomic<GraphId> node{0};
+    // ノードの中の段階（UV Unwrap は geometry::UvUnwrapStage + 1）。段階を持たないノードは 0。
+    std::atomic<int> stage{0};
+    std::atomic<int> percent{-1};  // 0～100。分からないときは -1。
+};
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview = 0,
                             RockEvaluationCache* persistent = nullptr,
                             geometry::VolumeMeshingMethod previewMethod = geometry::VolumeMeshingMethod::MarchingTetrahedra,
-                            std::stop_token stop = {});
+                            std::stop_token stop = {}, RockEvaluationProgress* progress = nullptr);
 }  // namespace rock::graph

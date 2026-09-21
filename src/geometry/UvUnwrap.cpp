@@ -75,7 +75,29 @@ bool HasValidUvs(const Mesh &mesh) {
     }
     return true;
 }
-Mesh UnwrapMesh(const Mesh &input, const UvUnwrapSettings &s, std::string &error) {
+namespace {
+struct ProgressContext {
+    std::stop_token stop;
+    const UvUnwrapProgress *report = nullptr;
+};
+// xatlas は false を返すと処理を打ち切る。
+bool OnXatlasProgress(xatlas::ProgressCategory category, int percent, void *userData) {
+    const auto *context = static_cast<const ProgressContext *>(userData);
+    if (context->report && *context->report) {
+        UvUnwrapStage stage = UvUnwrapStage::AddMesh;
+        if (category == xatlas::ProgressCategory::ComputeCharts)
+            stage = UvUnwrapStage::ComputeCharts;
+        else if (category == xatlas::ProgressCategory::PackCharts)
+            stage = UvUnwrapStage::PackCharts;
+        else if (category == xatlas::ProgressCategory::BuildOutputMeshes)
+            stage = UvUnwrapStage::BuildOutput;
+        (*context->report)(stage, percent);
+    }
+    return !context->stop.stop_requested();
+}
+} // namespace
+Mesh UnwrapMesh(const Mesh &input, const UvUnwrapSettings &s, std::string &error, std::stop_token stop,
+                const UvUnwrapProgress &progress) {
     error.clear();
     MeshInfo info;
     if (!InspectMesh(input, info) || input.triangles.empty()) {
@@ -107,7 +129,13 @@ Mesh UnwrapMesh(const Mesh &input, const UvUnwrapSettings &s, std::string &error
                              (p.z - info.minimum.z) * 1000.0f / extent});
     std::vector<uint32_t> faceMaterials;
     for (int repair = 0; repair < 4; ++repair) {
+        if (stop.stop_requested()) {
+            error = "評価をキャンセルしました";
+            return {};
+        }
         std::unique_ptr<xatlas::Atlas, decltype(&xatlas::Destroy)> atlas(xatlas::Create(), xatlas::Destroy);
+        const ProgressContext context{stop, &progress};
+        xatlas::SetProgressCallback(atlas.get(), OnXatlasProgress, const_cast<ProgressContext *>(&context));
         xatlas::MeshDecl decl;
         decl.vertexCount = static_cast<uint32_t>(input.positions.size());
         decl.vertexPositionData = positions.data();
@@ -141,6 +169,11 @@ Mesh UnwrapMesh(const Mesh &input, const UvUnwrapSettings &s, std::string &error
                     break;
                 pack.texelsPerUnit *= 0.8f;
             }
+        }
+        // 打ち切った xatlas の結果は不完全なので使わない。
+        if (stop.stop_requested()) {
+            error = "評価をキャンセルしました";
+            return {};
         }
         if (atlas->meshCount != 1 || atlas->atlasCount != 1 || !atlas->width || !atlas->height) {
             error = "1枚のUVアトラスを生成できませんでした。解像度を上げるか余白を減らしてください";

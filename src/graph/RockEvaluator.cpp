@@ -112,7 +112,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
 }
 }  // namespace
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvaluationCache* persistent,
-                            geometry::VolumeMeshingMethod previewMethod, std::stop_token stop) {
+                            geometry::VolumeMeshingMethod previewMethod, std::stop_token stop,
+                            RockEvaluationProgress* progress) {
     if (persistent) {
         std::erase_if(persistent->pieceEntries, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->uvs, [&](const auto& item) { return !graph.FindNode(item.first); });
@@ -146,9 +147,19 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (found != persistent->entries.end()) return found->second.result;
         }
         active.insert(id);
+        // 計算中のノードを UI へ伝える。上流の評価から戻ったら、このノードへ戻す。
+        const GraphId outer = progress ? progress->node.load(std::memory_order_relaxed) : 0;
+        const auto report = [&](GraphId node, int stage, int percent) {
+            if (!progress) return;
+            progress->stage.store(stage, std::memory_order_relaxed);
+            progress->percent.store(percent, std::memory_order_relaxed);
+            progress->node.store(node, std::memory_order_relaxed);
+        };
+        report(id, 0, -1);
         RockEvaluation result;
         const auto finish = [&](RockEvaluation value) {
             active.erase(id);
+            report(outer, 0, -1);
             cache[id] = value;
             if (persistentKey && value.error.empty())
                 persistent->entries[id] = {*persistentKey, value};
@@ -208,7 +219,15 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 }
                 if (!hit) {
                     std::string error;
-                    unwrapped = geometry::UnwrapMesh(combined, *settings, error);
+                    report(id, 1, 0);
+                    unwrapped = geometry::UnwrapMesh(combined, *settings, error, stop,
+                                                     [&](geometry::UvUnwrapStage stage, int percent) {
+                                                         // 配置は収まるまで何度も詰め直し、重なりの修復では最初から
+                                                         // やり直す。百分率が何度も 0 へ戻るので、UI へは島への分割の
+                                                         // 進み具合だけを渡す。
+                                                         const bool meaningful = stage == geometry::UvUnwrapStage::ComputeCharts;
+                                                         report(id, int(stage) + 1, meaningful ? percent : -1);
+                                                     });
                     if (!error.empty()) return finish(Failure(id, "UV Unwrap", error));
                     if (persistent) persistent->uvs[id] = {std::move(combined), unwrapped, *settings};
                 }

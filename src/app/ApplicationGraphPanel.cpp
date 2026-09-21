@@ -138,6 +138,17 @@ void DrawGraphDots(const ImVec2& screenMin, const ImVec2& screenMax) {
     ed::Resume();
 }
 
+// UV Unwrap の段階名。RockEvaluationProgress::stage は geometry::UvUnwrapStage + 1。
+const char* UvUnwrapStageName(int stage) {
+    switch (stage) {
+        case 1: return "メッシュを準備中";
+        case 2: return "島へ分割中";
+        case 3: return "島を配置中";
+        case 4: return "結果を作成中";
+        default: return "";
+    }
+}
+
 // ノードの表示名。レイヤー設定を持つ種類はレイヤー名を出す。
 const char* NodeDisplayName(const graph::Node& node) {
     if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
@@ -210,6 +221,27 @@ void Application::SetPreviewGraphNode(graph::GraphId nodeId, graph::GraphId outp
     }
 }
 
+graph::GraphId Application::EvaluatingNode() const {
+    if (!m_pieceUpdating || !m_pieceProgress) return 0;
+    return m_pieceProgress->node.load(std::memory_order_relaxed);
+}
+
+std::string Application::EvaluationProgressText() const {
+    const graph::GraphId id = EvaluatingNode();
+    const graph::Node* node = id ? m_graph.FindNode(id) : nullptr;
+    if (node == nullptr) return {};
+    std::string text = NodeDisplayName(*node);
+    const int stage = m_pieceProgress->stage.load(std::memory_order_relaxed);
+    const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
+    if (node->kind == graph::NodeKind::UvUnwrap && stage > 0) text += std::string(": ") + UvUnwrapStageName(stage);
+    // xatlas の「島へ分割」は、メッシュ1つにつき 0% と 100% しか通知しない。0% のまま長く待つので、
+    // 進み具合が分かる段階だけ百分率を出し、どの段階でも経過時間を添える。
+    if (percent > 0) text += " " + std::to_string(percent) + "%";
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - m_pieceTaskStart).count();
+    if (seconds >= 2) text += "・" + std::to_string(seconds) + "秒";
+    return text;
+}
+
 void Application::SyncMeshGraph() {
     if (m_uvLastSelectedNode != m_selectedGraphNode) {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
@@ -232,7 +264,10 @@ void Application::SyncMeshGraph() {
     }
     m_uvCheckerPreview = previewMeshNode && m_graph.FindNode(previewMeshNode)->kind == graph::NodeKind::UvUnwrap;
     const bool hasPieces = std::any_of(m_graph.Nodes().begin(), m_graph.Nodes().end(), [](const auto& n) {
-        return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume;
+        // UV Unwrap は大きなメッシュで数秒〜数十秒かかる。UI スレッドで走らせるとアプリが固まり、
+        // 計算中であることも表示できない。
+        return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
+               n.kind == graph::NodeKind::UvUnwrap;
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
     const std::string geometryKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
@@ -266,19 +301,22 @@ void Application::SyncMeshGraph() {
             m_pieceTaskKey = taskKey;
             m_pieceTaskGeometryKey = geometryKey;
             m_pieceStop = std::stop_source{};
+            m_pieceProgress = std::make_shared<graph::RockEvaluationProgress>();
+            m_pieceTaskStart = std::chrono::steady_clock::now();
             m_pieceTask = std::async(std::launch::async, [snapshot=m_graph, previewMeshNode, selected=m_selectedGraphNode,
-                method=m_settings.Display().sdfPreviewMethod, cache=m_rockEvaluationCache, stop=m_pieceStop.get_token()]() mutable {
+                method=m_settings.Display().sdfPreviewMethod, cache=m_rockEvaluationCache, stop=m_pieceStop.get_token(),
+                progress=m_pieceProgress]() mutable {
                 PieceTaskResult result;
                 // ここから漏れた例外は get() でUIスレッドへ再送出され、未保存の編集ごとアプリが落ちる。
                 // メモリ不足などは生成エラーとして表示する。
                 try {
-                    result.output = graph::EvaluateRocks(snapshot, previewMeshNode, &cache, method, stop);
+                    result.output = graph::EvaluateRocks(snapshot, previewMeshNode, &cache, method, stop, progress.get());
                     if (const auto* n = snapshot.FindNode(selected); n && graph::IsPieceNodeKind(n->kind) && !n->inputs.empty())
                         if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[0].id))
-                            result.input = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
+                            result.input = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop, progress.get());
                     if (const auto* n = snapshot.FindNode(selected); n && n->kind == graph::NodeKind::PieceTransform && n->inputs.size() > 1)
                         if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[1].id))
-                            result.selection = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
+                            result.selection = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop, progress.get());
                     result.cache = std::move(cache);
                 } catch (const std::exception& e) {
                     result = {};
@@ -546,6 +584,15 @@ void Application::DrawGraphNode(const graph::Node& node) {
             // ビューポートに出ている印。名前の右に小さく添える。
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.72f, 0.76f, 0.62f, 1.0f), "●");
+        }
+        if (EvaluatingNode() == node.id) {
+            // いま評価スレッドが計算しているノード。どこで待っているのかをグラフの上で示す。
+            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
+            ImGui::SameLine();
+            if (percent > 0)
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ui::WarnColor()), "計算中 %d%%", percent);
+            else
+                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ui::WarnColor()), "計算中…");
         }
         // 種類はヘッダの下に小さく添える。名前と種類の両方が分かるようにする。
         if (const graph::NodeDefinition* definition = graph::FindNodeDefinition(node.kind);
@@ -1312,6 +1359,14 @@ void Application::DrawGraphPanel() {
             ui::EndPropertyTable();
         }
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+        if (EvaluatingNode() == selected->id) {
+            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
+            // 進み具合が分からない段階は、バーを左右へ動かして「動いている」ことだけを示す。
+            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
+                               EvaluationProgressText().c_str());
+            ui::HintText("UV展開はCPUで行います。三角形が多いほど時間がかかり、6万三角形で15秒ほどです。島への分割の前半は進み具合が出ず、その間は打ち切りも効きません。"
+                         "表示は前回の結果です。");
+        }
         ui::HintText("選択するとUVチェッカーを表示します。UVビューのタブで島の配置を確認できます。複数の入力メッシュは1枚のアトラスへまとめます。");
     } else if (selected->kind == graph::NodeKind::ApplyMaterial) {
         ui::HintText("MeshとSurfaceを接続します。Mask未接続なら全面を置換。Mask接続時は白で新しい素材、黒で上流の素材、中間値で混合します。最大8段まで重ねられます。");

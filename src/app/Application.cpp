@@ -771,7 +771,12 @@ void Application::DrawStatusBar() {
             }
             // 形状の評価は別スレッドで走る。終わるまでビューポートの絵は前回のまま。
             if (m_pieceUpdating) {
-                ImGui::TextDisabled("更新中…前回の結果を表示しています");
+                // どのノードで待っているかを出す。UV Unwrap は段階と進み具合も出る。
+                const std::string progress = EvaluationProgressText();
+                if (progress.empty())
+                    ImGui::TextDisabled("更新中…前回の結果を表示しています");
+                else
+                    ImGui::TextDisabled("更新中（%s）…前回の結果を表示しています", progress.c_str());
                 ImGui::TextDisabled("|");
             }
 
