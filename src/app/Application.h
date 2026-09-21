@@ -136,6 +136,8 @@ private:
     void SyncMeshGraph();
     graph::RockEvaluationCache m_rockEvaluationCache;
     uint64_t m_meshGraphRevision = 0;
+    // 法線を頂点に焼くので、表示設定の切り替えでもメッシュを作り直す。
+    bool m_meshGraphSmoothShading = false;
     // 直近にメッシュシーンへ出した「途中のメッシュノード」。0 なら Mesh Output の鎖。
     graph::GraphId m_meshGraphPreviewNode = 0;
     bool m_meshGraphActive = false;

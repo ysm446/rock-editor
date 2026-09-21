@@ -19,3 +19,6 @@ vcpkg_installed/
 # 置き場所で扱いが決まるようにして、都度 .gitignore を書き足さなくて済むようにする。
 data/
 docs/references/
+# サンプルを開くとアプリが作るワークスペースの控え。環境ごとに違うのでコミットしない。
+examples/**/project.reproj
+examples/**/.rock-editor/

@@ -213,13 +213,16 @@ void Application::SyncMeshGraph() {
         node != nullptr && (graph::IsMeshNodeKind(node->kind) || graph::IsModelNodeKind(node->kind))) {
         previewMeshNode = node->id;
     }
-    if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode) return;
+    if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
+        m_meshGraphSmoothShading == m_settings.Display().smoothShading)
+        return;
+    m_meshGraphSmoothShading = m_settings.Display().smoothShading;
     const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache);
     renderer::MeshScene scene;
     m_rockMeshReferences.clear();
     for (const auto& rock : evaluated.rocks) {
         renderer::SceneMesh mesh;
-        mesh.geometry = renderer::MakeRockMeshData(rock.mesh);
+        mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading);
         const DirectX::XMFLOAT3 colors[] = {{0.28f, 0.39f, 0.48f}, {0.48f, 0.34f, 0.24f},
                                             {0.35f, 0.46f, 0.32f}, {0.49f, 0.43f, 0.29f},
                                             {0.40f, 0.33f, 0.46f}, {0.30f, 0.46f, 0.45f}};

@@ -183,6 +183,7 @@ set(rock_sources
     src/renderer/MaterialSphere.cpp
     src/renderer/MaterialSphere.h
     src/renderer/MeshData.cpp
+    src/renderer/RockMesh.cpp
     src/renderer/MeshData.h
     src/renderer/ModelAsset.cpp
     src/renderer/ModelAsset.h

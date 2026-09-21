@@ -1000,10 +1000,10 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     // シーンが無ければ何も描かない（m_sceneMeshes が空）。背景とグリッドだけが出る。
     // outlineMesh が 0 以上なら、そのメッシュの外周だけを LINELIST で描く（ホバー / 選択の枠）。
     const auto drawMeshes = [&](const MeshConstants& passConstants, uint32_t passMask, bool tessellate,
-                                bool onlyWireframe = false, int outlineMesh = -1) {
+                                int outlineMesh = -1) {
         for (size_t i = 0; i < m_sceneMeshes.size(); ++i) {
             if (outlineMesh >= 0 && i != static_cast<size_t>(outlineMesh)) continue;
-            if (m_meshScene.meshes[i].materialOnly || (onlyWireframe && !m_meshScene.meshes[i].showWireframe)) continue;
+            if (m_meshScene.meshes[i].materialOnly) continue;
             MeshConstants drawConstants = passConstants;
             const Mesh& drawMesh = m_sceneMeshes[i];
             const compositor::BlendMode blendMode = blendModeOf(i);
@@ -1480,47 +1480,6 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
 
     PIXEndEvent(commandList);
 
-    // 帯の編集用ワイヤーは凹凸に埋もれないガイドとして、分割前の辺を独立して重ねる。
-    for (int wireMode = 0; wireMode < 3; ++wireMode) {
-        const bool localWireframe = wireMode == 2;
-        const bool enabled = localWireframe
-            ? std::any_of(m_meshScene.meshes.begin(), m_meshScene.meshes.end(),
-                [](const SceneMesh& mesh) { return !mesh.materialOnly && mesh.showWireframe; })
-            : (wireMode == 0 ? m_showRoadGrid : m_showWireframe);
-        if (!m_meshSceneEnabled || !enabled) continue;
-        const bool wireTessellation = wireMode == 1 && useTessellation;
-        rhi::GraphicsPipelineDesc wireDesc;
-        wireDesc.shaderPath = L"MeshPbr.hlsl";
-        wireDesc.vertexEntry = wireTessellation ? L"VsControl" : L"VsMain";
-        if (wireTessellation) {
-            wireDesc.hullEntry = L"HsMain";
-            wireDesc.domainEntry = L"DsMain";
-        }
-        wireDesc.pixelEntry = L"PsWireframe";
-        wireDesc.rtvFormat = kOutputFormat;
-        wireDesc.dsvFormat = kDepthFormat;
-        wireDesc.layout = rhi::VertexLayout::MeshStandard;
-        wireDesc.cullMode = D3D12_CULL_MODE_BACK;
-        wireDesc.fillMode = D3D12_FILL_MODE_WIREFRAME;
-        wireDesc.depthTest = !localWireframe;
-        wireDesc.depthWrite = false;
-        wireDesc.depthBias = -32;
-        wireDesc.slopeScaledDepthBias = -1.0f;
-        wireDesc.alphaBlend = true;
-        if (ID3D12PipelineState* wirePipeline = pipelineCache.GetGraphics(wireDesc)) {
-            PIXBeginEvent(commandList, PIX_COLOR(160, 200, 240), localWireframe ? "PreviewDecalWireframe" : (wireMode == 0 ? "PreviewWireframeBase" : "PreviewWireframeTessellated"));
-            TransitionIfNeeded(commandList, m_output, D3D12_RESOURCE_STATE_RENDER_TARGET);
-            TransitionIfNeeded(commandList, m_depth, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-            const D3D12_CPU_DESCRIPTOR_HANDLE outputRtv = m_output.rtv.cpu;
-            const D3D12_CPU_DESCRIPTOR_HANDLE depthDsv = m_depth.dsv.cpu;
-            commandList->OMSetRenderTargets(1, &outputRtv, FALSE, &depthDsv);
-            commandList->SetGraphicsRootSignature(pipelineCache.GlobalRootSignature());
-            commandList->SetPipelineState(wirePipeline);
-            drawMeshes(constants, kPassOpaque | kPassDecal | kPassTranslucent, wireTessellation, localWireframe);
-            PIXEndEvent(commandList);
-        }
-    }
-
     // ホバー / 選択メッシュのシルエット枠。外周の辺を、本描画と同じ変位で押し出して重ねる。
     // 深度は見ない（手前の物に隠れても輪郭が分かるようにする）。選択を先に描き、ホバーを上に重ねる。
     if (m_meshSceneEnabled) {
@@ -1551,7 +1510,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
             commandList->SetPipelineState(outlinePipeline);
             MeshConstants outlineConstants = constants;
             outlineConstants.meshDisplayFlags |= flag;
-            drawMeshes(outlineConstants, kPassOpaque | kPassDecal | kPassTranslucent, false, false, meshIndex);
+            drawMeshes(outlineConstants, kPassOpaque | kPassDecal | kPassTranslucent, false, meshIndex);
             PIXEndEvent(commandList);
         };
         for (const int selected : m_selectedMeshes) drawOutline(selected, kMeshFlagOutlineSelected);

@@ -42,11 +42,9 @@ struct DisplaySettings {
     bool showStats = false;
     // 原点中心の50m四方、1m刻みの作業グリッド。
     bool showReferenceGrid = true;
-    // 分割前ワイヤーフレーム。保存キーは旧道路グリッドから引き継ぐ。
-    bool showRoadGrid = false;
     bool showUvChecker = false;
-    // メッシュシーンにワイヤーフレームを重ねるか。
-    bool showWireframe = false;
+    // 岩メッシュの法線を、折れ角つきで平均して滑らかに見せるか。偽なら面法線（面ごとの陰影）。
+    bool smoothShading = false;
     // アセットの帯（ルートのフォルダ階層とその中身）を出すか。畳むとビューポートが縦に広がる。
     bool showAssetBand = true;
     // 前面にあるときの FPS 上限。0 で上限なし。

@@ -104,9 +104,8 @@ void AppSettings::Load() {
             showStats != display->end() && showStats->is_boolean()) {
             m_display.showStats = showStats->get<bool>();
         }
-        for (const auto& setting : {std::pair{"showRoadGrid", &m_display.showRoadGrid},
-                                     std::pair{"showUvChecker", &m_display.showUvChecker},
-                                     std::pair{"showWireframe", &m_display.showWireframe}}) {
+        for (const auto& setting : {std::pair{"showUvChecker", &m_display.showUvChecker},
+                                     std::pair{"smoothShading", &m_display.smoothShading}}) {
             const auto it = display->find(setting.first);
             if (it != display->end() && it->is_boolean()) *setting.second = it->get<bool>();
         }
@@ -159,9 +158,8 @@ bool AppSettings::Save() const {
     display["showFps"] = m_display.showFps;
     display["showStats"] = m_display.showStats;
     display["showReferenceGrid"] = m_display.showReferenceGrid;
-    display["showRoadGrid"] = m_display.showRoadGrid;
     display["showUvChecker"] = m_display.showUvChecker;
-    display["showWireframe"] = m_display.showWireframe;
+    display["smoothShading"] = m_display.smoothShading;
     display["showAssetBand"] = m_display.showAssetBand;
     display["frameRateLimit"] = m_display.frameRateLimit;
     display["inactiveFrameRateLimit"] = m_display.inactiveFrameRateLimit;

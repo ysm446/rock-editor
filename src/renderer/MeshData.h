@@ -75,7 +75,6 @@ struct SceneMesh {
     float additiveHeightMeters = 0.0f;
     // 路面と帯の分割差を吸収する実寸の深度補正。形状と陰影位置は動かさない。
     float surfaceDepthBiasMeters = 0.0f;
-    bool showWireframe = false;
     // 接続から導出した材質。GPU参照や保存対象ではない。
     std::optional<compositor::MaterialStack> materialStack;
     // 道路のレイヤー。スロット 2〜4 の材質と、それらの被覆率を持つ道路空間マスク（RGBA8）。

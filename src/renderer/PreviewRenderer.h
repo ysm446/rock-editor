@@ -317,10 +317,7 @@ public:
     // 1 辺あたりの分割の上限。
     float& TessellationFactor() { return m_tessellationFactor; }
     float& TessellationTargetPixels() { return m_tessellationTargetPixels; }
-    bool& ShowRoadGrid() { return m_showRoadGrid; }
     bool& ShowUvChecker() { return m_showUvChecker; }
-    // メッシュシーンにワイヤーフレームを重ねる。テセレーションと変位の後の辺を見る。
-    bool& ShowWireframe() { return m_showWireframe; }
     bool& ShowReferenceGrid() { return m_showReferenceGrid; }
     // 直前のフレームの描画の量。
     void EnableDiagnostics(bool enabled) { m_diagnostics.SetEnabled(enabled); }
@@ -421,9 +418,7 @@ private:
     float m_tessellationFactor = kPreviewDefaults.tessellationFactor;
     float m_tessellationTargetPixels = kPreviewDefaults.tessellationTargetPixels;
     bool m_showReferenceGrid = true;
-    bool m_showRoadGrid = false;
     bool m_showUvChecker = false;
-    bool m_showWireframe = false;
     int m_hoveredMesh = -1;
     std::vector<int> m_selectedMeshes;
     bool m_skyRebuildRequested = false;

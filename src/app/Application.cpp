@@ -441,9 +441,7 @@ int Application::Run() {
         // グリッドは深度テストのためレンダラが描く。設定の写しは持たない方針
         // だが、レンダラは AppSettings を知らないので、描く直前に毎フレーム渡す。
         m_renderer.ShowReferenceGrid() = m_settings.Display().showReferenceGrid;
-        m_renderer.ShowRoadGrid() = m_settings.Display().showRoadGrid;
         m_renderer.ShowUvChecker() = m_settings.Display().showUvChecker;
-        m_renderer.ShowWireframe() = m_settings.Display().showWireframe;
 
         m_renderer.SetExtraSceneRadius(ModelInstancesRadius());
         m_renderer.Render(m_device, m_pipelineCache, commandList, m_textureLibrary,

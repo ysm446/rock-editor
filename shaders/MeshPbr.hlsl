@@ -789,12 +789,6 @@ float GridLine(float2 coordinate)
     return max(coverage.x, coverage.y);
 }
 
-// トーンマップ後のワイヤーフレーム。分割前はVSのみ、分割後はHS/DSも通す。
-float4 PsWireframe(VsOutput input) : SV_Target0
-{
-    return float4(0.55f, 0.85f, 1.0f, 0.85f);
-}
-
 // meshDisplayFlags のビット。C++ の kMeshFlag* と一致させる。
 #define ROCK_MESH_FLAG_OUTLINE_HOVERED 4u
 #define ROCK_MESH_FLAG_OUTLINE_SELECTED 8u

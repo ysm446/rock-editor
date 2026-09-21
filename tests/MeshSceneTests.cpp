@@ -2,6 +2,8 @@
 #include "renderer/AxisProjection.h"
 #include "renderer/MeshData.h"
 #include "renderer/ModelAsset.h"
+#include "renderer/RockMesh.h"
+#include "geometry/BaseRock.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +11,62 @@
 
 void RunMeshSceneTests() {
     using namespace rock;
+    tests::Section("岩メッシュの法線（フラット / スムーズ）");
+    {
+        geometry::BaseRockSettings rockSettings;
+        rockSettings.shape = geometry::BaseShape::Sphere;
+        rockSettings.subdivisions = 8;
+        std::string error;
+        const auto sphere = geometry::MakeBaseRock(rockSettings, error);
+        const auto flat = renderer::MakeRockMeshData(sphere, false);
+        const auto smooth = renderer::MakeRockMeshData(sphere, true);
+        tests::Check(error.empty() && !flat.vertices.empty() &&
+                         flat.vertices.size() == smooth.vertices.size() &&
+                         flat.indices == smooth.indices,
+                     "スムーズ化しても頂点数と三角形は変わらない");
+        const auto unitLength = [](const auto& data) {
+            for (const auto& v : data.vertices) {
+                const float length = std::sqrt(v.normal.x * v.normal.x + v.normal.y * v.normal.y +
+                                               v.normal.z * v.normal.z);
+                if (!std::isfinite(length) || std::abs(length - 1.0f) > 1e-3f) return false;
+            }
+            return true;
+        };
+        tests::Check(unitLength(flat) && unitLength(smooth), "法線は有限で単位長");
+        size_t changed = 0;
+        for (size_t i = 0; i < flat.vertices.size(); ++i) {
+            const auto& a = flat.vertices[i].normal;
+            const auto& b = smooth.vertices[i].normal;
+            if (std::abs(a.x - b.x) + std::abs(a.y - b.y) + std::abs(a.z - b.z) > 1e-4f) ++changed;
+        }
+        tests::Check(changed > flat.vertices.size() / 2, "球では大半の法線が平均で変わる");
+        const auto orthonormal = [](const auto& data) {
+            for (const auto& v : data.vertices) {
+                const float tangentLength = std::sqrt(v.tangent.x * v.tangent.x + v.tangent.y * v.tangent.y +
+                                                      v.tangent.z * v.tangent.z);
+                const float dot = v.normal.x * v.tangent.x + v.normal.y * v.tangent.y + v.normal.z * v.tangent.z;
+                if (std::abs(tangentLength - 1.0f) > 1e-3f || std::abs(dot) > 1e-3f) return false;
+            }
+            return true;
+        };
+        tests::Check(orthonormal(flat) && orthonormal(smooth), "接線は単位長で法線と直交する");
+        renderer::SceneMesh smoothMesh;
+        smoothMesh.geometry = smooth;
+        tests::Check(renderer::ValidateMeshScene(renderer::MeshScene{{smoothMesh}}),
+                     "スムーズ化したメッシュも描画へ渡せる");
+        geometry::MeshInfo info;
+        const auto box = geometry::MakeBox({2, 2, 2});
+        const auto boxSmooth = renderer::MakeRockMeshData(box, true);
+        const auto boxFlat = renderer::MakeRockMeshData(box, false);
+        bool sameOnBox = boxSmooth.vertices.size() == boxFlat.vertices.size();
+        for (size_t i = 0; sameOnBox && i < boxFlat.vertices.size(); ++i) {
+            const auto& a = boxFlat.vertices[i].normal;
+            const auto& b = boxSmooth.vertices[i].normal;
+            sameOnBox = std::abs(a.x - b.x) + std::abs(a.y - b.y) + std::abs(a.z - b.z) < 1e-4f;
+        }
+        tests::Check(geometry::InspectMesh(box, info) && sameOnBox,
+                     "直方体の90度の角は折れ角で分かれ、面法線のまま");
+    }
     tests::Section("Mesh scene");
     renderer::SceneMesh mesh;
     mesh.geometry.vertices = {
