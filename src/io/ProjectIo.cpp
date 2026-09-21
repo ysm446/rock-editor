@@ -511,6 +511,10 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                    {"rotation", boxes->rotation}, {"seed", boxes->seed}};
         } else if (const auto* volume = std::get_if<geometry::VolumeSettings>(&node.settings)) {
             item["toVolume"] = {{"resolution", volume->resolution}};
+        } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node.settings)) {
+            item["uvUnwrap"] = {{"resolution", uv->resolution}, {"padding", uv->padding}, {"quality", uv->quality}};
+        } else if (const auto* bake = std::get_if<graph::MaterialBakeSettings>(&node.settings)) {
+            item["materialBake"] = {{"layer", WriteLayer(bake->bakedLayer, writeMaterial)}, {"fingerprint", bake->fingerprint}};
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
@@ -726,6 +730,21 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.applyCut = ReadBool(*v, "applyCut", false);
                     settings.meshCut = ReadBool(*v, "meshCut", false);
                     settings.showBridge = ReadBool(*v, "showBridge", true);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::UvUnwrap) {
+                geometry::UvUnwrapSettings settings;
+                if (const json* v = FindMember(item, "uvUnwrap"); v && v->is_object()) {
+                    settings.resolution = ReadInt(*v, "resolution", 1024);
+                    settings.padding = ReadInt(*v, "padding", 4);
+                    settings.quality = ReadInt(*v, "quality", 1);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::MaterialBake) {
+                graph::MaterialBakeSettings settings;
+                if (const json* v = FindMember(item, "materialBake"); v && v->is_object()) {
+                    if (const json* layer = FindMember(*v, "layer"); layer && layer->is_object()) settings.bakedLayer = ReadLayer(*layer, readMaterial);
+                    settings.fingerprint = ReadString(*v, "fingerprint");
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeToMesh) {

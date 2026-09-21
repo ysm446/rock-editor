@@ -207,12 +207,24 @@ void Application::SetPreviewGraphNode(graph::GraphId nodeId, graph::GraphId outp
 }
 
 void Application::SyncMeshGraph() {
+    if (m_uvLastSelectedNode != m_selectedGraphNode) {
+        if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
+            previous && previous->kind == graph::NodeKind::UvUnwrap && m_previewGraphNode == previous->id)
+            SetPreviewGraphNode(m_uvPreviousPreviewNode, m_uvPreviousPreviewPin);
+        m_uvLastSelectedNode = m_selectedGraphNode;
+        if (const auto* node = m_graph.FindNode(m_selectedGraphNode); node && node->kind == graph::NodeKind::UvUnwrap) {
+            m_uvPreviousPreviewNode = m_previewGraphNode;
+            m_uvPreviousPreviewPin = m_previewGraphPin;
+            SetPreviewGraphNode(node->id);
+        }
+    }
     // メッシュを作るノードを見ているときは、そのノードまでの鎖を出す。
     graph::GraphId previewMeshNode = 0;
     if (const graph::Node* node = m_graph.FindNode(m_previewGraphNode);
         node != nullptr && (graph::IsMeshNodeKind(node->kind) || graph::IsModelNodeKind(node->kind))) {
         previewMeshNode = node->id;
     }
+    m_uvCheckerPreview = previewMeshNode && m_graph.FindNode(previewMeshNode)->kind == graph::NodeKind::UvUnwrap;
     if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
         m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod)
@@ -222,8 +234,10 @@ void Application::SyncMeshGraph() {
     const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache,
                                                m_settings.Display().sdfPreviewMethod);
     renderer::MeshScene scene;
+    m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();
     for (const auto& rock : evaluated.rocks) {
+        if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading);
         const DirectX::XMFLOAT3 colors[] = {{0.28f, 0.39f, 0.48f}, {0.48f, 0.34f, 0.24f},
@@ -233,22 +247,7 @@ void Application::SyncMeshGraph() {
             rock.chunk > 0 ? colors[(rock.chunk - 1) % 6] : DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
         m_rockMeshReferences.push_back({rock.source, rock.chunk, rock.pivot, rock.key});
         mesh.material.roughness = 0.8f;
-        if (const auto* surface = m_graph.FindNode(rock.materialSource)) {
-            if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&surface->settings)) {
-                compositor::MaterialStack stack;
-                stack.Layers() = m_graph.CompileLayersTo(surface->id).layers;
-                for (auto& layer : stack.Layers()) {
-                    if (layer.material == compositor::kNoMaterialAsset) continue;
-                    layer.heightSource = compositor::ValueSource::Texture;
-                    layer.heightBase = compositor::kHeightPivot;
-                    layer.heightGain = 1.0f;
-                }
-                // 今回は陰影用の法線マップを使う。高さからの変位・バンプは別途追加する。
-                stack.SetTerrainScale(settings->layer.mapping.repeatMeters, 0.0f);
-                mesh.materialStack = std::move(stack);
-                mesh.mapping = settings->layer.mapping;
-            }
-        }
+        ApplyRockMaterial(mesh, rock, true);
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;
@@ -797,6 +796,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂と部分切断");
         addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
         addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
+        addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
         ImGui::TextDisabled("ボリューム");
         addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体を重ねて塊を作る");
@@ -813,6 +813,7 @@ void Application::DrawGraphEditor() {
         ImGui::Separator();
         ImGui::TextDisabled("材質");
         addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Material スロットへ渡す");
+        addNodeMenuItem(graph::NodeKind::MaterialBake, "Material Bake — UVへ材質を焼き付ける");
         ImGui::EndPopup();
     }
     ed::Resume();
@@ -1255,6 +1256,23 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は上流の To Volume で調整します。Marching Tetrahedra は従来方式、Dual Contouring は角や稜線を保つために頂点位置を調整する方式です。");
         if (method == 1)
             ui::HintText("Dual Contouring は格子から交点・法線を推定します。細部や角の再現には入力の解像度も影響します。");
+    } else if (auto* uvSettings = std::get_if<geometry::UvUnwrapSettings>(&selected->settings)) {
+        bool changed = false;
+        if (ui::BeginPropertyTable("uvUnwrapRows")) {
+            changed |= ui::PropertyInt("テクスチャ解像度", &uvSettings->resolution, 128, 4096, 1024);
+            changed |= ui::PropertyInt("余白 (px)", &uvSettings->padding, 1, 32, 4);
+            changed |= ui::PropertyInt("品質", &uvSettings->quality, 1, 4, 1);
+            ui::EndPropertyTable();
+        }
+        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+        ui::HintText("選択するとUVチェッカーを表示します。UVビューのタブで島の配置を確認できます。複数の入力メッシュは1枚のアトラスへまとめます。");
+    } else if (selected->kind == graph::NodeKind::MaterialBake) {
+        ui::HintText("UV UnwrapのMeshとSurfaceのMaterialを接続してください。");
+        if (ImGui::Button("ベイク実行")) m_pendingBake=selected->id;
+        if (const auto status=m_bakeStatus.find(selected->id); status!=m_bakeStatus.end())
+            ui::HintText(status->second.c_str());
+        else ui::HintText("未ベイク。ノードの出力をプレビューして状態を確認してください。");
+        ui::HintText("UV Unwrapのアトラス寸法でPNGを4枚生成し、ルート内のBakesへ保存します。形状・材質・スムーズシェーディングを変えたら再ベイクしてください。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
         ui::HintText("メッシュ・モデル・Boxes・Volume を接続すると表示する。複数の Mesh Output を同時に表示できる。");
         ui::HintText("MaterialにSurfaceを接続すると、生成メッシュに材質を適用します。UVのない岩にはSurfaceでTriplanarを選びます。モデルの材質はモデル側で設定します。");

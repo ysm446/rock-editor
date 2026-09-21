@@ -27,6 +27,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+add_library(rock_xatlas STATIC third_party/xatlas/xatlas.cpp)
+target_include_directories(rock_xatlas PUBLIC third_party/xatlas)
+target_compile_definitions(rock_xatlas PRIVATE NOMINMAX)
+target_compile_options(rock_xatlas PRIVATE /utf-8)
+
 # マルチコンフィグジェネレータでも出力先を揃える。
 foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
     string(TOUPPER "${cfg}" cfgUpper)
@@ -214,6 +219,8 @@ set_source_files_properties(${rock_shaders} PROPERTIES HEADER_FILE_ONLY TRUE)
 source_group("shaders" FILES ${rock_shaders})
 
 add_executable(rock_editor WIN32 ${rock_sources} ${rock_shaders})
+target_sources(rock_editor PRIVATE src/geometry/UvUnwrap.cpp src/app/ApplicationUvPanel.cpp src/app/ApplicationBake.cpp src/renderer/BakePadding.cpp)
+target_link_libraries(rock_editor PRIVATE rock_xatlas)
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "src" FILES ${rock_sources})
 
@@ -286,6 +293,15 @@ add_custom_command(TARGET rock_editor POST_BUILD
     COMMENT "dxil.dll を配置"
 )
 
+# --- プレビュー用の同梱画像 -----------------------------------------------
+add_custom_command(TARGET rock_editor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:rock_editor>/assets/textures"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/textures/uv_checker.png"
+        "$<TARGET_FILE_DIR:rock_editor>/assets/textures/uv_checker.png"
+    COMMENT "UVチェッカーを配置"
+)
+
 # --- テスト ---------------------------------------------------------------
 # UI の相互作用（ドラッグ、ホバー）は `--screenshot-ui` では確認できない。
 # ImGui へマウスイベントを注入して確かめる。GPU もウィンドウも要らないので、
@@ -356,6 +372,8 @@ add_executable(rock_editor_tests
 )
 
 target_include_directories(rock_editor_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_sources(rock_editor_tests PRIVATE src/geometry/UvUnwrap.cpp tests/UvTests.cpp src/renderer/BakePadding.cpp)
+target_link_libraries(rock_editor_tests PRIVATE rock_xatlas)
 # テストの一時フォルダは data/test/ に作る（AGENTS.md）。
 target_compile_definitions(rock_editor_tests PRIVATE ROCK_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 target_compile_options(rock_editor_tests PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)

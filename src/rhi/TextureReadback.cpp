@@ -7,8 +7,39 @@
 
 #include <algorithm>
 #include <vector>
+#include <cstring>
 
 namespace rock::rhi {
+bool ReadTextureRgba8(Device& device, GpuTexture& texture, LdrImage& image) {
+    image = {};
+    if (!texture.IsValid() || texture.format != DXGI_FORMAT_R8G8B8A8_UNORM) return false;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+    UINT64 bytes = 0;
+    const auto desc = texture.resource->GetDesc();
+    device.GetDevice()->GetCopyableFootprints(&desc,0,1,0,&footprint,nullptr,nullptr,&bytes);
+    GpuBuffer buffer;
+    if (!device.Allocator().CreateReadbackBuffer(bytes,L"BakeReadback",buffer)) return false;
+    const auto state=texture.state;
+    const bool copied=device.ExecuteImmediate([&](auto* list) {
+        TransitionIfNeeded(list,texture,D3D12_RESOURCE_STATE_COPY_SOURCE);
+        const CD3DX12_TEXTURE_COPY_LOCATION dst(buffer.resource.Get(),footprint), src(texture.resource.Get(),0);
+        list->CopyTextureRegion(&dst,0,0,0,&src,nullptr);
+        TransitionIfNeeded(list,texture,state);
+    });
+    void* mapped=nullptr;
+    const D3D12_RANGE range{0,static_cast<SIZE_T>(bytes)};
+    bool success=copied && SUCCEEDED(buffer.resource->Map(0,&range,&mapped));
+    if (success) {
+        image.width=texture.width; image.height=texture.height;
+        image.pixels.resize(size_t(image.width)*image.height*4);
+        for (uint32_t y=0;y<image.height;++y)
+            std::memcpy(image.pixels.data()+size_t(y)*image.width*4,
+                static_cast<const uint8_t*>(mapped)+footprint.Offset+size_t(y)*footprint.Footprint.RowPitch,size_t(image.width)*4);
+        const D3D12_RANGE written{0,0}; buffer.resource->Unmap(0,&written);
+    }
+    device.DeferRelease(buffer);
+    return success;
+}
 
 bool SaveTextureToPng(Device& device, GpuTexture& texture, const std::filesystem::path& path,
                       uint32_t maxSize) {

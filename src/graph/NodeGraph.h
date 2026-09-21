@@ -1,4 +1,5 @@
 #pragma once
+#include "geometry/UvUnwrap.h"
 
 #include "compositor/MaterialLayer.h"
 #include "crack/CrackPatch.h"
@@ -60,6 +61,8 @@ enum class NodeKind : uint32_t {
     ToVolume = 39,
     VolumeToMesh = 40,
     VolumeTransform = 41,
+    UvUnwrap = 42,
+    MaterialBake = 43,
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
@@ -108,6 +111,10 @@ using BaseRockNodeSettings = geometry::BaseRockSettings;
 struct LayerNodeSettings {
     compositor::MaterialLayer layer;
 };
+struct MaterialBakeSettings {
+    compositor::MaterialLayer bakedLayer;
+    std::string fingerprint;
+};
 
 // モデル。model は Application のモデル一覧の ID（0 = なし）。position はモデルの底面の中心の位置（m）、
 // 倍率はモデルアセットの倍率に掛ける。
@@ -144,7 +151,8 @@ struct CompiledGraph {
 using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings,
                                   TransformNodeSettings, BaseRockNodeSettings, crack::CrackSettings,
                                   fracture::FractureSettings, crack::JointSetSettings, geometry::BoxClusterSettings, geometry::VolumeSettings,
-                                  geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings, std::monostate>;
+                                  geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
+                                  geometry::UvUnwrapSettings, MaterialBakeSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;
@@ -163,6 +171,7 @@ struct Node {
 template<class Visitor>
 void VisitNodeMaterialLayers(Node& node, const Visitor& visit) {
     if (auto* settings = std::get_if<LayerNodeSettings>(&node.settings)) visit(settings->layer);
+    if (auto* settings = std::get_if<MaterialBakeSettings>(&node.settings)) visit(settings->bakedLayer);
 }
 
 struct Link {

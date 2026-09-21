@@ -337,6 +337,8 @@ int Application::Run() {
         ProcessPendingFileWork();
         // メッシュの生成と転送も GPU 待機を伴うため、フレームの外で。
         SyncMeshGraph();
+        if (m_options.bakeNode && m_frameCounter >= 2) { m_pendingBake=m_options.bakeNode; m_options.bakeNode=0; }
+        ProcessPendingBake();
 
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。
@@ -441,7 +443,7 @@ int Application::Run() {
         // グリッドは深度テストのためレンダラが描く。設定の写しは持たない方針
         // だが、レンダラは AppSettings を知らないので、描く直前に毎フレーム渡す。
         m_renderer.ShowReferenceGrid() = m_settings.Display().showReferenceGrid;
-        m_renderer.ShowUvChecker() = m_settings.Display().showUvChecker;
+        m_renderer.ShowUvChecker() = m_settings.Display().showUvChecker || m_uvCheckerPreview;
 
         m_renderer.SetExtraSceneRadius(ModelInstancesRadius());
         m_renderer.Render(m_device, m_pipelineCache, commandList, m_textureLibrary,
@@ -580,7 +582,7 @@ void Application::DrawUi() {
     // ドックスペースの ID には版を付ける。**パネルを増減したら版を上げること。**
     // ID が変われば ini に配置が無い状態になり、既定レイアウトが組み直される。
     // 上げないと、新しいパネルがどこにも入らず浮いたままになる。
-    const ImGuiID dockspaceId = ImGui::GetID("RockEditorDockSpace_v18");
+    const ImGuiID dockspaceId = ImGui::GetID("RockEditorDockSpace_v19");
 
     // ステータスバーもメニューバーと同じく、先に作って作業領域を狭めておく。
     DrawStatusBar();
@@ -599,6 +601,7 @@ void Application::DrawUi() {
     ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport());
 
     DrawViewportPanel();
+    DrawUvPanel();
     // タブが重なる枠では、**最初に submit したパネルが前面のタブになり、
     // タブは submit した順に並ぶ**（ini に配置が無いとき）。
     // 作業の起点はグラフなので、右カラムの他のパネルより先に描く。
@@ -688,6 +691,7 @@ void Application::BuildDefaultLayout(ImGuiID dockspaceId) {
     ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.28f, &bottom, &center);
 
     ImGui::DockBuilderDockWindow("ビューポート", center);
+    ImGui::DockBuilderDockWindow("UVビュー", center);
     // アセットの一覧はすべて帯の 1 枠へタブで重ねる。**素材の一覧はどれもサムネイルの格子**
     // なので、左右に割るより 1 枠で幅いっぱいに使うほうが枡が多く入る。
     // テクスチャからマテリアルのマップ欄へは、ドラッグ中にタブへ重ねて待つと切り替わる

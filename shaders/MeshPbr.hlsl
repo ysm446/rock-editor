@@ -43,7 +43,7 @@ struct MeshConstants
     float4x4 normalMatrix;
 
     float3 cameraPosition;
-    float pad0;
+    uint uvCheckerIndex;
 
     float3 lightDirection;   // サーフェスから光源へ向かう方向
     float lightIlluminance;  // lux 相当
@@ -856,21 +856,49 @@ float3 TriplanarNormal(Texture2D<float2> map, TriplanarFrame f)
     return normalize(g_mesh.mappingAxisX.xyz * n.x + g_mesh.mappingAxisY.xyz * n.y + g_mesh.mappingAxisZ.xyz * n.z);
 }
 
+// UV空間へラスタライズする。位置・法線は投影元のワールド座標のまま渡す。
+VsOutput VsBake(VsInput input)
+{
+    VsOutput output = (VsOutput)0;
+    output.clipPosition = float4(input.uv.x*2-1, 1-input.uv.y*2, 0, 1);
+    output.worldPosition = input.position;
+    output.worldNormal = input.normal;
+    output.worldTangent = input.tangent.xyz;
+    output.tangentSign = input.tangent.w;
+    output.uv = input.uv;
+    return output;
+}
+float4 PsBake(VsOutput input) : SV_Target0
+{
+    Texture2D<float4> colorMap = ResourceDescriptorHeap[g_mesh.materialBaseColorIndex];
+    Texture2D<float2> normalMap = ResourceDescriptorHeap[g_mesh.materialNormalIndex];
+    Texture2D<float4> surfaceMap = ResourceDescriptorHeap[g_mesh.materialSurfaceIndex];
+    Texture2D<float> heightMap = ResourceDescriptorHeap[g_mesh.materialHeightIndex];
+    const float3 n = normalize(input.worldNormal);
+    const TriplanarFrame f = MakeTriplanarFrame(input.worldPosition,n);
+    const bool tri = g_mesh.mappingMethod == 1u;
+    if (g_mesh.debugView == 0u) {
+        float3 color = tri ? TriplanarColor(colorMap,f).rgb : SampleMaterialColor(colorMap,input.uv).rgb;
+        return float4(LinearToSrgb(saturate(color)),1);
+    }
+    if (g_mesh.debugView == 1u) {
+        float3 tangentNormal;
+        if (tri) {
+            const float3 worldNormal = TriplanarNormal(normalMap,f);
+            const float3 tangent = normalize(input.worldTangent-n*dot(input.worldTangent,n));
+            const float3 bitangent = cross(n,tangent)*input.tangentSign;
+            tangentNormal = normalize(float3(dot(worldNormal,tangent),dot(worldNormal,bitangent),dot(worldNormal,n)));
+        } else tangentNormal = DecodeTangentNormal(SampleMaterialNormal(normalMap,input.uv));
+        return float4(tangentNormal*0.5f+0.5f,1);
+    }
+    if (g_mesh.debugView == 2u) return float4((tri ? TriplanarColor(surfaceMap,f) : SampleMaterialColor(surfaceMap,input.uv)).rgb,1);
+    const float height = tri ? TriplanarHeight(heightMap,f,0.0f.xx) : SampleMaterialScalar(heightMap,input.uv);
+    return float4(height.xxx,1);
+}
+
 float4 PsMain(VsOutput input) : SV_Target0
 {
-    if ((g_mesh.meshDisplayFlags & 2u) != 0u)
-    {
-        // 1 UVタイルを2×2の市松模様で表示。赤がU、緑がV方向の目印。
-        float2 cell = floor(input.uv * 2.0f);
-        float checker = fmod(abs(cell.x + cell.y), 2.0f);
-        float fade = saturate(1.0f - max(fwidth(input.uv.x), fwidth(input.uv.y)) * 2.0f);
-        float3 color = lerp(0.45f.xxx, lerp(0.18f.xxx, 0.75f.xxx, checker), fade);
-        float2 local = frac(input.uv);
-        color = lerp(color, float3(0.8f,0.12f,0.08f), step(local.y,0.07f)*fade);
-        color = lerp(color, float3(0.08f,0.65f,0.18f), step(local.x,0.07f)*fade);
-        color *= lerp(1.0f,0.25f,GridLine(input.uv));
-        return float4(color,1.0f);
-    }
+    const bool uvChecker = (g_mesh.meshDisplayFlags & 2u) != 0u;
     const float3 geometricNormal = normalize(input.worldNormal);
     const float3 viewDirection = normalize(g_mesh.cameraPosition - input.worldPosition);
 
@@ -884,7 +912,16 @@ float4 PsMain(VsOutput input) : SV_Target0
     // **クレイ表示**は、形（変位）はそのままで陰影だけをテクスチャ抜きにする。
     // 合成の色 / 法線 / サーフェスを読まず、単色マテリアルと面の向きで塗る。
     const bool clay = (g_mesh.debugView == ROCK_VIEW_CLAY);
-    const bool useMaterialShading = (g_mesh.useMaterialTextures != 0u) && !clay;
+    const bool useMaterialShading = (g_mesh.useMaterialTextures != 0u) && !clay && !uvChecker;
+
+    if (uvChecker)
+    {
+        // UV確認用の拡散色だけを差し替える。照明・影・天球・露出は通常描画と共通。
+        Texture2D<float4> checker = ResourceDescriptorHeap[g_mesh.uvCheckerIndex];
+        baseColor = checker.Sample(g_samplerAnisoWrap, input.uv).rgb;
+        roughnessValue = 0.8f;
+        metallicValue = 0.0f;
+    }
 
     if (clay)
     {

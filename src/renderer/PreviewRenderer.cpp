@@ -1,4 +1,5 @@
 #include "renderer/PreviewRenderer.h"
+#include "renderer/MaterialBake.h"
 #include "rhi/TextureReadback.h"
 
 #include "core/ImageIo.h"
@@ -79,7 +80,7 @@ struct MeshConstants {
     XMFLOAT4X4 normalMatrix;
 
     XMFLOAT3 cameraPosition;
-    float pad0;
+    uint32_t uvCheckerIndex;
 
     XMFLOAT3 lightDirection;
     float lightIlluminance;
@@ -313,6 +314,68 @@ bool IsShadedView(DebugView view) {
 
 }  // namespace
 
+bool BakeMaterial(rhi::Device& device, rhi::PipelineCache& pipelines, const SceneMesh& source,
+                  const compositor::TextureLibrary& textures, const compositor::MaterialLibrary& materials,
+                  uint32_t width, uint32_t height, std::array<LdrImage,4>& images, std::string& error) {
+    images = {}; error.clear();
+    if (!source.materialStack || !width || !height || width>8192 || height>8192) { error="ベイク入力または解像度が無効です"; return false; }
+    compositor::MaterialEvaluator evaluator;
+    const uint32_t sourceResolution=std::clamp(std::max(width,height),128u,4096u);
+    Mesh mesh;
+    rhi::GpuTexture target;
+    rhi::GpuBuffer constantsBuffer;
+    const auto cleanup = [&] { mesh.Release(device); evaluator.Destroy(device); device.DeferRelease(target); device.DeferRelease(constantsBuffer); };
+    if (!mesh.Create(device,source.geometry,L"BakeMesh") || !evaluator.Create(device,sourceResolution,false)) {
+        error="ベイク用リソースを作成できません"; cleanup(); return false;
+    }
+    bool evaluated=false;
+    if (!device.ExecuteImmediate([&](auto* list) { evaluated=evaluator.Evaluate(device,pipelines,list,*source.materialStack,textures,materials,{{0,0,sourceResolution,sourceResolution}}); }) || !evaluated) {
+        error="ベイク元の材質を評価できません"; cleanup(); return false;
+    }
+    rhi::GraphicsPipelineDesc desc;
+    desc.shaderPath=L"MeshPbr.hlsl"; desc.vertexEntry=L"VsBake"; desc.pixelEntry=L"PsBake";
+    desc.rtvFormat=DXGI_FORMAT_R8G8B8A8_UNORM; desc.layout=rhi::VertexLayout::MeshStandard;
+    desc.cullMode=D3D12_CULL_MODE_NONE; desc.depthTest=false; desc.depthWrite=false;
+    auto* pipeline=pipelines.GetGraphics(desc);
+    rhi::TextureDesc targetDesc;
+    targetDesc.width=width; targetDesc.height=height; targetDesc.allowRenderTarget=true;
+    targetDesc.initialState=D3D12_RESOURCE_STATE_RENDER_TARGET;
+    targetDesc.debugName=L"MaterialBake";
+    if (!pipeline || !device.Allocator().CreateTexture2D(targetDesc,target) ||
+        !device.Allocator().CreateUploadBuffer((sizeof(MeshConstants)+255)&~255ull,L"BakeConstants",constantsBuffer)) {
+        error="ベイク用シェーダまたはターゲットを作成できません"; cleanup(); return false;
+    }
+    MeshConstants constants{};
+    const auto& maps=evaluator.Textures();
+    constants.materialBaseColorIndex=maps.baseColor.SrvIndex(); constants.materialNormalIndex=maps.normal.SrvIndex();
+    constants.materialSurfaceIndex=maps.surface.SrvIndex(); constants.materialHeightIndex=maps.height.SrvIndex();
+    const auto& mapping=source.mapping;
+    const auto rotation=XMMatrixRotationRollPitchYaw(XMConvertToRadians(mapping.rotationDegrees.x),XMConvertToRadians(mapping.rotationDegrees.y),XMConvertToRadians(mapping.rotationDegrees.z));
+    XMStoreFloat4(&constants.mappingAxisX,rotation.r[0]); XMStoreFloat4(&constants.mappingAxisY,rotation.r[1]); XMStoreFloat4(&constants.mappingAxisZ,rotation.r[2]);
+    constants.mappingAxisX.w=1.0f/mapping.repeatMeters; constants.mappingAxisY.w=mapping.sharpness;
+    constants.mappingOffset=mapping.offset; constants.mappingMethod=static_cast<uint32_t>(mapping.method);
+    for (uint32_t channel=0;channel<4;++channel) {
+        constants.debugView=channel;
+        void* mapped=nullptr; const D3D12_RANGE read{0,0};
+        if (FAILED(constantsBuffer.resource->Map(0,&read,&mapped))) { error="ベイク定数を転送できません"; cleanup(); return false; }
+        std::memcpy(mapped,&constants,sizeof(constants)); constantsBuffer.resource->Unmap(0,nullptr);
+        if (!device.ExecuteImmediate([&](auto* list) {
+            const float clear[4]={0,0,0,0};
+            list->ClearRenderTargetView(target.rtv.cpu,clear,0,nullptr);
+            list->OMSetRenderTargets(1,&target.rtv.cpu,FALSE,nullptr);
+            const auto viewport=CD3DX12_VIEWPORT(0.0f,0.0f,float(width),float(height));
+            const auto scissor=CD3DX12_RECT(0,0,LONG(width),LONG(height));
+            list->RSSetViewports(1,&viewport); list->RSSetScissorRects(1,&scissor);
+            list->SetGraphicsRootSignature(pipelines.GlobalRootSignature()); list->SetPipelineState(pipeline);
+            list->SetGraphicsRootConstantBufferView(1,constantsBuffer.resource->GetGPUVirtualAddress());
+            mesh.Draw(list);
+        }) || !rhi::ReadTextureRgba8(device,target,images[channel])) {
+            error="ベイク描画または読み戻しに失敗しました"; cleanup(); return false;
+        }
+    }
+    cleanup(); return true;
+}
+
 float ExposureSettings::Ev100() const {
     if (automatic) {
         return std::clamp(autoEv100 + compensation, std::min(minEv100, maxEv100), std::max(minEv100, maxEv100));
@@ -341,6 +404,15 @@ bool PreviewRenderer::Initialize(rhi::Device& device, rhi::PipelineCache& pipeli
     if (!m_environment.Initialize(device, pipelineCache)) {
         return false;
     }
+
+    // 実行ファイルに同梱する表示専用画像。カレントディレクトリには依存しない。
+    std::wstring executable(32768, L'\0');
+    const DWORD length = ::GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
+    if (!length || length >= executable.size()) return false;
+    executable.resize(length);
+    const auto checkerPath = std::filesystem::path(executable).parent_path() / L"assets/textures/uv_checker.png";
+    m_uvCheckerTexture = m_previewTextures.Load(device, pipelineCache, checkerPath);
+    if (m_uvCheckerTexture == compositor::kNoTexture) return false;
 
     // 自動露出の測光バッファ。ヒストグラム 256 ビンと結果 4 要素、読み戻しはフレーム数ぶんの枠。
     if (!device.Allocator().CreateStructuredBuffer(256, sizeof(uint32_t), L"ExposureHistogram", m_meterHistogram, true) ||
@@ -605,6 +677,8 @@ void PreviewRenderer::ClearMeshScene(rhi::Device& device) {
 }
 
 void PreviewRenderer::Shutdown(rhi::Device& device) {
+    m_previewTextures.Destroy(device);
+    m_uvCheckerTexture = compositor::kNoTexture;
     m_diagnostics.Shutdown(device);
     ClearMeshScene(device);
     for (auto& map : m_shadowMaps) device.DeferRelease(map);
@@ -878,6 +952,8 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     if (!m_sceneColor.IsValid() || !m_output.IsValid()) {
         return;
     }
+    // チェッカーは照明付きで確認する。選択していたチャンネル表示の設定は変更しない。
+    const DebugView displayView = m_showUvChecker ? DebugView::Shaded : m_debugView;
     // この枠の前回の測光値は、コマンドアロケータの再利用時点で完了している。
     ReadExposureMeter(device);
 
@@ -931,7 +1007,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
         meshPipelineDesc.domainEntry = L"DsMain";
     }
     // ワイヤーフレーム表示のときだけラスタライザを切り替える。
-    if (m_debugView == DebugView::Wireframe) {
+    if (displayView == DebugView::Wireframe) {
         meshPipelineDesc.fillMode = D3D12_FILL_MODE_WIREFRAME;
     }
 
@@ -976,8 +1052,9 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     // 材質（合成結果）と変位はメッシュごとに決める（下の drawMeshes）。ここでは無しにしておく。
     constants.useMaterialTextures = 0u;
     constants.displacementScale = 0.0f;
-    constants.debugView = static_cast<uint32_t>(m_debugView);
+    constants.debugView = static_cast<uint32_t>(displayView);
     constants.meshDisplayFlags = m_showUvChecker ? kMeshFlagUvChecker : 0u;
+    constants.uvCheckerIndex = m_previewTextures.SrvIndex(m_uvCheckerTexture, true);
     // 分割量はカメラから見た見え方で決める。本描画では viewProjection と同一で、
     // シャドウパスだけが viewProjection 側を上書きして分岐する。
     XMStoreFloat4x4(&constants.tessellationViewProjection, viewProjection);
@@ -1193,7 +1270,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     constants.shadowCascadeCount = m_shadowCascadeCount;
 
     // 描くものが無ければシャドウパスも走らせない。
-    const bool drawExtras = drawSceneExtras && m_extraSceneRadius > 0.0f && IsShadedView(m_debugView);
+    const bool drawExtras = drawSceneExtras && m_extraSceneRadius > 0.0f && IsShadedView(displayView);
     if (m_shadowEnabled && m_shadowMaps[0].IsValid() && (!m_sceneMeshes.empty() || drawExtras)) {
         float displacementMargin = 0;
         for (const auto& mesh : m_meshScene.meshes)
@@ -1358,7 +1435,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     // メッシュのあとに描く。深度は書かず、まだ何も描かれていない画素だけを埋める。
 
     // チャンネルを覗く表示のときは背景を描かない。値だけを見たいため。
-    if (m_showSkybox && environment.IsReady() && IsShadedView(m_debugView)) {
+    if (m_showSkybox && environment.IsReady() && IsShadedView(displayView)) {
         rhi::GraphicsPipelineDesc skyboxPipelineDesc;
         skyboxPipelineDesc.shaderPath = L"Skybox.hlsl";
         skyboxPipelineDesc.vertexEntry = L"VsMain";
@@ -1427,7 +1504,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
 
     // --- 自動露出の測光 ------------------------------------------------------
     // 被写界深度と露出の前の線形 HDR を測る。結果は次のフレーム以降に CPU で読む。
-    if (m_exposure.automatic && IsShadedView(m_debugView)) MeterExposure(device, pipelineCache, commandList);
+    if (m_exposure.automatic && IsShadedView(displayView)) MeterExposure(device, pipelineCache, commandList);
 
     // --- 被写界深度 --------------------------------------------------------
     // **トーンマップの前に、線形 HDR のまま掛ける。** 露出後だと明るい点が
@@ -1435,7 +1512,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     // チャンネルを覗く表示には掛けない（値そのものを見るための表示）。
     uint32_t tonemapSourceIndex = m_sceneColor.SrvIndex();
     ID3D12PipelineState* dofPipeline =
-        (m_dof.enabled && IsShadedView(m_debugView) && !m_showUvChecker && m_sceneColorDof.IsValid())
+        (m_dof.enabled && IsShadedView(displayView) && m_sceneColorDof.IsValid())
             ? pipelineCache.GetCompute(L"DepthOfField.hlsl", L"CsMain")
             : nullptr;
     if (dofPipeline != nullptr) {
@@ -1484,7 +1561,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
         tonemapSourceIndex,    m_output.UavIndex(),
         m_width,               m_height,
         m_exposure.Exposure(), static_cast<uint32_t>(m_tonemap),
-        (IsShadedView(m_debugView) && !(m_meshSceneEnabled && m_showUvChecker)) ? 0u : 1u};
+        IsShadedView(displayView) ? 0u : 1u};
 
     commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
     commandList->SetPipelineState(tonemapPipeline);

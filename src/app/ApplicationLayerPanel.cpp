@@ -82,7 +82,7 @@ bool Application::DrawLayerSettings(compositor::MaterialLayer& layer) {
     }
     ui::HintText("SurfaceのResultをMesh OutputのMaterialへ接続します。Triplanarはワールド座標で投影します。");
     if (layer.mapping.method == compositor::MappingMethod::UV)
-        ui::HintText("UV方式は既存UVを使います。SDFメッシュのUV展開はまだ未対応のため、Triplanarを選んでください。");
+        ui::HintText("UV方式はメッシュのUVを使います。UVのない生成メッシュにはTriplanarを選ぶか、UV Unwrapを接続してください。");
 
     ui::SectionHeader("合成");
     if (ui::BeginPropertyTable("layerBlendRows")) {

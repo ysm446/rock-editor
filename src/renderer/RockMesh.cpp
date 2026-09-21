@@ -1,4 +1,5 @@
 #include "renderer/RockMesh.h"
+#include "geometry/UvUnwrap.h"
 #include <cmath>
 #include <vector>
 namespace rock::renderer {
@@ -10,6 +11,7 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
     MeshData result;
     geometry::MeshInfo info;
     if (!geometry::InspectMesh(mesh, info)) return result;
+    const bool hasUv = geometry::HasValidUvs(mesh);
     // 面法線（単位）と、面積の重み（外積の長さ）。重みは平均するときだけ使う。
     std::vector<geometry::Vec3> faceNormals(mesh.triangles.size());
     std::vector<float> faceAreas(mesh.triangles.size(), 0.0f);
@@ -41,6 +43,16 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
         const auto a = mesh.positions[face[0]], b = mesh.positions[face[1]];
         const float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
         const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+        geometry::Vec3 uvTangent{}, uvBitangent{};
+        if (hasUv) {
+            const auto& uv = mesh.cornerUvs[f];
+            const auto c = mesh.positions[face[2]];
+            const float du1 = uv[1].u-uv[0].u, dv1 = uv[1].v-uv[0].v;
+            const float du2 = uv[2].u-uv[0].u, dv2 = uv[2].v-uv[0].v;
+            const float inv = 1.0f/(du1*dv2-du2*dv1);
+            uvTangent = {(dx*dv2-(c.x-a.x)*dv1)*inv, (dy*dv2-(c.y-a.y)*dv1)*inv, (dz*dv2-(c.z-a.z)*dv1)*inv};
+            uvBitangent = {((c.x-a.x)*du1-dx*du2)*inv, ((c.y-a.y)*du1-dy*du2)*inv, ((c.z-a.z)*du1-dz*du2)*inv};
+        }
         for (size_t i = 0; i < 3; ++i) {
             const auto p = mesh.positions[face[i]];
             MeshVertex v{};
@@ -62,7 +74,8 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
                 if (sum > 0) v.normal = {sx / sum, sy / sum, sz / sum};
             }
             v.tangent = {dx / length, dy / length, dz / length, 1};
-            if (smooth) {
+            if (hasUv) v.tangent = {uvTangent.x, uvTangent.y, uvTangent.z, 1};
+            if (smooth || hasUv) {
                 // 平均した法線とは辺の向きが直交しなくなるので、接線を張り直す
                 // （描画側は法線と接線の直交を前提にしている）。
                 const float d = v.tangent.x * v.normal.x + v.tangent.y * v.normal.y + v.tangent.z * v.normal.z;
@@ -82,6 +95,12 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
             }
             // UV展開前の仮座標。Triplanarはこの値を使わず、描画時に位置から投影する。
             v.uv = {i == 1 ? 1.0f : 0.0f, i == 2 ? 1.0f : 0.0f};
+            if (hasUv) {
+                v.uv = {mesh.cornerUvs[f][i].u, mesh.cornerUvs[f][i].v};
+                const auto& t = v.tangent; const auto& vn = v.normal;
+                const float sign = (vn.y*t.z-vn.z*t.y)*uvBitangent.x + (vn.z*t.x-vn.x*t.z)*uvBitangent.y + (vn.x*t.y-vn.y*t.x)*uvBitangent.z;
+                v.tangent.w = sign < 0 ? -1.0f : 1.0f;
+            }
             v.roadUv = v.uv;
             result.indices.push_back(static_cast<uint32_t>(result.vertices.size()));
             result.vertices.push_back(v);

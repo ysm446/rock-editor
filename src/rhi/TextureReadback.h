@@ -1,10 +1,12 @@
 #pragma once
 
 #include "rhi/Device.h"
+#include "core/ImageIo.h"
 
 #include <filesystem>
 
 namespace rock::rhi {
+bool ReadTextureRgba8(Device& device, GpuTexture& texture, LdrImage& image);
 
 // RGBA8 のテクスチャを読み戻して PNG へ保存する。GPU 待機を伴うので**フレームの外で呼ぶこと。**
 // maxSize を指定すると、縦横比を保ってその大きさ以下へ縮小する（0 で等倍）。

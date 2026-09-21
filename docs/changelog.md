@@ -1,9 +1,13 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 17:38
+更新日時: 2026-09-21 19:32
 
 ## 未リリース
+
+- UVチェッカーを16×16マスのPNGへ変更。Houdiniの参考画像に合わせ、明るいマスに行名A〜P、暗いマスに列番号1〜16を表示する。UV確認中も天球・照明・影・露出・被写界深度を通常どおり適用し、背景が白くなる描画の例外を削除した。
+
+- UV UnwrapとMaterial Bakeを追加。生成メッシュを自動展開し、選択時にUVチェッカーを表示する。「UVビュー」タブでUV島のワイヤーフレームを確認できる。ベイク実行で色・法線・Roughness/Metallic/AO・HeightをPNGへ保存して適用し、上流変更時は再ベイクを案内する。サンプルは `examples/uv-bake/`。
 
 - Mesh OutputにMaterial入力を追加し、Surfaceの材質を生成メッシュへ適用できるようにした。SurfaceにUV／Triplanarの方式、反復サイズ・位置・回転・混合の鋭さを追加。シーン保存・Undo/Redoに対応。TriplanarはUVのないSDFメッシュへ色・法線・ラフネス・Metallic・AOを投影する。検証用サンプルを `examples/triplanar/` に追加。
 

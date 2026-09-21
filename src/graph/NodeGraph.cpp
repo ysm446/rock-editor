@@ -54,7 +54,11 @@ constexpr std::array<PinDefinition, 2> kVolumeTransformPins = {
     {{PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 13> kNodeDefinitions = {{
+constexpr std::array<PinDefinition, 3> kBakePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<NodeDefinition, 15> kNodeDefinitions = {{
+    {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kCrackPins},
+    {NodeKind::MaterialBake, "materialBake", "Material Bake", kBakePins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
     {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
@@ -102,7 +106,8 @@ bool IsMeshNodeKind(NodeKind kind) {
     return kind == NodeKind::Merge || kind == NodeKind::BaseRock || kind == NodeKind::Crack ||
            kind == NodeKind::Fracture || kind == NodeKind::JointSet ||
            kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
-           kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeToMesh;
+           kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeToMesh ||
+           kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -384,6 +389,10 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeSettings{};
     } else if (kind == NodeKind::VolumeTransform) {
         node.settings = geometry::VolumeTransformSettings{};
+    } else if (kind == NodeKind::UvUnwrap) {
+        node.settings = geometry::UvUnwrapSettings{};
+    } else if (kind == NodeKind::MaterialBake) {
+        node.settings = MaterialBakeSettings{};
     } else if (kind == NodeKind::VolumeToMesh) {
         node.settings = geometry::VolumeToMeshSettings{};
     } else if (kind == NodeKind::JointSet) {

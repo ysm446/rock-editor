@@ -64,6 +64,8 @@ rock::StartupOptions ParseCommandLine() {
             options.testDelete = true;
         } else if (argument == L"--select-node" && (i + 1) < argc) {
             options.selectNode = ::_wtoi(argv[++i]);
+        } else if (argument == L"--bake-node" && (i + 1) < argc) {
+            options.bakeNode = ::_wtoi(argv[++i]);
         } else if (argument == L"--import-model" && (i + 1) < argc) {
             options.importModel = argv[++i];
         } else if (argument == L"--gizmo-rotate") {

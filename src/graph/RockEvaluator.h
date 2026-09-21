@@ -20,6 +20,7 @@ struct GeneratedRock {
     std::shared_ptr<const std::vector<geometry::OrientedBox>> boxes;
     std::shared_ptr<const geometry::VolumeGrid> volume;
     GraphId materialSource = 0;
+    GraphId bakeSource = 0;
 };
 struct GeneratedCrack {
     GraphId source = 0;
@@ -62,6 +63,8 @@ struct RockEvaluationCache {
         geometry::VolumeMeshingMethod method = geometry::VolumeMeshingMethod::MarchingTetrahedra;
     };
     std::map<GraphId, Surface> surfaces;
+    struct UvEntry { geometry::Mesh input, output; geometry::UvUnwrapSettings settings; };
+    std::map<GraphId, UvEntry> uvs;
 };
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview = 0,
                             RockEvaluationCache* persistent = nullptr,

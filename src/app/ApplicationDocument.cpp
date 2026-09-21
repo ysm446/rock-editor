@@ -167,6 +167,7 @@ void Application::ApplyDocument(const DocumentSnapshot& snapshot) {
 }
 
 void Application::MarkDocumentChanged() {
+    m_meshGraphRevision = 0; // 材質の変更でもベイクの有効性を再判定する。
     m_layerPreviewDirty = true;
     m_documentDirty = true;
     // マテリアルの変更はモデルの見た目にも効くので、サムネイルを描き直す。

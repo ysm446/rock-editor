@@ -76,6 +76,7 @@ struct StartupOptions {
     // 開発用。モデルのギズモを回転（E）で始める。
     bool gizmoRotate = false;
     bool gizmoScale = false;
+    int bakeNode = 0; // 開発用。通常のベイク実行と同じ処理を予約する。
     // --place-model で置いたモデルの FBX のノードに足す回転（--model-node-rotation <node> <x> <y> <z>）。
     std::vector<renderer::ModelNodeRotation> modelNodeRotations;
     // ノード用のギズモをオンにして、そのノードを選ぶ（--model-node-gizmo <node>）。
@@ -134,6 +135,18 @@ private:
     bool DrawLayerSettings(compositor::MaterialLayer& layer);
     // グラフの変更をメッシュシーンへ反映する。フレームの頭（フレームの外）で呼ぶ。
     void SyncMeshGraph();
+    void DrawUvPanel();
+    void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked);
+    std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input) const;
+    void ProcessPendingBake();
+    graph::GraphId m_pendingBake = 0;
+    std::unordered_map<graph::GraphId,std::string> m_bakeStatus;
+    geometry::Mesh m_uvPreviewMesh;
+    float m_uvZoom = 1.0f;
+    ImVec2 m_uvPan{};
+    bool m_uvCheckerPreview = false;
+    graph::GraphId m_uvLastSelectedNode = 0;
+    graph::GraphId m_uvPreviousPreviewNode = 0, m_uvPreviousPreviewPin = 0;
     graph::RockEvaluationCache m_rockEvaluationCache;
     uint64_t m_meshGraphRevision = 0;
     // 法線を頂点に焼くので、表示設定の切り替えでもメッシュを作り直す。

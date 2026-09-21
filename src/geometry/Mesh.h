@@ -11,8 +11,13 @@ struct Vec3 {
     bool operator==(const Vec3&) const = default;
 };
 struct Mesh {
+    struct Uv { float u = 0, v = 0; bool operator==(const Uv&) const = default; };
     std::vector<Vec3> positions;
     std::vector<std::array<uint32_t, 3>> triangles;
+    // 面の各コーナーのUV。位置の共有頂点は分割せず、形状トポロジーを保つ。
+    std::vector<std::array<Uv, 3>> cornerUvs;
+    std::vector<uint32_t> uvCharts;
+    uint32_t uvWidth = 0, uvHeight = 0;
 };
 struct MeshInfo {
     Vec3 minimum, maximum;

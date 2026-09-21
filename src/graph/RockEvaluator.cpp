@@ -86,6 +86,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvaluationCache* persistent,
                             geometry::VolumeMeshingMethod previewMethod) {
     if (persistent) {
+        std::erase_if(persistent->uvs, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->entries, [&](const auto& item) {
             const auto key = VolumeKey(graph, item.first);
             return !key || *key != item.second.key;
@@ -118,7 +119,48 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 persistent->entries[id] = {*persistentKey, value};
             return value;
         };
-        if (node->kind == NodeKind::RandomBoxes) {
+        if (node->kind == NodeKind::UvUnwrap || node->kind == NodeKind::MaterialBake) {
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!upstream) return finish(Failure(id, "UV / Bake", "Mesh入力を接続してください"));
+            result = evaluate(upstream->id, depth+1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty()) return finish(Failure(id, "UV / Bake", "生成メッシュを接続してください"));
+            if (node->kind == NodeKind::UvUnwrap) {
+                geometry::Mesh combined;
+                for (const auto& rock : result.rocks) {
+                    if (rock.volume || rock.boxes) return finish(Failure(id, "UV Unwrap", "先にVolume to Meshへ接続してください"));
+                    const auto offset = static_cast<uint32_t>(combined.positions.size());
+                    combined.positions.insert(combined.positions.end(), rock.mesh.positions.begin(), rock.mesh.positions.end());
+                    for (auto face : rock.mesh.triangles) { for (auto& i : face) i += offset; combined.triangles.push_back(face); }
+                }
+                const auto* settings = std::get_if<geometry::UvUnwrapSettings>(&node->settings);
+                if (!settings) return finish(Failure(id, "UV Unwrap", "設定がありません"));
+                geometry::Mesh unwrapped;
+                bool hit = false;
+                if (persistent) if (auto found = persistent->uvs.find(id); found != persistent->uvs.end()) {
+                    const auto& entry = found->second;
+                    hit = entry.settings == *settings && entry.input.positions == combined.positions && entry.input.triangles == combined.triangles;
+                    if (hit) unwrapped = entry.output;
+                }
+                if (!hit) {
+                    std::string error;
+                    unwrapped = geometry::UnwrapMesh(combined, *settings, error);
+                    if (!error.empty()) return finish(Failure(id, "UV Unwrap", error));
+                    if (persistent) persistent->uvs[id] = {std::move(combined), unwrapped, *settings};
+                }
+                GeneratedRock rock; rock.source = id; rock.mesh = std::move(unwrapped);
+                result = {}; result.rocks.push_back(std::move(rock));
+            } else {
+                if (result.rocks.size() != 1 || !geometry::HasValidUvs(result.rocks[0].mesh))
+                    return finish(Failure(id, "Material Bake", "UV Unwrapの出力を接続してください"));
+                const auto* surface = graph.FindUpstreamNodeForPin(node->inputs[1].id);
+                if (!surface || surface->kind != NodeKind::Surface)
+                    return finish(Failure(id, "Material Bake", "MaterialにSurfaceを接続してください"));
+                result.rocks[0].source = id;
+                result.rocks[0].materialSource = surface->id;
+                result.rocks[0].bakeSource = id;
+            }
+        } else if (node->kind == NodeKind::RandomBoxes) {
             const auto* settings = std::get_if<geometry::BoxClusterSettings>(&node->settings);
             if (!settings) return finish(Failure(id, "Random Boxes", "設定がありません"));
             std::string error;
@@ -339,7 +381,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (node->kind == NodeKind::MeshOutput && node->inputs.size() > 1) {
                 const auto* surface = graph.FindUpstreamNodeForPin(node->inputs[1].id);
                 if (surface && surface->kind == NodeKind::Surface)
-                    for (auto& rock : result.rocks) rock.materialSource = surface->id;
+                    for (auto& rock : result.rocks) { rock.materialSource = surface->id; rock.bakeSource = 0; }
             }
         }
         return finish(result);

@@ -419,6 +419,9 @@ private:
     float m_tessellationTargetPixels = kPreviewDefaults.tessellationTargetPixels;
     bool m_showReferenceGrid = true;
     bool m_showUvChecker = false;
+    // シーンの材質とは別に保持し、保存データやベイクへ混ぜない。
+    compositor::TextureLibrary m_previewTextures;
+    compositor::TextureId m_uvCheckerTexture = compositor::kNoTexture;
     int m_hoveredMesh = -1;
     std::vector<int> m_selectedMeshes;
     bool m_skyRebuildRequested = false;
