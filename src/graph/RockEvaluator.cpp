@@ -46,9 +46,50 @@ void Append(RockEvaluation& target, const RockEvaluation& source) {
     append(target.cuts, source.cuts);
     target.hasModels |= source.hasModels;
 }
+// 対応する枝を完全な値で比較し、改版番号の巻き戻りにも対応する。
+std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t depth = 0) {
+    const auto* node = graph.FindNode(id);
+    if (!node || depth > 256) return std::nullopt;
+    std::string key;
+    const auto add = [&](const auto& value) {
+        key.append(reinterpret_cast<const char*>(&value), sizeof(value));
+    };
+    add(id);
+    add(node->kind);
+    if (node->kind == NodeKind::RandomBoxes) {
+        const auto* s = std::get_if<geometry::BoxClusterSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->count); add(s->size); add(s->sizeVariation); add(s->spread); add(s->rotation); add(s->seed);
+        return key;
+    }
+    if (node->kind == NodeKind::ToVolume) {
+        const auto* s = std::get_if<geometry::VolumeSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->resolution);
+    } else if (node->kind == NodeKind::VolumeTransform) {
+        const auto* s = std::get_if<geometry::VolumeTransformSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->position); add(s->rotationDegrees); add(s->scale);
+    } else if (node->kind != NodeKind::VolumeToMesh) return std::nullopt;
+    const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+    if (!upstream) return std::nullopt;
+    const auto parent = VolumeKey(graph, upstream->id, depth + 1);
+    if (!parent) return std::nullopt;
+    key += *parent;
+    return key;
+}
 }  // namespace
-RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
-    // 評価一回の中で共有上流を再利用する。永続的な枝キャッシュは P6。
+RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvaluationCache* persistent) {
+    if (persistent) {
+        std::erase_if(persistent->entries, [&](const auto& item) {
+            const auto key = VolumeKey(graph, item.first);
+            return !key || *key != item.second.key;
+        });
+        std::erase_if(persistent->surfaces, [&](const auto& item) {
+            return !persistent->entries.contains(item.first);
+        });
+    }
+    // 評価一回の中では、他の種類の共有上流も再利用する。
     std::map<GraphId, RockEvaluation> cache;
     std::unordered_set<GraphId> active;
     std::function<RockEvaluation(GraphId, size_t)> evaluate;
@@ -58,11 +99,18 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             return Failure(id, "Graph", "循環または評価深さの上限を検出しました");
         const auto* node = graph.FindNode(id);
         if (!node) return {};
+        const auto persistentKey = persistent ? VolumeKey(graph, id) : std::nullopt;
+        if (persistentKey) {
+            const auto found = persistent->entries.find(id);
+            if (found != persistent->entries.end()) return found->second.result;
+        }
         active.insert(id);
         RockEvaluation result;
         const auto finish = [&](RockEvaluation value) {
             active.erase(id);
             cache[id] = value;
+            if (persistentKey && value.error.empty())
+                persistent->entries[id] = {*persistentKey, value};
             return value;
         };
         if (node->kind == NodeKind::RandomBoxes) {
@@ -283,13 +331,21 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
         return finish(result);
     };
     // Volume の外皮は描画へ渡す最後にだけ抽出する。下流の評価にはグリッドを渡す。
-    const auto preparePreview = [](RockEvaluation result) {
+    const auto preparePreview = [persistent](RockEvaluation result) {
         if (!result.error.empty()) return result;
         for (auto& rock : result.rocks) {
             if (!rock.volume) continue;
+            if (persistent) {
+                const auto found = persistent->surfaces.find(rock.source);
+                if (found != persistent->surfaces.end() && found->second.volume == rock.volume) {
+                    rock.mesh = found->second.mesh;
+                    continue;
+                }
+            }
             std::string error;
             rock.mesh = geometry::VolumeSurface(*rock.volume, error);
             if (!error.empty()) return Failure(rock.source, "Volume Preview", error);
+            if (persistent) persistent->surfaces[rock.source] = {rock.volume, rock.mesh};
         }
         return result;
     };

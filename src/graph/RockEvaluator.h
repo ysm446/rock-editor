@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <memory>
+#include <map>
 
 #include "crack/PartialCut.h"
 #include "geometry/Mesh.h"
@@ -50,5 +51,16 @@ struct RockEvaluation {
     std::vector<GeneratedRock> rocks;
     std::string error;
 };
-RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview = 0);
+// ボリューム系の枝を設定と接続の内容で再利用する。アプリ単位で保持する。
+struct RockEvaluationCache {
+    struct Entry { std::string key; RockEvaluation result; };
+    std::map<GraphId, Entry> entries;
+    struct Surface {
+        std::shared_ptr<const geometry::VolumeGrid> volume;
+        geometry::Mesh mesh;
+    };
+    std::map<GraphId, Surface> surfaces;
+};
+RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview = 0,
+                            RockEvaluationCache* persistent = nullptr);
 }  // namespace rock::graph

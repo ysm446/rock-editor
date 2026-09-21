@@ -4,6 +4,7 @@
 #include "app/UndoHistory.h"
 #include <cmath>
 #include <limits>
+#include <chrono>
 
 void RunVolumeTests() {
     using namespace rock;
@@ -269,8 +270,49 @@ void RunVolumeTests() {
           "非有限の移動量を拒否");
     Check(geometry::TransformVolume({}, {}, error).values.empty() && !error.empty(), "空の格子を拒否");
     const auto dense = geometry::BoxesToVolume(unitCube, {96}, error);
-    Check(geometry::TransformVolume(dense, spin, error).values.empty() && !error.empty(),
-          "回転で格子上限を超える場合は解像度を下げるよう診断");
+    for (const std::array<float, 3> rotation : {
+             std::array<float, 3>{0, 0, 0}, {0, 1, 0}, {0, 15, 0}, {0, 45, 0}, {0, 90, 0},
+             {0, -45, 0}, {0, 180, 0}, {0, 360, 0}, {35, 45, 30}}) {
+        auto denseSettings = spin;
+        denseSettings.rotationDegrees = rotation;
+        const auto rotated = geometry::TransformVolume(dense, denseSettings, error);
+        geometry::MeshInfo denseInfo;
+        Check(error.empty() && measure(rotated, denseInfo) &&
+                  std::abs(denseInfo.volume - 8) < .4 && rotated.spacing == dense.spacing,
+              "最大解像度の回転でも精度と閉包・体積を保って表面を抽出");
+    }
+    auto excessive = dense;
+    excessive.dimensions[0] = 193;
+    Check(geometry::TransformVolume(excessive, spin, error).values.empty() && !error.empty(),
+          "上限を超える入力グリッドは確保前に拒否");
+    geometry::VolumeGrid wide;
+    wide.dimensions = {192, 2, 192};
+    wide.spacing = 1;
+    wide.values.resize(size_t(192) * 2 * 192, 1);
+    Check(geometry::TransformVolume(wide, spin, error).values.empty() && !error.empty(),
+          "回転後の格子が新しい上限を超える場合も確保前に拒否");
+
+    geometry::BoxClusterSettings regressionBoxes;
+    regressionBoxes.count = 11;
+    regressionBoxes.size = {1, 2.4000000953674316f, 1.7999999523162842f};
+    regressionBoxes.rotation = 73.60299682617188f;
+    regressionBoxes.seed = 285425088;
+    const auto regressionGrid = geometry::BoxesToVolume(
+        geometry::MakeBoxCluster(regressionBoxes, error), {64}, error);
+    for (const std::array<float, 3> rotation : {
+             std::array<float, 3>{0, 15, 0}, {29.097206f, -166.721252f, -114.63147f},
+             {29.097206f, -151.721252f, -114.63147f}}) {
+        geometry::VolumeTransformSettings settings;
+        settings.position[0] = .2700706124f;
+        settings.rotationDegrees = rotation;
+        const auto rotated = geometry::TransformVolume(regressionGrid, settings, error);
+        geometry::MeshInfo regressionInfo;
+        const auto regressionMesh = error.empty() ? geometry::VolumeSurface(rotated, error) : geometry::Mesh{};
+        Check(error.empty() && geometry::InspectMesh(regressionMesh, regressionInfo) && regressionInfo.closed,
+              "保存済みシーンの直方体設定でY15度と複合回転を表示可能");
+        std::printf("  Rotation regression dimensions: %u x %u x %u, error: %s\n",
+                    rotated.dimensions[0], rotated.dimensions[1], rotated.dimensions[2], error.c_str());
+    }
 
     tests::Section("Volume Transform の型・評価・Undo");
     graph::NodeGraph moveGraph;
@@ -335,4 +377,60 @@ void RunVolumeTests() {
     Check(std::get<geometry::VolumeTransformSettings>(moveGraph.FindNode(transform)->settings).position[0] ==
               5,
           "Redo で移動量を復元");
+
+    tests::Section("ボリュームの永続キャッシュ");
+    graph::RockEvaluationCache cache;
+    const auto compare = [&]() {
+        const auto cached = graph::EvaluateRocks(moveGraph, 0, &cache);
+        const auto fresh = graph::EvaluateRocks(moveGraph);
+        return cached.error == fresh.error && cached.rocks.size() == fresh.rocks.size() &&
+               (cached.rocks.empty() ||
+                (cached.rocks[0].mesh.positions == fresh.rocks[0].mesh.positions &&
+                 cached.rocks[0].mesh.triangles == fresh.rocks[0].mesh.triangles));
+    };
+    Check(compare(), "初回のキャッシュ評価と通常評価が一致");
+    const auto originalVolume = cache.entries.at(toVolume).result.rocks[0].volume;
+    auto& moving = std::get<geometry::VolumeTransformSettings>(moveGraph.FindMutableNode(transform)->settings);
+    moving.rotationDegrees[1] = 13;
+    Check(compare() && cache.entries.at(toVolume).result.rocks[0].volume == originalVolume,
+          "回転時に上流SDFを再利用し、出力は通常評価と一致");
+    moving.position[0] = 2;
+    Check(compare(), "移動後のキャッシュ出力が通常評価と一致");
+    std::get<geometry::VolumeSettings>(moveGraph.FindMutableNode(toVolume)->settings).resolution = 28;
+    Check(compare() && cache.entries.at(toVolume).result.rocks[0].volume != originalVolume,
+          "解像度変更で下流を含めてキャッシュを更新");
+    ++std::get<geometry::BoxClusterSettings>(moveGraph.FindMutableNode(boxSource)->settings).seed;
+    Check(compare(), "Seed変更を下流に反映");
+    moveGraph.Replace(beforeMove.graphNodes, beforeMove.graphLinks);
+    Check(compare(), "Undo相当のグラフ復元で古いキャッシュを使用しない");
+    Check(moveGraph.CreateLink(out(toVolume), in(toMesh)) && compare(),
+          "接続変更で変換を迂回した出力も一致");
+    Check(moveGraph.CreateLink(out(transform), in(toMesh)), "変換の接続を復元");
+    const auto direct = graph::EvaluateRocks(moveGraph, transform, &cache);
+    const auto directAgain = graph::EvaluateRocks(moveGraph, transform, &cache);
+    Check(direct.error.empty() && directAgain.error.empty() &&
+              direct.rocks[0].volume == directAgain.rocks[0].volume &&
+              direct.rocks[0].mesh.positions == directAgain.rocks[0].mesh.positions,
+          "Volume直接プレビューもSDFと外皮を再利用");
+    moveGraph.DeleteNode(boxSource);
+    Check(compare() && !cache.entries.contains(boxSource) && !cache.entries.contains(toVolume),
+          "上流削除時はキャッシュを破棄して入力エラーを返す");
+
+    // UI/GPU転送を含まない、ドラッグに相当する連続更新の比較。時間は合否条件にしない。
+    moveGraph.Replace(beforeMove.graphNodes, beforeMove.graphLinks);
+    std::get<geometry::VolumeSettings>(moveGraph.FindMutableNode(toVolume)->settings).resolution = 48;
+    const auto measureDrag = [&](graph::RockEvaluationCache* retained) {
+        graph::EvaluateRocks(moveGraph, 0, retained);
+        const auto start = std::chrono::steady_clock::now();
+        for (int step = 0; step < 6; ++step) {
+            auto& settings = std::get<geometry::VolumeTransformSettings>(moveGraph.FindMutableNode(transform)->settings);
+            settings.position[0] = step * .1f;
+            settings.rotationDegrees[1] = step * 2.f;
+            const auto result = graph::EvaluateRocks(moveGraph, 0, retained);
+            Check(result.error.empty(), "連続操作の評価成功");
+        }
+        return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() / 6;
+    };
+    const auto freshMs = measureDrag(nullptr), cachedMs = measureDrag(&cache);
+    std::printf("  Volume drag CPU (48 cells): fresh %.2f ms, cached %.2f ms per update\n", freshMs, cachedMs);
 }

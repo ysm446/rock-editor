@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <map>
+#include <unordered_map>
 #include <numeric>
 
 namespace rock::geometry {
@@ -49,7 +49,9 @@ bool InspectMesh(const Mesh& mesh, MeshInfo& info) {
         return i;
     };
     std::vector<bool> used(mesh.positions.size());
-    std::map<std::pair<uint32_t, uint32_t>, std::pair<int, int>> edges;
+    // 頂点IDの組を64bitに詰めて照合する。辺の順序は検証結果に影響しない。
+    std::unordered_map<uint64_t, std::pair<int, int>> edges;
+    edges.reserve(mesh.triangles.size() * 3 / 2);
     for (const auto& f : mesh.triangles) {
         for (auto i : f)
             if (i >= mesh.positions.size()) return false;
@@ -68,7 +70,8 @@ bool InspectMesh(const Mesh& mesh, MeshInfo& info) {
             const auto u = f[k], v = f[(k + 1) % 3];
             used[u] = true;
             parent[root(u)] = root(v);
-            auto& edge = edges[{std::min(u, v), std::max(u, v)}];
+            const auto key = (uint64_t(std::min(u, v)) << 32) | std::max(u, v);
+            auto& edge = edges[key];
             ++edge.first;
             edge.second += u < v ? 1 : -1;
         }

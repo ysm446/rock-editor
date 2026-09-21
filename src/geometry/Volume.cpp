@@ -8,10 +8,14 @@
 
 namespace rock::geometry {
 namespace {
-// 格子として読める最低条件。VolumeSurface の上限（各軸102）に合わせる。
+// To Volume の最大解像度96に、余白と任意方向への回転による外接箱の拡大を許容する。
+// 密な配列のため上限は残す（最大約28MiBの距離データ）。
+constexpr uint32_t kMaxGridPointsPerAxis = 192;
+// 格子生成・変換・表面抽出で同じ上限を使う。
 bool ValidGrid(const VolumeGrid& g) {
     const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];
-    return nx >= 2 && ny >= 2 && nz >= 2 && nx <= 102 && ny <= 102 && nz <= 102 &&
+    return nx >= 2 && ny >= 2 && nz >= 2 && nx <= kMaxGridPointsPerAxis &&
+           ny <= kMaxGridPointsPerAxis && nz <= kMaxGridPointsPerAxis &&
            g.values.size() == size_t(nx) * ny * nz && std::isfinite(g.spacing) && g.spacing > 0 &&
            std::isfinite(g.origin.x) && std::isfinite(g.origin.y) && std::isfinite(g.origin.z) &&
            std::none_of(g.values.begin(), g.values.end(), [](float v) { return !std::isfinite(v); });
@@ -165,8 +169,8 @@ VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s
     const float extent[3] = {maximum.x - minimum.x, maximum.y - minimum.y, maximum.z - minimum.z};
     for (int i = 0; i < 3; ++i) {
         const double cells = std::ceil(extent[i] / out.spacing) + 5;
-        if (!std::isfinite(cells) || cells < 2 || cells > 102) {
-            error = "回転で格子が上限を超えます。上流の To Volume の解像度を下げてください";
+        if (!std::isfinite(cells) || cells < 2 || cells > kMaxGridPointsPerAxis) {
+            error = "変換後の格子が各軸192点の上限を超えます。連続する Volume Transform をまとめるか、上流の解像度を下げてください";
             return {};
         }
         out.dimensions[i] = static_cast<uint32_t>(cells);

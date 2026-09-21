@@ -214,7 +214,7 @@ void Application::SyncMeshGraph() {
         previewMeshNode = node->id;
     }
     if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode) return;
-    const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode);
+    const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache);
     renderer::MeshScene scene;
     m_rockMeshReferences.clear();
     for (const auto& rock : evaluated.rocks) {

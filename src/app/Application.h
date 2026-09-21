@@ -134,6 +134,7 @@ private:
     bool DrawLayerSettings(compositor::MaterialLayer& layer);
     // グラフの変更をメッシュシーンへ反映する。フレームの頭（フレームの外）で呼ぶ。
     void SyncMeshGraph();
+    graph::RockEvaluationCache m_rockEvaluationCache;
     uint64_t m_meshGraphRevision = 0;
     // 直近にメッシュシーンへ出した「途中のメッシュノード」。0 なら Mesh Output の鎖。
     graph::GraphId m_meshGraphPreviewNode = 0;

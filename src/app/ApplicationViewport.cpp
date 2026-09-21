@@ -243,6 +243,23 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
         ImGui::EndPopup();
     }
 
+    // ノード設定欄が閉じていても、生成できない理由をビューポートで確認できるようにする。
+    if (!m_meshGraphError.empty()) {
+        const float padding = ui::Scaled(8.0f);
+        const float wrap = std::max(1.0f, viewportMax.x - viewportMin.x - 2 * (margin + padding));
+        const ImVec2 size = ImGui::CalcTextSize(m_meshGraphError.c_str(), nullptr, false, wrap);
+        const ImVec2 minimum(viewportMin.x + margin,
+                             std::max(viewportMin.y + margin, viewportMax.y - margin - size.y - padding * 2));
+        const ImVec2 maximum(minimum.x + size.x + padding * 2, minimum.y + size.y + padding * 2);
+        auto* draw = ImGui::GetWindowDrawList();
+        draw->PushClipRect(viewportMin, viewportMax, true);
+        draw->AddRectFilled(minimum, maximum, IM_COL32(30, 12, 10, 235), ui::Scaled(4.0f));
+        draw->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
+                      ImVec2(minimum.x + padding, minimum.y + padding),
+                      ui::WarnColor(), m_meshGraphError.c_str(), nullptr, wrap);
+        draw->PopClipRect();
+    }
+
     // --- FPS と描画の量 ------------------------------------------------------
     // **右上へ置く。** 左上は表示モードの切り替えとライトの数値で埋まっている。
     // ボタンではなく描き込みにする。押すものではないので、枠を持たせない。
