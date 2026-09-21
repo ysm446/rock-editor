@@ -5,6 +5,11 @@
 #include <algorithm>
 #include <unordered_set>
 namespace rock::geometry {
+int NormalizeUvResolution(int resolution) {
+    int result = 128;
+    while (result < resolution && result < 4096) result *= 2;
+    return result;
+}
 namespace {
 // 投影が折り重なる細い面を検出する。画素中心だけでなく面積のある交差を調べる。
 std::unordered_set<size_t> OverlappingFaces(const Mesh &mesh) {
@@ -81,7 +86,11 @@ Mesh UnwrapMesh(const Mesh &input, const UvUnwrapSettings &s, std::string &error
         error = "自動展開は50万三角形までです。上流の解像度を下げてください";
         return {};
     }
-    if (s.resolution < 128 || s.resolution > 4096 || s.padding < 1 || s.padding > 32 || s.quality < 1 ||
+    if (s.resolution != NormalizeUvResolution(s.resolution)) {
+        error = "UV解像度は128〜4096の2のべき乗を指定してください";
+        return {};
+    }
+    if (s.padding < 1 || s.padding > 32 || s.quality < 1 ||
         s.quality > 4) {
         error = "UV展開の解像度・余白・品質が範囲外です";
         return {};

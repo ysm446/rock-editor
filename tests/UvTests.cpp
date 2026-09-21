@@ -10,8 +10,17 @@
 void RunUvTests() {
     using namespace rock;
     tests::Section("自動UV展開");
+    tests::Check(geometry::NormalizeUvResolution(128) == 128 &&
+                     geometry::NormalizeUvResolution(512) == 512 &&
+                     geometry::NormalizeUvResolution(4096) == 4096 &&
+                     geometry::NormalizeUvResolution(513) == 1024 &&
+                     geometry::NormalizeUvResolution(0) == 128 &&
+                     geometry::NormalizeUvResolution(2147483647) == 4096,
+                 "旧解像度を範囲内の2のべき乗へ切り上げる");
     auto box = geometry::MakeBox({2, 3, 4});
     std::string error;
+    geometry::UnwrapMesh(box, {300, 4, 1}, error);
+    tests::Check(!error.empty(), "2のべき乗でない解像度を直接評価では拒否する");
     auto uv = geometry::UnwrapMesh(box, {512, 4, 1}, error);
     tests::Check(error.empty() && geometry::HasValidUvs(uv), "Boxを0〜1のUVへ展開");
     tests::Check(uv.positions == box.positions && uv.triangles == box.triangles,

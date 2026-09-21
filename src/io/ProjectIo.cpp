@@ -735,7 +735,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
             } else if (created.kind == graph::NodeKind::UvUnwrap) {
                 geometry::UvUnwrapSettings settings;
                 if (const json* v = FindMember(item, "uvUnwrap"); v && v->is_object()) {
-                    settings.resolution = ReadInt(*v, "resolution", 1024);
+                    settings.resolution = geometry::NormalizeUvResolution(ReadInt(*v, "resolution", 1024));
                     settings.padding = ReadInt(*v, "padding", 4);
                     settings.quality = ReadInt(*v, "quality", 1);
                 }

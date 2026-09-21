@@ -1259,7 +1259,13 @@ void Application::DrawGraphPanel() {
     } else if (auto* uvSettings = std::get_if<geometry::UvUnwrapSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("uvUnwrapRows")) {
-            changed |= ui::PropertyInt("テクスチャ解像度", &uvSettings->resolution, 128, 4096, 1024);
+            const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+            int resolutionIndex = 0;
+            while ((128 << resolutionIndex) < uvSettings->resolution && resolutionIndex < 5) ++resolutionIndex;
+            if (ui::PropertyCombo("テクスチャ解像度", &resolutionIndex, resolutions, 6, 3)) {
+                uvSettings->resolution = 128 << resolutionIndex;
+                changed = true;
+            }
             changed |= ui::PropertyInt("余白 (px)", &uvSettings->padding, 1, 32, 4);
             changed |= ui::PropertyInt("品質", &uvSettings->quality, 1, 4, 1);
             ui::EndPropertyTable();
