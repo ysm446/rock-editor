@@ -240,25 +240,14 @@ void Application::SyncMeshGraph() {
         if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading);
-        const DirectX::XMFLOAT3 colors[] = {{0.28f, 0.39f, 0.48f}, {0.48f, 0.34f, 0.24f},
-                                            {0.35f, 0.46f, 0.32f}, {0.49f, 0.43f, 0.29f},
-                                            {0.40f, 0.33f, 0.46f}, {0.30f, 0.46f, 0.45f}};
-        mesh.material.baseColor =
-            rock.chunk > 0 ? colors[(rock.chunk - 1) % 6] : DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
-        m_rockMeshReferences.push_back({rock.source, rock.chunk, rock.pivot, rock.key});
+        mesh.material.baseColor = DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
+        m_rockMeshReferences.push_back({rock.source});
         mesh.material.roughness = 0.8f;
         ApplyRockMaterial(mesh, rock, true);
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;
-    m_cutReports = evaluated.cuts;
-    m_fractureReports = evaluated.fractures;
     m_meshHighlight = MeshHighlightState{};
-    for (size_t i = 0; i < m_rockMeshReferences.size(); ++i) {
-        const auto& ref = m_rockMeshReferences[i];
-        if (ref.source == m_selectedGraphNode && ref.chunk == m_selectedChunk)
-            m_meshHighlight.selected.push_back(static_cast<int>(i));
-    }
     if (scene.meshes.empty()) {
         if (m_meshGraphActive) m_renderer.ClearMeshScene(m_device);
         m_meshGraphActive = false;
@@ -269,21 +258,6 @@ void Application::SyncMeshGraph() {
             m_meshGraphError = "岩メッシュを描画へ転送できませんでした";
         }
     }
-    std::vector<renderer::OverlayLineSet> guides;
-    if (m_meshGraphActive && m_meshGraphError.empty()) {
-        for (const auto& crack : evaluated.cracks) {
-            auto generated = renderer::MakeCrackGuides(crack.patch);
-            for (auto& guide : generated) guides.push_back(std::move(guide));
-        }
-    }
-    if (m_meshGraphActive && m_meshGraphError.empty()) {
-        for (const auto& report : evaluated.cuts)
-            if (report.bridge && report.showBridge) {
-                auto generated = renderer::MakeBridgeGuides(*report.bridge);
-                for (auto& guide : generated) guides.push_back(std::move(guide));
-            }
-    }
-    m_renderer.SetCrackGuides(std::move(guides));
     m_meshGraphRevision = m_graph.Revision();
     m_meshGraphPreviewNode = previewMeshNode;
 }
@@ -792,9 +766,6 @@ void Application::DrawGraphEditor() {
         // 扱う型ごとに分けて並べる。見出しは出力する型（変換ノードは変換後の型）で選ぶ。
         ImGui::TextDisabled("メッシュ（ポリゴン）");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
-        addNodeMenuItem(graph::NodeKind::JointSet, "Joint Set — 方向と間隔を持つ有限パッチ列");
-        addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂と部分切断");
-        addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
         addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
@@ -960,176 +931,6 @@ void Application::DrawGraphPanel() {
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
                      "ピンをドラッグして接続、Ctrl+C / Ctrl+V でコピー");
-    } else if (auto* fracture = std::get_if<fracture::FractureSettings>(&selected->settings)) {
-        auto edited = *fracture;
-        const float zero[3] = {0, 0, 0};
-        bool changed = false;
-        if (ui::BeginPropertyTable("fractureRows")) {
-            changed |= ui::PropertyBool("Joint Set で分割", &edited.useJointSets, false);
-            if (!edited.useJointSets) {
-                changed |= ui::PropertyFloat3Input("平面中心 (m)", edited.center.data(), zero) != 0;
-                changed |= ui::PropertyFloat3Input("平面回転 (度)", edited.rotationDegrees.data(), zero) != 0;
-            }
-            ui::EndPropertyTable();
-        }
-        if (edited.useJointSets)
-            ui::HintText(
-                "上流の全 Joint Set "
-                "の中心・向きを無限平面として使い、岩全体を完全分割します。半幅・Depth・Persistence・Aperture"
-                " とガイド表示は分割に影響しません。最大32平面・128片です。");
-        else
-            ui::HintText(
-                "平面で岩全体を2片に分けます。初期の法線は +Z。Crack の有限範囲や深さは延長しません。");
-        size_t connections = 0;
-        double area = 0;
-        for (const auto& report : m_fractureReports)
-            if (report.source == selected->id) {
-                ++connections;
-                area += report.sectionArea;
-            }
-        if (connections && ui::BeginPropertyTable("fractureReportRows")) {
-            ui::PropertyValue("共有断面数", "%d", static_cast<int>(connections));
-            ui::PropertyValue("合計面積 (m²)", "%.4f", area);
-            ui::EndPropertyTable();
-        }
-        const auto selectChunk = [&](int chunk) {
-            m_selectedChunk = chunk;
-            m_meshHighlight.selected.clear();
-            for (size_t i = 0; i < m_rockMeshReferences.size(); ++i)
-                if (m_rockMeshReferences[i].source == selected->id && m_rockMeshReferences[i].chunk == chunk)
-                    m_meshHighlight.selected.push_back(static_cast<int>(i));
-        };
-        const RockMeshReference* chosen = nullptr;
-        std::vector<const RockMeshReference*> chunks;
-        for (const auto& ref : m_rockMeshReferences)
-            if (ref.source == selected->id && ref.chunk > 0 && (edited.useJointSets == !ref.key.empty())) {
-                chunks.push_back(&ref);
-                if (ref.chunk == m_selectedChunk) chosen = &ref;
-            }
-        if (!chosen && !chunks.empty()) {
-            chosen = chunks.front();
-            selectChunk(chosen->chunk);
-        }
-        if (chosen) {
-            const std::string label =
-                "Chunk " + std::to_string(chosen->chunk) + " / " + std::to_string(chunks.size());
-            if (ImGui::BeginCombo("片の選択", label.c_str())) {
-                for (const auto* ref : chunks) {
-                    const std::string name = "Chunk " + std::to_string(ref->chunk);
-                    if (ImGui::Selectable(name.c_str(), ref->chunk == m_selectedChunk)) {
-                        selectChunk(ref->chunk);
-                        chosen = ref;
-                    }
-                }
-                ImGui::EndCombo();
-            }
-            auto& chunk =
-                edited.useJointSets ? edited.jointChunks[chosen->key] : edited.chunks[chosen->chunk - 1];
-            if (ui::BeginPropertyTable("chunkRows")) {
-                ui::PropertyValue("Chunk ID", "%d:%d", selected->id, chosen->chunk);
-                changed |= ui::PropertyBool("Locked", &chunk.locked, true);
-                ImGui::BeginDisabled(chunk.locked);
-                changed |= ui::PropertyFloat3Input("移動 (m)", chunk.position.data(), zero) != 0;
-                changed |= ui::PropertyFloat3Input("回転 (度)", chunk.rotationDegrees.data(), zero) != 0;
-                ImGui::EndDisabled();
-                ui::EndPropertyTable();
-            }
-        }
-        ui::HintText(
-            "Locked は現在の配置を固定します。解除すると個別に移動・回転できます。W: 移動 / E: "
-            "回転。回転中心は分割直後の各片の外接箱中心です。");
-        if (changed) {
-            *fracture = edited;
-            m_graph.MarkDirty();
-            MarkDocumentChanged();
-        }
-    } else if (auto* joint = std::get_if<crack::JointSetSettings>(&selected->settings)) {
-        auto edited = *joint;
-        const float zero[3] = {0, 0, 0};
-        bool changed = false;
-        if (ui::BeginPropertyTable("jointRows")) {
-            changed |= ui::PropertyBool("ガイド表示", &edited.showGuide, true);
-            changed |= ui::PropertyFloat3Input("中心 (m)", edited.center.data(), zero) != 0;
-            changed |= ui::PropertyFloat3Input("回転 (度)", edited.rotationDegrees.data(), zero) != 0;
-            changed |= ui::PropertyFloat("間隔 (m)", &edited.spacing, 0.001f, 1000, 0.6f);
-            changed |= ui::PropertyFloat("位置ばらつき", &edited.spacingVariance, 0, 0.49f, 0.15f);
-            changed |= ui::PropertyFloat("角度ばらつき (度)", &edited.angleVariance, 0, 30, 5);
-            changed |= ui::PropertyFloat("オフセット (m)", &edited.offset, -10000, 10000, 0);
-            changed |= ui::PropertyInt("本数", &edited.count, 1, 64, 3);
-            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 0);
-            changed |= ui::PropertyFloat("半幅 U (m)", &edited.extentU, 0.001f, 1000, 1.2f);
-            changed |= ui::PropertyFloat("半幅 V (m)", &edited.extentV, 0.001f, 1000, 1.2f);
-            changed |= ui::PropertyFloat("Depth (m)", &edited.depth, 0, 2000, 1.6f);
-            changed |= ui::PropertyFloat("Persistence", &edited.persistence, 0, 1, 0.6f);
-            changed |= ui::PropertyFloat("Aperture (m)", &edited.aperture, 0, 100, 0.02f);
-            ui::EndPropertyTable();
-        }
-        ui::HintText(
-            "有限パッチ列のガイドです。母岩はまだ切断しません。Joint Set "
-            "を直列につなぐと複数方向を重ねられます。");
-        ui::HintText(
-            "初期の法線は +Z。位置ばらつきは間隔に対する各中心のずれ、角度ばらつきはローカル U/V "
-            "軸ごとの傾き上限です。");
-        if (changed) {
-            *joint = edited;
-            m_graph.MarkDirty();
-            MarkDocumentChanged();
-        }
-    } else if (auto* crack = std::get_if<crack::CrackSettings>(&selected->settings)) {
-        auto edited = *crack;
-        const float zero[3] = {0, 0, 0};
-        bool changed = false;
-        if (ui::BeginPropertyTable("crackRows")) {
-            changed |= ui::PropertyBool("部分切断", &edited.applyCut, false);
-            changed |= ui::PropertyBool("Mesh 有限溝", &edited.meshCut, false);
-            changed |= ui::PropertyBool("ガイド表示", &edited.showGuide, true);
-            ImGui::BeginDisabled(edited.meshCut);
-            changed |= ui::PropertyBool("Bridge 表示", &edited.showBridge, true);
-            ImGui::EndDisabled();
-            changed |= ui::PropertyFloat3Input("中心 (m)", edited.center.data(), zero) != 0;
-            changed |= ui::PropertyFloat3Input("回転 (度)", edited.rotationDegrees.data(), zero) != 0;
-            changed |= ui::PropertyFloat("半幅 U (m)", &edited.extentU, 0.001f, 1000, 1.2f);
-            changed |= ui::PropertyFloat("半幅 V (m)", &edited.extentV, 0.001f, 1000, 1.2f);
-            changed |= ui::PropertyFloat("Depth (m)", &edited.depth, 0, 2000, 1.6f);
-            changed |= ui::PropertyFloat("Persistence", &edited.persistence, 0, 1, 0.6f);
-            changed |= ui::PropertyFloat("Aperture (m)", &edited.aperture, 0, 100, 0.02f);
-            crack::CrackPatch patch;
-            std::string error;
-            if (crack::BuildCrackPatch(edited, patch, error))
-                ui::PropertyValue("到達深さ (m)", "%.3f", patch.effectiveDepth);
-            ui::EndPropertyTable();
-        }
-        if (edited.applyCut) {
-            if (edited.meshCut)
-                ui::HintText(
-                    "曲面・斜め方向に1回の溝を作ります。U 半幅で長さを指定し、+V "
-                    "側の外面を覆う範囲にしてください。深さを抑えて奥に未破断部を残します。上限4096三角形。Br"
-                    "idge 断面の計測・表示は未対応です。");
-            else
-                ui::HintText(
-                    "Box 専用方式は回転90度単位で、有限長の溝にも対応します。+V "
-                    "端を母岩の外面まで伸ばしてください。");
-            const auto report = std::find_if(m_cutReports.begin(), m_cutReports.end(),
-                                             [&](const auto& value) { return value.source == selected->id; });
-            if (report != m_cutReports.end()) {
-                ui::HintText("%s", report->status.c_str());
-                if (report->bridge && ui::BeginPropertyTable("bridgeRows")) {
-                    ui::PropertyValue("切込深さ (m)", "%.4f", report->penetration);
-                    ui::PropertyValue("未破断厚 (m)", "%.4f", report->bridge->thickness);
-                    ui::PropertyValue("未破断面積 (m²)", "%.4f", report->bridge->area);
-                    ui::EndPropertyTable();
-                }
-            }
-        } else
-            ui::HintText("ガイド表示のみ。部分切断をオンにすると実際の切り込みを作ります。");
-        ui::HintText(
-            "青: 候補 / 橙: 到達範囲 / 緑: 未破断部。形状確認時はガイドと Bridge 表示をオフにできます。");
-        ui::HintText("+V 端から -V へ、min(Depth, V 全幅) × Persistence だけ進みます。");
-        if (changed) {
-            *crack = edited;
-            m_graph.MarkDirty();
-            MarkDocumentChanged();
-        }
     } else if (auto* boxes = std::get_if<geometry::BoxClusterSettings>(&selected->settings)) {
         auto edited = *boxes;
         bool changed = false;
@@ -1220,9 +1021,7 @@ void Application::DrawGraphPanel() {
         ui::HintText(
             "原点中心の母岩。寸法はノイズを加える前の大きさです。ノイズ強度は半径に対する変位率、細かさを上げ"
             "ると細かな凹凸になります。");
-        ui::HintText(
-            "Seed はノイズがあるときに形を変えます。曲面の部分切断は Crack の Mesh 有限溝、完全分割は "
-            "Fracture で分割できます。");
+        ui::HintText("Seed はノイズがあるときに形を変えます。");
         if (changed) {
             *rock = edited;
             m_graph.MarkDirty();

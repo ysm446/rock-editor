@@ -22,7 +22,7 @@ struct VolumeGrid {
     }
 };
 // Volume Transform。倍率 → 回転 → 平行移動の順に、原点まわりで動かす。
-// 回転は右手系 Z → X → Y、度（Crack / Model と同じ規約）。
+// 回転は右手系 Z → X → Y、度（Model と同じ規約）。
 struct VolumeTransformSettings {
     std::array<float, 3> position{0, 0, 0};
     std::array<float, 3> rotationDegrees{0, 0, 0};

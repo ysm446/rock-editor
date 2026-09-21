@@ -2,11 +2,8 @@
 #include "geometry/UvUnwrap.h"
 
 #include "compositor/MaterialLayer.h"
-#include "crack/CrackPatch.h"
-#include "crack/JointSet.h"
 #include "geometry/BaseRock.h"
 #include "geometry/Volume.h"
-#include "fracture/PlaneSplit.h"
 #include "renderer/ModelAsset.h"
 
 #include <array>
@@ -54,9 +51,7 @@ enum class ValueType : uint32_t {
 // 撤去した種類の値は再利用しない。
 enum class NodeKind : uint32_t {
     BaseRock = 34,
-    Crack = 35,
-    Fracture = 36,
-    JointSet = 37,
+    // 35～37 は撤去した Crack / Fracture / Joint Set。
     RandomBoxes = 38,
     ToVolume = 39,
     VolumeToMesh = 40,
@@ -149,8 +144,8 @@ struct CompiledGraph {
 
 // 設定を持たないノード（Mesh Output）は std::monostate。
 using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings,
-                                  TransformNodeSettings, BaseRockNodeSettings, crack::CrackSettings,
-                                  fracture::FractureSettings, crack::JointSetSettings, geometry::BoxClusterSettings, geometry::VolumeSettings,
+                                  TransformNodeSettings, BaseRockNodeSettings,
+                                  geometry::BoxClusterSettings, geometry::VolumeSettings,
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
                                   geometry::UvUnwrapSettings, MaterialBakeSettings, std::monostate>;
 
@@ -265,7 +260,7 @@ const NodeDefinition* FindNodeDefinition(NodeKind kind);
 const NodeDefinition* FindNodeDefinitionByName(std::string_view name);
 // レイヤー設定を持つ種類か（Surface）。
 bool IsLayerNodeKind(NodeKind kind);
-// メッシュの鎖を成す種類か（Base Rock / Crack / Merge）。Mesh Output は含まない。
+// メッシュの鎖を成す種類か（Base Rock / Volume 系 / Merge など）。Mesh Output は含まない。
 // 出力ピンを選ぶと、そのノードまでの鎖がメッシュシーンに出る。
 bool IsMeshNodeKind(NodeKind kind);
 // 選ぶとプレビューの対象になる種類か。

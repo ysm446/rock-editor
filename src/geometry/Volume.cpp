@@ -21,7 +21,7 @@ bool ValidGrid(const VolumeGrid& g) {
            std::isfinite(g.origin.x) && std::isfinite(g.origin.y) && std::isfinite(g.origin.z) &&
            std::none_of(g.values.begin(), g.values.end(), [](float v) { return !std::isfinite(v); });
 }
-// 右手系 Z → X → Y。Crack / Model と同じ向きに回す。
+// 右手系 Z → X → Y。Model と同じ向きに回す。
 Vec3 Rotate(Vec3 p, const std::array<float, 3>& degrees) {
     const float x = degrees[0] * std::numbers::pi_v<float> / 180;
     const float y = degrees[1] * std::numbers::pi_v<float> / 180;

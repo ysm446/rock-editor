@@ -108,13 +108,6 @@ set(rock_sources
     src/app/UndoHistory.h
     src/core/Log.cpp
     src/core/Log.h
-    src/crack/CrackPatch.cpp
-    src/crack/JointSet.cpp
-    src/crack/PartialCut.cpp
-    src/crack/MeshCut.cpp
-    src/fracture/PlaneSplit.cpp
-    src/fracture/MultiSplit.cpp
-    src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/geometry/BaseRock.cpp
     src/geometry/BoxCluster.cpp
@@ -201,6 +194,7 @@ set(rock_sources
     src/renderer/PreviewDiagnostics.h
     src/renderer/PreviewRenderer.cpp
     src/renderer/PreviewRenderer.h
+    src/renderer/OverlayLines.h
     src/renderer/SkyLibrary.cpp
     src/renderer/SkyLibrary.h
     src/renderer/SkySphere.cpp
@@ -317,12 +311,6 @@ add_executable(rock_editor_tests
     tests/RockTests.cpp
     tests/BaseRockTests.cpp
     tests/VolumeTests.cpp
-    tests/CrackTests.cpp
-    tests/JointSetTests.cpp
-    tests/PartialCutTests.cpp
-    tests/MeshCutTests.cpp
-    tests/FractureTests.cpp
-    tests/MultiSplitTests.cpp
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
     src/renderer/Camera.cpp
@@ -351,13 +339,6 @@ add_executable(rock_editor_tests
     src/core/FrameLimiter.h
     src/compositor/MaterialStack.cpp
     src/compositor/MaterialStack.h
-    src/crack/CrackPatch.cpp
-    src/crack/JointSet.cpp
-    src/crack/PartialCut.cpp
-    src/crack/MeshCut.cpp
-    src/fracture/PlaneSplit.cpp
-    src/fracture/MultiSplit.cpp
-    src/renderer/CrackGuide.cpp
     src/geometry/Mesh.cpp
     src/geometry/BaseRock.cpp
     src/geometry/BoxCluster.cpp

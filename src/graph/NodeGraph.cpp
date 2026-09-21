@@ -45,7 +45,7 @@ constexpr std::array<PinDefinition, 2> kMeshOutputPins = {{
 
 constexpr std::array<PinDefinition, 1> kBaseRockPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
 
-constexpr std::array<PinDefinition, 2> kCrackPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+constexpr std::array<PinDefinition, 2> kMeshFilterPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 1> kRandomBoxesPins = {{{PinKind::Output, ValueType::Boxes, "Boxes"}}};
 constexpr std::array<PinDefinition, 2> kToVolumePins = {{{PinKind::Input, ValueType::Boxes, "Boxes"},
@@ -56,16 +56,13 @@ constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, Va
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 3> kBakePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 15> kNodeDefinitions = {{
-    {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kCrackPins},
+constexpr std::array<NodeDefinition, 12> kNodeDefinitions = {{
+    {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kMeshFilterPins},
     {NodeKind::MaterialBake, "materialBake", "Material Bake", kBakePins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
     {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
-    {NodeKind::JointSet, "jointSet", "Joint Set", kCrackPins},
-    {NodeKind::Crack, "crack", "Crack", kCrackPins},
-    {NodeKind::Fracture, "fracture", "Fracture", kCrackPins},
     {NodeKind::BaseRock, "baseRock", "Base Rock", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
     {NodeKind::Model, "model", "Model", kModelPins},
@@ -103,8 +100,7 @@ bool IsLayerNodeKind(NodeKind kind) {
 }
 
 bool IsMeshNodeKind(NodeKind kind) {
-    return kind == NodeKind::Merge || kind == NodeKind::BaseRock || kind == NodeKind::Crack ||
-           kind == NodeKind::Fracture || kind == NodeKind::JointSet ||
+    return kind == NodeKind::Merge || kind == NodeKind::BaseRock ||
            kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
            kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake;
@@ -395,14 +391,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = MaterialBakeSettings{};
     } else if (kind == NodeKind::VolumeToMesh) {
         node.settings = geometry::VolumeToMeshSettings{};
-    } else if (kind == NodeKind::JointSet) {
-        node.settings = crack::JointSetSettings{};
-    } else if (kind == NodeKind::Fracture) {
-        node.settings = fracture::FractureSettings{};
     } else if (kind == NodeKind::BaseRock) {
         node.settings = BaseRockNodeSettings{};
-    } else if (kind == NodeKind::Crack) {
-        node.settings = crack::CrackSettings{};
     } else if (IsLayerNodeKind(kind)) {
         node.settings = LayerNodeSettings{};
     } else if (kind == NodeKind::Merge) {
@@ -551,13 +541,13 @@ std::vector<ModelPlacementPath> CollectOutputModels(const NodeGraph& graph, Grap
             transforms.push_back(node->id);
             if (!node->inputs.empty()) self(self, graph.FindUpstreamNodeForPin(node->inputs.front().id), depth + 1);
             transforms.pop_back();
-        } else if (node->kind == NodeKind::Merge || node->kind == NodeKind::Crack) {
+        } else if (node->kind == NodeKind::Merge) {
             for (const Pin& pin : node->inputs) self(self, graph.FindUpstreamNodeForPin(pin.id), depth + 1);
         }
     };
     if (const Node* preview = graph.FindNode(previewNodeId); preview != nullptr) {
         // モデルの系統か Merge ならその枝のモデル、ほかのノードならモデルは出さない。
-        if (IsModelNodeKind(preview->kind) || preview->kind == NodeKind::Merge || preview->kind == NodeKind::Crack)
+        if (IsModelNodeKind(preview->kind) || preview->kind == NodeKind::Merge)
             visit(visit, preview, 0);
         if (IsModelNodeKind(preview->kind) || IsMeshNodeKind(preview->kind)) return result;
     }

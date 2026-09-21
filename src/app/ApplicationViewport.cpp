@@ -143,14 +143,6 @@ void Application::HandleMeshHover(bool itemHovered, const ImVec2& viewportMin, c
             else state.selected.push_back(state.hovered);
         } else {
             state.selected = {state.hovered};
-            if (static_cast<size_t>(state.hovered) < m_rockMeshReferences.size()) {
-                const auto& ref = m_rockMeshReferences[static_cast<size_t>(state.hovered)];
-                if (ref.chunk != 0) {
-                    m_selectedChunk = ref.chunk;
-                    m_selectedGraphNode = ref.source;
-                    m_graphSelectionRequest = ref.source;
-                }
-            }
         }
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) state.selected.clear();

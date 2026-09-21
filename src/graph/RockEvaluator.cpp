@@ -1,6 +1,4 @@
 #include "graph/RockEvaluator.h"
-#include "fracture/MultiSplit.h"
-#include "crack/MeshCut.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,34 +14,10 @@ RockEvaluation Failure(GraphId id, const char* kind, const std::string& message)
 }
 // 同じ生成結果へ合流したときだけ重複を除く。元の Box と加工した枝は別の source を持つ。
 void Append(RockEvaluation& target, const RockEvaluation& source) {
-    const auto append = [](auto& dst, const auto& src) {
-        for (const auto& item : src)
-            if (std::none_of(dst.begin(), dst.end(),
-                             [&](const auto& other) { return other.source == item.source; }))
-                dst.push_back(item);
-    };
     for (const auto& item : source.rocks)
-        if (std::none_of(target.rocks.begin(), target.rocks.end(), [&](const auto& other) {
-                return other.source == item.source && other.chunk == item.chunk;
-            }))
+        if (std::none_of(target.rocks.begin(), target.rocks.end(),
+                         [&](const auto& other) { return other.source == item.source; }))
             target.rocks.push_back(item);
-    for (const auto& item : source.fractures)
-        if (std::none_of(target.fractures.begin(), target.fractures.end(), [&](const auto& other) {
-                return other.source == item.source && other.negative == item.negative &&
-                       other.positive == item.positive;
-            }))
-            target.fractures.push_back(item);
-    for (const auto& item : source.jointPlanes)
-        if (std::none_of(target.jointPlanes.begin(), target.jointPlanes.end(), [&](const auto& other) {
-                return other.source == item.source && other.index == item.index;
-            }))
-            target.jointPlanes.push_back(item);
-    for (const auto& item : source.cracks)
-        if (std::none_of(target.cracks.begin(), target.cracks.end(), [&](const auto& other) {
-                return other.source == item.source && other.index == item.index;
-            }))
-            target.cracks.push_back(item);
-    append(target.cuts, source.cuts);
     target.hasModels |= source.hasModels;
 }
 // 対応する枝を完全な値で比較し、改版番号の巻き戻りにも対応する。
@@ -227,146 +201,10 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             auto mesh = settings ? geometry::MakeBaseRock(*settings, error) : geometry::Mesh{};
             if (!settings || !error.empty())
                 return finish(Failure(id, "Base Rock", settings ? error : "設定がありません"));
-            const auto uncutBox = settings->shape == geometry::BaseShape::Box && settings->noiseStrength == 0
-                                      ? std::optional{settings->size}
-                                      : std::nullopt;
-            result.rocks.push_back({id, std::move(mesh), uncutBox});
-        } else if (node->kind == NodeKind::JointSet) {
-            const auto* settings = std::get_if<crack::JointSetSettings>(&node->settings);
-            const auto* upstream =
-                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
-            if (!settings || !upstream)
-                return finish(Failure(id, "Joint Set", "Mesh 入力を接続してください"));
-            result = evaluate(upstream->id, depth + 1);
-            if (!result.error.empty()) return finish(result);
-            if (result.hasModels || result.rocks.empty())
-                return finish(Failure(id, "Joint Set", "母岩の Mesh を接続してください"));
-            std::vector<crack::CrackPatch> patches;
-            std::string error;
-            if (!crack::BuildJointSet(*settings, patches, error))
-                return finish(Failure(id, "Joint Set", error));
-            for (size_t i = 0; i < patches.size(); ++i) {
-                const GeneratedCrack generated{id, patches[i], static_cast<int>(i)};
-                result.jointPlanes.push_back(generated);
-                if (settings->showGuide) result.cracks.push_back(generated);
-            }
-        } else if (node->kind == NodeKind::Crack) {
-            const auto* settings = std::get_if<crack::CrackSettings>(&node->settings);
-            const auto* upstream =
-                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
-            crack::CrackPatch patch;
-            std::string error;
-            if (!settings || !upstream || !crack::BuildCrackPatch(*settings, patch, error))
-                return finish(Failure(id, "Crack", !upstream ? "Mesh 入力を接続してください" : error));
-            result = evaluate(upstream->id, depth + 1);
-            if (!result.error.empty()) return finish(result);
-            if (settings->applyCut) {
-                if (result.hasModels || result.rocks.size() != 1 || result.rocks.front().chunk != 0)
-                    return finish(Failure(id, "Crack", "部分切断は未分割の岩1個を接続してください"));
-                if (settings->meshCut && std::any_of(result.cuts.begin(), result.cuts.end(),
-                                                     [](const auto& c) { return c.removedVolume > 0; }))
-                    return finish(Failure(
-                        id, "Crack",
-                        "Mesh 部分切断は未加工の母岩への1回だけ対応します。交差する複数亀裂は未対応です"));
-                if (!settings->meshCut && !result.rocks.front().uncutBox)
-                    return finish(Failure(
-                        id, "Crack",
-                        "Box 部分切断は未加工の Box 1個のみ対応します。曲面は Mesh 有限溝を選んでください"));
-                auto cut = settings->meshCut ? crack::CutMesh(result.rocks.front().mesh, *settings)
-                                             : crack::CutBox(*result.rocks.front().uncutBox, *settings);
-                if (!cut.error.empty()) return finish(Failure(id, "Crack", cut.error));
-                if (cut.removedVolume > 0) {
-                    result.rocks.front() = {id, std::move(cut.mesh), std::nullopt};
-                }
-                result.cuts.push_back(
-                    {id, cut.bridge, cut.penetration, cut.removedVolume, settings->showBridge, cut.status});
-            }
-            if (settings->showGuide) result.cracks.push_back({id, patch});
-        } else if (node->kind == NodeKind::Fracture) {
-            const auto* settings = std::get_if<fracture::FractureSettings>(&node->settings);
-            const auto* upstream =
-                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
-            if (!settings || !upstream) return finish(Failure(id, "Fracture", "Mesh 入力を接続してください"));
-            result = evaluate(upstream->id, depth + 1);
-            if (!result.error.empty()) return finish(result);
-            if (result.hasModels || result.rocks.size() != 1 || result.rocks.front().chunk != 0)
-                return finish(
-                    Failure(id, "Fracture", "未分割の岩1個を接続してください。再帰分割は未対応です"));
-            const auto parent = result.rocks.front().source;
-            std::string error;
-            std::vector<fracture::SplitPiece> pieces;
-            if (settings->useJointSets) {
-                std::vector<fracture::SplitPlane> planes;
-                for (const auto& joint : result.jointPlanes)
-                    planes.push_back({joint.patch.center, joint.patch.normal,
-                                      std::to_string(joint.source) + ":" + std::to_string(joint.index)});
-                auto split = fracture::SplitByPlanes(result.rocks.front().mesh, planes);
-                if (!split.error.empty()) return finish(Failure(id, "Fracture", split.error));
-                for (const auto& connection : split.connections) {
-                    const auto& plane = split.planes[connection.plane];
-                    const auto joint = std::find_if(
-                        result.jointPlanes.begin(), result.jointPlanes.end(), [&](const auto& p) {
-                            return std::to_string(p.source) + ":" + std::to_string(p.index) == plane.key;
-                        });
-                    result.fractures.push_back({id, parent, plane.center, plane.normal, connection.area,
-                                                static_cast<int>(connection.negative + 1),
-                                                static_cast<int>(connection.positive + 1), joint->source,
-                                                joint->index});
-                }
-                pieces = std::move(split.pieces);
-            } else {
-                crack::CrackSettings plane;
-                plane.center = settings->center;
-                plane.rotationDegrees = settings->rotationDegrees;
-                crack::CrackPatch frame;
-                if (!crack::BuildCrackPatch(plane, frame, error))
-                    return finish(Failure(id, "Fracture", error));
-                auto split = fracture::SplitByPlane(result.rocks.front().mesh, frame.center, frame.normal);
-                if (!split.error.empty()) return finish(Failure(id, "Fracture", split.error));
-                result.fractures.push_back({id, parent, frame.center, frame.normal, split.sectionArea});
-                for (auto& mesh : split.meshes) pieces.push_back({std::move(mesh), {}});
-            }
-            result.rocks.clear();
-            result.cracks.clear();
-            result.jointPlanes.clear();
-            result.cuts.clear();
-            for (size_t side = 0; side < pieces.size(); ++side) {
-                auto& piece = pieces[side];
-                fracture::ChunkSettings transform;
-                if (!settings->useJointSets)
-                    transform = settings->chunks[side];
-                else if (const auto found = settings->jointChunks.find(piece.key);
-                         found != settings->jointChunks.end())
-                    transform = found->second;
-                crack::CrackSettings rotation;
-                rotation.center = transform.position;
-                rotation.rotationDegrees = transform.rotationDegrees;
-                crack::CrackPatch basis;
-                if (!crack::BuildCrackPatch(rotation, basis, error))
-                    return finish(Failure(id, "Fracture", error));
-                geometry::MeshInfo info;
-                geometry::InspectMesh(piece.mesh, info);
-                const geometry::Vec3 pivot{(info.minimum.x + info.maximum.x) * 0.5f,
-                                           (info.minimum.y + info.maximum.y) * 0.5f,
-                                           (info.minimum.z + info.maximum.z) * 0.5f};
-                for (auto& p : piece.mesh.positions) {
-                    const float x = p.x - pivot.x, y = p.y - pivot.y, z = p.z - pivot.z;
-                    p = {pivot.x + basis.tangentU.x * x + basis.tangentV.x * y + basis.normal.x * z +
-                             transform.position[0],
-                         pivot.y + basis.tangentU.y * x + basis.tangentV.y * y + basis.normal.y * z +
-                             transform.position[1],
-                         pivot.z + basis.tangentU.z * x + basis.tangentV.z * y + basis.normal.z * z +
-                             transform.position[2]};
-                }
-                geometry::MeshInfo transformed;
-                if (!geometry::InspectMesh(piece.mesh, transformed) || !transformed.closed ||
-                    transformed.components != 1 ||
-                    std::abs(transformed.volume - info.volume) > info.volume * 1e-4)
-                    return finish(Failure(id, "Fracture",
-                                          "移動・回転後の精度を保てません。移動量を小さくしてください"));
-                result.rocks.push_back({id, std::move(piece.mesh), std::nullopt, static_cast<int>(side + 1),
-                                        parent, transform.locked, pivot, piece.key});
-            }
+            GeneratedRock rock;
+            rock.source = id;
+            rock.mesh = std::move(mesh);
+            result.rocks.push_back(std::move(rock));
         } else if (node->kind == NodeKind::Model || node->kind == NodeKind::Transform) {
             result.hasModels = true;
         } else if (node->kind == NodeKind::Merge || node->kind == NodeKind::MeshOutput) {

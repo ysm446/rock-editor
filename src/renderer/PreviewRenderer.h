@@ -1,6 +1,6 @@
 #pragma once
 
-#include "renderer/CrackGuide.h"
+#include "renderer/OverlayLines.h"
 #include "renderer/ShadowCascades.h"
 
 #include "compositor/MaterialEvaluator.h"
@@ -281,7 +281,6 @@ public:
     // **毎フレーム渡してよい。**
     void SetExtraSceneRadius(float radius) { m_extraSceneRadius = radius; }
     // 重ねる線。**毎フレーム渡す**（渡さなければ前のフレームのまま）。
-    void SetCrackGuides(std::vector<OverlayLineSet> guides) { m_crackGuides = std::move(guides); }
     void SetOverlayLines(std::vector<OverlayLineSet> lines) { m_overlayLines = std::move(lines); }
     TonemapMode& Tonemap() { return m_tonemap; }
     DebugView& Debug() { return m_debugView; }
@@ -369,7 +368,6 @@ private:
     float m_meshSceneRadius = 0.1f;
     float m_extraSceneRadius = 0.0f;
     std::vector<OverlayLineSet> m_overlayLines;
-    std::vector<OverlayLineSet> m_crackGuides;
 
     rhi::GpuTexture m_sceneColor;  // 線形 HDR
     // 被写界深度を掛けた結果。**トーンマップはこちらを読む。**

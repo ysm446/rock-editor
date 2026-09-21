@@ -6,12 +6,6 @@
 
 #include "TestSupport.h"
 
-void RunPartialCutTests();
-void RunMeshCutTests();
-void RunFractureTests();
-void RunMultiSplitTests();
-void RunCrackTests();
-void RunJointSetTests();
 void RunRockTests();
 void RunBaseRockTests();
 void RunVolumeTests();
@@ -25,12 +19,6 @@ void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
 
 int main() {
-    RunPartialCutTests();
-    RunMeshCutTests();
-    RunFractureTests();
-    RunMultiSplitTests();
-    RunCrackTests();
-    RunJointSetTests();
     RunRockTests();
     RunBaseRockTests();
     RunVolumeTests();

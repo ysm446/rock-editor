@@ -467,45 +467,7 @@ json WriteGraph(const graph::NodeGraph& graphData,
             outputs.push_back(pin.id);
         }
         item["outputs"] = std::move(outputs);
-        if (const auto* joint = std::get_if<crack::JointSetSettings>(&node.settings)) {
-            item["jointSet"] = {{"center", joint->center},
-                                {"rotation", joint->rotationDegrees},
-                                {"spacing", joint->spacing},
-                                {"spacingVariance", joint->spacingVariance},
-                                {"angleVariance", joint->angleVariance},
-                                {"offset", joint->offset},
-                                {"count", joint->count},
-                                {"seed", joint->seed},
-                                {"extentU", joint->extentU},
-                                {"extentV", joint->extentV},
-                                {"depth", joint->depth},
-                                {"persistence", joint->persistence},
-                                {"aperture", joint->aperture},
-                                {"showGuide", joint->showGuide}};
-        } else if (const auto* fracture = std::get_if<fracture::FractureSettings>(&node.settings)) {
-            json chunks = json::array();
-            for (const auto& chunk : fracture->chunks)
-                chunks.push_back({{"locked", chunk.locked},
-                                  {"position", chunk.position},
-                                  {"rotation", chunk.rotationDegrees}});
-            json jointChunks = json::object();
-            for (const auto& [key, chunk] : fracture->jointChunks)
-                jointChunks[key] = {{"locked", chunk.locked},
-                                    {"position", chunk.position},
-                                    {"rotation", chunk.rotationDegrees}};
-            item["fracture"] = {{"center", fracture->center},
-                                {"rotation", fracture->rotationDegrees},
-                                {"chunks", chunks},
-                                {"useJointSets", fracture->useJointSets},
-                                {"jointChunks", jointChunks}};
-        } else if (const auto* crack = std::get_if<crack::CrackSettings>(&node.settings)) {
-            item["crack"] = {{"center", crack->center},     {"rotation", crack->rotationDegrees},
-                             {"extentU", crack->extentU},   {"extentV", crack->extentV},
-                             {"depth", crack->depth},       {"persistence", crack->persistence},
-                             {"aperture", crack->aperture}, {"showGuide", crack->showGuide},
-                             {"applyCut", crack->applyCut}, {"showBridge", crack->showBridge},
-                             {"meshCut", crack->meshCut}};
-        } else if (const auto* boxes = std::get_if<geometry::BoxClusterSettings>(&node.settings)) {
+        if (const auto* boxes = std::get_if<geometry::BoxClusterSettings>(&node.settings)) {
             item["randomBoxes"] = {{"count", boxes->count}, {"size", boxes->size},
                                    {"sizeVariation", boxes->sizeVariation}, {"spread", boxes->spread},
                                    {"rotation", boxes->rotation}, {"seed", boxes->seed}};
@@ -664,75 +626,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 }
             }
 
-            if (created.kind == graph::NodeKind::JointSet) {
-                crack::JointSetSettings settings;
-                if (const json* v = FindMember(item, "jointSet"); v && v->is_object()) {
-                    const auto center = ReadFloat3(*v, "center", {}),
-                               rotation = ReadFloat3(*v, "rotation", {});
-                    settings.center = {center.x, center.y, center.z};
-                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
-                    settings.spacing = ReadFloat(*v, "spacing", settings.spacing);
-                    settings.spacingVariance = ReadFloat(*v, "spacingVariance", settings.spacingVariance);
-                    settings.angleVariance = ReadFloat(*v, "angleVariance", settings.angleVariance);
-                    settings.offset = ReadFloat(*v, "offset", settings.offset);
-                    settings.count = ReadInt(*v, "count", settings.count);
-                    settings.seed = ReadInt(*v, "seed", settings.seed);
-                    settings.extentU = ReadFloat(*v, "extentU", settings.extentU);
-                    settings.extentV = ReadFloat(*v, "extentV", settings.extentV);
-                    settings.depth = ReadFloat(*v, "depth", settings.depth);
-                    settings.persistence = ReadFloat(*v, "persistence", settings.persistence);
-                    settings.aperture = ReadFloat(*v, "aperture", settings.aperture);
-                    settings.showGuide = ReadBool(*v, "showGuide", settings.showGuide);
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::Fracture) {
-                fracture::FractureSettings settings;
-                if (const json* v = FindMember(item, "fracture"); v && v->is_object()) {
-                    const auto center = ReadFloat3(*v, "center", {}),
-                               rotation = ReadFloat3(*v, "rotation", {});
-                    settings.center = {center.x, center.y, center.z};
-                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
-                    settings.useJointSets = ReadBool(*v, "useJointSets", false);
-                    if (const json* chunks = FindMember(*v, "jointChunks"); chunks && chunks->is_object())
-                        for (const auto& [key, c] : chunks->items()) {
-                            if (!c.is_object()) continue;
-                            auto& chunk = settings.jointChunks[key];
-                            chunk.locked = ReadBool(c, "locked", true);
-                            const auto p = ReadFloat3(c, "position", {}), r = ReadFloat3(c, "rotation", {});
-                            chunk.position = {p.x, p.y, p.z};
-                            chunk.rotationDegrees = {r.x, r.y, r.z};
-                        }
-                    if (const json* chunks = FindMember(*v, "chunks"); chunks && chunks->is_array())
-                        for (size_t i = 0; i < std::min(size_t(2), chunks->size()); ++i) {
-                            const auto& c = (*chunks)[i];
-                            if (!c.is_object()) continue;
-                            auto& chunk = settings.chunks[i];
-                            chunk.locked = ReadBool(c, "locked", true);
-                            const auto p = ReadFloat3(c, "position", {}), r = ReadFloat3(c, "rotation", {});
-                            chunk.position = {p.x, p.y, p.z};
-                            chunk.rotationDegrees = {r.x, r.y, r.z};
-                        }
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::Crack) {
-                crack::CrackSettings settings;
-                if (const json* v = FindMember(item, "crack"); v && v->is_object()) {
-                    const auto center = ReadFloat3(*v, "center", {}),
-                               rotation = ReadFloat3(*v, "rotation", {});
-                    settings.center = {center.x, center.y, center.z};
-                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
-                    settings.extentU = ReadFloat(*v, "extentU", settings.extentU);
-                    settings.extentV = ReadFloat(*v, "extentV", settings.extentV);
-                    settings.depth = ReadFloat(*v, "depth", settings.depth);
-                    settings.persistence = ReadFloat(*v, "persistence", settings.persistence);
-                    settings.aperture = ReadFloat(*v, "aperture", settings.aperture);
-                    settings.showGuide = ReadBool(*v, "showGuide", true);
-                    settings.applyCut = ReadBool(*v, "applyCut", false);
-                    settings.meshCut = ReadBool(*v, "meshCut", false);
-                    settings.showBridge = ReadBool(*v, "showBridge", true);
-                }
-                created.settings = settings;
-            } else if (created.kind == graph::NodeKind::UvUnwrap) {
+            if (created.kind == graph::NodeKind::UvUnwrap) {
                 geometry::UvUnwrapSettings settings;
                 if (const json* v = FindMember(item, "uvUnwrap"); v && v->is_object()) {
                     settings.resolution = geometry::NormalizeUvResolution(ReadInt(*v, "resolution", 1024));

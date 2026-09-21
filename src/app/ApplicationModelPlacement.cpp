@@ -370,20 +370,6 @@ std::vector<Application::VisibleModel> Application::CollectVisibleModels() const
 bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
     graph::Node* node = m_graph.FindMutableNode(nodeId);
     if (node == nullptr) return false;
-    if (auto* fracture = std::get_if<fracture::FractureSettings>(&node->settings)) {
-        fracture::ChunkSettings* chunk = nullptr;
-        if (fracture->useJointSets) {
-            for (const auto& ref : m_rockMeshReferences)
-                if (ref.source == nodeId && ref.chunk == m_selectedChunk && !ref.key.empty()) {
-                    const auto found = fracture->jointChunks.find(ref.key);
-                    if (found != fracture->jointChunks.end()) chunk = &found->second;
-                }
-        } else if (m_selectedChunk >= 1 && m_selectedChunk <= 2)
-            chunk = &fracture->chunks[m_selectedChunk - 1];
-        if (!chunk || chunk->locked) return false;
-        out = {chunk->position.data(), chunk->rotationDegrees.data(), nullptr, true};
-        return true;
-    }
     if (auto* model = std::get_if<graph::ModelNodeSettings>(&node->settings)) {
         out = {model->position, model->rotationDegrees, &model->scale};
         return true;
@@ -421,29 +407,6 @@ bool Application::RockMeshUsesNode(graph::GraphId nodeId) const {
 
 bool Application::NodeGizmoFrame(graph::GraphId nodeId, XMFLOAT3& pivot, XMFLOAT4X4& parent) const {
     const graph::Node* node = m_graph.FindNode(nodeId);
-    if (node && node->kind == graph::NodeKind::Fracture) {
-        const auto& settings = std::get<fracture::FractureSettings>(node->settings);
-        if (!m_meshGraphError.empty() || !m_meshGraphActive) return false;
-        for (const auto& ref : m_rockMeshReferences)
-            if (ref.source == nodeId && ref.chunk == m_selectedChunk) {
-                fracture::ChunkSettings chunk;
-                if (settings.useJointSets) {
-                    if (ref.key.empty()) return false;
-                    if (const auto found = settings.jointChunks.find(ref.key);
-                        found != settings.jointChunks.end())
-                        chunk = found->second;
-                } else {
-                    if (!ref.key.empty() || m_selectedChunk < 1 || m_selectedChunk > 2) return false;
-                    chunk = settings.chunks[m_selectedChunk - 1];
-                }
-                if (chunk.locked) return false;
-                pivot = {ref.pivot.x + chunk.position[0], ref.pivot.y + chunk.position[1],
-                         ref.pivot.z + chunk.position[2]};
-                XMStoreFloat4x4(&parent, XMMatrixIdentity());
-                return true;
-            }
-        return false;
-    }
     if (node && node->kind == graph::NodeKind::VolumeTransform) {
         // ボリュームは倍率 → 回転 → 移動の順に原点まわりで動かすので、移動量がそのまま
         // 回転・倍率の中心になる。表示中の岩がこのノードを通っているときだけ出す。

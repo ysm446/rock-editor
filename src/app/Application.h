@@ -156,16 +156,10 @@ private:
     graph::GraphId m_meshGraphPreviewNode = 0;
     bool m_meshGraphActive = false;
     std::string m_meshGraphError;
-    std::vector<graph::GeneratedCut> m_cutReports;
-    std::vector<graph::GeneratedFracture> m_fractureReports;
     struct RockMeshReference {
         graph::GraphId source = 0;
-        int chunk = 0;
-        geometry::Vec3 pivot;
-        std::string key;
     };
     std::vector<RockMeshReference> m_rockMeshReferences;
-    int m_selectedChunk = 1;
     // 選択中のノードを控える / 貼り付ける（Ctrl+C / Ctrl+V）。
     void CopySelectedGraphNodes();
     // 控えたノードを貼る。viewCenter は今のキャンバスの中央（キャンバス座標）で、
@@ -219,11 +213,11 @@ private:
         float* position = nullptr;
         float* rotation = nullptr;
         float* scale = nullptr;
-        // 形そのものを作り直す設定か（Chunk / Volume Transform）。真ならグラフを改版して再評価する。
+        // 形そのものを作り直す設定か（Volume Transform）。真ならグラフを改版して再評価する。
         bool regenerate = false;
     };
     bool NodeTransform(graph::GraphId nodeId, NodeTransformRef& out);
-    // 選んでいる Model / Transform / Fracture の Chunk / Volume Transform ノードのギズモの基準。
+    // 選んでいる Model / Transform / Volume Transform ノードのギズモの基準。
     // pivot はそのノードの原点のワールド位置、parent は下流の Transform をまとめた行列。
     // ビューポートに出ていなければ偽。
     bool NodeGizmoFrame(graph::GraphId nodeId, DirectX::XMFLOAT3& pivot, DirectX::XMFLOAT4X4& parent) const;

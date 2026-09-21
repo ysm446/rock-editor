@@ -661,7 +661,6 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& scen
 }
 
 void PreviewRenderer::ClearMeshScene(rhi::Device& device) {
-    m_crackGuides.clear();
     m_diagnostics.ResetScene(device);
     for (auto& mesh : m_sceneMeshes) mesh.Release(device);
     m_sceneMeshes.clear();
@@ -1628,7 +1627,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
 void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
                                        rhi::PipelineCache& pipelineCache,
                                        ID3D12GraphicsCommandList* commandList) {
-    if (!m_showReferenceGrid && m_overlayLines.empty() && m_crackGuides.empty()) {
+    if (!m_showReferenceGrid && m_overlayLines.empty()) {
         return;
     }
 
@@ -1709,7 +1708,6 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
         submit(constants, count);
     };
     for (const auto& set : m_overlayLines) drawGuide(set);
-    for (const auto& set : m_crackGuides) drawGuide(set);
     commandList->SetPipelineState(pipeline);
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
     if (!m_showReferenceGrid) {

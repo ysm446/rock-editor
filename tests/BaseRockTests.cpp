@@ -5,7 +5,6 @@
 #include "app/UndoHistory.h"
 #include "geometry/BaseRock.h"
 #include "graph/RockEvaluator.h"
-#include "fracture/PlaneSplit.h"
 #include "renderer/RockMesh.h"
 
 void RunBaseRockTests() {
@@ -62,21 +61,6 @@ void RunBaseRockTests() {
             m.geometry = renderer::MakeRockMeshData(mesh);
             scene.meshes.push_back(m);
             Check(renderer::ValidateMeshScene(scene), "曲面の描画データが有効");
-            for (auto normal : {geometry::Vec3{0, 0, 1}, geometry::Vec3{1, 2, 3}}) {
-                const auto split = fracture::SplitByPlane(mesh, {}, normal);
-                Check(split.error.empty(),
-                      split.error.empty() ? "曲面を平面分割できる" : split.error.c_str());
-                if (!split.error.empty()) continue;
-                double total = 0;
-                for (const auto& part : split.meshes) {
-                    geometry::MeshInfo partInfo;
-                    geometry::InspectMesh(part, partInfo);
-                    Check(partInfo.closed && partInfo.components == 1 && partInfo.volume > 0,
-                          "曲面分割後も閉じた片");
-                    total += partInfo.volume;
-                }
-                Check(std::abs(total - info.volume) < info.volume * 1e-5, "曲面分割の体積を保存");
-            }
         }
     }
     settings = {};
@@ -139,9 +123,6 @@ void RunBaseRockTests() {
             ++settings.seed;
             Check(geometry::MakeBaseRock(settings, error).positions != mesh.positions,
                   "seed を変えると輪郭が変わる");
-            const auto split = fracture::SplitByPlane(mesh, {}, {0, 0, 1});
-            Check(split.error.empty(),
-                  split.error.empty() ? "ノイズ付き母岩も完全分割" : split.error.c_str());
         }
     }
     bool boundaryCases = true;
@@ -181,11 +162,9 @@ void RunBaseRockTests() {
         Check(geometry::ParseBaseShape(geometry::BaseShapeName(shape)) == shape, "形状名の往復");
     Check(geometry::ParseBaseShape("unknown") == BaseShape::Invalid, "不明な保存形状を Box に置換しない");
 
-    tests::Section("母岩形状 — グラフ・Undo・部分切断の制約");
+    tests::Section("母岩形状 — グラフ・Undo");
     graph::NodeGraph graph;
-    const auto base = graph.CreateNode(graph::NodeKind::BaseRock),
-               cut = graph.CreateNode(graph::NodeKind::Crack);
-    graph.CreateLink(graph.FindNode(base)->outputs[0].id, graph.FindNode(cut)->inputs[0].id);
+    const auto base = graph.CreateNode(graph::NodeKind::BaseRock);
     DocumentSnapshot before;
     before.graphNodes = graph.Nodes();
     before.graphLinks = graph.Links();
@@ -196,13 +175,7 @@ void RunBaseRockTests() {
     config.seed = 17;
     graph.MarkDirty();
     auto evaluated = graph::EvaluateRocks(graph, base);
-    Check(evaluated.error.empty() && evaluated.rocks.size() == 1 && !evaluated.rocks[0].uncutBox,
-          "曲面を生成し未加工 Box と区別");
-    auto& crack = std::get<crack::CrackSettings>(graph.FindMutableNode(cut)->settings);
-    crack.applyCut = true;
-    Check(!graph::EvaluateRocks(graph, cut).error.empty(), "曲面の部分切断を誤適用しない");
-    crack.applyCut = false;
-    Check(graph::EvaluateRocks(graph, cut).error.empty(), "曲面にも有限パッチを表示できる");
+    Check(evaluated.error.empty() && evaluated.rocks.size() == 1, "グラフから曲面の母岩を生成");
     DocumentSnapshot after;
     after.graphNodes = graph.Nodes();
     after.graphLinks = graph.Links();
