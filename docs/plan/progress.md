@@ -1,9 +1,16 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 17:18
+更新日時: 2026-09-21 17:40
 
 ## 現在地
+
+### 2026-09-21 生成メッシュへのSurface材質とTriplanar
+
+- Mesh OutputにMaterial入力を追加。Surfaceの材質を生成メッシュへ渡し、UV／Triplanarを選べる。Triplanarはワールド座標基準で、サイズ・位置・回転・混合の鋭さを調整。Surface単位で保存・Undo/Redoする。
+- Base Color／Normal／Roughness／Metallic／AOを接続。法線の投影方向を戻して勾配を合成する。Heightはチャンネル表示のみ。UV展開・ベイク・Height変位・ローカル座標追従は未対応。モデル材質は既存のモデル側設定を使う。
+- Debug/Releaseビルド、Release単体テスト、Debug CTest（1/1、52.99秒）が成功。実画面で材質表示、背面の投影、UI切り替え、旧シーン互換、保存往復を確認。サンプルの別フォルダへのコピーも読み込み・表示できた。詳細は [仕様と検証](../reference/triplanar.md)。サンプルは `examples/triplanar/`。
+- 実行ファイルは `build/triplanar/rock_editor.exe`。起動中のアプリは置き換えていない。
 
 ### 2026-09-21 SDFプレビュー方式の共通設定
 

@@ -167,6 +167,11 @@ struct MeshConstants {
     float boundaryFrameSign;
     uint32_t boundaryCount;
     float boundaryPad;
+    XMFLOAT4 mappingAxisX;
+    XMFLOAT4 mappingAxisY;
+    XMFLOAT4 mappingAxisZ;
+    XMFLOAT3 mappingOffset;
+    uint32_t mappingMethod;
 };
 
 // 道路空間マスク（RGBA8）を GPU へ上げる。ミップは持たない（低解像度でぼかして読む）。
@@ -1142,6 +1147,16 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
             drawConstants.baseColor = material.baseColor;
             drawConstants.roughness = material.roughness;
             drawConstants.metallic = material.metallic;
+            const auto& mapping = m_meshScene.meshes[i].mapping;
+            const auto rotation = XMMatrixRotationRollPitchYaw(XMConvertToRadians(mapping.rotationDegrees.x),
+                XMConvertToRadians(mapping.rotationDegrees.y), XMConvertToRadians(mapping.rotationDegrees.z));
+            XMStoreFloat4(&drawConstants.mappingAxisX, rotation.r[0]);
+            XMStoreFloat4(&drawConstants.mappingAxisY, rotation.r[1]);
+            XMStoreFloat4(&drawConstants.mappingAxisZ, rotation.r[2]);
+            drawConstants.mappingAxisX.w = 1.0f / mapping.repeatMeters;
+            drawConstants.mappingAxisY.w = mapping.sharpness;
+            drawConstants.mappingOffset = mapping.offset;
+            drawConstants.mappingMethod = static_cast<uint32_t>(mapping.method);
             const auto& evaluator = m_sceneMaterials[i].evaluator;
             if (evaluator && evaluator->EvaluatedRevision() != 0 && evaluator->Textures().IsValid()) {
                 const auto& maps = evaluator->Textures();

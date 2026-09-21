@@ -233,6 +233,22 @@ void Application::SyncMeshGraph() {
             rock.chunk > 0 ? colors[(rock.chunk - 1) % 6] : DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
         m_rockMeshReferences.push_back({rock.source, rock.chunk, rock.pivot, rock.key});
         mesh.material.roughness = 0.8f;
+        if (const auto* surface = m_graph.FindNode(rock.materialSource)) {
+            if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&surface->settings)) {
+                compositor::MaterialStack stack;
+                stack.Layers() = m_graph.CompileLayersTo(surface->id).layers;
+                for (auto& layer : stack.Layers()) {
+                    if (layer.material == compositor::kNoMaterialAsset) continue;
+                    layer.heightSource = compositor::ValueSource::Texture;
+                    layer.heightBase = compositor::kHeightPivot;
+                    layer.heightGain = 1.0f;
+                }
+                // 今回は陰影用の法線マップを使う。高さからの変位・バンプは別途追加する。
+                stack.SetTerrainScale(settings->layer.mapping.repeatMeters, 0.0f);
+                mesh.materialStack = std::move(stack);
+                mesh.mapping = settings->layer.mapping;
+            }
+        }
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;
@@ -1241,6 +1257,7 @@ void Application::DrawGraphPanel() {
             ui::HintText("Dual Contouring は格子から交点・法線を推定します。細部や角の再現には入力の解像度も影響します。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
         ui::HintText("メッシュ・モデル・Boxes・Volume を接続すると表示する。複数の Mesh Output を同時に表示できる。");
+        ui::HintText("MaterialにSurfaceを接続すると、生成メッシュに材質を適用します。UVのない岩にはSurfaceでTriplanarを選びます。モデルの材質はモデル側で設定します。");
     } else if (auto* settings = std::get_if<graph::LayerNodeSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("graphNodeBasicRows")) {

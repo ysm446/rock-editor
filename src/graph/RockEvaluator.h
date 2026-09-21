@@ -19,6 +19,7 @@ struct GeneratedRock {
     std::string key;  // 多片の変換設定を結び付ける半空間のキー。
     std::shared_ptr<const std::vector<geometry::OrientedBox>> boxes;
     std::shared_ptr<const geometry::VolumeGrid> volume;
+    GraphId materialSource = 0;
 };
 struct GeneratedCrack {
     GraphId source = 0;

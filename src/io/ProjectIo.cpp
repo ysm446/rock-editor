@@ -376,6 +376,9 @@ json WriteLayer(const compositor::MaterialLayer& layer,
     node["height"] = std::move(height);
 
     node["uvScale"] = layer.uvScale;
+    node["mapping"] = {{"method", layer.mapping.method == compositor::MappingMethod::Triplanar ? "triplanar" : "uv"},
+                       {"repeatMeters", layer.mapping.repeatMeters}, {"offset", WriteFloat3(layer.mapping.offset)},
+                       {"rotationDegrees", WriteFloat3(layer.mapping.rotationDegrees)}, {"sharpness", layer.mapping.sharpness}};
     return node;
 }
 
@@ -422,6 +425,14 @@ compositor::MaterialLayer ReadLayer(
     }
 
     layer.uvScale = ReadFloat(node, "uvScale", defaults.uvScale);
+    if (const json* mapping = FindMember(node, "mapping"); mapping && mapping->is_object()) {
+        layer.mapping.method = ReadString(*mapping, "method", "uv") == "triplanar"
+            ? compositor::MappingMethod::Triplanar : compositor::MappingMethod::UV;
+        layer.mapping.repeatMeters = std::clamp(ReadFloat(*mapping, "repeatMeters", 1.0f), 0.001f, 10000.0f);
+        layer.mapping.offset = ReadFloat3(*mapping, "offset", {0, 0, 0});
+        layer.mapping.rotationDegrees = ReadFloat3(*mapping, "rotationDegrees", {0, 0, 0});
+        layer.mapping.sharpness = std::clamp(ReadFloat(*mapping, "sharpness", 4.0f), 1.0f, 16.0f);
+    }
     return layer;
 }
 

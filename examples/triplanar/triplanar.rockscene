@@ -1,0 +1,172 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "randomBoxes",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "randomBoxes": {
+          "count": 8,
+          "size": [
+            2,
+            2.4,
+            1.8
+          ],
+          "sizeVariation": 0.55,
+          "spread": 0.85,
+          "rotation": 25,
+          "seed": 42
+        }
+      },
+      {
+        "id": 3,
+        "kind": "toVolume",
+        "inputs": [
+          4
+        ],
+        "outputs": [
+          5
+        ],
+        "position": [
+          260,
+          0
+        ],
+        "toVolume": {
+          "resolution": 48
+        }
+      },
+      {
+        "id": 10,
+        "kind": "volumeToMesh",
+        "inputs": [
+          11
+        ],
+        "outputs": [
+          12
+        ],
+        "position": [
+          520,
+          0
+        ],
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 6,
+        "kind": "meshOutput",
+        "inputs": [
+          7,
+          20
+        ],
+        "outputs": [],
+        "position": [
+          800,
+          0
+        ]
+      },
+      {
+        "id": 21,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          22
+        ],
+        "position": [
+          500,
+          260
+        ],
+        "layer": {
+          "name": "Rock Surface",
+          "material": 1,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar",
+            "repeatMeters": 0.8,
+            "offset": [
+              0.1,
+              0.2,
+              0.3
+            ],
+            "rotationDegrees": [
+              15,
+              25,
+              5
+            ],
+            "sharpness": 4
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": 8,
+        "start": 2,
+        "end": 4
+      },
+      {
+        "id": 9,
+        "start": 5,
+        "end": 11
+      },
+      {
+        "id": 13,
+        "start": 12,
+        "end": 7
+      },
+      {
+        "id": 23,
+        "start": 22,
+        "end": 20
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 8,
+      "fovY": 0.785398,
+      "pitch": 0.4,
+      "yaw": 0.65
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0,
+  "materials": [
+    {
+      "id": 1,
+      "asset": {
+        "path": "Materials/checker.rockmat"
+      }
+    }
+  ]
+}

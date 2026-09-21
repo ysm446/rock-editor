@@ -62,6 +62,28 @@ bool Application::DrawLayerSettings(compositor::MaterialLayer& layer) {
         ui::HintText("マテリアルパネルで作って割り当てる");
     }
 
+    ui::SectionHeader("マッピング");
+    if (ui::BeginPropertyTable("surfaceMappingRows")) {
+        auto& mapping = layer.mapping;
+        int method = static_cast<int>(mapping.method);
+        const char* methods[] = {"UV", "Triplanar"};
+        if (ui::PropertyCombo("方式", &method, methods, 2, 0)) {
+            mapping.method = static_cast<compositor::MappingMethod>(method);
+            changed = true;
+        }
+        if (mapping.method == compositor::MappingMethod::Triplanar) {
+            const float zero[3] = {};
+            changed |= ui::PropertyFloat("反復サイズ (m)", &mapping.repeatMeters, 0.001f, 10000.0f, 1.0f);
+            changed |= ui::PropertyFloat3Input("位置 (m)", &mapping.offset.x, zero) != 0;
+            changed |= ui::PropertyFloat3Input("回転 (度)", &mapping.rotationDegrees.x, zero) != 0;
+            changed |= ui::PropertyFloat("混合の鋭さ", &mapping.sharpness, 1.0f, 16.0f, 4.0f);
+        }
+        ui::EndPropertyTable();
+    }
+    ui::HintText("SurfaceのResultをMesh OutputのMaterialへ接続します。Triplanarはワールド座標で投影します。");
+    if (layer.mapping.method == compositor::MappingMethod::UV)
+        ui::HintText("UV方式は既存UVを使います。SDFメッシュのUV展開はまだ未対応のため、Triplanarを選んでください。");
+
     ui::SectionHeader("合成");
     if (ui::BeginPropertyTable("layerBlendRows")) {
         ui::PropertyLabel("書き込み", "このレイヤーが書き込むチャンネル");

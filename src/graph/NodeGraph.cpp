@@ -38,8 +38,9 @@ constexpr std::array<PinDefinition, 2> kMergePins = {{
 }};
 
 // メッシュ・モデル・それらをまとめた Merge のどれでも受ける。
-constexpr std::array<PinDefinition, 1> kMeshOutputPins = {{
+constexpr std::array<PinDefinition, 2> kMeshOutputPins = {{
     {PinKind::Input, ValueType::Preview, "Geometry"},
+    {PinKind::Input, ValueType::Material, "Material"},
 }};
 
 constexpr std::array<PinDefinition, 1> kBaseRockPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};

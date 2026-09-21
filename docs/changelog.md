@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 17:18
+更新日時: 2026-09-21 17:38
 
 ## 未リリース
+
+- Mesh OutputにMaterial入力を追加し、Surfaceの材質を生成メッシュへ適用できるようにした。SurfaceにUV／Triplanarの方式、反復サイズ・位置・回転・混合の鋭さを追加。シーン保存・Undo/Redoに対応。TriplanarはUVのないSDFメッシュへ色・法線・ラフネス・Metallic・AOを投影する。検証用サンプルを `examples/triplanar/` に追加。
 
 - 「プレビュー設定」に「SDFプレビュー（共通）」を追加。To Volume / Volume Transform などの Volume 直接表示に使う変換方式を選べる。設定はアプリに保存し、切り替え時は内部SDFを再利用する。Volume to Mesh の出力は引き続きノード側の方式に従う。
 

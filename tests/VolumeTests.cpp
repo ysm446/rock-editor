@@ -535,6 +535,25 @@ void RunVolumeTests() {
               sameMesh(outputPreview.rocks[0].mesh, transformPreview.rocks[0].mesh),
           "Mesh OutputへのVolume直接接続にも共通設定を適用");
     Check(moveGraph.CreateLink(out(toMesh), in(viewer)), "Mesh Outputの明示的な変換を復元");
+    tests::Section("Mesh Outputの材質接続");
+    const auto surfaceNode = moveGraph.CreateNode(graph::NodeKind::Surface);
+    const auto materialPin = moveGraph.FindNode(viewer)->inputs[1].id;
+    Check(moveGraph.CreateLink(out(surfaceNode), materialPin), "SurfaceをMaterial入力へ接続");
+    Check(!moveGraph.CanCreateLink(out(surfaceNode), in(viewer)) &&
+              !moveGraph.CanCreateLink(out(toMesh), materialPin), "材質と形状の型を分離");
+    const auto materialResult = graph::EvaluateRocks(moveGraph, 0, &cache);
+    Check(materialResult.error.empty() && materialResult.rocks.size() == 1 &&
+              materialResult.rocks[0].materialSource == surfaceNode &&
+              sameMesh(materialResult.rocks[0].mesh, explicitTetra.rocks[0].mesh), "材質を付けても形状を維持");
+    const auto beforeMaterialEdit = graph::EvaluateRocks(moveGraph, transform, &cache);
+    std::get<graph::LayerNodeSettings>(moveGraph.FindMutableNode(surfaceNode)->settings).layer.mapping.method =
+        compositor::MappingMethod::Triplanar;
+    moveGraph.MarkDirty();
+    const auto afterMaterialEdit = graph::EvaluateRocks(moveGraph, transform, &cache);
+    Check(beforeMaterialEdit.rocks[0].volume == afterMaterialEdit.rocks[0].volume &&
+              afterMaterialEdit.rocks[0].materialSource == 0, "材質変更時にSDFを再利用し上流プレビューへ漏らさない");
+    moveGraph.DeleteNode(surfaceNode);
+    Check(graph::EvaluateRocks(moveGraph, 0, &cache).rocks[0].materialSource == 0, "材質削除後は未割当へ戻る");
     moveGraph.DeleteNode(boxSource);
     Check(compare() && !cache.entries.contains(boxSource) && !cache.entries.contains(toVolume),
           "上流削除時はキャッシュを破棄して入力エラーを返す");

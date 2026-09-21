@@ -99,7 +99,17 @@ struct NoiseParams {
 //
 // 道路の材質は Surface 1 枚で、マテリアル（PBR のマップ一式）を指す入れ物。
 // 旧地形の積み重ね（下地との競合・マスク・加工）は撤去した。
+enum class MappingMethod : uint32_t { UV = 0, Triplanar = 1 };
+struct MaterialMapping {
+    MappingMethod method = MappingMethod::UV;
+    float repeatMeters = 1.0f;
+    DirectX::XMFLOAT3 offset = {0, 0, 0};
+    DirectX::XMFLOAT3 rotationDegrees = {0, 0, 0};
+    float sharpness = 4.0f;
+};
+
 struct MaterialLayer {
+    MaterialMapping mapping;
     std::string name = "Layer";
     bool enabled = true;
 

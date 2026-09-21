@@ -104,6 +104,39 @@ void RunUndoHistoryTests() {
         Check(LayerCount(history.UndoStack().front()) == 11, "捨てられるのは古い段のほう");
     }
 
+    Section("アンドゥ履歴 — Surfaceのマッピング");
+    {
+        rock::graph::NodeGraph graph;
+        const auto surface = graph.CreateNode(rock::graph::NodeKind::Surface);
+        const auto output = graph.CreateNode(rock::graph::NodeKind::MeshOutput);
+        graph.CreateLink(graph.FindNode(surface)->outputs[0].id, graph.FindNode(output)->inputs[1].id);
+        DocumentSnapshot before;
+        before.graphNodes = graph.Nodes();
+        before.graphLinks = graph.Links();
+        auto& mapping = std::get<rock::graph::LayerNodeSettings>(graph.FindMutableNode(surface)->settings).layer.mapping;
+        mapping.method = rock::compositor::MappingMethod::Triplanar;
+        mapping.repeatMeters = 2.5f;
+        mapping.offset = {1, 2, 3};
+        mapping.rotationDegrees = {15, 30, 45};
+        mapping.sharpness = 8;
+        DocumentSnapshot after;
+        after.graphNodes = graph.Nodes();
+        after.graphLinks = graph.Links();
+        UndoHistory history;
+        history.Push(before, 0);
+        const auto undone = history.Undo(after);
+        graph.Replace(undone.graphNodes, undone.graphLinks);
+        Check(std::get<rock::graph::LayerNodeSettings>(graph.FindNode(surface)->settings).layer.mapping.method ==
+                  rock::compositor::MappingMethod::UV, "UndoでUVへ戻る");
+        const auto redone = history.Redo(undone);
+        graph.Replace(redone.graphNodes, redone.graphLinks);
+        const auto& restored = std::get<rock::graph::LayerNodeSettings>(graph.FindNode(surface)->settings).layer.mapping;
+        Check(restored.method == rock::compositor::MappingMethod::Triplanar && restored.repeatMeters == 2.5f &&
+                  restored.offset.z == 3 && restored.rotationDegrees.y == 30 && restored.sharpness == 8 &&
+                  graph.FindUpstreamNodeForPin(graph.FindNode(output)->inputs[1].id)->id == surface,
+              "Redoで投影設定と材質接続を復元");
+    }
+
     Section("アンドゥ履歴 — 消去");
     {
         UndoHistory history;

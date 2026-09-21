@@ -1,7 +1,7 @@
 # 岩生成の設計整理
 
 作成日時: 2026-09-20 22:06
-更新日時: 2026-09-21 01:26
+更新日時: 2026-09-21 17:40
 
 ## 位置づけ
 
@@ -15,7 +15,7 @@
 | `src/app/ApplicationGraphPanel.cpp` | SyncMeshGraph は RockEvaluator の CPU 評価結果を RockMesh で描画データへ変換して転送する |
 | `src/renderer/MeshData.h/.cpp` | CPU 描画データと検証を持つが道路由来の属性が残る。岩処理用トポロジーを分離し、描画境界で変換 |
 | `src/renderer/`、`src/rhi/` | DX12 表示、カメラ、GPU リソース基盤を再利用 |
-| `src/compositor/`、`shaders/` | 既存 Surface / PBR 評価を再利用。岩用 Triplanar は別途接続・検証 |
+| `src/compositor/`、`shaders/` | 既存 Surface / PBR 評価を再利用。生成メッシュへSurfaceを接続し、UV／Triplanarを選択可能 |
 | `src/io/ProjectIo.cpp` | JSON 保存版は現在1。Base Rock / Crack / Fracture と片の変換・Locked を保存。Chunk 選択参照は後続 |
 | `src/app/UndoHistory.*` | 既存 Undo に岩ノード設定と操作を統合 |
 | `tests/`、`CMakeLists.txt` | 実処理を呼ぶジオメトリ・グラフ・保存テストを追加 |
@@ -91,7 +91,7 @@ Geometry / CrackField / JointSet / ChunkSet / Selection を既存 ValueType に�
 `InspectMesh` は AABB、符号付き体積、頂点接続による連結成分、共有辺が逆向きに2回現れる閉包を調べる。縮退面は外積の二乗が辺長二乗の積の 1e-12 以下として検出する。自己交差や頂点周りの manifold 判定はまだ対象外で、亀裂実装時に拡張する。
 
 P1 は既存 Mesh ピンを利用し、Base Rock / Merge / Mesh Output の到達可能な岩を生成する。同じ生成元は重複させない。モデルは従来どおり別経路で表示する。グラフ Revision が変わったときに再評価し、枝単位キャッシュは P6 で追加する。
-不正寸法では岩の生成結果を空にし、ノード ID を含む診断を表示する。Box にノイズはなく、Seed は将来用の保存値。Triplanar・素材入力は P7 で追加する。
+不正寸法では岩の生成結果を空にし、ノード ID を含む診断を表示する。初期Boxにノイズはなく、Seedは将来用の保存値だった。後続で母岩のノイズと、Mesh Outputの素材入力・[Triplanar](triplanar.md)を追加した。
 
 ## P2 の有限パッチ表示規約
 

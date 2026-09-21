@@ -80,7 +80,7 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
                 }
                 if (t > 0) v.tangent = {tx / t, ty / t, tz / t, 1};
             }
-            // P1 の無地表示用。Triplanar は P7 で接続する。
+            // UV展開前の仮座標。Triplanarはこの値を使わず、描画時に位置から投影する。
             v.uv = {i == 1 ? 1.0f : 0.0f, i == 2 ? 1.0f : 0.0f};
             v.roadUv = v.uv;
             result.indices.push_back(static_cast<uint32_t>(result.vertices.size()));

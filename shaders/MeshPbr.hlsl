@@ -136,6 +136,11 @@ struct MeshConstants
     float boundaryFrameSign;
     uint boundaryCount;
     float boundaryPad;
+    float4 mappingAxisX;
+    float4 mappingAxisY;
+    float4 mappingAxisZ;
+    float3 mappingOffset;
+    uint mappingMethod;
 };
 
 
@@ -497,19 +502,19 @@ float BlendedHeightLevel(float2 roadUv, float3 worldPosition)
 // 道路は実距離UVを反復し、旧平面プレビューは端をクランプする。
 float4 SampleMaterialColor(Texture2D<float4> map, float2 uv)
 {
-    if (g_mesh.roadMetersPerUv > 0.0f) return map.Sample(g_samplerAnisoWrap, uv);
+    if (g_mesh.roadMetersPerUv > 0.0f || g_mesh.mappingMethod == 1u) return map.Sample(g_samplerAnisoWrap, uv);
     return map.Sample(g_samplerAnisoClamp, uv);
 }
 
 float2 SampleMaterialNormal(Texture2D<float2> map, float2 uv)
 {
-    if (g_mesh.roadMetersPerUv > 0.0f) return map.Sample(g_samplerAnisoWrap, uv);
+    if (g_mesh.roadMetersPerUv > 0.0f || g_mesh.mappingMethod == 1u) return map.Sample(g_samplerAnisoWrap, uv);
     return map.Sample(g_samplerAnisoClamp, uv);
 }
 
 float SampleMaterialScalar(Texture2D<float> map, float2 uv)
 {
-    if (g_mesh.roadMetersPerUv > 0.0f) return map.Sample(g_samplerAnisoWrap, uv);
+    if (g_mesh.roadMetersPerUv > 0.0f || g_mesh.mappingMethod == 1u) return map.Sample(g_samplerAnisoWrap, uv);
     return map.Sample(g_samplerAnisoClamp, uv);
 }
 
@@ -802,6 +807,55 @@ float4 PsOutline(VsOutput input) : SV_Target0
     return float4(0.55f, 0.85f, 1.0f, 0.9f);
 }
 
+// ワールド空間の投影フレーム。負側の面も右手系の接空間を保つ。
+struct TriplanarFrame {
+    float2 x, y, z;
+    float3 weights, signs, normal;
+};
+TriplanarFrame MakeTriplanarFrame(float3 position, float3 normal)
+{
+    TriplanarFrame f;
+    float3 p = position - g_mesh.mappingOffset;
+    p = float3(dot(p, g_mesh.mappingAxisX.xyz), dot(p, g_mesh.mappingAxisY.xyz),
+               dot(p, g_mesh.mappingAxisZ.xyz)) * g_mesh.mappingAxisX.w;
+    f.normal = float3(dot(normal, g_mesh.mappingAxisX.xyz), dot(normal, g_mesh.mappingAxisY.xyz),
+                      dot(normal, g_mesh.mappingAxisZ.xyz));
+    f.signs = float3(f.normal.x < 0 ? -1 : 1, f.normal.y < 0 ? -1 : 1, f.normal.z < 0 ? -1 : 1);
+    f.x = float2(-p.z * f.signs.x, p.y);
+    f.y = float2(p.x, -p.z * f.signs.y);
+    f.z = float2(p.x * f.signs.z, p.y);
+    f.weights = pow(abs(f.normal), g_mesh.mappingAxisY.w);
+    f.weights /= max(dot(f.weights, 1.0f.xxx), 1e-8f);
+    return f;
+}
+float4 TriplanarColor(Texture2D<float4> map, TriplanarFrame f)
+{
+    return SampleMaterialColor(map, f.x) * f.weights.x + SampleMaterialColor(map, f.y) * f.weights.y
+         + SampleMaterialColor(map, f.z) * f.weights.z;
+}
+float TriplanarHeight(Texture2D<float> map, TriplanarFrame f, float2 offset)
+{
+    return SampleMaterialScalar(map, f.x + offset) * f.weights.x + SampleMaterialScalar(map, f.y + offset) * f.weights.y
+         + SampleMaterialScalar(map, f.z + offset) * f.weights.z;
+}
+float3 TriplanarNormal(Texture2D<float2> map, TriplanarFrame f)
+{
+    float3 nx = DecodeTangentNormal(SampleMaterialNormal(map, f.x));
+    float3 ny = DecodeTangentNormal(SampleMaterialNormal(map, f.y));
+    float3 nz = DecodeTangentNormal(SampleMaterialNormal(map, f.z));
+    // 法線マップから勾配を取り、各投影の接線方向へ戻して表面へ投影する。
+    // 平坦な法線マップでは勾配がゼロとなり、混合の鋭さによらず元の法線を保つ。
+    float2 sx = nx.xy / max(nx.z, 0.05f);
+    float2 sy = ny.xy / max(ny.z, 0.05f);
+    float2 sz = nz.xy / max(nz.z, 0.05f);
+    float3 slope = float3(0, sx.y, -sx.x * f.signs.x) * f.weights.x
+                 + float3(sy.x, 0, -sy.y * f.signs.y) * f.weights.y
+                 + float3(sz.x * f.signs.z, sz.y, 0) * f.weights.z;
+    slope -= f.normal * dot(f.normal, slope);
+    float3 n = normalize(f.normal + slope);
+    return normalize(g_mesh.mappingAxisX.xyz * n.x + g_mesh.mappingAxisY.xyz * n.y + g_mesh.mappingAxisZ.xyz * n.z);
+}
+
 float4 PsMain(VsOutput input) : SV_Target0
 {
     if ((g_mesh.meshDisplayFlags & 2u) != 0u)
@@ -935,9 +989,11 @@ float4 PsMain(VsOutput input) : SV_Target0
 
         const float2 uv = input.uv;
 
-        baseColor = SampleMaterialColor(baseColorMap, uv).rgb;
+        const bool triplanar = g_mesh.mappingMethod == 1u;
+        const TriplanarFrame projection = MakeTriplanarFrame(input.worldPosition, geometricNormal);
+        baseColor = triplanar ? TriplanarColor(baseColorMap, projection).rgb : SampleMaterialColor(baseColorMap, uv).rgb;
 
-        const float4 surface = SampleMaterialColor(surfaceMap, uv);
+        const float4 surface = triplanar ? TriplanarColor(surfaceMap, projection) : SampleMaterialColor(surfaceMap, uv);
         roughnessValue = surface.r;
         metallicValue = surface.g;
         ambientOcclusion = surface.b;
@@ -948,13 +1004,16 @@ float4 PsMain(VsOutput input) : SV_Target0
             discard;
         }
 
-        // タンジェント空間法線をワールド空間へ移す。
-        const float3 tangentNormal = DecodeTangentNormal(SampleMaterialNormal(normalMap, uv));
-        const float3 tangent =
-            normalize(input.worldTangent - geometricNormal * dot(geometricNormal, input.worldTangent));
-        const float3 bitangent = cross(geometricNormal, tangent) * input.tangentSign;
-        normal = normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y +
-                           geometricNormal * tangentNormal.z);
+        if (triplanar) {
+            normal = TriplanarNormal(normalMap, projection);
+        } else {
+            const float3 tangentNormal = DecodeTangentNormal(SampleMaterialNormal(normalMap, uv));
+            const float3 tangent =
+                normalize(input.worldTangent - geometricNormal * dot(geometricNormal, input.worldTangent));
+            const float3 bitangent = cross(geometricNormal, tangent) * input.tangentSign;
+            normal = normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y +
+                               geometricNormal * tangentNormal.z);
+        }
     }
 
     // --- チャンネルを覗く表示 ----------------------------------------------
@@ -1011,6 +1070,8 @@ float4 PsMain(VsOutput input) : SV_Target0
             {
                 Texture2D<float> heightMap = ResourceDescriptorHeap[g_mesh.materialHeightIndex];
                 height = SampleMaterialScalar(heightMap, input.uv);
+                if (g_mesh.mappingMethod == 1u)
+                    height = TriplanarHeight(heightMap, MakeTriplanarFrame(input.worldPosition, geometricNormal), 0.0f.xx);
             }
             debugColor = saturate(height).xxx;
         }
@@ -1037,7 +1098,9 @@ float4 PsMain(VsOutput input) : SV_Target0
             else if (g_mesh.useMaterialTextures != 0u)
             {
                 Texture2D<float> heightMap = ResourceDescriptorHeap[g_mesh.materialHeightIndex];
-                const float center = SampleMaterialScalar(heightMap, input.uv);
+                const TriplanarFrame projection = MakeTriplanarFrame(input.worldPosition, geometricNormal);
+                const float center = g_mesh.mappingMethod == 1u ? TriplanarHeight(heightMap, projection, 0.0f.xx)
+                                                               : SampleMaterialScalar(heightMap, input.uv);
 
                 // 周りの平均。半径は合成テクセル基準で固定する
                 // （解像度を変えても「どのくらい大きな形を引くか」が変わらない）。
@@ -1051,7 +1114,8 @@ float4 PsMain(VsOutput input) : SV_Target0
                 {
                     const float angle = (float(i) / 8.0f) * 6.28318530718f;
                     const float2 offset = float2(cos(angle), sin(angle)) * radius * texel;
-                    sum += SampleMaterialScalar(heightMap, input.uv + offset);
+                    sum += g_mesh.mappingMethod == 1u ? TriplanarHeight(heightMap, projection, offset)
+                                                     : SampleMaterialScalar(heightMap, input.uv + offset);
                 }
                 local = 0.5f + (center - sum / 8.0f) * kLocalHeightGain;
             }

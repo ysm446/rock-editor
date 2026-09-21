@@ -11,6 +11,24 @@
 
 void RunMeshSceneTests() {
     using namespace rock;
+    tests::Section("マッピング設定の描画入力検証");
+    {
+        renderer::MeshScene scene;
+        renderer::SceneMesh entry;
+        std::string error;
+        entry.geometry = renderer::MakeRockMeshData(geometry::MakeBaseRock({}, error));
+        entry.mapping.method = compositor::MappingMethod::Triplanar;
+        scene.meshes.push_back(entry);
+        tests::Check(renderer::ValidateMeshScene(scene), "Triplanarの既定設定を描画できる");
+        scene.meshes[0].mapping.repeatMeters = 0;
+        tests::Check(!renderer::ValidateMeshScene(scene), "投影サイズ0をGPUへ渡さない");
+        scene.meshes[0].mapping = entry.mapping;
+        scene.meshes[0].mapping.rotationDegrees.y = std::numeric_limits<float>::infinity();
+        tests::Check(!renderer::ValidateMeshScene(scene), "非有限の投影回転を拒否");
+        scene.meshes[0].mapping = entry.mapping;
+        scene.meshes[0].mapping.sharpness = 32;
+        tests::Check(!renderer::ValidateMeshScene(scene), "範囲外の混合設定を拒否");
+    }
     tests::Section("岩メッシュの法線（フラット / スムーズ）");
     {
         geometry::BaseRockSettings rockSettings;

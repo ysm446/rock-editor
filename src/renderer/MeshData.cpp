@@ -9,6 +9,12 @@ namespace rock::renderer {
 
 bool ValidateMeshScene(const MeshScene& scene) {
     for (const auto& mesh : scene.meshes) {
+        const auto& mapping = mesh.mapping;
+        if ((mapping.method != compositor::MappingMethod::UV && mapping.method != compositor::MappingMethod::Triplanar) ||
+            !std::isfinite(mapping.repeatMeters) || mapping.repeatMeters < 0.001f || mapping.repeatMeters > 10000.0f ||
+            !std::isfinite(mapping.sharpness) || mapping.sharpness < 1 || mapping.sharpness > 16 ||
+            !std::isfinite(mapping.offset.x) || !std::isfinite(mapping.offset.y) || !std::isfinite(mapping.offset.z) ||
+            !std::isfinite(mapping.rotationDegrees.x) || !std::isfinite(mapping.rotationDegrees.y) || !std::isfinite(mapping.rotationDegrees.z)) return false;
         const auto& data = mesh.geometry;
         if (!mesh.boundaryControl.rgba.empty() && (!mesh.boundaryControl.IsValid() || mesh.boundaryControl.width != 8)) return false;
         for (const auto& boundary : mesh.boundaries) {

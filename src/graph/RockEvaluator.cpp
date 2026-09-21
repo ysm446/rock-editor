@@ -328,12 +328,19 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         } else if (node->kind == NodeKind::Model || node->kind == NodeKind::Transform) {
             result.hasModels = true;
         } else if (node->kind == NodeKind::Merge || node->kind == NodeKind::MeshOutput) {
-            for (const auto& pin : node->inputs)
+            for (const auto& pin : node->inputs) {
+                if (pin.valueType == ValueType::Material) continue;
                 if (const auto* upstream = graph.FindUpstreamNodeForPin(pin.id)) {
                     const auto input = evaluate(upstream->id, depth + 1);
                     if (!input.error.empty()) return finish(input);
                     Append(result, input);
                 }
+            }
+            if (node->kind == NodeKind::MeshOutput && node->inputs.size() > 1) {
+                const auto* surface = graph.FindUpstreamNodeForPin(node->inputs[1].id);
+                if (surface && surface->kind == NodeKind::Surface)
+                    for (auto& rock : result.rocks) rock.materialSource = surface->id;
+            }
         }
         return finish(result);
     };
