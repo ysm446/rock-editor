@@ -1,0 +1,320 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "randomBoxes",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "randomBoxes": {
+          "count": 3,
+          "size": [
+            2,
+            2.4,
+            1.8
+          ],
+          "sizeVariation": 0.55,
+          "spread": 0.85,
+          "rotation": 25,
+          "seed": 42
+        }
+      },
+      {
+        "id": 3,
+        "kind": "toVolume",
+        "inputs": [
+          4
+        ],
+        "outputs": [
+          5
+        ],
+        "position": [
+          220,
+          0
+        ],
+        "toVolume": {
+          "resolution": 24
+        }
+      },
+      {
+        "id": 10,
+        "kind": "volumeToMesh",
+        "inputs": [
+          11
+        ],
+        "outputs": [
+          12
+        ],
+        "position": [
+          440,
+          0
+        ],
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 6,
+        "kind": "meshOutput",
+        "inputs": [
+          7,
+          20
+        ],
+        "outputs": [],
+        "position": [
+          1680,
+          0
+        ]
+      },
+      {
+        "id": 21,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          22
+        ],
+        "position": [
+          860,
+          220
+        ],
+        "layer": {
+          "name": "Rock",
+          "baseColor": [
+            0.18,
+            0.12,
+            0.07
+          ],
+          "roughness": 0.8,
+          "ambientOcclusion": 0.8,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar"
+          }
+        }
+      },
+      {
+        "id": 50,
+        "kind": "uvUnwrap",
+        "inputs": [
+          51
+        ],
+        "outputs": [
+          52
+        ],
+        "position": [
+          660,
+          0
+        ],
+        "uvUnwrap": {
+          "resolution": 512,
+          "padding": 4,
+          "quality": 1
+        }
+      },
+      {
+        "id": 60,
+        "kind": "materialBake",
+        "inputs": [
+          61,
+          62
+        ],
+        "outputs": [
+          63
+        ],
+        "position": [
+          1420,
+          0
+        ],
+        "materialBake": {
+          "geometryAo": true,
+          "aoDistance": 1,
+          "aoStrength": 1,
+          "aoSamples": 16
+        }
+      },
+      {
+        "id": 80,
+        "kind": "applyMaterial",
+        "inputs": [
+          81,
+          82,
+          83
+        ],
+        "outputs": [
+          84
+        ],
+        "position": [
+          900,
+          0
+        ]
+      },
+      {
+        "id": 90,
+        "kind": "applyMaterial",
+        "inputs": [
+          91,
+          92,
+          93
+        ],
+        "outputs": [
+          94
+        ],
+        "position": [
+          1160,
+          0
+        ]
+      },
+      {
+        "id": 100,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          101
+        ],
+        "position": [
+          1120,
+          220
+        ],
+        "layer": {
+          "name": "Coating",
+          "baseColor": [
+            0.06,
+            0.16,
+            0.04
+          ],
+          "roughness": 0.4,
+          "ambientOcclusion": 0.6,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar",
+            "repeatMeters": 0.5
+          }
+        }
+      },
+      {
+        "id": 110,
+        "kind": "materialMask",
+        "inputs": [],
+        "outputs": [
+          111
+        ],
+        "position": [
+          1120,
+          440
+        ],
+        "materialMask": {
+          "texture": 80,
+          "value": 0.8,
+          "triplanar": true,
+          "repeatMeters": 1.3,
+          "invert": false
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": 8,
+        "start": 2,
+        "end": 4
+      },
+      {
+        "id": 9,
+        "start": 5,
+        "end": 11
+      },
+      {
+        "id": 70,
+        "start": 12,
+        "end": 51
+      },
+      {
+        "id": 73,
+        "start": 63,
+        "end": 7
+      },
+      {
+        "id": 200,
+        "start": 52,
+        "end": 81
+      },
+      {
+        "id": 201,
+        "start": 22,
+        "end": 82
+      },
+      {
+        "id": 202,
+        "start": 84,
+        "end": 91
+      },
+      {
+        "id": 203,
+        "start": 101,
+        "end": 92
+      },
+      {
+        "id": 204,
+        "start": 111,
+        "end": 93
+      },
+      {
+        "id": 205,
+        "start": 94,
+        "end": 61
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 8,
+      "fovY": 0.785398,
+      "pitch": 0.4,
+      "yaw": 0.65
+    },
+    "exposure": {
+      "compensation": 1.5
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0,
+  "materials": [],
+  "textures": [
+    {
+      "id": 80,
+      "name": "Coating mask",
+      "source": {
+        "path": "Textures/coating-mask.png"
+      }
+    }
+  ]
+}

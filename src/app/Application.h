@@ -17,6 +17,7 @@
 #include "io/AppSettings.h"
 #include "io/RecentFiles.h"
 #include "renderer/MaterialSphere.h"
+#include "renderer/OcclusionBake.h"
 #include "renderer/ModelAsset.h"
 #include "renderer/ModelPreview.h"
 #include "renderer/PreviewRenderer.h"
@@ -78,6 +79,7 @@ struct StartupOptions {
     // 開発用。モデルのギズモを回転（E）で始める。
     bool gizmoRotate = false;
     bool gizmoScale = false;
+    bool testGpuAo = false;
     int bakeNode = 0; // 開発用。通常のベイク実行と同じ処理を予約する。
     // --place-model で置いたモデルの FBX のノードに足す回転（--model-node-rotation <node> <x> <y> <z>）。
     std::vector<renderer::ModelNodeRotation> modelNodeRotations;
@@ -159,8 +161,20 @@ private:
 
     void DrawUvPanel();
     void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked);
-    std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input) const;
+    std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input, graph::GraphId bakeNode = 0) const;
     void ProcessPendingBake();
+    bool ValidateGpuAo();
+    void FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images, const std::string& fingerprint);
+    struct BakeJob {
+        graph::GraphId id = 0;
+        uint64_t epoch = 0, revision = 0;
+        std::filesystem::path root;
+        std::string fingerprint;
+        std::array<LdrImage, 4> images;
+        renderer::OcclusionBake ao;
+        bool cancel = false;
+    };
+    std::optional<BakeJob> m_bakeJob;
     graph::GraphId m_pendingBake = 0;
     std::unordered_map<graph::GraphId,std::string> m_bakeStatus;
     geometry::Mesh m_uvPreviewMesh;

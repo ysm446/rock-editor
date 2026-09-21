@@ -106,6 +106,8 @@ rock::StartupOptions ParseCommandLine() {
         } else if (argument == L"--screenshot-ui" && (i + 1) < argc) {
             options.uiScreenshotPath = argv[i + 1];
             ++i;
+        } else if (argument == L"--test-gpu-ao") {
+            options.testGpuAo = true;
         } else if (argument == L"--screenshot-frame" && (i + 1) < argc) {
             options.screenshotFrame = static_cast<uint32_t>(::_wtoi(argv[i + 1]));
             ++i;

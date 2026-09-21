@@ -1,7 +1,7 @@
 # plan — v2 仕様に基づく実装計画
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 21:43
+更新日時: 2026-09-21 23:01
 
 ## 方針
 
@@ -26,6 +26,8 @@ P 番号は本計画の作業単位。原仕様の Milestone 番号とは別。P
 | P8 書き出しと受入 | OBJ 出力、出力範囲・座標・法線・材質の扱いを明示 | 選択/可視 Chunk を別ビューアで読み直せる。MVP 受入が通る | §45 |
 
 ## 現在の方向 — 岩のボリュームを研究する
+
+ユーザー指定により、Apply Materialを1種類のノードとして追加。マスク未接続は全面置換、接続時は素材の積み重ねとする。生成Meshに適用情報を引き継ぎ、既存Material Bakeへ形状AOを追加する。[素材の適用と形状AO](../reference/material-application.md)を参照。
 
 2026-09-21の追加依頼で、メッシュ方式のVoronoi分割とピース選別・個別操作を新規設計した。仕様は [Voronoiとピース操作](../reference/voronoi-pieces.md)。旧Crack / Fractureは復活させず、新しいPoints / Pieces / Selection型で処理を分ける。Base Rockの表示名をBase Shapeに変更し、保存用の `baseRock` は維持する。
 

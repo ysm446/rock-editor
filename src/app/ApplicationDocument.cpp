@@ -145,6 +145,7 @@ void Application::ApplyDocument(const DocumentSnapshot& snapshot) {
     // --- グラフ -------------------------------------------------------------
     std::vector<graph::Node> nodes = snapshot.graphNodes;
     for (graph::Node& node : nodes) {
+        if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings)) mask->texture = ValidTexture(mask->texture);
         graph::VisitNodeMaterialLayers(node, [&](compositor::MaterialLayer& layer) {
             if (m_materialLibrary.Find(layer.material) == nullptr) layer.material = compositor::kNoMaterialAsset;
         });

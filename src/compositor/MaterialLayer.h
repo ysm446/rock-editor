@@ -108,6 +108,12 @@ struct MaterialMapping {
     float sharpness = 4.0f;
 };
 
+struct MaterialMask {
+    uint32_t texture = 0;
+    float value = 1, repeatMeters = 1;
+    bool invert = false, triplanar = false;
+    bool operator==(const MaterialMask&) const = default;
+};
 struct MaterialLayer {
     MaterialMapping mapping;
     std::string name = "Layer";

@@ -1,9 +1,23 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 22:24
+更新日時: 2026-09-21 23:42
 
 ## 現在地
+
+### 形状AOのGPU化・進捗表示
+
+- 形状AOのレイ判定をDX12 Computeへ移行。空間/UV BVHはCPUで構築し、GPUは128×64画素のタイルをフレーム間に分割して処理する。完了タイル数による進捗表示とキャンセル、入力変更時の破棄、適用前の指紋照合を追加。専用DXR機能は不要。
+- 実GPUとCPU参照実装の比較で、平面・遮蔽・距離・強度・8/32/128サンプルの最大差は8bit値で1。タイル端・進捗単調増加・部分実行の破棄/再利用を開発用 `--test-gpu-ao` で検証。512のSDFメッシュのAOベイク画像は従来CPU版と画素単位で一致。Release実アプリで2048/128サンプルの完了・進捗画面、キャンセル、保存再読込を確認。Debugの2048実画面検証は長時間化したため中止し、実GPU比較テストとビルド・CTestで検証した。
+
+- Release/DebugビルドとCTest成功（約15秒/131秒）。実GPU参照比較も両構成で成功。DebugのD3D12検証でエラーなし（共通StructuredBuffer生成によるCOPY_DEST初期状態の警告は残る）。
+
+### Apply Material・マスク合成・形状AO
+
+- Apply Material（Mesh / Material / Mask → Mesh）とMaterial Mask（定数・画像R、反転、UV/Triplanar）を追加。マスク省略は全面置換、接続時は最大8段の素材合成。Surfaceごとの投影を保持し、UV UnwrapとMaterial Bakeへ引き継ぐ。旧Output/BakeのMaterial入力は全面置換として互換維持。
+- Material Bakeに距離・強度・サンプル数を持つ形状AOを追加。UV画素ごとのBVHレイ判定で素材AOへ乗算し、BaseColorは保持する。マスク画像・各段の投影・AO設定をベイク指紋へ含める。保存・再読込・Undoに対応。
+- Release/Debugビルドと全CTest成功（約13秒/107秒）。マスク型、全面置換、素材順序、UV/Bake継承、8段上限、無効Surface、Undo/Redo、AOの遮蔽・距離・強度・再現性を検証。実アプリで黒/白/50%と画像マスクのプレビュー・ベイクを確認。黒/白/50%のBaseColor中央値はそれぞれ[202,38,38]/[38,38,202]/[150,38,150]。AOは素材の上限値を維持し、遮蔽で暗くなることを確認。保存再読込でマスク・AO・指紋と接続を維持し、AO距離変更で再ベイク待ちになることを画面確認。配布サンプルを別ルートにコピーして読み込み・ベイク成功。
+- 詳細と制限は[素材の適用と形状AO](../reference/material-application.md)。サンプルは `examples/material-layers/`。
 
 ### 2026-09-21 Dual Contouringの共有面接続修正
 

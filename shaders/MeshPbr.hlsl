@@ -34,6 +34,13 @@ struct BoundaryConstants {
     float center; float acrossSign; float width; float repeat;
     float depth; float heightCenter; float pad0; float pad1;
 };
+struct AppliedConstants {
+    uint4 maps;
+    float4 axisX, axisY, axisZ;
+    float3 offset; uint method;
+    uint maskIndex; float maskValue, maskRepeat; uint maskFlags;
+};
+
 struct MeshConstants
 {
     float4x4 viewProjection;
@@ -141,6 +148,8 @@ struct MeshConstants
     float4 mappingAxisZ;
     float3 mappingOffset;
     uint mappingMethod;
+    AppliedConstants applied[8];
+    uint appliedCount; uint3 appliedPadding;
 };
 
 
@@ -856,6 +865,84 @@ float3 TriplanarNormal(Texture2D<float2> map, TriplanarFrame f)
     return normalize(g_mesh.mappingAxisX.xyz * n.x + g_mesh.mappingAxisY.xyz * n.y + g_mesh.mappingAxisZ.xyz * n.z);
 }
 
+TriplanarFrame MakeAppliedFrame(AppliedConstants layer, float3 position, float3 normal)
+{
+    TriplanarFrame f;
+    float3 p = position - layer.offset;
+    p = float3(dot(p, layer.axisX.xyz), dot(p, layer.axisY.xyz),
+               dot(p, layer.axisZ.xyz)) * layer.axisX.w;
+    f.normal = float3(dot(normal, layer.axisX.xyz), dot(normal, layer.axisY.xyz),
+                      dot(normal, layer.axisZ.xyz));
+    f.signs = float3(f.normal.x < 0 ? -1 : 1, f.normal.y < 0 ? -1 : 1, f.normal.z < 0 ? -1 : 1);
+    f.x = float2(-p.z * f.signs.x, p.y);
+    f.y = float2(p.x, -p.z * f.signs.y);
+    f.z = float2(p.x * f.signs.z, p.y);
+    f.weights = pow(abs(f.normal), layer.axisY.w);
+    f.weights /= max(dot(f.weights, 1.0f.xxx), 1e-8f);
+    return f;
+}
+float3 AppliedNormal(AppliedConstants layer, Texture2D<float2> map, TriplanarFrame f)
+{
+    float3 nx = DecodeTangentNormal(map.Sample(g_samplerAnisoWrap, f.x));
+    float3 ny = DecodeTangentNormal(map.Sample(g_samplerAnisoWrap, f.y));
+    float3 nz = DecodeTangentNormal(map.Sample(g_samplerAnisoWrap, f.z));
+    // 法線マップから勾配を取り、各投影の接線方向へ戻して表面へ投影する。
+    // 平坦な法線マップでは勾配がゼロとなり、混合の鋭さによらず元の法線を保つ。
+    float2 sx = nx.xy / max(nx.z, 0.05f);
+    float2 sy = ny.xy / max(ny.z, 0.05f);
+    float2 sz = nz.xy / max(nz.z, 0.05f);
+    float3 slope = float3(0, sx.y, -sx.x * f.signs.x) * f.weights.x
+                 + float3(sy.x, 0, -sy.y * f.signs.y) * f.weights.y
+                 + float3(sz.x * f.signs.z, sz.y, 0) * f.weights.z;
+    slope -= f.normal * dot(f.normal, slope);
+    float3 n = normalize(f.normal + slope);
+    return normalize(layer.axisX.xyz * n.x + layer.axisY.xyz * n.y + layer.axisZ.xyz * n.z);
+}
+
+struct AppliedValue { float3 color, normal; float4 surface; float height; };
+AppliedValue EvaluateApplied(VsOutput input) {
+    AppliedValue result;
+    float3 n = normalize(input.worldNormal);
+    float3 t = normalize(input.worldTangent - n * dot(input.worldTangent, n));
+    float3 b = cross(n, t) * input.tangentSign;
+    result.color = 0.18f.xxx; result.normal = n; result.surface = float4(.5,0,1,1); result.height = .5;
+    for (uint i = 0; i < g_mesh.appliedCount; ++i) {
+        AppliedConstants a = g_mesh.applied[i];
+        Texture2D<float4> colorMap = ResourceDescriptorHeap[a.maps.x];
+        Texture2D<float2> normalMap = ResourceDescriptorHeap[a.maps.y];
+        Texture2D<float4> surfaceMap = ResourceDescriptorHeap[a.maps.z];
+        Texture2D<float> heightMap = ResourceDescriptorHeap[a.maps.w];
+        TriplanarFrame f = MakeAppliedFrame(a, input.worldPosition, n);
+        float3 color; float4 surface; float height; float3 normal;
+        if (a.method == 1u) {
+            color = (colorMap.Sample(g_samplerAnisoWrap,f.x)*f.weights.x + colorMap.Sample(g_samplerAnisoWrap,f.y)*f.weights.y + colorMap.Sample(g_samplerAnisoWrap,f.z)*f.weights.z).rgb;
+            surface = surfaceMap.Sample(g_samplerAnisoWrap,f.x)*f.weights.x + surfaceMap.Sample(g_samplerAnisoWrap,f.y)*f.weights.y + surfaceMap.Sample(g_samplerAnisoWrap,f.z)*f.weights.z;
+            height = heightMap.Sample(g_samplerAnisoWrap,f.x)*f.weights.x + heightMap.Sample(g_samplerAnisoWrap,f.y)*f.weights.y + heightMap.Sample(g_samplerAnisoWrap,f.z)*f.weights.z;
+            normal = AppliedNormal(a, normalMap, f);
+        } else {
+            color = SampleMaterialColor(colorMap,input.uv).rgb; surface = SampleMaterialColor(surfaceMap,input.uv);
+            height = SampleMaterialScalar(heightMap,input.uv);
+            float3 tn = DecodeTangentNormal(SampleMaterialNormal(normalMap,input.uv)); normal = normalize(t*tn.x+b*tn.y+n*tn.z);
+        }
+        float mask = a.maskValue;
+        if (a.maskIndex != 0xffffffffu) {
+            Texture2D<float4> m = ResourceDescriptorHeap[a.maskIndex];
+            if ((a.maskFlags & 2u) != 0u) {
+                float3 p = input.worldPosition / a.maskRepeat;
+                float3 w = pow(abs(n), 4); w /= max(dot(w,1.0f.xxx),1e-8);
+                mask *= m.Sample(g_samplerAnisoWrap,p.zy).r*w.x + m.Sample(g_samplerAnisoWrap,p.xz).r*w.y + m.Sample(g_samplerAnisoWrap,p.xy).r*w.z;
+            } else mask *= m.Sample(g_samplerAnisoWrap,input.uv / a.maskRepeat).r;
+        }
+        if ((a.maskFlags & 1u) != 0u) mask = 1-mask;
+        mask = saturate(mask);
+        if ((a.maskFlags & 256u) != 0u) result.color = lerp(result.color,color,mask);
+        if ((a.maskFlags & 512u) != 0u) result.normal = normalize(lerp(result.normal,normal,mask));
+        if ((a.maskFlags & 1024u) != 0u) result.surface = lerp(result.surface,surface,mask);
+        if ((a.maskFlags & 2048u) != 0u) result.height = lerp(result.height,height,mask);
+    }
+    return result;
+}
+
 // UV空間へラスタライズする。位置・法線は投影元のワールド座標のまま渡す。
 VsOutput VsBake(VsInput input)
 {
@@ -870,6 +957,15 @@ VsOutput VsBake(VsInput input)
 }
 float4 PsBake(VsOutput input) : SV_Target0
 {
+    if (g_mesh.appliedCount != 0u) {
+        AppliedValue a = EvaluateApplied(input);
+        if (g_mesh.debugView == 0u) return float4(LinearToSrgb(saturate(a.color)),1);
+        if (g_mesh.debugView == 2u) return float4(a.surface.rgb,1);
+        if (g_mesh.debugView == 3u) return float4(a.height.xxx,1);
+        float3 n=normalize(input.worldNormal), t=normalize(input.worldTangent-n*dot(n,input.worldTangent));
+        float3 b=cross(n,t)*input.tangentSign;
+        return float4(normalize(float3(dot(a.normal,t),dot(a.normal,b),dot(a.normal,n)))*.5+.5,1);
+    }
     Texture2D<float4> colorMap = ResourceDescriptorHeap[g_mesh.materialBaseColorIndex];
     Texture2D<float2> normalMap = ResourceDescriptorHeap[g_mesh.materialNormalIndex];
     Texture2D<float4> surfaceMap = ResourceDescriptorHeap[g_mesh.materialSurfaceIndex];
@@ -1053,6 +1149,11 @@ float4 PsMain(VsOutput input) : SV_Target0
         }
     }
 
+    if (g_mesh.appliedCount != 0u && !uvChecker && !clay) {
+        AppliedValue a = EvaluateApplied(input);
+        baseColor=a.color; normal=a.normal; roughnessValue=a.surface.r; metallicValue=a.surface.g;
+        ambientOcclusion=a.surface.b; opacity=a.surface.a;
+    }
     // --- チャンネルを覗く表示 ----------------------------------------------
     // チャンネルの中身をそのまま出す。露出もトーンマップも掛けない
     // （後段の TonemapPass が素通しする）。**クレイはここへ来ない。**

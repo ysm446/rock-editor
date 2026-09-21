@@ -446,7 +446,7 @@ compositor::MaterialLayer ReadLayer(
 // writeModel は Model ノードのモデル（実行中の ID）を文書内の番号へ写す。無ければ null を書く。
 json WriteGraph(const graph::NodeGraph& graphData,
                 const std::function<json(compositor::MaterialAssetId)>& writeMaterial,
-                const std::function<json(uint64_t)>& writeModel = {}) {
+                const std::function<json(uint64_t)>& writeModel, const TextureWriter& writeTexture) {
     json out;
     json nodes = json::array();
     for (const graph::Node& node : graphData.Nodes()) {
@@ -478,8 +478,11 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["toVolume"] = {{"resolution", volume->resolution}};
         } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node.settings)) {
             item["uvUnwrap"] = {{"resolution", uv->resolution}, {"padding", uv->padding}, {"quality", uv->quality}};
+        } else if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings)) {
+            item["materialMask"] = {{"texture", writeTexture(mask->texture)}, {"value", mask->value},
+                {"repeatMeters", mask->repeatMeters}, {"invert", mask->invert}, {"triplanar", mask->triplanar}};
         } else if (const auto* bake = std::get_if<graph::MaterialBakeSettings>(&node.settings)) {
-            item["materialBake"] = {{"layer", WriteLayer(bake->bakedLayer, writeMaterial)}, {"fingerprint", bake->fingerprint}};
+            item["materialBake"] = {{"layer", WriteLayer(bake->bakedLayer, writeMaterial)}, {"fingerprint", bake->fingerprint}, {"geometryAo", bake->geometryAo}, {"aoDistance", bake->aoDistance}, {"aoStrength", bake->aoStrength}, {"aoSamples", bake->aoSamples}};
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
@@ -540,7 +543,7 @@ json WriteGraph(const graph::NodeGraph& graphData,
 // readModel は Model ノードの文書内の番号を実行中のモデル ID へ写す（0 = なし）。
 bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                const std::function<compositor::MaterialAssetId(const json&)>& readMaterial,
-               const std::function<uint64_t(const json&)>& readModel = {}) {
+               const std::function<uint64_t(const json&)>& readModel, const TextureReader& readTexture) {
     std::vector<graph::Node> nodes;
     std::vector<graph::Link> links;
     graph::GraphId maxId = 0;
@@ -640,11 +643,25 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.quality = ReadInt(*v, "quality", 1);
                 }
                 created.settings = settings;
+            } else if (created.kind == graph::NodeKind::MaterialMask) {
+                graph::MaterialMaskSettings settings;
+                if (const json* v = FindMember(item, "materialMask"); v && v->is_object()) {
+                    if (const json* t = FindMember(*v, "texture")) settings.texture = readTexture(*t);
+                    settings.value = std::clamp(ReadFloat(*v, "value", 1), 0.f, 1.f);
+                    settings.repeatMeters = std::clamp(ReadFloat(*v, "repeatMeters", 1), .001f, 10000.f);
+                    settings.invert = ReadBool(*v, "invert", false);
+                    settings.triplanar = ReadBool(*v, "triplanar", false);
+                }
+                created.settings = settings;
             } else if (created.kind == graph::NodeKind::MaterialBake) {
                 graph::MaterialBakeSettings settings;
                 if (const json* v = FindMember(item, "materialBake"); v && v->is_object()) {
                     if (const json* layer = FindMember(*v, "layer"); layer && layer->is_object()) settings.bakedLayer = ReadLayer(*layer, readMaterial);
                     settings.fingerprint = ReadString(*v, "fingerprint");
+                    settings.geometryAo = ReadBool(*v, "geometryAo", false);
+                    settings.aoDistance = std::clamp(ReadFloat(*v, "aoDistance", .5f), .001f, 1000.f);
+                    settings.aoStrength = std::clamp(ReadFloat(*v, "aoStrength", 1), 0.f, 1.f);
+                    settings.aoSamples = std::clamp(ReadInt(*v, "aoSamples", 32), 8, 128);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeToMesh) {
@@ -1253,7 +1270,7 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
         const auto found = modelIndex.find(id);
         return found != modelIndex.end() ? json(found->second) : json();
     };
-    document["graph"] = WriteGraph(refs.graph, writeMaterial, writeModel);
+    document["graph"] = WriteGraph(refs.graph, writeMaterial, writeModel, writeTexture);
 
     // 天球はマテリアルと同じく、構造ごと埋め込む（画像だけ相対パスの参照）。
     json skies = json::array();
@@ -1443,7 +1460,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
             const auto found = modelIds.find(value.get<int>());
             return found != modelIds.end() ? found->second : 0;
         };
-        graphLoaded = ReadGraph(*graphNode, refs.graph, readMaterial, readModel);
+        graphLoaded = ReadGraph(*graphNode, refs.graph, readMaterial, readModel, readTexture);
     }
     if (!graphLoaded) {
         refs.graph = graph::NodeGraph::CreateDefault();

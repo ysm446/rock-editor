@@ -50,6 +50,7 @@ ImVec4 NodeAccentColor(graph::NodeKind kind) {
 ImVec4 PinTypeColor(graph::ValueType valueType) {
     switch (valueType) {
         // メッシュは緑。
+        case graph::ValueType::Mask: return ImVec4(.65f,.65f,.65f,1);
         case graph::ValueType::Points: return ImVec4(.8f,.65f,.35f,1);
         case graph::ValueType::Pieces: return ImVec4(.75f,.5f,.32f,1);
         case graph::ValueType::Selection: return ImVec4(.85f,.75f,.25f,1);
@@ -859,6 +860,8 @@ void Application::DrawGraphEditor() {
         ImGui::Separator();
         ImGui::TextDisabled("材質");
         addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Material スロットへ渡す");
+        addNodeMenuItem(graph::NodeKind::ApplyMaterial, "Apply Material — マスクで素材を適用");
+        addNodeMenuItem(graph::NodeKind::MaterialMask, "Material Mask — 定数・画像マスク");
         addNodeMenuItem(graph::NodeKind::MaterialBake, "Material Bake — UVへ材質を焼き付ける");
         ImGui::EndPopup();
     }
@@ -1149,12 +1152,41 @@ void Application::DrawGraphPanel() {
         }
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
         ui::HintText("選択するとUVチェッカーを表示します。UVビューのタブで島の配置を確認できます。複数の入力メッシュは1枚のアトラスへまとめます。");
+    } else if (selected->kind == graph::NodeKind::ApplyMaterial) {
+        ui::HintText("MeshとSurfaceを接続します。Mask未接続なら全面を置換。Mask接続時は白で新しい素材、黒で上流の素材、中間値で混合します。最大8段まで重ねられます。");
+    } else if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&selected->settings)) {
+        bool changed = false;
+        if (ui::BeginPropertyTable("materialMask")) {
+            changed |= DrawTextureSlotRow("画像（R）", mask->texture, m_textureLibrary);
+            changed |= ui::PropertyFloat("値・画像の強度", &mask->value, 0, 1, 1);
+            changed |= ui::PropertyBool("反転", &mask->invert, false);
+            changed |= ui::PropertyBool("Triplanar", &mask->triplanar, false);
+            changed |= ui::PropertyFloat("反復幅", &mask->repeatMeters, .001f, 10000, 1);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("画像未指定なら定数。画像はリニアのRを使用。反復幅はUV時はUV単位、Triplanar時はメートルです。");
+        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
     } else if (selected->kind == graph::NodeKind::MaterialBake) {
-        ui::HintText("UV UnwrapのMeshとSurfaceのMaterialを接続してください。");
-        ImGui::BeginDisabled(m_pieceUpdating);
+        ui::HintText("UV付きのMeshを接続します。Apply Materialの素材を焼き付けます。MaterialにSurfaceを接続すると全面を置換します。");
+        auto& bake = std::get<graph::MaterialBakeSettings>(selected->settings);
+        bool changed = false;
+        if (ui::BeginPropertyTable("geometryAo")) {
+            changed |= ui::PropertyBool("形状AOをベイク", &bake.geometryAo, false);
+            if (bake.geometryAo) {
+                changed |= ui::PropertyFloat("AO距離 (m)", &bake.aoDistance, .001f, 1000, .5f);
+                changed |= ui::PropertyFloat("AO強度", &bake.aoStrength, 0, 1, 1);
+                changed |= ui::PropertyInt("AOサンプル数", &bake.aoSamples, 8, 128, 32);
+            }
+            ui::EndPropertyTable();
+        }
+        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+        ui::HintText("形状AOはGPUで同じ入力メッシュの遮蔽を計算し、素材AOに乗算します。サンプル数と画像サイズが大きいほど時間がかかります。");
+        ImGui::BeginDisabled(m_pieceUpdating || m_bakeJob.has_value() || m_pendingBake != 0);
         if (ImGui::Button("ベイク実行")) m_pendingBake=selected->id;
         ImGui::EndDisabled();
-        if (const auto status=m_bakeStatus.find(selected->id); status!=m_bakeStatus.end())
+        if (m_bakeJob && m_bakeJob->id == selected->id)
+            ui::HintText("形状AOをGPUで計算中です。進捗ウィンドウからキャンセルできます。");
+        else if (const auto status=m_bakeStatus.find(selected->id); status!=m_bakeStatus.end())
             ui::HintText(status->second.c_str());
         else ui::HintText("未ベイク。ノードの出力をプレビューして状態を確認してください。");
         ui::HintText("UV Unwrapのアトラス寸法でPNGを4枚生成し、ルート内のBakesへ保存します。形状・材質・スムーズシェーディングを変えたら再ベイクしてください。");

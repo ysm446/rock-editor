@@ -275,6 +275,8 @@ void Application::ResetProject() {
     m_meshHighlight = MeshHighlightState{};
     m_graph = graph::NodeGraph::CreateDefault();
     ++m_pieceEpoch;
+    m_pendingBake = 0;
+    m_bakeStatus.clear();
     m_pieceStop.request_stop();
     m_pieceCompletedKey.clear();
     m_pieceSelectionEditing = false;
@@ -366,6 +368,8 @@ void Application::ProcessPendingFileWork() {
             m_selectedGraphNode = m_graph.FindNode(m_options.selectNode) ? m_options.selectNode : 0;
             m_options.selectNode = 0;
             ++m_pieceEpoch;
+            m_pendingBake = 0;
+            m_bakeStatus.clear();
             m_pieceStop.request_stop();
             m_pieceCompletedKey.clear();
             m_pieceSelectionEditing = false;
@@ -477,6 +481,11 @@ void Application::ProcessPendingFileWork() {
             if (hit) {
                 asset->thumbnailDirty = true;
             }
+        }
+        for (const auto& entry : m_graph.Nodes()) {
+            auto* node = m_graph.FindMutableNode(entry.id);
+            if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&node->settings))
+                if (clearSlot(mask->texture)) { m_graph.MarkDirty(); MarkDocumentChanged(); }
         }
         clearSlot(m_ordTexture);
 

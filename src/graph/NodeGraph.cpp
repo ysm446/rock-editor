@@ -61,7 +61,13 @@ constexpr std::array<PinDefinition, 3> kVoronoiPins = {{{PinKind::Input, ValueTy
 constexpr std::array<PinDefinition, 2> kSelectPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Selection, "Selection"}}};
 constexpr std::array<PinDefinition, 3> kPieceFilterPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Input, ValueType::Selection, "Selection"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
 constexpr std::array<PinDefinition, 2> kPiecesMeshPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 18> kNodeDefinitions = {{
+constexpr std::array<PinDefinition, 4> kApplyPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Input, ValueType::Mask, "Mask"},
+    {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType::Mask, "Mask"}}};
+constexpr std::array<NodeDefinition, 20> kNodeDefinitions = {{
+    {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
+    {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
     {NodeKind::VoronoiFracture, "voronoiFracture", "Voronoi Fracture", kVoronoiPins},
     {NodeKind::PieceSelect, "pieceSelect", "Piece Select", kSelectPins},
@@ -117,7 +123,7 @@ bool IsMeshNodeKind(NodeKind kind) {
     return IsPieceNodeKind(kind) || kind == NodeKind::Merge || kind == NodeKind::BaseRock ||
            kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
            kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeToMesh ||
-           kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake;
+           kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -411,6 +417,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::PieceTransformSettings{};
     } else if (kind == NodeKind::UvUnwrap) {
         node.settings = geometry::UvUnwrapSettings{};
+    } else if (kind == NodeKind::MaterialMask) {
+        node.settings = MaterialMaskSettings{};
     } else if (kind == NodeKind::MaterialBake) {
         node.settings = MaterialBakeSettings{};
     } else if (kind == NodeKind::VolumeToMesh) {

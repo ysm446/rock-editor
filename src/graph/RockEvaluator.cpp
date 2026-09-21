@@ -17,7 +17,7 @@ RockEvaluation Failure(GraphId id, const char* kind, const std::string& message)
 void Append(RockEvaluation& target, const RockEvaluation& source) {
     for (const auto& item : source.rocks)
         if (std::none_of(target.rocks.begin(), target.rocks.end(),
-                         [&](const auto& other) { return other.source == item.source; }))
+                         [&](const auto& other) { return other.source == item.source && other.materials == item.materials && other.materialSource == item.materialSource && other.bakeSource == item.bakeSource; }))
             target.rocks.push_back(item);
     target.hasModels |= source.hasModels;
 }
@@ -131,6 +131,33 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         };
         if (IsPieceNodeKind(node->kind)) {
             return finish(EvaluatePieceNode(graph, *node, persistent, [&](GraphId upstream) { return evaluate(upstream, depth+1); }, stop));
+        } else if (node->kind == NodeKind::ApplyMaterial) {
+            const auto* upstream = graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            const auto* material = graph.FindUpstreamNodeForPin(node->inputs[1].id);
+            const auto* mask = graph.FindUpstreamNodeForPin(node->inputs[2].id);
+            if (!upstream || !material || material->kind != NodeKind::Surface)
+                return finish(Failure(id, "Apply Material", "MeshとSurfaceを接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty())
+                return finish(Failure(id, "Apply Material", "生成メッシュが必要です"));
+            if (const auto* layer = std::get_if<LayerNodeSettings>(&material->settings); layer && !layer->layer.enabled)
+                return finish(result);
+            if (mask) {
+                const auto* settings = std::get_if<MaterialMaskSettings>(&mask->settings);
+                if (!settings || !std::isfinite(settings->value) || settings->value < 0 || settings->value > 1 ||
+                    !std::isfinite(settings->repeatMeters) || settings->repeatMeters < .001f || settings->repeatMeters > 10000)
+                    return finish(Failure(id, "Apply Material", "マスクの設定が不正です"));
+            }
+            for (auto& rock : result.rocks) {
+                if (rock.volume) return finish(Failure(id, "Apply Material", "Volume to Meshを通してください"));
+                if (!mask) rock.materials.clear();
+                else if (rock.materials.empty() && rock.materialSource) rock.materials.push_back({rock.materialSource, 0});
+                if (rock.materials.size() >= 8) return finish(Failure(id, "Apply Material", "素材の重ね合わせは8段までです"));
+                rock.materials.push_back({material->id, mask ? mask->id : 0});
+                rock.materialSource = 0;
+                rock.bakeSource = 0;
+            }
         } else if (node->kind == NodeKind::UvUnwrap || node->kind == NodeKind::MaterialBake) {
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
             if (!upstream) return finish(Failure(id, "UV / Bake", "Mesh入力を接続してください"));
@@ -161,15 +188,22 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                     if (persistent) persistent->uvs[id] = {std::move(combined), unwrapped, *settings};
                 }
                 GeneratedRock rock; rock.source = id; rock.mesh = std::move(unwrapped);
+                rock.materials = result.rocks[0].materials;
+                rock.materialSource = result.rocks[0].materialSource;
+                for (const auto& inputRock : result.rocks)
+                    if (inputRock.materials != rock.materials || inputRock.materialSource != rock.materialSource)
+                        return finish(Failure(id, "UV Unwrap", "異なる素材の枝はUV Unwrap後に適用してください"));
                 result = {}; result.rocks.push_back(std::move(rock));
             } else {
                 if (result.rocks.size() != 1 || !geometry::HasValidUvs(result.rocks[0].mesh))
                     return finish(Failure(id, "Material Bake", "UV Unwrapの出力を接続してください"));
                 const auto* surface = graph.FindUpstreamNodeForPin(node->inputs[1].id);
-                if (!surface || surface->kind != NodeKind::Surface)
-                    return finish(Failure(id, "Material Bake", "MaterialにSurfaceを接続してください"));
+                if (surface) {
+                    result.rocks[0].materials.clear();
+                    result.rocks[0].materialSource = surface->id;
+                } else if (result.rocks[0].materials.empty() && !result.rocks[0].materialSource)
+                    return finish(Failure(id, "Material Bake", "Apply Materialを通すかMaterialにSurfaceを接続してください"));
                 result.rocks[0].source = id;
-                result.rocks[0].materialSource = surface->id;
                 result.rocks[0].bakeSource = id;
             }
         } else if (node->kind == NodeKind::RandomBoxes) {
@@ -270,7 +304,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (node->kind == NodeKind::MeshOutput && node->inputs.size() > 1) {
                 const auto* surface = graph.FindUpstreamNodeForPin(node->inputs[1].id);
                 if (surface && surface->kind == NodeKind::Surface)
-                    for (auto& rock : result.rocks) { rock.materialSource = surface->id; rock.bakeSource = 0; }
+                    for (auto& rock : result.rocks) { rock.materialSource = surface->id; rock.materials.clear(); rock.bakeSource = 0; }
             }
         }
         return finish(result);

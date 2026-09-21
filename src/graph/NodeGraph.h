@@ -36,6 +36,7 @@ enum class PinKind : uint32_t {
 
 // ピンを流れる値の型。同じ型どうしだけ接続できる。
 enum class ValueType : uint32_t {
+    Mask = 13,
     Points = 10, Pieces = 11, Selection = 12,
     Material = 0,
     Mesh = 3,
@@ -52,6 +53,7 @@ enum class ValueType : uint32_t {
 // 数値は保存名ではなくファイルには書かない（定義テーブルの name を書く）が、
 // 撤去した種類の値は再利用しない。
 enum class NodeKind : uint32_t {
+    ApplyMaterial = 50, MaterialMask = 51,
     BaseRock = 34,
     // 35～37 は撤去した Crack / Fracture / Joint Set。
     RandomBoxes = 38,
@@ -110,7 +112,11 @@ using BaseRockNodeSettings = geometry::BaseRockSettings;
 struct LayerNodeSettings {
     compositor::MaterialLayer layer;
 };
+using MaterialMaskSettings = compositor::MaterialMask;
 struct MaterialBakeSettings {
+    bool geometryAo = false;
+    float aoDistance = 0.5f, aoStrength = 1;
+    int aoSamples = 32;
     compositor::MaterialLayer bakedLayer;
     std::string fingerprint;
 };
@@ -151,7 +157,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   TransformNodeSettings, BaseRockNodeSettings,
                                   geometry::BoxClusterSettings, geometry::VolumeSettings,
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
-                                  geometry::UvUnwrapSettings, MaterialBakeSettings,
+                                  geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
                                   geometry::PieceTransformSettings, std::monostate>;

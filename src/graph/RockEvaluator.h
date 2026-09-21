@@ -11,6 +11,11 @@ struct GeneratedRock {
     geometry::Mesh mesh;
     std::shared_ptr<const std::vector<geometry::OrientedBox>> boxes;
     std::shared_ptr<const geometry::VolumeGrid> volume;
+    struct MaterialBinding {
+        GraphId surface = 0, mask = 0;
+        bool operator==(const MaterialBinding&) const = default;
+    };
+    std::vector<MaterialBinding> materials;
     GraphId materialSource = 0;
     GraphId bakeSource = 0;
     int pieceId = -1;

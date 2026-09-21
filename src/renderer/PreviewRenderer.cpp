@@ -72,6 +72,12 @@ constexpr uint32_t kMeshFlagUvChecker = 2u;
 constexpr uint32_t kMeshFlagOutlineHovered = 4u;
 constexpr uint32_t kMeshFlagOutlineSelected = 8u;
 
+struct AppliedConstants {
+    uint32_t maps[4];
+    XMFLOAT4 axisX, axisY, axisZ;
+    XMFLOAT3 offset; uint32_t method;
+    uint32_t maskIndex; float maskValue, maskRepeat; uint32_t maskFlags;
+};
 struct MeshConstants {
     XMFLOAT4X4 viewProjection;
     // 法線をカメラ空間で見るためのビュー行列。**HLSL 側と同じ並びにすること。**
@@ -173,7 +179,24 @@ struct MeshConstants {
     XMFLOAT4 mappingAxisZ;
     XMFLOAT3 mappingOffset;
     uint32_t mappingMethod;
+    AppliedConstants applied[8];
+    uint32_t appliedCount; uint32_t appliedPadding[3];
 };
+
+void FillApplied(AppliedConstants& out, const SceneMesh::AppliedMaterial& source,
+                 const compositor::MaterialTextureSet& maps, const compositor::TextureLibrary& textures) {
+    out.maps[0] = maps.baseColor.SrvIndex(); out.maps[1] = maps.normal.SrvIndex();
+    out.maps[2] = maps.surface.SrvIndex(); out.maps[3] = maps.height.SrvIndex();
+    const auto& m = source.mapping;
+    const auto rotation = XMMatrixRotationRollPitchYaw(XMConvertToRadians(m.rotationDegrees.x),
+        XMConvertToRadians(m.rotationDegrees.y), XMConvertToRadians(m.rotationDegrees.z));
+    XMStoreFloat4(&out.axisX, rotation.r[0]); XMStoreFloat4(&out.axisY, rotation.r[1]); XMStoreFloat4(&out.axisZ, rotation.r[2]);
+    out.axisX.w = 1 / m.repeatMeters; out.axisY.w = m.sharpness;
+    out.offset = m.offset; out.method = uint32_t(m.method);
+    out.maskIndex = textures.SrvIndex(source.mask.texture, false);
+    out.maskValue = source.mask.value; out.maskRepeat = source.mask.repeatMeters;
+    out.maskFlags = (source.mask.invert ? 1u : 0u) | (source.mask.triplanar ? 2u : 0u) | (source.channels << 8);
+}
 
 // 道路空間マスク（RGBA8）を GPU へ上げる。ミップは持たない（低解像度でぼかして読む）。
 bool CreateRoadMaskTexture(rhi::Device& device, const SceneMesh::RoadMaskPixels& pixels, rhi::GpuTexture& outTexture) {
@@ -320,11 +343,12 @@ bool BakeMaterial(rhi::Device& device, rhi::PipelineCache& pipelines, const Scen
     images = {}; error.clear();
     if (!source.materialStack || !width || !height || width>8192 || height>8192) { error="ベイク入力または解像度が無効です"; return false; }
     compositor::MaterialEvaluator evaluator;
+    std::vector<std::unique_ptr<compositor::MaterialEvaluator>> appliedEvaluators;
     const uint32_t sourceResolution=std::clamp(std::max(width,height),128u,4096u);
     Mesh mesh;
     rhi::GpuTexture target;
     rhi::GpuBuffer constantsBuffer;
-    const auto cleanup = [&] { mesh.Release(device); evaluator.Destroy(device); device.DeferRelease(target); device.DeferRelease(constantsBuffer); };
+    const auto cleanup = [&] { mesh.Release(device); evaluator.Destroy(device); for (auto& e : appliedEvaluators) e->Destroy(device); device.DeferRelease(target); device.DeferRelease(constantsBuffer); };
     if (!mesh.Create(device,source.geometry,L"BakeMesh") || !evaluator.Create(device,sourceResolution,false)) {
         error="ベイク用リソースを作成できません"; cleanup(); return false;
     }
@@ -354,6 +378,17 @@ bool BakeMaterial(rhi::Device& device, rhi::PipelineCache& pipelines, const Scen
     XMStoreFloat4(&constants.mappingAxisX,rotation.r[0]); XMStoreFloat4(&constants.mappingAxisY,rotation.r[1]); XMStoreFloat4(&constants.mappingAxisZ,rotation.r[2]);
     constants.mappingAxisX.w=1.0f/mapping.repeatMeters; constants.mappingAxisY.w=mapping.sharpness;
     constants.mappingOffset=mapping.offset; constants.mappingMethod=static_cast<uint32_t>(mapping.method);
+    if (source.appliedMaterials.size() > 8) { error="素材の重ね合わせは8段までです"; cleanup(); return false; }
+    for (const auto& applied : source.appliedMaterials) {
+        if (constants.appliedCount == 0) { FillApplied(constants.applied[constants.appliedCount++], applied, evaluator.Textures(), textures); continue; }
+        auto& e = appliedEvaluators.emplace_back(std::make_unique<compositor::MaterialEvaluator>());
+        if (!e->Create(device, sourceResolution, false)) { error="素材評価器を作成できません"; cleanup(); return false; }
+        bool ok = false;
+        if (!device.ExecuteImmediate([&](auto* list) { ok = e->Evaluate(device,pipelines,list,applied.stack,textures,materials,{{0,0,sourceResolution,sourceResolution}}); }) || !ok) {
+            error="適用素材を評価できません"; cleanup(); return false;
+        }
+        FillApplied(constants.applied[constants.appliedCount++], applied, e->Textures(), textures);
+    }
     for (uint32_t channel=0;channel<4;++channel) {
         constants.debugView=channel;
         void* mapped=nullptr; const D3D12_RANGE read{0,0};
@@ -556,7 +591,19 @@ bool PreviewRenderer::IsEvaluating() const {
     return false;
 }
 
-bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& scene) {
+bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& input) {
+    auto scene = input;
+    for (size_t i = 0; i < input.meshes.size(); ++i) {
+        if (input.meshes[i].appliedMaterials.size() > 8) return false;
+        scene.meshes[i].appliedSources.clear();
+        for (const auto& applied : input.meshes[i].appliedMaterials) {
+            if (scene.meshes[i].appliedSources.empty()) { scene.meshes[i].appliedSources.push_back(i); continue; }
+            const size_t index = scene.meshes.size();
+            SceneMesh entry; entry.materialOnly = true; entry.materialStack = applied.stack; entry.mapping = applied.mapping;
+            scene.meshes.push_back(std::move(entry));
+            scene.meshes[i].appliedSources.push_back(index);
+        }
+    }
     if (!ValidateMeshScene(scene)) return false;
     std::vector<Mesh> uploaded(scene.meshes.size());
     for (size_t i = 0; i < uploaded.size(); ++i) {
@@ -1241,6 +1288,14 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
                 drawConstants.materialNormalIndex = maps.normal.SrvIndex();
                 drawConstants.materialSurfaceIndex = maps.surface.SrvIndex();
                 drawConstants.materialHeightIndex = maps.height.SrvIndex();
+            }
+            drawConstants.appliedCount = 0;
+            const auto& appliedMesh = m_meshScene.meshes[i];
+            for (size_t j = 0; j < appliedMesh.appliedSources.size(); ++j) {
+                const auto& eval = m_sceneMaterials[appliedMesh.appliedSources[j]].evaluator;
+                if (!eval || !eval->EvaluatedRevision() || !eval->Textures().IsValid()) { drawConstants.appliedCount = 0; break; }
+                FillApplied(drawConstants.applied[j], appliedMesh.appliedMaterials[j], eval->Textures(), textures);
+                ++drawConstants.appliedCount;
             }
             const auto allocation = device.Upload().Allocate(sizeof(MeshConstants), 256);
             if (!allocation.IsValid()) continue;

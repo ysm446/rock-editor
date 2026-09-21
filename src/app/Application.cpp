@@ -222,6 +222,7 @@ void Application::Shutdown() {
     SetLogSink({});
 
     m_device.WaitForGpu();
+    if (m_bakeJob) { m_bakeJob->ao.Release(m_device); m_bakeJob.reset(); }
     // ImGui のコンテキストより先に破棄する（エディタが ImGui に依存している）。
     m_assetThumbnails.Destroy(m_device);
     DestroyGraphEditor();
@@ -293,6 +294,7 @@ void Application::PollShaderHotReload() {
 }
 
 int Application::Run() {
+    if (m_options.testGpuAo) return ValidateGpuAo() ? 0 : 1;
     while (m_window.PumpMessages()) {
         if (m_window.IsMinimized()) {
             ::WaitMessage();
@@ -342,7 +344,7 @@ int Application::Run() {
 
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。
-        if (!m_options.saveProjectPath.empty() && m_frameCounter >= m_options.screenshotFrame) {
+        if (!m_options.saveProjectPath.empty() && !m_bakeJob && !m_pendingBake && m_frameCounter >= m_options.screenshotFrame) {
             const io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                                        m_renderer, m_graph, &m_models};
             const bool scene = _wcsicmp(m_options.saveProjectPath.extension().c_str(), L".rockscene") == 0;
@@ -488,6 +490,7 @@ int Application::Run() {
         const bool evaluationIdle = !m_renderer.IsEvaluating();
         const bool captureUi = !m_options.uiScreenshotPath.empty() &&
                                (m_frameCounter + 1) >= m_options.screenshotFrame && evaluationIdle &&
+                               (m_options.saveProjectPath.empty() || (!m_bakeJob && !m_pendingBake)) &&
                                !m_assetThumbnails.HasPendingWork();
         if (captureUi) {
             m_device.RequestBackBufferCapture(m_options.uiScreenshotPath);
@@ -533,6 +536,16 @@ bool Application::Headless() const {
 }
 
 void Application::DrawUi() {
+    if (m_bakeJob) {
+        ImGui::SetNextWindowSize(ImVec2(360, 0), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("ベイク進捗", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking)) {
+            ImGui::Text("Material Bake #%d — 形状AO (GPU)", int(m_bakeJob->id));
+            ImGui::ProgressBar(m_bakeJob->ao.Progress(), ImVec2(320, 0));
+            if (ImGui::Button("キャンセル")) m_bakeJob->cancel = true;
+        }
+        ImGui::End();
+    }
+
     // ショートカットはメニューを開いていなくても効かせたいので、先に見る。
     HandleShortcuts();
     // 開発用: 指定したパネル（ドックのタブ）を前に出す。ウィンドウができるまでの数フレームだけ要求する。

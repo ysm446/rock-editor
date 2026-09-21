@@ -40,6 +40,14 @@ struct SceneMesh {
         compositor::BoundaryMaterial material;
         float center = 0, acrossSign = 1;
     };
+    struct AppliedMaterial {
+        compositor::MaterialStack stack;
+        compositor::MaterialMapping mapping;
+        compositor::MaterialMask mask;
+        uint32_t channels = compositor::kAllChannelBits;
+    };
+    std::vector<AppliedMaterial> appliedMaterials;
+    std::vector<size_t> appliedSources; // 描画器内部の素材評価エントリ。
     MeshData geometry;
     // P0 の材質評価専用エントリ。形状を持たず、既存の評価器とGPU寿命管理を共有する。
     bool materialOnly = false;

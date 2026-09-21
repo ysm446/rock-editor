@@ -20,7 +20,9 @@ void RunUiInteractionTests();
 void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
 
+void RunApplyMaterialTests();
 int main() {
+    RunApplyMaterialTests();
     RunPieceTests();
     RunMeshVolumeTests();
     RunRockTests();
