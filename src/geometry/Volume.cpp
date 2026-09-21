@@ -218,6 +218,107 @@ VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s
     }
     return out;
 }
+const char* VolumeBooleanOperationName(VolumeBooleanOperation operation) {
+    switch (operation) {
+        case VolumeBooleanOperation::Intersection: return "intersection";
+        case VolumeBooleanOperation::Difference: return "difference";
+        default: return "union";
+    }
+}
+VolumeBooleanOperation ParseVolumeBooleanOperation(std::string_view name) {
+    if (name == "intersection") return VolumeBooleanOperation::Intersection;
+    if (name == "difference") return VolumeBooleanOperation::Difference;
+    return VolumeBooleanOperation::Union;
+}
+VolumeGrid CombineVolumes(const VolumeGrid& a, const VolumeGrid& b, const VolumeBooleanSettings& s,
+                          std::string& error) {
+    error.clear();
+    if (!ValidGrid(a) || !ValidGrid(b)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    if (s.operation != VolumeBooleanOperation::Union && s.operation != VolumeBooleanOperation::Intersection &&
+        s.operation != VolumeBooleanOperation::Difference) {
+        error = "不明なブーリアン演算です";
+        return {};
+    }
+    if (!std::isfinite(s.blend) || s.blend < 0 || s.blend > 10) {
+        error = "なめらかさは 0～10 m にしてください";
+        return {};
+    }
+    // 出力は A の格子点の上に置く。A の値は補間でなまらず、そのまま引き継がれる。
+    // 範囲は A の格子の添字で持つ（負や A の外も取り得る）。
+    const auto last = [](const VolumeGrid& g, int i) { return double(g.dimensions[i] - 1); };
+    const auto origin = [](const VolumeGrid& g, int i) {
+        return double(i == 0 ? g.origin.x : (i == 1 ? g.origin.y : g.origin.z));
+    };
+    int64_t first[3], count[3];
+    for (int i = 0; i < 3; ++i) {
+        // B の範囲を A の格子の添字へ直す。
+        const double bLow = (origin(b, i) - origin(a, i)) / a.spacing;
+        const double bHigh = bLow + last(b, i) * double(b.spacing) / a.spacing;
+        double low = 0, high = last(a, i);
+        if (s.operation == VolumeBooleanOperation::Union) {
+            // なめらかな和は、つなぎ目が外へ最大で幅の1/4ふくらむ。外周を空に保つ分だけ広げる。
+            const double margin = std::ceil(s.blend * .25 / a.spacing);
+            low = std::min(low, std::floor(bLow)) - margin;
+            high = std::max(high, std::ceil(bHigh)) + margin;
+        } else if (s.operation == VolumeBooleanOperation::Intersection) {
+            low = std::max(low, std::floor(bLow));
+            high = std::min(high, std::ceil(bHigh));
+        }
+        if (!std::isfinite(low) || !std::isfinite(high) || high - low < 1) {
+            error = "A と B が重なっていません";
+            return {};
+        }
+        if (high - low + 1 > kMaxGridPointsPerAxis) {
+            error = "結果の格子が各軸192点の上限を超えます。A と B を近づけるか、A の解像度を下げてください";
+            return {};
+        }
+        first[i] = int64_t(low);
+        count[i] = int64_t(high - low) + 1;
+    }
+    VolumeGrid out;
+    out.spacing = a.spacing;
+    out.origin = {a.origin.x + float(first[0]) * a.spacing, a.origin.y + float(first[1]) * a.spacing,
+                  a.origin.z + float(first[2]) * a.spacing};
+    out.dimensions = {uint32_t(count[0]), uint32_t(count[1]), uint32_t(count[2])};
+    out.values.resize(size_t(out.dimensions[0]) * out.dimensions[1] * out.dimensions[2]);
+    const float threshold = out.spacing * 1e-4f;
+    const float k = s.blend;
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const int64_t ax = first[0] + x, ay = first[1] + y, az = first[2] + z;
+        const bool onA = ax >= 0 && ay >= 0 && az >= 0 && ax < a.dimensions[0] && ay < a.dimensions[1] &&
+                         az < a.dimensions[2];
+        const auto p = out.Position(x, y, z);
+        const float da = onA ? a.values[a.Index(uint32_t(ax), uint32_t(ay), uint32_t(az))] : SampleVolume(a, p);
+        float db = SampleVolume(b, p);
+        float value;
+        if (s.operation == VolumeBooleanOperation::Union) {
+            value = std::min(da, db);
+            // 多項式のなめらかな最小値。差が幅以上なら通常の最小値と同じ。
+            if (k > 0) {
+                const float h = std::max(k - std::abs(da - db), 0.f) / k;
+                value -= h * h * k * .25f;
+            }
+        } else {
+            if (s.operation == VolumeBooleanOperation::Difference) db = -db;
+            value = std::max(da, db);
+            if (k > 0) {
+                const float h = std::max(k - std::abs(da - db), 0.f) / k;
+                value += h * h * k * .25f;
+            }
+        }
+        // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
+        out.values[out.Index(x, y, z)] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
+    if (!inside) {
+        error = "演算の結果に内部が残りません。A と B の位置や演算を見直してください";
+        return {};
+    }
+    return out;
+}
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {
     error.clear();
     const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];

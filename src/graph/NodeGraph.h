@@ -60,6 +60,8 @@ enum class NodeKind : uint32_t {
     ToVolume = 39,
     VolumeToMesh = 40,
     VolumeTransform = 41,
+    // 2つの Volume の和・交差・差。入力は A（基準の格子）と B。
+    VolumeBoolean = 52,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -157,6 +159,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   TransformNodeSettings, BaseRockNodeSettings,
                                   geometry::BoxClusterSettings, geometry::VolumeSettings,
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
+                                  geometry::VolumeBooleanSettings,
                                   geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,

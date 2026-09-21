@@ -52,6 +52,8 @@ constexpr std::array<PinDefinition, 2> kToVolumePins = {{{PinKind::Input, ValueT
     {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 2> kVolumeTransformPins = {
     {{PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
+constexpr std::array<PinDefinition, 3> kVolumeBooleanPins = {{{PinKind::Input, ValueType::Volume, "A"},
+    {PinKind::Input, ValueType::Volume, "B"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 3> kBakePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
@@ -65,7 +67,7 @@ constexpr std::array<PinDefinition, 4> kApplyPins = {{{PinKind::Input, ValueType
     {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Input, ValueType::Mask, "Mask"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 20> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 21> kNodeDefinitions = {{
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
@@ -79,6 +81,7 @@ constexpr std::array<NodeDefinition, 20> kNodeDefinitions = {{
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
     {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
+    {NodeKind::VolumeBoolean, "volumeBoolean", "Volume Boolean", kVolumeBooleanPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::BaseRock, "baseRock", "Base Shape", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
@@ -122,7 +125,8 @@ bool IsPieceNodeKind(NodeKind kind) {
 bool IsMeshNodeKind(NodeKind kind) {
     return IsPieceNodeKind(kind) || kind == NodeKind::Merge || kind == NodeKind::BaseRock ||
            kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
-           kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeToMesh ||
+           kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeBoolean ||
+           kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial;
 }
 
@@ -405,6 +409,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeSettings{};
     } else if (kind == NodeKind::VolumeTransform) {
         node.settings = geometry::VolumeTransformSettings{};
+    } else if (kind == NodeKind::VolumeBoolean) {
+        node.settings = geometry::VolumeBooleanSettings{};
     } else if (kind == NodeKind::ScatterPoints) {
         node.settings = geometry::ScatterSettings{};
     } else if (kind == NodeKind::VoronoiFracture) {

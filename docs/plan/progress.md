@@ -1,9 +1,17 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 00:18
+更新日時: 2026-09-22 00:36
 
 ## 現在地
+
+### 2026-09-22 設計メモと Volume Boolean
+
+- ユーザー提示の参考画像（`docs/references/thumbnail_bea6868d-…​.webp`、Git 対象外）のような岩を作るための処理を整理し、[岩らしい形と色のためのノード設計メモ](../reference/rock-shaping-nodes.md) に残した。候補は Volume Boolean、Plane Cuts、Volume Crack、Volume Displace / Noise、Volume Smooth、形状からのマスク、ディテールの焼き込み。概念として Field（スカラー場）型を挙げた。着手順は Boolean → Plane Cuts → Crack。
+- その1番目として **Volume Boolean** を追加。A / B の Volume 入力から和・交差・差を取り、なめらかさ（0〜10 m）でつなぎ目を丸める。結果は A の格子を引き継ぎ、A の値は補間せずに使う。和は B を含む範囲まで格子を延ばし、交差は重なる範囲へ狭める。Z スライス単位の並列処理とボリューム枝のキャッシュに対応。保存名 `volumeBoolean`、右クリックメニュー、設定欄、保存/読込、Undo/Redo（既存スナップショット）に接続。仕様と制限は [Volume Boolean](../reference/volume-boolean.md)、サンプルは `examples/volume-boolean/`。
+- 単体テスト36項目を追加（`tests/VolumeBooleanTests.cpp`）。体積 8.5 / 0.5 / 7.5 m³、格子の広がり方、A の値の完全一致、再現性、なめらかさ、離れた B、上限・不正設定の診断、グラフの型制約・未接続の診断・キャッシュを確認。Release/Debug ビルドと全2,476項目が成功。
+- Release 実アプリでサンプルを開き、差・なめらかな和・交差の3つの形、ノード選択時の設定欄と説明文を確認。`--save-project` による保存で `volumeBoolean` の設定と7本の接続が残ることを確認。通常の実行ファイルは起動中だったため、検証は `build/statusbar/rock_editor.exe`。実マウスでのメニュー操作と Undo/Redo の手動確認は未実施。
+- 制限：結果の距離値は符号が正しい近似で、後続のオフセット・平滑化には距離の再計算が要る。細部は A のセル間隔まで。なめらかさ 0 のつなぎ目は Dual Contouring でもセル程度にギザつくことがある。
 
 ### 2026-09-22 更新中の表示をステータスバーへ移動
 
@@ -126,9 +134,9 @@
 | 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
-| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる |
+| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる |
 | 材質 | Apply Material / Material Mask、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
-| 次の作業 | ボリューム上の操作を増やす。平面を境にずらす断層ノードが候補（方針未決） |
+| 次の作業 | [設計メモ](../reference/rock-shaping-nodes.md) の順に、Plane Cuts（平面群によるファセット化）、Volume Crack が候補 |
 
 ## 完了
 

@@ -486,6 +486,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
+        } else if (const auto* boolean = std::get_if<geometry::VolumeBooleanSettings>(&node.settings)) {
+            item["volumeBoolean"] = {{"operation", geometry::VolumeBooleanOperationName(boolean->operation)},
+                                     {"blend", boolean->blend}};
         } else if (const auto* moved = std::get_if<geometry::VolumeTransformSettings>(&node.settings)) {
             item["volumeTransform"] = {{"position", moved->position},
                                        {"rotation", moved->rotationDegrees},
@@ -696,6 +699,14 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.position = {position.x, position.y, position.z};
                     settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
                     settings.scale = ReadFloat(*v, "scale", settings.scale);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeBoolean) {
+                geometry::VolumeBooleanSettings settings;
+                if (const json* v = FindMember(item, "volumeBoolean"); v && v->is_object()) {
+                    settings.operation =
+                        geometry::ParseVolumeBooleanOperation(ReadString(*v, "operation", "union"));
+                    settings.blend = ReadFloat(*v, "blend", settings.blend);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::BaseRock) {

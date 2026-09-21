@@ -864,6 +864,7 @@ void Application::DrawGraphEditor() {
         ImGui::TextDisabled("ボリューム");
         addNodeMenuItem(graph::NodeKind::ToVolume, "To Volume — メッシュをボリュームに変換");
         addNodeMenuItem(graph::NodeKind::VolumeTransform, "Volume Transform — ボリュームを移動・回転・拡大");
+        addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1059,6 +1060,30 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は最長辺の分割数です。高くすると角や細い形を保ちやすくなり、処理時間も増えます。");
         if (changed) {
             *volume = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* boolean = std::get_if<geometry::VolumeBooleanSettings>(&selected->settings)) {
+        auto edited = *boolean;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeBooleanRows")) {
+            const char* operations[] = {"和 (A ∪ B)", "交差 (A ∩ B)", "差 (A − B)"};
+            int operation = std::clamp(static_cast<int>(edited.operation), 0, 2);
+            if (ui::PropertyCombo("演算", &operation, operations, 3, 0)) {
+                edited.operation = static_cast<geometry::VolumeBooleanOperation>(operation);
+                changed = true;
+            }
+            changed |= ui::PropertyFloat("なめらかさ (m)", &edited.blend, 0, 2, 0,
+                                         "つなぎ目を丸める幅。0 で角を残します。Ctrl + クリックで 10 m まで入力できます。");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("A を基準に B との和・交差・差を取ります。入力・出力とも Volume 型です。"
+                     "B を動かすには、B の上流に Volume Transform を置きます。");
+        ui::HintText("結果は A の格子（セル間隔）を引き継ぎます。和は B を含む範囲まで格子を広げ、"
+                     "各軸192点を超えると生成できません。B が A より細かくても、細部は A のセル間隔までしか残りません。");
+        if (changed) {
+            edited.blend = std::clamp(edited.blend, 0.0f, 10.0f);
+            *boolean = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

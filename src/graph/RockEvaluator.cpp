@@ -51,6 +51,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         const auto* s = std::get_if<geometry::VolumeTransformSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->position); add(s->rotationDegrees); add(s->scale);
+    } else if (node->kind == NodeKind::VolumeBoolean) {
+        const auto* s = std::get_if<geometry::VolumeBooleanSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->operation); add(s->blend);
     } else if (node->kind == NodeKind::VolumeToMesh) {
         const auto* s = std::get_if<geometry::VolumeToMeshSettings>(&node->settings);
         const auto method = s ? s->method : geometry::VolumeMeshingMethod::MarchingTetrahedra;
@@ -117,7 +121,8 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         const auto* node = graph.FindNode(id);
         if (!node) return {};
         const bool volumeCache = node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
-                                 node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeToMesh;
+                                 node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
+                                 node->kind == NodeKind::VolumeToMesh;
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id) : std::nullopt;
         if (persistentKey) {
             const auto found = persistent->entries.find(id);
@@ -264,6 +269,28 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             GeneratedRock rock;
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(moved));
+            result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::VolumeBoolean) {
+            const auto* settings = std::get_if<geometry::VolumeBooleanSettings>(&node->settings);
+            const bool wired = node->inputs.size() >= 2;
+            const auto* upstreamA = wired ? graph.FindUpstreamNodeForPin(node->inputs[0].id) : nullptr;
+            const auto* upstreamB = wired ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
+            if (!settings || !upstreamA || !upstreamB)
+                return finish(Failure(id, "Volume Boolean", "A と B の両方に Volume 出力を接続してください"));
+            const auto inputA = evaluate(upstreamA->id, depth + 1);
+            if (!inputA.error.empty()) return finish(inputA);
+            const auto inputB = evaluate(upstreamB->id, depth + 1);
+            if (!inputB.error.empty()) return finish(inputB);
+            if (inputA.rocks.size() != 1 || !inputA.rocks[0].volume || inputB.rocks.size() != 1 ||
+                !inputB.rocks[0].volume)
+                return finish(Failure(id, "Volume Boolean", "A と B にはボリュームが必要です"));
+            std::string error;
+            auto combined =
+                geometry::CombineVolumes(*inputA.rocks[0].volume, *inputB.rocks[0].volume, *settings, error);
+            if (!error.empty()) return finish(Failure(id, "Volume Boolean", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(combined));
             result.rocks.push_back(std::move(rock));
         } else if (node->kind == NodeKind::VolumeToMesh) {
             const auto* upstream =

@@ -1,0 +1,230 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "randomBoxes",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "randomBoxes": {
+          "count": 8,
+          "size": [
+            2,
+            2.4,
+            1.8
+          ],
+          "sizeVariation": 0.55,
+          "spread": 0.85,
+          "rotation": 25,
+          "seed": 42
+        }
+      },
+      {
+        "id": 3,
+        "kind": "toVolume",
+        "inputs": [
+          4
+        ],
+        "outputs": [
+          5
+        ],
+        "position": [
+          260,
+          0
+        ],
+        "toVolume": {
+          "resolution": 64
+        }
+      },
+      {
+        "id": 6,
+        "kind": "baseRock",
+        "inputs": [],
+        "outputs": [
+          7
+        ],
+        "position": [
+          0,
+          220
+        ],
+        "baseRock": {
+          "size": [
+            1.6,
+            1.2,
+            1.6
+          ],
+          "seed": 3,
+          "shape": "ellipsoid",
+          "subdivisions": 16,
+          "roundness": 0.25,
+          "noiseStrength": 0.08,
+          "noiseScale": 2
+        }
+      },
+      {
+        "id": 8,
+        "kind": "toVolume",
+        "inputs": [
+          9
+        ],
+        "outputs": [
+          10
+        ],
+        "position": [
+          260,
+          220
+        ],
+        "toVolume": {
+          "resolution": 48
+        }
+      },
+      {
+        "id": 11,
+        "kind": "volumeTransform",
+        "inputs": [
+          12
+        ],
+        "outputs": [
+          13
+        ],
+        "position": [
+          520,
+          220
+        ],
+        "volumeTransform": {
+          "position": [
+            1.1,
+            0.7,
+            0.6
+          ],
+          "rotation": [
+            0,
+            20,
+            15
+          ],
+          "scale": 1
+        }
+      },
+      {
+        "id": 14,
+        "kind": "volumeBoolean",
+        "inputs": [
+          15,
+          16
+        ],
+        "outputs": [
+          17
+        ],
+        "position": [
+          780,
+          60
+        ],
+        "volumeBoolean": {
+          "operation": "difference",
+          "blend": 0.0
+        }
+      },
+      {
+        "id": 18,
+        "kind": "volumeToMesh",
+        "inputs": [
+          19
+        ],
+        "outputs": [
+          20
+        ],
+        "position": [
+          1040,
+          60
+        ],
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 21,
+        "kind": "meshOutput",
+        "inputs": [
+          22
+        ],
+        "outputs": [],
+        "position": [
+          1300,
+          60
+        ]
+      }
+    ],
+    "links": [
+      {
+        "id": 30,
+        "start": 2,
+        "end": 4
+      },
+      {
+        "id": 31,
+        "start": 5,
+        "end": 15
+      },
+      {
+        "id": 32,
+        "start": 7,
+        "end": 9
+      },
+      {
+        "id": 33,
+        "start": 10,
+        "end": 12
+      },
+      {
+        "id": 34,
+        "start": 13,
+        "end": 16
+      },
+      {
+        "id": 35,
+        "start": 17,
+        "end": 19
+      },
+      {
+        "id": 36,
+        "start": 20,
+        "end": 22
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0.2,
+        0.2,
+        0.2
+      ],
+      "distance": 6.5,
+      "fovY": 0.785398,
+      "pitch": 0.35,
+      "yaw": 0.9
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0
+}

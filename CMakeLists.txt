@@ -314,6 +314,7 @@ add_executable(rock_editor_tests
     tests/RockTests.cpp
     tests/BaseRockTests.cpp
     tests/VolumeTests.cpp
+    tests/VolumeBooleanTests.cpp
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
     src/renderer/Camera.cpp
