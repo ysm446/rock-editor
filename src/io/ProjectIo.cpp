@@ -486,7 +486,15 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["materialMask"] = {{"texture", writeTexture(mask->texture)}, {"value", mask->value},
                 {"repeatMeters", mask->repeatMeters}, {"invert", mask->invert}, {"triplanar", mask->triplanar}};
         } else if (const auto* bake = std::get_if<graph::MaterialBakeSettings>(&node.settings)) {
-            item["materialBake"] = {{"layer", WriteLayer(bake->bakedLayer, writeMaterial)}, {"fingerprint", bake->fingerprint}, {"geometryAo", bake->geometryAo}, {"aoDistance", bake->aoDistance}, {"aoStrength", bake->aoStrength}, {"aoSamples", bake->aoSamples}};
+            // ベイク結果は一時的なもので、保存しない。開き直したら未ベイクへ戻る。指紋だけ残すと、結果が無いのに
+            // 「ベイク済み」と判定されるので、材質を書けないときは指紋も書かない。
+            // 旧版が Bakes/ へ保存した結果（一時でない材質）は、従来どおり書く。
+            const bool keepBake = !writeMaterial(bake->bakedLayer.material).is_null();
+            item["materialBake"] = {{"geometryAo", bake->geometryAo}, {"aoDistance", bake->aoDistance}, {"aoStrength", bake->aoStrength}, {"aoSamples", bake->aoSamples}};
+            if (keepBake) {
+                item["materialBake"]["layer"] = WriteLayer(bake->bakedLayer, writeMaterial);
+                item["materialBake"]["fingerprint"] = bake->fingerprint;
+            }
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
@@ -1289,6 +1297,8 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
     std::unordered_map<compositor::TextureId, int> textureIndex;
     json textures = json::array();
     for (const compositor::LibraryTexture& entry : refs.textures.Entries()) {
+        // 一時的なテクスチャ（Material Bake の結果）はファイルを持たない。参照は「なし」として書かれる。
+        if (entry.transient) continue;
         const int index = static_cast<int>(textures.size()) + 1;
         textureIndex[entry.id] = index;
 
@@ -1309,6 +1319,7 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
     std::unordered_map<compositor::MaterialAssetId, int> materialIndex;
     json materials = json::array();
     for (const compositor::MaterialAsset& asset : refs.materials.Entries()) {
+        if (asset.transient) continue;
         const int index = static_cast<int>(materials.size()) + 1;
         materialIndex[asset.id] = index;
 
@@ -1641,6 +1652,7 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
         return workspace.UniquePath(workspace.Root() / folder, name, extension);
     };
     for (const compositor::MaterialAsset& entry : refs.materials.Entries()) {
+        if (entry.transient) continue;
         compositor::MaterialAsset* asset = refs.materials.FindMutable(entry.id);
         json body = WriteMaterialBody(*asset, writeTexture);
         body["uid"] = asset->assetUid;

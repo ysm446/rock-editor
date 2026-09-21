@@ -70,6 +70,9 @@ rock::StartupOptions ParseCommandLine() {
             options.selectNode = ::_wtoi(argv[++i]);
         } else if (argument == L"--bake-node" && (i + 1) < argc) {
             options.bakeNode = ::_wtoi(argv[++i]);
+            options.exportBakeNode = options.bakeNode;
+        } else if (argument == L"--export-bake" && (i + 1) < argc) {
+            options.exportBakeDirectory = argv[++i];
         } else if (argument == L"--preview-node" && (i + 1) < argc) {
             options.previewNode = ::_wtoi(argv[++i]);
         } else if (argument == L"--import-model" && (i + 1) < argc) {

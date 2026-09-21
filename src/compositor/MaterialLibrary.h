@@ -43,6 +43,8 @@ struct MaterialAsset {
     std::filesystem::path assetPath;
     std::string assetUid;
     std::string name;
+    // **一時的な材質。** Material Bake の結果。シーンにも共有アセット（.rockmat）にも保存しない。
+    bool transient = false;
 
     // 未指定のスロットは下の定数を使う。
     // ベースカラーと法線は RGB をそのまま使うのでチャンネル指定は要らない。

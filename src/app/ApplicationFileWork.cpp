@@ -276,7 +276,7 @@ void Application::ResetProject() {
     m_graph = graph::NodeGraph::CreateDefault();
     ++m_pieceEpoch;
     m_pendingBake = 0;
-    m_bakeStatus.clear();
+    m_bakeStatus.clear(); m_bakeImages.clear();
     m_pieceStop.request_stop();
     m_pieceCompletedKey.clear();
     m_pieceSelectionEditing = false;
@@ -371,7 +371,7 @@ void Application::ProcessPendingFileWork() {
             m_options.selectNode = 0;
             ++m_pieceEpoch;
             m_pendingBake = 0;
-            m_bakeStatus.clear();
+            m_bakeStatus.clear(); m_bakeImages.clear();
             m_pieceStop.request_stop();
             m_pieceCompletedKey.clear();
             m_pieceSelectionEditing = false;

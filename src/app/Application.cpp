@@ -345,6 +345,10 @@ int Application::Run() {
         // メッシュの生成と転送も GPU 待機を伴うため、フレームの外で。
         SyncMeshGraph();
         if (m_options.bakeNode && m_frameCounter >= 2) { m_pendingBake=m_options.bakeNode; m_options.bakeNode=0; }
+        if (!m_options.exportBakeDirectory.empty() && m_bakeImages.contains(m_options.exportBakeNode)) {
+            ExportBakedTextures(m_options.exportBakeNode, m_options.exportBakeDirectory);
+            m_options.exportBakeDirectory.clear();
+        }
         ProcessPendingBake();
 
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。

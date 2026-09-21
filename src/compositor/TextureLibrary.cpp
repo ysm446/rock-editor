@@ -97,6 +97,7 @@ TextureId TextureLibrary::FindByPath(const std::filesystem::path& path) const {
     const std::filesystem::path& key = error ? path : normalized;
 
     for (const LibraryTexture& entry : m_entries) {
+        if (entry.transient) continue;  // ファイルを持たない。
         std::error_code entryError;
         const std::filesystem::path entryNormalized =
             std::filesystem::weakly_canonical(entry.path, entryError);
@@ -181,6 +182,21 @@ bool TextureLibrary::Relink(rhi::Device& device, rhi::PipelineCache& pipelineCac
     return true;
 }
 
+TextureId TextureLibrary::AddTransient(rhi::Device& device, rhi::PipelineCache& pipelineCache,
+                                       const std::string& name, const LdrImage& image) {
+    LibraryTexture entry;
+    // path は表示名を作るためだけに渡す。作った後で空へ戻し、ファイルを持たないことを示す。
+    if (!LoadInto(device, pipelineCache, FromUtf8(name), entry, &image)) {
+        return kNoTexture;
+    }
+    entry.path.clear();
+    entry.name = name;
+    entry.transient = true;
+    entry.id = m_nextId++;
+    m_entries.push_back(std::move(entry));
+    return m_entries.back().id;
+}
+
 TextureId TextureLibrary::Load(rhi::Device& device, rhi::PipelineCache& pipelineCache,
                                const std::filesystem::path& path) {
     // 同じ画像を二重に持たない。プロジェクトやマテリアルの読み込みでは、
@@ -204,10 +220,10 @@ TextureId TextureLibrary::Load(rhi::Device& device, rhi::PipelineCache& pipeline
 }
 
 bool TextureLibrary::LoadInto(rhi::Device& device, rhi::PipelineCache& pipelineCache,
-                              const std::filesystem::path& path, LibraryTexture& entry) {
+                              const std::filesystem::path& path, LibraryTexture& entry, const LdrImage* memory) {
     // EXR は 16bit float のまま持つ。8bit へ落とすとハイトに階段が出る。
-    // それ以外（PNG / TGA / JPG）は 8bit で読む。
-    const bool isFloat = IsExrPath(path);
+    // それ以外（PNG / TGA / JPG）は 8bit で読む。メモリ上の画像は 8bit。
+    const bool isFloat = memory == nullptr && IsExrPath(path);
 
     uint32_t width = 0;
     uint32_t height = 0;
@@ -223,6 +239,15 @@ bool TextureLibrary::LoadInto(rhi::Device& device, rhi::PipelineCache& pipelineC
         height = image.height;
         pixels = ConvertToHalf4(image);
         sourceRowPitch = static_cast<size_t>(width) * 4 * sizeof(uint16_t);
+    } else if (memory != nullptr) {
+        if (memory->width == 0 || memory->height == 0 ||
+            memory->pixels.size() != static_cast<size_t>(memory->width) * memory->height * 4) {
+            return false;
+        }
+        width = memory->width;
+        height = memory->height;
+        pixels = memory->pixels;
+        sourceRowPitch = static_cast<size_t>(width) * 4;
     } else {
         LdrImage image;
         if (!LoadLdrImage(path, image)) {

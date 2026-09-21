@@ -81,6 +81,9 @@ struct StartupOptions {
     bool gizmoScale = false;
     bool testGpuAo = false;
     int bakeNode = 0; // 開発用。通常のベイク実行と同じ処理を予約する。
+    // 開発用。bakeNode のベイクが終わったら、結果をこのフォルダへ出力する（出力ボタンと同じ処理。ダイアログは出さない）。
+    std::filesystem::path exportBakeDirectory;
+    int exportBakeNode = 0;
     // --place-model で置いたモデルの FBX のノードに足す回転（--model-node-rotation <node> <x> <y> <z>）。
     std::vector<renderer::ModelNodeRotation> modelNodeRotations;
     // ノード用のギズモをオンにして、そのノードを選ぶ（--model-node-gizmo <node>）。
@@ -183,6 +186,12 @@ private:
     std::optional<BakeJob> m_bakeJob;
     graph::GraphId m_pendingBake = 0;
     std::unordered_map<graph::GraphId,std::string> m_bakeStatus;
+    // ベイク結果の画像（BaseColor / Normal / RoughnessMetallicAO / Height）。「テクスチャを出力…」で書き出す元。
+    // ファイルへは自動で保存しない。プロジェクトを開き直すと消える。
+    std::unordered_map<graph::GraphId, std::array<LdrImage, 4>> m_bakeImages;
+    // フォルダを選んで、ベイク結果の PNG を書き出す。
+    // directory が空ならフォルダを選ぶダイアログを出す。
+    void ExportBakedTextures(graph::GraphId id, std::filesystem::path directory = {});
     geometry::Mesh m_uvPreviewMesh;
     float m_uvZoom = 1.0f;
     ImVec2 m_uvPan{};
@@ -339,6 +348,8 @@ private:
     // テクスチャプレビューの窓（拡大表示 + 詳細）。
     // 一覧のサムネイルをダブルクリックするか、ウィンドウメニューから開く。
     void DrawTexturePreviewWindow();
+    // Material Bake の結果を、チャンネルごとのタイルで並べる。ベイク済みで、指紋が現在の入力と合うときだけ「最新」。
+    void DrawBakedTextureTiles(const graph::MaterialBakeSettings& bake);
     // アプリの設定ウィンドウ（ウィンドウ > 設定）。プロジェクトに保存しない設定を置く。
     void DrawSettingsWindow();
     // 開発用オプション（スクリーンショット / 保存）で動いているか。

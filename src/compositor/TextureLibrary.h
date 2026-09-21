@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core/ImageIo.h"
+
 #include "compositor/MaterialLayer.h"
 #include "rhi/Device.h"
 #include "rhi/PipelineCache.h"
@@ -29,6 +31,9 @@ struct LibraryTexture {
     // 別のファイルを指定して繋ぎ直せる（Relink）。
     // シェーダへ渡すインデックスは無効値になるので、合成では「マップなし」と同じに扱われる。
     bool missing = false;
+    // **一時的なテクスチャ。** Material Bake の結果のように、メモリ上の画像から作ったもの。
+    // ファイルを持たず（path は空）、シーンにも保存しない。アプリを閉じるか、プロジェクトを開き直すと消える。
+    bool transient = false;
     // 一覧に出すための表示用テクスチャ。**リニアなテクスチャのときだけ作る。**
     // ImGui は値をそのまま描くので、リニアのまま渡すと極端に暗く見える。
     rhi::GpuTexture preview;
@@ -77,6 +82,9 @@ public:
     // プロジェクトを開いたときに参照を失わないために使う。
     // 同じパスがすでにあれば、読み直さずにその ID を返す。
     TextureId AddMissing(const std::filesystem::path& path, const std::string& name);
+    // メモリ上の 8bit RGBA 画像から、一時的なテクスチャを作る。ファイルは読み書きしない。
+    TextureId AddTransient(rhi::Device& device, rhi::PipelineCache& pipelineCache, const std::string& name,
+                           const LdrImage& image);
 
     // ID を保ったまま別のファイル（か同じファイル）を読み直す。**リンク切れの解消に使う。**
     // 名前が元のファイル名のままなら、新しいファイル名に付け替える（付けた名前は残す）。
@@ -106,8 +114,9 @@ public:
 private:
     // 画像を読み込んで entry に GPU リソースを作る。ID と missing には触らない。
     // 失敗したら確保したものをすべて返して false。
+    // memory が null でなければ、ファイルを読まずにその画像から作る（path は名前付けにだけ使う）。
     bool LoadInto(rhi::Device& device, rhi::PipelineCache& pipelineCache,
-                  const std::filesystem::path& path, LibraryTexture& entry);
+                  const std::filesystem::path& path, LibraryTexture& entry, const LdrImage* memory = nullptr);
     // entry の GPU リソースとディスクリプタをすべて返す。リンク切れなら何もしない。
     void ReleaseResources(rhi::Device& device, LibraryTexture& entry);
     bool GenerateMips(rhi::Device& device, rhi::PipelineCache& pipelineCache,

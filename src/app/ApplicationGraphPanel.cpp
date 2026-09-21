@@ -242,6 +242,71 @@ std::string Application::EvaluationProgressText() const {
     return text;
 }
 
+void Application::DrawBakedTextureTiles(const graph::MaterialBakeSettings& bake) {
+    const compositor::MaterialAsset* asset = m_materialLibrary.Find(bake.bakedLayer.material);
+    if (asset == nullptr) return;
+    // Roughness / Metallic / AO は1枚の画像の R / G / B へ詰めて焼いている。RGB のまま見ても読めないので、
+    // テクスチャライブラリが持つ「1チャンネルだけを灰色で描く SRV」で分けて出す。
+    struct Tile {
+        const char* label;
+        compositor::TextureId texture;
+        int channel;  // -1 なら RGB のまま。0..3 は R / G / B / A。
+    };
+    const auto channelOf = [](compositor::TextureChannel c) { return static_cast<int>(c); };
+    const Tile tiles[] = {
+        {"Base Color", asset->baseColor, -1},
+        {"Normal", asset->normal, -1},
+        {"Roughness", asset->roughness.texture, channelOf(asset->roughness.channel)},
+        {"Metallic", asset->metallic.texture, channelOf(asset->metallic.channel)},
+        {"AO", asset->ambientOcclusion.texture, channelOf(asset->ambientOcclusion.channel)},
+        {"Height", asset->height.texture, channelOf(asset->height.channel)},
+    };
+    ui::SectionHeader("ベイク結果");
+    // 欄の幅に合わせて 3 列か 2 列に並べる。
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
+    // スクロールバーが出ても右端の1枚が隠れないよう、その幅を先に引いておく。
+    const float available = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
+    const int columns = available >= ui::Scaled(330.0f) ? 3 : 2;
+    const float size = std::max(ui::Scaled(48.0f), (available - spacing * float(columns - 1)) / float(columns));
+    const auto& entries = m_textureLibrary.Entries();
+    for (int i = 0; i < int(IM_ARRAYSIZE(tiles)); ++i) {
+        const Tile& tile = tiles[i];
+        if (i % columns != 0) ImGui::SameLine();
+        ImGui::BeginGroup();
+        ImGui::PushID(i);
+        const compositor::LibraryTexture* texture = m_textureLibrary.Find(tile.texture);
+        const ImVec2 min = ImGui::GetCursorScreenPos();
+        if (texture == nullptr || texture->missing) {
+            ui::MissingThumbnail(min, ImVec2(min.x + size, min.y + size));
+            ImGui::Dummy(ImVec2(size, size));
+        } else {
+            // UV の島が無い部分は、RGB の画像では透明、1チャンネルの表示では黒になる。同じ下地を敷いて揃える。
+            ImGui::GetWindowDrawList()->AddRectFilled(min, ImVec2(min.x + size, min.y + size), IM_COL32(0, 0, 0, 255));
+            ImGui::Image(static_cast<ImTextureID>(texture->ChannelHandle(tile.channel).ptr), ImVec2(size, size));
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s\n%s\nクリックで拡大", tile.label, texture->name.c_str());
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                    // テクスチャプレビューの窓で、同じ画像・同じチャンネルを開く。
+                    for (size_t index = 0; index < entries.size(); ++index)
+                        if (entries[index].id == tile.texture) m_selectedTexture = int(index);
+                    m_previewChannel = tile.channel + 1;
+                    m_showTexturePreview = true;
+                }
+            }
+        }
+        ImGui::TextDisabled("%s", tile.label);
+        ImGui::PopID();
+        ImGui::EndGroup();
+    }
+    if (const compositor::LibraryTexture* color = m_textureLibrary.Find(asset->baseColor); color && !color->missing) {
+        if (color->transient)
+            ui::HintText("%u × %u。一時的な結果です（未出力）。", color->texture.width, color->texture.height);
+        else
+            ui::HintText("%u × %u。保存先: %s", color->texture.width, color->texture.height,
+                         ToUtf8Display(color->path.parent_path()).c_str());
+    }
+}
+
 void Application::SyncMeshGraph() {
     if (m_uvLastSelectedNode != m_selectedGraphNode) {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
@@ -1450,7 +1515,17 @@ void Application::DrawGraphPanel() {
         else if (const auto status=m_bakeStatus.find(selected->id); status!=m_bakeStatus.end())
             ui::HintText("%s", status->second.c_str());
         else ui::HintText("未ベイク。ノードの出力をプレビューして状態を確認してください。");
-        ui::HintText("UV Unwrapのアトラス寸法でPNGを4枚生成し、ルート内のBakesへ保存します。形状・材質・スムーズシェーディングを変えたら再ベイクしてください。");
+        DrawBakedTextureTiles(bake);
+        {
+            // 出力できるのは、この起動中にベイクした結果だけ（画像をメモリに持っているもの）。
+            const bool exportable = m_bakeImages.contains(selected->id);
+            ImGui::BeginDisabled(!exportable || m_bakeJob.has_value() || m_pendingBake != 0);
+            if (ImGui::Button("テクスチャを出力…")) ExportBakedTextures(selected->id);
+            ImGui::EndDisabled();
+            if (!exportable && m_materialLibrary.Find(bake.bakedLayer.material) != nullptr)
+                ui::HintText("このベイク結果は旧版がファイルへ保存したものです。もう一度ベイクすると出力できます。");
+        }
+        ui::HintText("UV Unwrapのアトラス寸法で4枚の画像（Base Color / Normal / Roughness・Metallic・AO / Height）を作ります。結果は一時的なもので、ファイルにもシーンにも保存しません。残すには「テクスチャを出力…」でフォルダへ書き出します。シーンを開き直したら、もう一度ベイクしてください。形状・材質・スムーズシェーディングを変えたときも再ベイクが必要です。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
         ui::HintText("メッシュ・モデル・Volumeを接続すると表示する。複数のMesh Outputを同時に表示できる。");
         ui::HintText("MaterialにSurfaceを接続すると、生成メッシュに材質を適用します。UVのない岩にはSurfaceでTriplanarを選びます。モデルの材質はモデル側で設定します。");

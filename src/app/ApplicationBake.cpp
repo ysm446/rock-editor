@@ -1,4 +1,6 @@
 #include "app/Application.h"
+#include "core/FileDialog.h"
+#include "core/PathUtf8.h"
 #include "renderer/MaterialBake.h"
 #include "renderer/RockMesh.h"
 #include <fstream>
@@ -256,44 +258,38 @@ void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images,
         if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&parent->settings)) { padding = uv->padding; break; }
         parent = parent->inputs.empty() ? nullptr : m_graph.FindUpstreamNodeForPin(parent->inputs[0].id);
     }
-    const auto directory =
-        m_workspace.UniquePath(m_workspace.Root() / L"Bakes", "MaterialBake_" + std::to_string(id), "");
-    if (directory.empty()) {
-        fail("ベイク保存先を作成できません");
-        return;
-    }
-    std::error_code ec;
-    std::filesystem::create_directories(directory, ec);
-    if (ec) {
-        fail("ベイク保存先を作成できません");
-        return;
-    }
-    const char *names[] = {"BaseColor.png", "Normal.png", "RoughnessMetallicAO.png", "Height.png"};
+    // 結果はメモリ上にだけ持つ。ファイルへは「テクスチャを出力…」を押したときだけ書く。
+    // テクスチャと材質は一時的なもので、シーンにも保存しない。開き直したら再ベイクする。
+    const char* labels[] = {"BaseColor", "Normal", "RoughnessMetallicAO", "Height"};
     std::array<compositor::TextureId, 4> ids{};
     for (size_t channel = 0; channel < 4; ++channel) {
-        renderer::DilateBakePixels(images[channel], padding);
-        auto &image = images[channel];
-        // 未被覆領域にも安全な法線を置く。余白を越える強い縮小では島の混色は残り得る。
+        auto& image = images[channel];
+        // UV の島が無い部分を黒や透明のまま残さない。縮小表示やミップマップで、島の縁へその色がにじむ。
+        // 色・Roughness/Metallic/AO・Height は、最も近い島の縁の色を全面へ伸ばす（エッジパディング）。
+        // 法線は余白の幅だけ伸ばし、その外は既定の向き（128, 128, 255）で不透明に埋める。
+        if (channel == 1)
+            renderer::DilateBakePixels(image, padding);
+        else
+            renderer::FillBakeBackground(image);
         if (channel == 1)
             for (size_t i = 0; i < image.pixels.size(); i += 4)
                 if (!image.pixels[i + 3]) {
                     image.pixels[i] = 128;
                     image.pixels[i + 1] = 128;
                     image.pixels[i + 2] = 255;
+                    image.pixels[i + 3] = 255;
                 }
-        const auto path = directory / names[channel];
-        if (!SaveRgba8Png(path, image.width, image.height, image.width * 4, image.pixels.data())) {
-            fail("ベイク画像を保存できません");
-            return;
-        }
-        ids[channel] = m_textureLibrary.Load(m_device, m_pipelineCache, path);
+        ids[channel] = m_textureLibrary.AddTransient(
+            m_device, m_pipelineCache, "Bake " + std::to_string(id) + " " + labels[channel] + "（一時）", image);
         if (!ids[channel]) {
-            fail("ベイク画像を読み込めません");
+            for (size_t created = 0; created < channel; ++created) m_textureLibrary.Remove(m_device, ids[created]);
+            fail("ベイク画像をGPUへ転送できません");
             return;
         }
     }
-    const auto material = m_materialLibrary.Add("Baked " + std::to_string(id));
+    const auto material = m_materialLibrary.Add("Baked " + std::to_string(id) + "（一時）");
     auto *asset = m_materialLibrary.FindMutable(material);
+    asset->transient = true;
     asset->baseColor = ids[0];
     asset->normal = ids[1];
     asset->flipNormalGreen = false;
@@ -310,12 +306,39 @@ void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images,
     bake.bakedLayer.heightSource = compositor::ValueSource::Texture;
     bake.bakedLayer.heightGain = 1;
     bake.fingerprint = fingerprint;
+    m_bakeImages[id] = std::move(images);
     m_materialLibrary.MarkThumbnailDirty(material);
-    m_assetRefresh = true;
     SetPreviewGraphNode(id);
     m_graph.MarkDirty();
     MarkDocumentChanged();
     SyncMeshGraph();
-    ROCK_LOG_INFO("Material Bake完了: %u x %u、4チャンネル", images[0].width, images[0].height);
+    ROCK_LOG_INFO("Material Bake完了: %u x %u、4チャンネル（一時。ファイルへは未出力）", m_bakeImages[id][0].width,
+                  m_bakeImages[id][0].height);
+}
+
+void Application::ExportBakedTextures(graph::GraphId id, std::filesystem::path directory) {
+    const auto found = m_bakeImages.find(id);
+    if (found == m_bakeImages.end()) return;
+    if (directory.empty()) {
+        const std::filesystem::path initial = m_workspace.IsOpen() ? m_workspace.Root() : std::filesystem::path{};
+        directory = ShowPickFolderDialog(L"ベイクしたテクスチャの出力先", initial);
+        if (directory.empty()) return;  // 取り消し。
+    }
+    std::error_code createError;
+    std::filesystem::create_directories(directory, createError);
+    const char* names[] = {"BaseColor.png", "Normal.png", "RoughnessMetallicAO.png", "Height.png"};
+    for (size_t channel = 0; channel < 4; ++channel) {
+        const auto& image = found->second[channel];
+        const auto path = directory / names[channel];
+        if (!SaveRgba8Png(path, image.width, image.height, image.width * 4, image.pixels.data())) {
+            m_toasts.Push("テクスチャを出力できません", ToUtf8Display(path));
+            ROCK_LOG_ERROR("ベイクしたテクスチャを出力できません: %s", ToUtf8Display(path).c_str());
+            return;
+        }
+    }
+    m_toasts.Push("ベイクしたテクスチャを4枚出力しました", ToUtf8Display(directory), directory);
+    ROCK_LOG_INFO("ベイクしたテクスチャを出力しました: %s", ToUtf8Display(directory).c_str());
+    // 出力先がルートの中なら、アセット欄に出す。
+    m_assetRefresh = true;
 }
 } // namespace rock

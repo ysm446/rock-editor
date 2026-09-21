@@ -1,5 +1,6 @@
 #include "renderer/BakePadding.h"
 #include <algorithm>
+#include <limits>
 namespace rock::renderer {
 void DilateBakePixels(LdrImage &image, int padding) {
     // 元の被覆画素を起点に幅優先で広げる。島の内側を上書きしない。
@@ -22,5 +23,9 @@ void DilateBakePixels(LdrImage &image, int padding) {
         }
         frontier.swap(next);
     }
+}
+void FillBakeBackground(LdrImage &image) {
+    // 幅優先の塗り広げを、埋める画素が無くなるまで続ける。各画素は、縦横の歩数で最も近い島の色になる。
+    DilateBakePixels(image, std::numeric_limits<int>::max());
 }
 } // namespace rock::renderer

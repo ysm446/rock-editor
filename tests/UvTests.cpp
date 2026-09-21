@@ -142,6 +142,36 @@ void RunUvTests() {
     tests::Check(image.pixels[(3 * 7 + 5) * 4] == 200 && image.pixels[(3 * 7 + 6) * 4 + 3] == 0 &&
                      image.pixels[(3 * 7 + 3) * 4] == 200,
                  "指定幅だけ色を伸ばし元の被覆画素を保持する");
+    {
+        // 全面を埋める。2つの島（赤と青）を置き、空きが近いほうの色になること、島の中は変わらないこと。
+        LdrImage filled;
+        filled.width = 9;
+        filled.height = 5;
+        filled.pixels.assign(9 * 5 * 4, 0);
+        const auto put = [&](int x, int y, uint8_t r, uint8_t b) {
+            auto* px = filled.pixels.data() + (size_t(y) * 9 + x) * 4;
+            px[0] = r; px[2] = b; px[3] = 255;
+        };
+        put(1, 2, 200, 0);
+        put(7, 2, 0, 150);
+        renderer::FillBakeBackground(filled);
+        bool opaque = true;
+        for (size_t i = 3; i < filled.pixels.size(); i += 4) opaque &= filled.pixels[i] == 255;
+        const auto red = [&](int x, int y) { return filled.pixels[(size_t(y) * 9 + x) * 4]; };
+        const auto blue = [&](int x, int y) { return filled.pixels[(size_t(y) * 9 + x) * 4 + 2]; };
+        tests::Check(opaque, "空きを全て埋め、全面が不透明になる");
+        tests::Check(red(0, 0) == 200 && blue(0, 0) == 0 && red(3, 4) == 200 && red(8, 4) == 0 && blue(8, 4) == 150 &&
+                         blue(5, 0) == 150,
+                     "空きの画素は最も近い島の色になる");
+        tests::Check(red(1, 2) == 200 && blue(7, 2) == 150 && blue(1, 2) == 0, "島の中の色は変えない");
+        LdrImage empty;
+        empty.width = 4;
+        empty.height = 4;
+        empty.pixels.assign(4 * 4 * 4, 0);
+        renderer::FillBakeBackground(empty);
+        tests::Check(std::all_of(empty.pixels.begin(), empty.pixels.end(), [](uint8_t v) { return v == 0; }),
+                     "島が1つも無い画像は変えない");
+    }
 
     tests::Section("UV展開の進捗とキャンセル");
     {
