@@ -27,6 +27,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Visual Studio ジェネレータはプロジェクト内のソースを1つずつコンパイルする。
+# /MP で翻訳単位を並列にし、ビルド時間を縮める。
+add_compile_options(/MP)
+
 add_library(rock_xatlas STATIC third_party/xatlas/xatlas.cpp)
 target_include_directories(rock_xatlas PUBLIC third_party/xatlas)
 target_compile_definitions(rock_xatlas PRIVATE NOMINMAX)
@@ -114,7 +118,6 @@ set(rock_sources
     src/geometry/Volume.cpp
     src/geometry/DualContouring.cpp
     src/graph/RockEvaluator.cpp
-    src/renderer/RockMesh.cpp
     src/graph/NodeGraph.cpp
     src/graph/NodeGraph.h
     src/compositor/MaterialEvaluator.cpp

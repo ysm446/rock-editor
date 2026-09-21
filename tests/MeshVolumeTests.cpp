@@ -210,4 +210,31 @@ void RunMeshVolumeTests() {
     auto revised = graph::EvaluateRocks(graph, to, &cache);
     Check(revised.error.empty() && revised.rocks[0].volume != remembered,
           "piece upstream edits invalidate volume cache");
+    {
+        // Apply Material は形状を変えない。下流のボリュームを毎回作り直さず、材質の接続変更では作り直す。
+        graph::NodeGraph layered;
+        auto shape = layered.CreateNode(graph::NodeKind::BaseRock), apply = layered.CreateNode(graph::NodeKind::ApplyMaterial),
+             layerSurface = layered.CreateNode(graph::NodeKind::Surface), other = layered.CreateNode(graph::NodeKind::Surface),
+             layeredVolume = layered.CreateNode(graph::NodeKind::ToVolume);
+        auto wire = [&](int a, int b, int pin) {
+            return layered.CreateLink(layered.FindNode(a)->outputs[0].id, layered.FindNode(b)->inputs[pin].id);
+        };
+        Check(wire(shape, apply, 0) && wire(layerSurface, apply, 1) && wire(apply, layeredVolume, 0),
+              "Base Shape -> Apply Material -> To Volume");
+        std::get<VolumeSettings>(layered.FindMutableNode(layeredVolume)->settings).resolution = 24;
+        graph::RockEvaluationCache layeredCache;
+        auto layeredFirst = graph::EvaluateRocks(layered, layeredVolume, &layeredCache);
+        auto layeredAgain = graph::EvaluateRocks(layered, layeredVolume, &layeredCache);
+        Check(layeredFirst.error.empty() && layeredFirst.rocks.size() == 1 &&
+                  layeredAgain.rocks[0].volume == layeredFirst.rocks[0].volume,
+              "layeredVolume cache survives an upstream Apply Material");
+        std::get<BaseRockSettings>(layered.FindMutableNode(shape)->settings).size[1] = 3;
+        auto layeredResized = graph::EvaluateRocks(layered, layeredVolume, &layeredCache);
+        Check(layeredResized.error.empty() && layeredResized.rocks[0].volume != layeredFirst.rocks[0].volume,
+              "geometry above Apply Material still invalidates the layeredVolume");
+        Check(wire(other, apply, 1), "material input can be rewired");
+        auto rewired = graph::EvaluateRocks(layered, layeredVolume, &layeredCache);
+        Check(rewired.error.empty() && rewired.rocks[0].volume != layeredResized.rocks[0].volume,
+              "material rewiring is part of the cache key");
+    }
 }

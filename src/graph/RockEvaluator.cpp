@@ -72,10 +72,13 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         add(uv->resolution); add(uv->padding); add(uv->quality);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
                node->kind != NodeKind::UvUnwrap && node->kind != NodeKind::MaterialBake &&
-               node->kind != NodeKind::MeshOutput) return std::nullopt;
+               node->kind != NodeKind::ApplyMaterial && node->kind != NodeKind::MeshOutput) return std::nullopt;
     for (const auto& pin : node->inputs) {
-        if (pin.valueType == ValueType::Material) {
-            if (node->kind == NodeKind::MaterialBake) add(graph.FindUpstreamPin(pin.id));
+        // 材質とマスクは形状を変えない。結果に残るのは接続先のIDだけなので、接続だけをキーへ含める。
+        // ここで打ち切らないと、Apply Material より下流のボリュームを毎回作り直すことになる。
+        if (pin.valueType == ValueType::Material || pin.valueType == ValueType::Mask) {
+            if (node->kind == NodeKind::MaterialBake || node->kind == NodeKind::ApplyMaterial)
+                add(graph.FindUpstreamPin(pin.id));
             continue;
         }
         const auto* upstream = graph.FindUpstreamNodeForPin(pin.id);

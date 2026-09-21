@@ -12,6 +12,8 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
     geometry::MeshInfo info;
     if (!geometry::InspectMesh(mesh, info)) return result;
     const bool hasUv = geometry::HasValidUvs(mesh);
+    result.vertices.reserve(mesh.triangles.size() * 3);
+    result.indices.reserve(mesh.triangles.size() * 3);
     // 面法線（単位）と、面積の重み（外積の長さ）。重みは平均するときだけ使う。
     std::vector<geometry::Vec3> faceNormals(mesh.triangles.size());
     std::vector<float> faceAreas(mesh.triangles.size(), 0.0f);
@@ -44,12 +46,16 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
         const float dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
         const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
         geometry::Vec3 uvTangent{}, uvBitangent{};
+        // UVの面積がfloatの桁落ちで0になる面は、UVから接線を求めず辺の向きを使う。
+        // 0で割るとNaNが頂点に残り、描画前の検証で岩全体が弾かれる。
+        bool uvTangentValid = false;
         if (hasUv) {
             const auto& uv = mesh.cornerUvs[f];
             const auto c = mesh.positions[face[2]];
             const float du1 = uv[1].u-uv[0].u, dv1 = uv[1].v-uv[0].v;
             const float du2 = uv[2].u-uv[0].u, dv2 = uv[2].v-uv[0].v;
             const float inv = 1.0f/(du1*dv2-du2*dv1);
+            uvTangentValid = std::isfinite(inv);
             uvTangent = {(dx*dv2-(c.x-a.x)*dv1)*inv, (dy*dv2-(c.y-a.y)*dv1)*inv, (dz*dv2-(c.z-a.z)*dv1)*inv};
             uvBitangent = {((c.x-a.x)*du1-dx*du2)*inv, ((c.y-a.y)*du1-dy*du2)*inv, ((c.z-a.z)*du1-dz*du2)*inv};
         }
@@ -74,7 +80,7 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
                 if (sum > 0) v.normal = {sx / sum, sy / sum, sz / sum};
             }
             v.tangent = {dx / length, dy / length, dz / length, 1};
-            if (hasUv) v.tangent = {uvTangent.x, uvTangent.y, uvTangent.z, 1};
+            if (uvTangentValid) v.tangent = {uvTangent.x, uvTangent.y, uvTangent.z, 1};
             if (smooth || hasUv) {
                 // 平均した法線とは辺の向きが直交しなくなるので、接線を張り直す
                 // （描画側は法線と接線の直交を前提にしている）。
@@ -82,7 +88,7 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
                 float tx = v.tangent.x - v.normal.x * d, ty = v.tangent.y - v.normal.y * d,
                       tz = v.tangent.z - v.normal.z * d;
                 float t = std::sqrt(tx * tx + ty * ty + tz * tz);
-                if (t < 1e-6f) {
+                if (!(t >= 1e-6f)) {
                     // 辺が法線とほぼ平行。法線に直交する軸を作り直す。
                     const bool useX = std::abs(v.normal.x) < 0.9f;
                     const float ax = useX ? 1.0f : 0.0f, ay = useX ? 0.0f : 1.0f;
@@ -99,7 +105,7 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
                 v.uv = {mesh.cornerUvs[f][i].u, mesh.cornerUvs[f][i].v};
                 const auto& t = v.tangent; const auto& vn = v.normal;
                 const float sign = (vn.y*t.z-vn.z*t.y)*uvBitangent.x + (vn.z*t.x-vn.x*t.z)*uvBitangent.y + (vn.x*t.y-vn.y*t.x)*uvBitangent.z;
-                v.tangent.w = sign < 0 ? -1.0f : 1.0f;
+                v.tangent.w = uvTangentValid && sign < 0 ? -1.0f : 1.0f;
             }
             v.roadUv = v.uv;
             result.indices.push_back(static_cast<uint32_t>(result.vertices.size()));

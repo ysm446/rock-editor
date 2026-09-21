@@ -147,7 +147,7 @@ private:
     bool m_pieceSelectionEditing = false;
     bool m_pieceUpdating = false;
     uint64_t m_pieceEpoch = 1;
-    std::string m_pieceTaskKey, m_pieceCompletedKey;
+    std::string m_pieceTaskKey, m_pieceTaskGeometryKey, m_pieceCompletedKey;
     struct PieceTaskResult {
         graph::RockEvaluation output, input, selection;
         graph::RockEvaluationCache cache;

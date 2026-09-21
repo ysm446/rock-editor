@@ -338,8 +338,9 @@ bool ResourceAllocator::CreateStructuredBuffer(uint32_t count, uint32_t stride, 
     if (count == 0 || stride == 0 || m_srvHeap == nullptr) {
         return false;
     }
-    if (!CreateDefaultBuffer(uint64_t(count) * stride,
-                             allowUnorderedAccess ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_COPY_DEST,
+    // DEFAULT ヒープのバッファは COPY_DEST を指定しても COMMON で作られ、デバッグレイヤーが警告する。
+    // 転送する側が outBuffer.state から遷移させる。
+    if (!CreateDefaultBuffer(uint64_t(count) * stride, D3D12_RESOURCE_STATE_COMMON,
                              debugName, outBuffer, allowUnorderedAccess)) {
         return false;
     }

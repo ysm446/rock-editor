@@ -280,6 +280,8 @@ void Application::ResetProject() {
     m_pieceStop.request_stop();
     m_pieceCompletedKey.clear();
     m_pieceSelectionEditing = false;
+    // 前の文書のピンIDや材質IDを持ったまま貼り付けると、無関係なノードへつながる。
+    m_graphClipboard = {};
     m_selectedGraphNode = 0;
     m_previewGraphNode = 0;
     m_previewGraphPin = 0;
@@ -373,6 +375,7 @@ void Application::ProcessPendingFileWork() {
             m_pieceStop.request_stop();
             m_pieceCompletedKey.clear();
             m_pieceSelectionEditing = false;
+            m_graphClipboard = {};
             m_previewGraphNode = m_graph.FindNode(m_options.previewNode) ? m_options.previewNode : 0;
             m_options.previewNode = 0;
             m_previewGraphPin = 0;
@@ -478,6 +481,7 @@ void Application::ProcessPendingFileWork() {
             hit |= clearMap(asset->metallic);
             hit |= clearMap(asset->ambientOcclusion);
             hit |= clearMap(asset->height);
+            hit |= clearMap(asset->opacity);
             if (hit) {
                 asset->thumbnailDirty = true;
             }

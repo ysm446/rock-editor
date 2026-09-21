@@ -215,4 +215,25 @@ void RunPieceTests() {
     auto canceled = EvaluateRocks(graph, fracture, &cache, VolumeMeshingMethod::MarchingTetrahedra,
                                   cancellation.get_token());
     Check(!canceled.error.empty(), "canceled evaluation cannot publish a result");
+    // 原点から遠い入力では、floatへ丸めた点が面の外へ出ることがある。Scatterが出した点は
+    // 必ずVoronoi Fractureの内外判定を通る。
+    bool farAccepted = true;
+    for (uint32_t seed = 1; seed <= 6; ++seed) {
+        Mesh farBox = MakeBox({.02f, .03f, .02f});
+        for (auto &p : farBox.positions) {
+            p.x += 900;
+            p.y -= 700;
+            p.z += 500;
+        }
+        ScatterSettings farScatter;
+        farScatter.count = MaxScatterPoints;
+        farScatter.seed = seed;
+        std::string farError;
+        const auto farPoints = ScatterPoints(farBox, farScatter, farError);
+        if (!farError.empty())
+            continue;
+        FractureVoronoi(farBox, farPoints, {}, 1, farError);
+        farAccepted &= farError.find("外") == std::string::npos;
+    }
+    Check(farAccepted, "scattered points stay inside for Voronoi far from the origin");
 }

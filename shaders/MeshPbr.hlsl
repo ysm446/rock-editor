@@ -1009,6 +1009,7 @@ float4 PsMain(VsOutput input) : SV_Target0
     // 合成の色 / 法線 / サーフェスを読まず、単色マテリアルと面の向きで塗る。
     const bool clay = (g_mesh.debugView == ROCK_VIEW_CLAY);
     const bool useMaterialShading = (g_mesh.useMaterialTextures != 0u) && !clay && !uvChecker;
+    const bool appliedOverrides = g_mesh.appliedCount != 0u && !uvChecker && !clay;
 
     if (uvChecker)
     {
@@ -1114,7 +1115,10 @@ float4 PsMain(VsOutput input) : SV_Target0
         normal = normalize(tangent * tangentNormal.x + bitangent * tangentNormal.y +
                            geometricNormal * tangentNormal.z);
     }
-    else if (useMaterialShading)
+    // Apply Material の合成結果は下で色・法線・Surface をすべて置き換える。基本材質の読み取り
+    // （Triplanarなら9回の異方性サンプル）は捨てられるので省く。マスク抜きだけは基本材質の
+    // 不透明度で discard するため、従来どおり読む。
+    else if (useMaterialShading && (!appliedOverrides || g_mesh.opacityMode == 1u))
     {
         Texture2D<float4> baseColorMap = ResourceDescriptorHeap[g_mesh.materialBaseColorIndex];
         Texture2D<float2> normalMap    = ResourceDescriptorHeap[g_mesh.materialNormalIndex];
@@ -1149,7 +1153,7 @@ float4 PsMain(VsOutput input) : SV_Target0
         }
     }
 
-    if (g_mesh.appliedCount != 0u && !uvChecker && !clay) {
+    if (appliedOverrides) {
         AppliedValue a = EvaluateApplied(input);
         baseColor=a.color; normal=a.normal; roughnessValue=a.surface.r; metallicValue=a.surface.g;
         ambientOcclusion=a.surface.b; opacity=a.surface.a;

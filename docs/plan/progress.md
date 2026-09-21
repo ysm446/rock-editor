@@ -1,9 +1,22 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-21 23:42
+更新日時: 2026-09-22 00:15
 
 ## 現在地
+
+### 2026-09-22 全体レビューによる修正と最適化
+
+- **形状コアの高速化（出力はビット単位で不変）**：To Volumeの一般メッシュ経路を(Y,Z)の行単位で並列化。BVHは子の順序付けに使った箱距離を再利用し、隣の格子点の最近距離から探索の上限を決める。Random Boxesのボリューム化とVolume TransformはZスライス単位、Voronoi Fractureは片単位で並列化した。診断・三角形数の上限・体積の合計はID順にまとめ、直列処理と同じ結果・同じエラー文を返す。`InspectMesh` の辺照合は要素ごとに確保しない開番地法の表へ変更。Marching Tetrahedraの交点表は事前確保する。
+- 旧コードと新コードを同じ入力で比べる検証用プログラムで、To Volume（楕円体＋ノイズ12,288三角形・解像度96、Dual Contouringの53,892三角形の再ボリューム化、原点から500 m離れた入力）、Random Boxes 32個・解像度96、Volume Transform、Marching Tetrahedra / Dual Contouring、Voronoi 24/232/512点×2 Seed（方向付き伸長を含む）の全出力のハッシュが一致。Release実測は To Volume 5,774→187 ms、再ボリューム化 10,472→359 ms、Random Boxes 90→9 ms、Volume Transform 64→9 ms、Voronoi 512点 281→19 ms。単体テストのVolumeドラッグ相当は19.0→9.8 ms/更新、Releaseの全テストは13.5→約4.5秒。
+- **キャッシュ**：Apply Materialを通るとボリューム枝のキーが作れず、下流のTo Volumeを毎回作り直していた。材質・マスクは接続だけをキーへ含め、形状のキーを下流へ通す。
+- **Scatter → Voronoi**：Scatterは倍精度の点で、Voronoiはfloatへ丸めた保存値で内外を調べていた。Scatterでも保存値をVoronoiと同じ許容差で確かめる。従来の判定は残したので、既存Seedの結果は変わらない（上の一致検証に含む）。
+- **Volume Transform**：移動量に対してセルが小さく、floatの格子座標が隣どうしで潰れる設定を診断する（To Volumeと同じ考え方）。
+- **アプリ**：評価タスクの例外を生成エラーとして表示。終了時にタスクを止めて待つ。選択ノードだけが変わったときは実行中の評価を止めず、完了後のキャッシュで新しい選択を評価する。ベイク状態の `HintText` へ書式文字列として渡していた不具合を修正。テクスチャ削除で不透明度の参照を外し、使用箇所の一覧・件数へ不透明度とMaterial Maskを追加。文書の切り替えでグラフのクリップボードを捨てる。AO結果とベイク画像の寸法を照合。設定ファイルは一時ファイル経由で保存。`projectVersion` のないシーンを版4として拒否していた既定値を1へ修正。
+- **描画**：Apply Material使用時に捨てられていた基本材質の読み取り（Triplanarなら9回の異方性サンプル）を省略。マスク抜きの `discard` がある場合は従来どおり読む。`examples/material-layers` の実画面を変更前後のシェーダで撮り、ビューポートが画素単位で一致。生成メッシュの頂点配列の事前確保、UV面積0の面のNaN接線の回避、`UploadMeshScene` のシーン全体の複製1回分を削減。StructuredBufferをCOMMONで作成し、DebugのD3D12検証の警告を解消。
+- **ビルド**：`/MP` を追加。`rock_sources` の `RockMesh.cpp` の二重登録を削除。
+- Release/Debugビルドが警告の追加なしで成功し、単体テスト2,440項目が両構成で成功（Apply Material下流のキャッシュ4件、遠方のScatter→Voronoi 1件を追加）。`--test-gpu-ao` の実GPU比較も成功。Release実アプリで `examples/material-layers` と `examples/voronoi-pieces` の読み込み・表示を確認。実マウスでの操作確認、Debug実画面でのD3D12警告の消滅確認は未実施。
+- レビューで見つけたが今回は直していない項目は「未完了」の「レビューの持ち越し」に記録。
 
 ### 形状AOのGPU化・進捗表示
 
@@ -105,10 +118,11 @@
 | 区分 | 現在の状態 |
 | --- | --- |
 | アプリ基盤 | DX12 / ImGui、モデル表示、グラフ編集、素材・アセット・保存基盤あり |
-| 岩生成 | Base Rock の Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズと Seed の編集に対応。有限亀裂と Joint Set の複数方向ガイド表示、Box の軸に沿う部分切断・Rock Bridge 計測と、曲面の有限長部分溝に対応。単一平面/Joint Set による完全分割と各片の操作に対応 |
+| 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
 | ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる |
+| 材質 | Apply Material / Material Mask、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
 | 次の作業 | ボリューム上の操作を増やす。平面を境にずらす断層ノードが候補（方針未決） |
 
 ## 完了
@@ -367,8 +381,20 @@ Debug ビルドとテスト（`rock_editor_tests`）が通り、アプリが起�
 
 ## 未完了
 
-- 完全分割の穴・複数ループ対応。部分切断の不安定断面・一般メッシュ・複数交差対応。
-- Joint Set の有限範囲の部分切断、枝単位キャッシュ、Chip、Triplanar、OBJ。
+### レビューの持ち越し（2026-09-22）
+
+- 材質だけの編集でも `MarkDocumentChanged` が形状の再評価・全メッシュの再構築・再転送を起こす。ベイク指紋はそのたびに参照テクスチャのファイルを読み直す。材質の変更と形状の変更を分け、テクスチャのハッシュを読み込み時に控える。
+- `Mesh::Create` がメッシュ1個ごとにGPU全同期を行う（最大512片）。転送を1回のコマンドにまとめる。Piece Transformは頂点へ焼かず、描画時の行列で渡す。
+- ビューポートのリサイズごとの `WaitForGpu`、形状AOのタイルごとの同期待ち、最小化中にベイクが進まない点、デバイスロスト後に通知なく止まる点。
+- ベイクの途中失敗で書き出し済みPNGと読み込み済みテクスチャが残る。再ベイクのたびに材質・テクスチャ・フォルダが増える。
+- ギズモのドラッグをEscで取り消すと、何も変わらないUndo段が残る。
+- UV Unwrap・Volume to Mesh・Volume Transformは取消トークンを見ない。
+- Marching Tetrahedraの出力（解像度96で約16万〜40万三角形）がTo Volumeの入力上限25万三角形を超え得る。
+- CTestが全スイートを1件として実行する。`--test-gpu-ao` はCTest未登録。テストとアプリで同じソースを二重にコンパイルしている（共有の静的ライブラリ化が候補）。
+- Releaseの実行ファイルがソースツリーの `shaders/` の絶対パスを参照する。
+
+- （削除済み機能の残作業だった「完全分割の穴・複数ループ」「部分切断の不安定断面・複数交差」は、Joint Set / Crack / Fracture の削除により対象外。ボリューム上の操作として設計し直すときに改めて扱う）
+- Chip、OBJ 書き出し。（Joint Set / Crack / Fracture は削除済み。Triplanar と枝単位キャッシュは対応済み）
 - P1 の Box は無地表示。Surface 接続と岩用 UV/Triplanar は未対応。既存の Transform ノードはモデル専用のまま。
 - グラフからの寸法変更・Undo/Redo は自動テスト、Chunk ギズモは CLI 入力注入で確認。実マウス操作による一連の編集操作は未検証。
 

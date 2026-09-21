@@ -234,7 +234,9 @@ void Application::SyncMeshGraph() {
     const bool hasPieces = std::any_of(m_graph.Nodes().begin(), m_graph.Nodes().end(), [](const auto& n) {
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume;
     });
-    const std::string taskKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(m_selectedGraphNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
+    // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
+    const std::string geometryKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
+    const std::string taskKey = geometryKey + ":" + std::to_string(m_selectedGraphNode);
     if ((!hasPieces || m_pieceCompletedKey == taskKey) && m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
         m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod)
@@ -245,7 +247,9 @@ void Application::SyncMeshGraph() {
     if (hasPieces) {
         m_pieceUpdating = true;
         if (m_pieceTask.valid()) {
-            if (m_pieceTaskKey != taskKey) m_pieceStop.request_stop();
+            // 選択を変えただけなら実行中の重い評価を止めない。完了後にそのキャッシュを引き継ぎ、
+            // 新しい選択の評価はキャッシュを使ってすぐ終わる。
+            if (m_pieceTaskGeometryKey != geometryKey) m_pieceStop.request_stop();
             if (m_pieceTask.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
             auto finished = m_pieceTask.get();
             m_rockEvaluationCache = std::move(finished.cache);
@@ -260,18 +264,29 @@ void Application::SyncMeshGraph() {
         }
         if (m_pieceUpdating) {
             m_pieceTaskKey = taskKey;
+            m_pieceTaskGeometryKey = geometryKey;
             m_pieceStop = std::stop_source{};
             m_pieceTask = std::async(std::launch::async, [snapshot=m_graph, previewMeshNode, selected=m_selectedGraphNode,
                 method=m_settings.Display().sdfPreviewMethod, cache=m_rockEvaluationCache, stop=m_pieceStop.get_token()]() mutable {
                 PieceTaskResult result;
-                result.output = graph::EvaluateRocks(snapshot, previewMeshNode, &cache, method, stop);
-                if (const auto* n = snapshot.FindNode(selected); n && graph::IsPieceNodeKind(n->kind) && !n->inputs.empty())
-                    if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[0].id))
-                        result.input = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
-                if (const auto* n = snapshot.FindNode(selected); n && n->kind == graph::NodeKind::PieceTransform && n->inputs.size() > 1)
-                    if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[1].id))
-                        result.selection = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
-                result.cache = std::move(cache);
+                // ここから漏れた例外は get() でUIスレッドへ再送出され、未保存の編集ごとアプリが落ちる。
+                // メモリ不足などは生成エラーとして表示する。
+                try {
+                    result.output = graph::EvaluateRocks(snapshot, previewMeshNode, &cache, method, stop);
+                    if (const auto* n = snapshot.FindNode(selected); n && graph::IsPieceNodeKind(n->kind) && !n->inputs.empty())
+                        if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[0].id))
+                            result.input = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
+                    if (const auto* n = snapshot.FindNode(selected); n && n->kind == graph::NodeKind::PieceTransform && n->inputs.size() > 1)
+                        if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[1].id))
+                            result.selection = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
+                    result.cache = std::move(cache);
+                } catch (const std::exception& e) {
+                    result = {};
+                    result.output.error = std::string("評価中に例外が発生しました: ") + e.what();
+                } catch (...) {
+                    result = {};
+                    result.output.error = "評価中に不明な例外が発生しました";
+                }
                 return result;
             });
             return;
@@ -1187,7 +1202,7 @@ void Application::DrawGraphPanel() {
         if (m_bakeJob && m_bakeJob->id == selected->id)
             ui::HintText("形状AOをGPUで計算中です。進捗ウィンドウからキャンセルできます。");
         else if (const auto status=m_bakeStatus.find(selected->id); status!=m_bakeStatus.end())
-            ui::HintText(status->second.c_str());
+            ui::HintText("%s", status->second.c_str());
         else ui::HintText("未ベイク。ノードの出力をプレビューして状態を確認してください。");
         ui::HintText("UV Unwrapのアトラス寸法でPNGを4枚生成し、ルート内のBakesへ保存します。形状・材質・スムーズシェーディングを変えたら再ベイクしてください。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {

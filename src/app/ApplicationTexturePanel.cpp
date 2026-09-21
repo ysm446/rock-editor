@@ -58,6 +58,14 @@ std::vector<std::string> Application::CollectTextureUsers(compositor::TextureId 
         if (asset.height.texture == id) {
             add("ハイト");
         }
+        if (asset.opacity.texture == id) {
+            add("不透明度");
+        }
+    }
+    for (const graph::Node& node : m_graph.Nodes()) {
+        if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings); mask && mask->texture == id) {
+            users.push_back("グラフの Material Mask ノード");
+        }
     }
     return users;
 }
@@ -74,6 +82,11 @@ size_t Application::CountTextureUsers(compositor::TextureId id) const {
         count += (asset.metallic.texture == id) ? 1 : 0;
         count += (asset.ambientOcclusion.texture == id) ? 1 : 0;
         count += (asset.height.texture == id) ? 1 : 0;
+        count += (asset.opacity.texture == id) ? 1 : 0;
+    }
+    for (const graph::Node& node : m_graph.Nodes()) {
+        const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings);
+        count += (mask != nullptr && mask->texture == id) ? 1 : 0;
     }
     return count;
 }

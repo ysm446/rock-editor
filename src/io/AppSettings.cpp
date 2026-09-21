@@ -177,14 +177,29 @@ bool AppSettings::Save() const {
     document["ui"] = std::move(ui);
     document["display"] = std::move(display);
 
-    std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-    if (!stream.is_open()) {
-        ROCK_LOG_WARN("設定を保存できませんでした");
-        return false;
+    // 一時ファイルへ書いてから置き換える。直接書くと、途中で落ちたときに切れた設定が残り、
+    // 次回は黙って既定値へ戻ってしまう。
+    fs::path tempPath = path;
+    tempPath += L".tmp";
+    bool written = false;
+    {
+        std::ofstream stream(tempPath, std::ios::binary | std::ios::trunc);
+        if (stream.is_open()) {
+            // 壊れた文字列が混ざっていても例外を出さない（不正な UTF-8 は置換文字にする）。
+            stream << document.dump(2, ' ', false, json::error_handler_t::replace) << '\n';
+            stream.flush();
+            written = stream.good();
+        }
     }
-    // 壊れた文字列が混ざっていても例外を出さない（不正な UTF-8 は置換文字にする）。
-    stream << document.dump(2, ' ', false, json::error_handler_t::replace) << '\n';
-    return stream.good();
+    if (written) {
+        fs::rename(tempPath, path, error);
+        written = !error;
+    }
+    if (!written) {
+        fs::remove(tempPath, error);
+        ROCK_LOG_WARN("設定を保存できませんでした");
+    }
+    return written;
 }
 
 }  // namespace rock::io

@@ -2,6 +2,7 @@
 #include "geometry/DualContouring.h"
 #include <algorithm>
 #include <cmath>
+#include <execution>
 #include <unordered_map>
 #include <numeric>
 #include <numbers>
@@ -20,6 +21,21 @@ bool ValidGrid(const VolumeGrid& g) {
            g.values.size() == size_t(nx) * ny * nz && std::isfinite(g.spacing) && g.spacing > 0 &&
            std::isfinite(g.origin.x) && std::isfinite(g.origin.y) && std::isfinite(g.origin.z) &&
            std::none_of(g.values.begin(), g.values.end(), [](float v) { return !std::isfinite(v); });
+}
+// 格子点はどれも独立に求まるので、Zスライスごとに並列で埋める。
+// sampleは値を書き込み、その点が内部かどうかを返す。内部の点が1つでもあれば true。
+template <class Sample>
+bool FillSlices(const VolumeGrid& grid, Sample sample) {
+    std::vector<uint32_t> slices(grid.dimensions[2]);
+    std::iota(slices.begin(), slices.end(), 0u);
+    std::vector<uint8_t> inside(slices.size(), 0);
+    std::for_each(std::execution::par, slices.begin(), slices.end(), [&](uint32_t z) {
+        bool any = false;
+        for (uint32_t y = 0; y < grid.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < grid.dimensions[0]; ++x) any |= sample(x, y, z);
+        inside[z] = any ? 1 : 0;
+    });
+    return std::find(inside.begin(), inside.end(), uint8_t(1)) != inside.end();
 }
 // 右手系 Z → X → Y。Model と同じ向きに回す。
 Vec3 Rotate(Vec3 p, const std::array<float, 3>& degrees) {
@@ -102,16 +118,13 @@ VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSett
     for (int i = 0; i < 3; ++i)
         grid.dimensions[i] = static_cast<uint32_t>(std::ceil(extent[i] / grid.spacing)) + 5;
     grid.values.resize(size_t(grid.dimensions[0]) * grid.dimensions[1] * grid.dimensions[2]);
-    bool inside = false;
-    for (uint32_t z = 0; z < grid.dimensions[2]; ++z)
-        for (uint32_t y = 0; y < grid.dimensions[1]; ++y)
-            for (uint32_t x = 0; x < grid.dimensions[0]; ++x) {
-                const float value = BoxUnionField(grid.Position(x, y, z), boxes);
-                // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
-                grid.values[grid.Index(x, y, z)] =
-                    std::abs(value) < grid.spacing * 1e-4f ? grid.spacing * 1e-4f : value;
-                inside |= value < 0;
-            }
+    const bool inside = FillSlices(grid, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const float value = BoxUnionField(grid.Position(x, y, z), boxes);
+        // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
+        grid.values[grid.Index(x, y, z)] =
+            std::abs(value) < grid.spacing * 1e-4f ? grid.spacing * 1e-4f : value;
+        return value < 0;
+    });
     if (!inside) {
         error = "形がセルより薄いため内部を捉えられません。解像度を上げるか寸法を調整してください";
         return {};
@@ -176,20 +189,29 @@ VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s
         }
         out.dimensions[i] = static_cast<uint32_t>(cells);
     }
+    // 移動量に対してセルが小さいと、floatの格子座標が隣どうしで同じ値に潰れる。
+    for (int i = 0; i < 3; ++i) {
+        const uint32_t last = out.dimensions[i] - 1;
+        const auto at = [&](uint32_t n) {
+            const auto p = out.Position(i == 0 ? n : 0, i == 1 ? n : 0, i == 2 ? n : 0);
+            return i == 0 ? p.x : (i == 1 ? p.y : p.z);
+        };
+        if (!std::isfinite(at(last)) || at(1) == at(0) || at(last) == at(last - 1)) {
+            error = "移動量に対してセルが小さすぎます。原点に近づけるか倍率・解像度を調整してください";
+            return {};
+        }
+    }
     out.values.resize(size_t(out.dimensions[0]) * out.dimensions[1] * out.dimensions[2]);
     const float threshold = out.spacing * 1e-4f;
-    bool inside = false;
-    for (uint32_t z = 0; z < out.dimensions[2]; ++z)
-        for (uint32_t y = 0; y < out.dimensions[1]; ++y)
-            for (uint32_t x = 0; x < out.dimensions[0]; ++x) {
-                // 逆変換で元の格子を読む。距離の単位を保つため倍率を掛け戻す。
-                const auto p = out.Position(x, y, z);
-                const Vec3 d{p.x - s.position[0], p.y - s.position[1], p.z - s.position[2]};
-                const Vec3 source{Dot(d, ax) / s.scale, Dot(d, ay) / s.scale, Dot(d, az) / s.scale};
-                const float value = SampleVolume(g, source) * s.scale;
-                out.values[out.Index(x, y, z)] = std::abs(value) < threshold ? threshold : value;
-                inside |= value < 0;
-            }
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        // 逆変換で元の格子を読む。距離の単位を保つため倍率を掛け戻す。
+        const auto p = out.Position(x, y, z);
+        const Vec3 d{p.x - s.position[0], p.y - s.position[1], p.z - s.position[2]};
+        const Vec3 source{Dot(d, ax) / s.scale, Dot(d, ay) / s.scale, Dot(d, az) / s.scale};
+        const float value = SampleVolume(g, source) * s.scale;
+        out.values[out.Index(x, y, z)] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
     if (!inside) {
         error = "変換後に内部が残りません。倍率や上流の解像度を見直してください";
         return {};
@@ -209,6 +231,8 @@ Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod 
         if (!error.empty()) return {};
     } else if (method == VolumeMeshingMethod::MarchingTetrahedra) {
         std::unordered_map<uint64_t, uint32_t> crossings;
+        // 表面の頂点数は断面のセル数に比例する。成長中の再ハッシュを減らす（IDの割り当て順は変わらない）。
+        crossings.reserve(16 * std::max({size_t(nx) * ny, size_t(ny) * nz, size_t(nx) * nz}));
         // 全セルで同じ体対角を使う6四面体。隣接セルの面の分割も一致する。
         constexpr int corners[8][3] = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0},
                                        {0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}};

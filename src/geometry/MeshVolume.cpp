@@ -1,6 +1,8 @@
 #include "geometry/Volume.h"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <execution>
 #include <limits>
 #include <numeric>
 
@@ -108,9 +110,10 @@ struct Bvh {
         }
         return total;
     }
-    void Nearest(D p, int id, double &best) const {
+    // boundsは呼び出し側が求めたこのノードの箱までの距離。子の順序付けに使った値を再利用する。
+    void Nearest(D p, int id, double bounds, double &best) const {
         const auto &n = nodes[id];
-        if (BoundsDistance(p, id) >= best)
+        if (bounds >= best)
             return;
         if (n.left < 0) {
             for (size_t i = n.begin; i < n.end; ++i)
@@ -118,10 +121,13 @@ struct Bvh {
             return;
         }
         int first = n.left, second = n.right;
-        if (BoundsDistance(p, first) > BoundsDistance(p, second))
+        double firstBounds = BoundsDistance(p, first), secondBounds = BoundsDistance(p, second);
+        if (firstBounds > secondBounds) {
             std::swap(first, second);
-        Nearest(p, first, best);
-        Nearest(p, second, best);
+            std::swap(firstBounds, secondBounds);
+        }
+        Nearest(p, first, firstBounds, best);
+        Nearest(p, second, secondBounds, best);
     }
     void Crossings(double y, double z, int id, std::vector<Crossing> &out) const {
         const auto &n = nodes[id];
@@ -215,53 +221,86 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
     std::iota(bvh.order.begin(), bvh.order.end(), 0);
     bvh.Build(0, bvh.order.size());
     grid.values.resize(size_t(grid.dimensions[0]) * grid.dimensions[1] * grid.dimensions[2]);
-    bool hasInside = false;
-    std::vector<Crossing> crossings;
-    crossings.reserve(128);
-    for (uint32_t z = 0; z < grid.dimensions[2]; ++z)
-        for (uint32_t y = 0; y < grid.dimensions[1]; ++y) {
-            if (stop.stop_requested()) {
-                error = "評価をキャンセルしました";
-                return {};
-            }
-            D row = (V(grid.Position(0, y, z)) - origin) * (1 / scale);
-            crossings.clear();
-            bvh.Crossings(row.y, row.z, 0, crossings);
-            std::sort(crossings.begin(), crossings.end(), [](auto a, auto b) { return a.x < b.x; });
-            // 接触する片の向きが逆の断面は、数値誤差以内の交差をまとめて相殺する。
-            size_t count = 0;
-            for (size_t i = 0; i < crossings.size();) {
-                auto value = crossings[i++];
-                while (i < crossings.size() && crossings[i].x - value.x < 1e-10)
-                    value.direction += crossings[i++].direction;
-                crossings[count++] = value;
-            }
-            crossings.resize(count);
-            int total = 0;
-            for (auto crossing : crossings) {
-                total += crossing.direction;
-                if (total < 0) {
-                    error = "Meshの面の向きが不正です。外面を外向きに揃えてください";
-                    return {};
-                }
-            }
-            if (total != 0) {
-                error = "Meshの内外を判定できません。面の接続と向きを確認してください";
-                return {};
-            }
-            size_t event = 0;
-            int winding = 0;
-            for (uint32_t x = 0; x < grid.dimensions[0]; ++x) {
-                auto point = (V(grid.Position(x, y, z)) - origin) * (1 / scale);
-                while (event < crossings.size() && crossings[event].x <= point.x + 1e-10)
-                    winding += crossings[event++].direction;
-                double nearest = std::numeric_limits<double>::max();
-                bvh.Nearest(point, 0, nearest);
-                float distance = std::max(float(std::sqrt(nearest) * scale), grid.spacing * 1e-4f);
-                grid.values[grid.Index(x, y, z)] = winding > 0 ? -distance : distance;
-                hasInside |= winding > 0;
-            }
+    // 行（Y,Z）どうしは独立なので並列に処理する。各格子点の値は行の順序に依存しない。
+    // 診断は直列処理と同じく最初の行のものを返すため、失敗した行より前の行は最後まで調べる。
+    enum RowError : uint8_t { RowOk, RowOrientation, RowUndetermined };
+    const size_t rowCount = size_t(grid.dimensions[1]) * grid.dimensions[2];
+    std::vector<uint8_t> rowErrors(rowCount, RowOk), rowInside(rowCount, 0);
+    std::vector<size_t> rows(rowCount);
+    std::iota(rows.begin(), rows.end(), size_t(0));
+    std::atomic<size_t> firstFailure{rowCount};
+    std::atomic<bool> cancelled{false};
+    std::for_each(std::execution::par, rows.begin(), rows.end(), [&](size_t rowIndex) {
+        if (cancelled.load(std::memory_order_relaxed) || rowIndex > firstFailure.load(std::memory_order_relaxed))
+            return;
+        if (stop.stop_requested()) {
+            cancelled.store(true, std::memory_order_relaxed);
+            return;
         }
+        const uint32_t y = uint32_t(rowIndex % grid.dimensions[1]), z = uint32_t(rowIndex / grid.dimensions[1]);
+        const auto fail = [&](RowError code) {
+            rowErrors[rowIndex] = code;
+            size_t expected = firstFailure.load(std::memory_order_relaxed);
+            while (rowIndex < expected && !firstFailure.compare_exchange_weak(expected, rowIndex)) {
+            }
+        };
+        D row = (V(grid.Position(0, y, z)) - origin) * (1 / scale);
+        thread_local std::vector<Crossing> crossings;
+        crossings.clear();
+        bvh.Crossings(row.y, row.z, 0, crossings);
+        std::sort(crossings.begin(), crossings.end(), [](auto a, auto b) { return a.x < b.x; });
+        // 接触する片の向きが逆の断面は、数値誤差以内の交差をまとめて相殺する。
+        size_t count = 0;
+        for (size_t i = 0; i < crossings.size();) {
+            auto value = crossings[i++];
+            while (i < crossings.size() && crossings[i].x - value.x < 1e-10)
+                value.direction += crossings[i++].direction;
+            crossings[count++] = value;
+        }
+        crossings.resize(count);
+        int total = 0;
+        for (auto crossing : crossings) {
+            total += crossing.direction;
+            if (total < 0)
+                return fail(RowOrientation);
+        }
+        if (total != 0)
+            return fail(RowUndetermined);
+        size_t event = 0;
+        int winding = 0;
+        bool inside = false;
+        double previous = std::numeric_limits<double>::max(), previousX = 0;
+        for (uint32_t x = 0; x < grid.dimensions[0]; ++x) {
+            auto point = (V(grid.Position(x, y, z)) - origin) * (1 / scale);
+            while (event < crossings.size() && crossings[event].x <= point.x + 1e-10)
+                winding += crossings[event++].direction;
+            // 最近距離は隣の点から、点どうしの距離までしか増えない。余裕を持たせた上限から始めても、
+            // 真の最近三角形は必ず調べるので結果は上限なしの探索と同じになる。
+            double nearest = std::numeric_limits<double>::max();
+            if (x > 0) {
+                const double bound = std::sqrt(previous) + (point.x - previousX);
+                nearest = bound * bound * (1 + 1e-6) + 1e-300;
+            }
+            bvh.Nearest(point, 0, bvh.BoundsDistance(point, 0), nearest);
+            previous = nearest;
+            previousX = point.x;
+            float distance = std::max(float(std::sqrt(nearest) * scale), grid.spacing * 1e-4f);
+            grid.values[grid.Index(x, y, z)] = winding > 0 ? -distance : distance;
+            inside |= winding > 0;
+        }
+        rowInside[rowIndex] = inside ? 1 : 0;
+    });
+    if (cancelled.load() || stop.stop_requested()) {
+        error = "評価をキャンセルしました";
+        return {};
+    }
+    if (const size_t failed = firstFailure.load(); failed < rowCount) {
+        error = rowErrors[failed] == RowOrientation
+                    ? "Meshの面の向きが不正です。外面を外向きに揃えてください"
+                    : "Meshの内外を判定できません。面の接続と向きを確認してください";
+        return {};
+    }
+    const bool hasInside = std::find(rowInside.begin(), rowInside.end(), uint8_t(1)) != rowInside.end();
     if (!hasInside) {
         error = "形がセルより薄いため内部を捉えられません。解像度を上げるか寸法を調整してください";
         return {};

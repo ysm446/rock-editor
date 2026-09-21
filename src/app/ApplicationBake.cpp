@@ -191,6 +191,7 @@ void Application::ProcessPendingBake() {
         }
         LdrImage ao;
         if (!job.ao.Read(m_device, ao)) { discard("GPU形状AOを読み戻せません"); return; }
+        if (ao.pixels.size() != job.images[2].pixels.size()) { discard("GPU形状AOの寸法がベイク画像と一致しません"); return; }
         for (size_t i = 0; i < ao.pixels.size(); i += 4)
             job.images[2].pixels[i + 2] = uint8_t((unsigned(job.images[2].pixels[i + 2]) * ao.pixels[i] + 127) / 255);
         job.ao.Release(m_device);

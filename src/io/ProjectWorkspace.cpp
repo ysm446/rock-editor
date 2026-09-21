@@ -578,7 +578,9 @@ bool ProjectWorkspace::Expand(json& document) {
         }
     }
     document["format"] = "rock-editor.project";
-    document["version"] = document.contains("projectVersion") ? document["projectVersion"] : json(4);
+    // projectVersion を持たないシーンは現行の版として読む。前身の形式の版番号（4）を入れると、
+    // ProjectIo の上限（1）を超えて必ず拒否される。
+    document["version"] = document.contains("projectVersion") ? document["projectVersion"] : json(1);
     return true;
 }
 

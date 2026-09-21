@@ -1,7 +1,9 @@
 #include "geometry/Pieces.h"
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <cmath>
+#include <execution>
 #include <map>
 #include <numeric>
 #include <set>
@@ -110,9 +112,18 @@ bool Source(const Mesh &mesh, Poly &poly, std::vector<Plane> &planes, D &origin,
     }
     return true;
 }
+// 並列に切り出した片1つ分の結果。
+enum PieceError : uint8_t { PieceOk, PieceCancelled, PieceOpenCut, PieceTooSmall };
+struct Built {
+    Piece piece;
+    double volume = 0;
+    PieceError error = PieceOk;
+};
 // 同じ辺の交点を一度だけ生成し、切断面は境界辺の逆向きの閉路から作る。
 bool Clip(Poly &poly, Plane plane) {
-    std::vector<double> distances;
+    // 片ごとに点数−1回呼ばれる。距離の配列は使い回し、呼び出しごとの確保を避ける。
+    thread_local std::vector<double> distances;
+    distances.clear();
     for (auto p : poly.vertices) {
         auto d = Dot(plane.n, p) - plane.d;
         distances.push_back(std::abs(d) < 1e-12 ? 0 : d);
@@ -274,12 +285,25 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
                 valid = false;
                 break;
             }
-        for (auto other : accepted)
-            if (Length(p - other) < 1e-5)
+        if (!valid)
+            continue;
+        // 出力はfloatへ丸める。Voronoi Fractureは丸めた値から局所座標を求め直して内外を調べるので、
+        // 原点から遠い入力でも「点が入力の外」とならないよう、同じ値・同じ許容差で確かめておく。
+        const Vec3 stored = F(origin + p * scale);
+        const D local = (V(stored) - origin) * (1 / scale);
+        for (auto plane : planes)
+            if (Dot(plane.n, local) > plane.d + 1e-8) {
                 valid = false;
+                break;
+            }
+        for (auto other : accepted)
+            if (Length(p - other) < 1e-5) {
+                valid = false;
+                break;
+            }
         if (valid) {
             accepted.push_back(p);
-            out.positions.push_back(F(origin + p * scale));
+            out.positions.push_back(stored);
         }
     }
     if (accepted.size() != size_t(s.count)) {
@@ -374,19 +398,28 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         hash.Float(p.z);
     }
     out.generation = hash.value;
-    double total = 0;
-    size_t triangles = 0;
-    for (size_t i = 0; i < sites.size(); ++i) {
-        if (stop.stop_requested()) {
-            error = "評価をキャンセルしました";
-            return {};
-        }
+    // 片どうしは独立なので並列に切り出す。診断・三角形数の上限・体積の合計は、
+    // 直列処理と同じ結果になるようID順にまとめる。
+    std::vector<Built> built(sites.size());
+    std::vector<size_t> order(sites.size());
+    std::iota(order.begin(), order.end(), size_t(0));
+    std::atomic<size_t> firstFailure{sites.size()};
+    std::for_each(std::execution::par, order.begin(), order.end(), [&](size_t i) {
+        // 先に失敗した片より後ろは結果を使わない。前の片は診断を揃えるため最後まで処理する。
+        if (i > firstFailure.load(std::memory_order_relaxed))
+            return;
+        const auto fail = [&](PieceError code) {
+            built[i].error = code;
+            size_t expected = firstFailure.load(std::memory_order_relaxed);
+            while (i < expected && !firstFailure.compare_exchange_weak(expected, i)) {
+            }
+        };
+        if (stop.stop_requested())
+            return fail(PieceCancelled);
         auto poly = initial;
         for (size_t j = 0; j < sites.size(); ++j)
-            if (i != j && !Clip(poly, cuts[i][j])) {
-                error = "切断境界を閉じられません。Seedを変更してください";
-                return {};
-            }
+            if (i != j && !Clip(poly, cuts[i][j]))
+                return fail(PieceOpenCut);
         Mesh result;
         std::map<uint32_t, uint32_t> remap;
         std::vector<uint8_t> origins;
@@ -413,15 +446,8 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         }
         MeshInfo info;
         if (!InspectMesh(result, info) || !info.closed || info.components != 1 ||
-            info.volume <= scale * scale * scale * 1e-14) {
-            error = "微小片または精度不足の面を検出しました。Seed・寸法・伸長倍率を調整してください";
-            return {};
-        }
-        triangles += result.triangles.size();
-        if (triangles > 250000) {
-            error = "出力が25万三角形を超えました";
-            return {};
-        }
+            info.volume <= scale * scale * scale * 1e-14)
+            return fail(PieceTooSmall);
         D center{}, base = V(result.positions[0]);
         double volume = 0;
         for (auto t : result.triangles) {
@@ -431,15 +457,37 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
             volume += v;
             center = center + (a + b + c) * (v / 4);
         }
-        Piece piece;
+        auto &piece = built[i].piece;
         piece.id = uint32_t(i);
         piece.centroid = F(base + center * (1 / volume));
         piece.volume = info.volume;
         piece.outerFaces = outer;
         piece.mesh = std::make_shared<const Mesh>(std::move(result));
         piece.faceOrigins = std::make_shared<const std::vector<uint8_t>>(std::move(origins));
-        out.pieces.push_back(std::move(piece));
-        total += info.volume;
+        built[i].volume = info.volume;
+    });
+    double total = 0;
+    size_t triangles = 0;
+    for (auto &item : built) {
+        if (item.error == PieceCancelled || (item.error == PieceOk && !item.piece.mesh)) {
+            error = "評価をキャンセルしました";
+            return {};
+        }
+        if (item.error == PieceOpenCut) {
+            error = "切断境界を閉じられません。Seedを変更してください";
+            return {};
+        }
+        if (item.error == PieceTooSmall) {
+            error = "微小片または精度不足の面を検出しました。Seed・寸法・伸長倍率を調整してください";
+            return {};
+        }
+        triangles += item.piece.mesh->triangles.size();
+        if (triangles > 250000) {
+            error = "出力が25万三角形を超えました";
+            return {};
+        }
+        total += item.volume;
+        out.pieces.push_back(std::move(item.piece));
     }
     MeshInfo source;
     InspectMesh(mesh, source);

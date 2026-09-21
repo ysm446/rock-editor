@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <unordered_map>
+#include <bit>
 #include <numeric>
 
 namespace rock::geometry {
@@ -10,6 +10,8 @@ namespace {
 Vec3 Cross(Vec3 a, Vec3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
 Vec3 Sub(Vec3 a, Vec3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
 double Dot(Vec3 a, Vec3 b) { return double(a.x) * b.x + double(a.y) * b.y + double(a.z) * b.z; }
+// 縮退面は先に拒否するので、両端が同じ頂点の辺は現れない。
+constexpr uint64_t kEmptyEdge = ~uint64_t(0);
 }  // namespace
 Mesh MakeBox(const std::array<float, 3>& size) {
     for (float v : size)
@@ -50,8 +52,14 @@ bool InspectMesh(const Mesh& mesh, MeshInfo& info) {
     };
     std::vector<bool> used(mesh.positions.size());
     // 頂点IDの組を64bitに詰めて照合する。辺の順序は検証結果に影響しない。
-    std::unordered_map<uint64_t, std::pair<int, int>> edges;
-    edges.reserve(mesh.triangles.size() * 3 / 2);
+    // 大きなメッシュで何度も呼ばれるため、要素ごとに確保しない開番地法の表を使う。
+    // 辺は高々三角形数の3倍なので、4倍以上の表は埋まりきらない。
+    struct Edge {
+        uint64_t key = kEmptyEdge;
+        int32_t count = 0, direction = 0;
+    };
+    std::vector<Edge> edges(std::bit_ceil(mesh.triangles.size() * 4));
+    const size_t edgeMask = edges.size() - 1;
     for (const auto& f : mesh.triangles) {
         for (auto i : f)
             if (i >= mesh.positions.size()) return false;
@@ -71,14 +79,17 @@ bool InspectMesh(const Mesh& mesh, MeshInfo& info) {
             used[u] = true;
             parent[root(u)] = root(v);
             const auto key = (uint64_t(std::min(u, v)) << 32) | std::max(u, v);
-            auto& edge = edges[key];
-            ++edge.first;
-            edge.second += u < v ? 1 : -1;
+            size_t slot = size_t((key * 0x9E3779B97F4A7C15ull) >> 20) & edgeMask;
+            while (edges[slot].key != key && edges[slot].key != kEmptyEdge) slot = (slot + 1) & edgeMask;
+            auto& edge = edges[slot];
+            edge.key = key;
+            ++edge.count;
+            edge.direction += u < v ? 1 : -1;
         }
     }
     info.closed = true;
-    for (const auto& [key, edge] : edges)
-        if (edge.first != 2 || edge.second != 0) info.closed = false;
+    for (const auto& edge : edges)
+        if (edge.key != kEmptyEdge && (edge.count != 2 || edge.direction != 0)) info.closed = false;
     for (size_t i = 0; i < parent.size(); ++i)
         if (used[i] && root(i) == i) ++info.components;
     return true;

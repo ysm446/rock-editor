@@ -700,9 +700,10 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& inpu
     }
     for (auto& mesh : m_sceneMeshes) mesh.Release(device);
     m_sceneMeshes = std::move(uploaded);
-    m_meshScene = scene;
-    m_diagnostics.ResetScene(device);
+    // 全頂点を含むので複製しない。
     m_meshSceneRadius = MeshSceneRadius(scene);
+    m_meshScene = std::move(scene);
+    m_diagnostics.ResetScene(device);
     m_meshSceneEnabled = true;
     return true;
 }

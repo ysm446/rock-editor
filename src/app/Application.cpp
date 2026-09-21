@@ -221,6 +221,11 @@ void Application::Shutdown() {
     // シンクは this を掴んでいる。破棄より先に必ず外す。
     SetLogSink({});
 
+    // 評価中のタスクは future の破棄で待たされる。止めずに放置すると、ウィンドウを閉じた後も
+    // 重い評価が終わるまでプロセスが残る。
+    m_pieceStop.request_stop();
+    if (m_pieceTask.valid()) m_pieceTask.wait();
+
     m_device.WaitForGpu();
     if (m_bakeJob) { m_bakeJob->ao.Release(m_device); m_bakeJob.reset(); }
     // ImGui のコンテキストより先に破棄する（エディタが ImGui に依存している）。
