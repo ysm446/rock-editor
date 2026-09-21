@@ -251,13 +251,6 @@ void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images,
     auto* node = m_graph.FindMutableNode(id);
     if (!node || node->kind != graph::NodeKind::MaterialBake) return;
     const auto fail = [&](const std::string& error) { m_bakeStatus[id] = error; ROCK_LOG_ERROR("Material Bake: %s", error.c_str()); };
-    // UVの余白内を伸ばす。保存する画像は再実行ごとに新しいフォルダへ置き、Undoで戻れるようにする。
-    int padding = 4;
-    const auto* parent = m_graph.FindUpstreamNodeForPin(node->inputs[0].id);
-    for (int depth = 0; parent && depth < 256; ++depth) {
-        if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&parent->settings)) { padding = uv->padding; break; }
-        parent = parent->inputs.empty() ? nullptr : m_graph.FindUpstreamNodeForPin(parent->inputs[0].id);
-    }
     // 結果はメモリ上にだけ持つ。ファイルへは「テクスチャを出力…」を押したときだけ書く。
     // テクスチャと材質は一時的なもので、シーンにも保存しない。開き直したら再ベイクする。
     const char* labels[] = {"BaseColor", "Normal", "RoughnessMetallicAO", "Height"};
@@ -265,12 +258,10 @@ void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images,
     for (size_t channel = 0; channel < 4; ++channel) {
         auto& image = images[channel];
         // UV の島が無い部分を黒や透明のまま残さない。縮小表示やミップマップで、島の縁へその色がにじむ。
-        // 色・Roughness/Metallic/AO・Height は、最も近い島の縁の色を全面へ伸ばす（エッジパディング）。
-        // 法線は余白の幅だけ伸ばし、その外は既定の向き（128, 128, 255）で不透明に埋める。
-        if (channel == 1)
-            renderer::DilateBakePixels(image, padding);
-        else
-            renderer::FillBakeBackground(image);
+        // 4枚とも、最も近い島の縁の色を全面へ伸ばす（エッジパディング）。法線も同じく伸ばすので、
+        // 島の縁で向きが途切れない。
+        renderer::FillBakeBackground(image);
+        // 島が1つも無い画像は埋められない。法線だけは、既定の向き（128, 128, 255）の不透明にしておく。
         if (channel == 1)
             for (size_t i = 0; i < image.pixels.size(); i += 4)
                 if (!image.pixels[i + 3]) {
