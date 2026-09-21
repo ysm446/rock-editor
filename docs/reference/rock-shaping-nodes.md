@@ -1,7 +1,7 @@
 # 岩らしい形と色のためのノード設計メモ
 
 作成日時: 2026-09-22 00:30
-更新日時: 2026-09-22 02:28
+更新日時: 2026-09-22 04:12
 
 ## 目的
 
@@ -84,7 +84,7 @@ Apply Material は最大8段の合成を持つので、これらがマスク入�
 画像の細部はジオメトリではなく法線と Height に入っている。密な格子は各軸192点が上限なので、Micro を形状で出すのは無理がある。
 
 - Height から法線を合成する。Triplanar の Height は現在、表示専用。
-- 高解像度の SDF から、簡略化したメッシュへ法線をベイクする。Decimate と合わせると、ゲーム用アセットとして完結する。
+- 高解像度の SDF から、簡略化したメッシュへ法線をベイクする。簡略化は [Decimate](decimate.md) として実装済み（2026-09-22）。ベイクが入ると、ゲーム用アセットとして完結する。
 
 ## 概念として足したいもの
 
@@ -104,6 +104,7 @@ Base Shape → To Volume ───┘
    → Volume Displace（warp + Worley）
    → Volume Smooth（上向きの面だけ強く）
    → Volume to Mesh（Dual Contouring。稜線が残る）
+   → Decimate（UV 展開を速くし、ゲーム用の面数へ減らす）
    → UV Unwrap → Apply Material ×3〜4（Cavity / 上向き / 切断面のマスク）
    → Material Bake
 ```

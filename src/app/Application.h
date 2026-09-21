@@ -203,6 +203,8 @@ private:
         int pieceId = -1;
     };
     std::vector<RockMeshReference> m_rockMeshReferences;
+    // m_rockMeshReferences と同じ並びの三角形数。ノードの設定欄に出力の規模を出す。
+    std::vector<size_t> m_rockTriangleCounts;
     // 選択中のノードを控える / 貼り付ける（Ctrl+C / Ctrl+V）。
     void CopySelectedGraphNodes();
     // 控えたノードを貼る。viewCenter は今のキャンバスの中央（キャンバス座標）で、

@@ -476,6 +476,10 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                    {"rotation", boxes->rotation}, {"seed", boxes->seed}};
         } else if (const auto* volume = std::get_if<geometry::VolumeSettings>(&node.settings)) {
             item["toVolume"] = {{"resolution", volume->resolution}};
+        } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node.settings)) {
+            item["decimate"] = {{"targetTriangles", decimate->targetTriangles},
+                                {"maxError", decimate->maxError},
+                                {"creaseWeight", decimate->creaseWeight}};
         } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node.settings)) {
             item["uvUnwrap"] = {{"resolution", uv->resolution}, {"padding", uv->padding}, {"quality", uv->quality}};
         } else if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings)) {
@@ -662,6 +666,14 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
             if (graph::IsPieceNodeKind(created.kind)) {
                 const json* v = FindMember(item, "pieces");
                 ReadPieceSettings(created, v && v->is_object() ? *v : json::object());
+            } else if (created.kind == graph::NodeKind::Decimate) {
+                geometry::DecimateSettings settings;
+                if (const json* v = FindMember(item, "decimate"); v && v->is_object()) {
+                    settings.targetTriangles = ReadInt(*v, "targetTriangles", settings.targetTriangles);
+                    settings.maxError = ReadFloat(*v, "maxError", settings.maxError);
+                    settings.creaseWeight = ReadFloat(*v, "creaseWeight", settings.creaseWeight);
+                }
+                created.settings = settings;
             } else if (created.kind == graph::NodeKind::UvUnwrap) {
                 geometry::UvUnwrapSettings settings;
                 if (const json* v = FindMember(item, "uvUnwrap"); v && v->is_object()) {

@@ -385,8 +385,8 @@ target_sources(rock_editor PRIVATE src/app/ApplicationPiecePanel.cpp)
 target_sources(rock_editor PRIVATE src/geometry/MeshVolume.cpp)
 target_sources(rock_editor_tests PRIVATE src/geometry/MeshVolume.cpp tests/MeshVolumeTests.cpp)
 
-target_sources(rock_editor PRIVATE src/geometry/BakeOcclusion.cpp)
-target_sources(rock_editor_tests PRIVATE src/geometry/BakeOcclusion.cpp)
+target_sources(rock_editor PRIVATE src/geometry/BakeOcclusion.cpp src/geometry/Decimate.cpp)
+target_sources(rock_editor_tests PRIVATE src/geometry/BakeOcclusion.cpp src/geometry/Decimate.cpp tests/DecimateTests.cpp)
 
 target_sources(rock_editor_tests PRIVATE tests/ApplyMaterialTests.cpp)
 

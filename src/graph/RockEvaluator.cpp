@@ -87,6 +87,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
     } else if (const auto* transform = std::get_if<geometry::PieceTransformSettings>(&node->settings)) {
         pose(transform->pose); add(transform->individual); add(transform->producer); add(transform->generation); add(transform->overrides.size());
         for (const auto& value : transform->overrides) { add(value.id); pose(value.pose); }
+    } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node->settings)) {
+        add(decimate->targetTriangles); add(decimate->maxError); add(decimate->creaseWeight);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
         add(uv->resolution); add(uv->padding); add(uv->quality);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
@@ -139,7 +141,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         const bool volumeCache = node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
-                                 node->kind == NodeKind::VolumeNoise ||
+                                 node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate ||
                                  node->kind == NodeKind::VolumeToMesh;
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id) : std::nullopt;
         if (persistentKey) {
@@ -306,6 +308,39 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(moved));
             result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::Decimate) {
+            const auto* settings = std::get_if<geometry::DecimateSettings>(&node->settings);
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream) return finish(Failure(id, "Decimate", "Mesh出力を接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty())
+                return finish(Failure(id, "Decimate", "生成メッシュが必要です。Modelは直接変換できません"));
+            size_t total = 0;
+            for (const auto& rock : result.rocks) {
+                if (rock.volume) return finish(Failure(id, "Decimate", "Mesh入力が必要です"));
+                total += rock.mesh.triangles.size();
+            }
+            // 目標は入力全体に対する数。複数のメッシュには、もとの三角形数に応じて割り振る。
+            size_t done = 0;
+            for (auto& rock : result.rocks) {
+                auto share = *settings;
+                share.targetTriangles = std::clamp(
+                    int(double(settings->targetTriangles) * double(rock.mesh.triangles.size()) / double(std::max<size_t>(total, 1))),
+                    geometry::MinDecimateTriangles, geometry::MaxDecimateTriangles);
+                std::string error;
+                const size_t before = rock.mesh.triangles.size();
+                auto reduced = geometry::DecimateMesh(rock.mesh, share, error, stop, [&](int percent) {
+                    report(id, 0, int((double(done) + double(before) * percent / 100.0) * 100.0 / double(std::max<size_t>(total, 1))));
+                });
+                if (!error.empty()) return finish(Failure(id, "Decimate", error));
+                rock.mesh = std::move(reduced);
+                // 直方体の集まりという由来は、形を変えた時点で失われる（To Volume の解析的な高速経路に渡さない）。
+                rock.boxes.reset();
+                rock.source = id;
+                done += before;
+            }
         } else if (node->kind == NodeKind::VolumeNoise) {
             const auto* settings = std::get_if<geometry::VolumeNoiseSettings>(&node->settings);
             const auto* upstream =

@@ -267,7 +267,7 @@ void Application::SyncMeshGraph() {
         // UV Unwrap は大きなメッシュで数秒〜数十秒かかる。UI スレッドで走らせるとアプリが固まり、
         // 計算中であることも表示できない。
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
-               n.kind == graph::NodeKind::UvUnwrap;
+               n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate;
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
     const std::string geometryKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
@@ -338,6 +338,7 @@ void Application::SyncMeshGraph() {
     renderer::MeshScene scene;
     m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();
+    m_rockTriangleCounts.clear();
     std::vector<int> selectedPieces;
     for (const auto& rock : evaluated.rocks) {
         if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
@@ -351,6 +352,7 @@ void Application::SyncMeshGraph() {
             if (rock.pieceSelected) selectedPieces.push_back(int(scene.meshes.size()));
         }
         m_rockMeshReferences.push_back({rock.source, rock.pieceId});
+        m_rockTriangleCounts.push_back(rock.mesh.triangles.size());
         mesh.material.roughness = 0.8f;
         ApplyRockMaterial(mesh, rock, true);
         scene.meshes.push_back(std::move(mesh));
@@ -898,6 +900,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Shape — 基本形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体メッシュを重ねて塊を作る");
         addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
+        addNodeMenuItem(graph::NodeKind::Decimate, "Decimate — 形を保ったまま三角形を減らす");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
         ImGui::TextDisabled("分割・ピース操作");
@@ -1344,6 +1347,48 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は上流の To Volume で調整します。Marching Tetrahedra は従来方式、Dual Contouring は角や稜線を保つために頂点位置を調整する方式です。");
         if (method == 1)
             ui::HintText("Dual Contouring は格子から交点・法線を推定します。細部や角の再現には入力の解像度も影響します。");
+    } else if (auto* decimate = std::get_if<geometry::DecimateSettings>(&selected->settings)) {
+        auto edited = *decimate;
+        bool changed = false;
+        if (ui::BeginPropertyTable("decimateRows")) {
+            changed |= ui::PropertyInt("目標の三角形数", &edited.targetTriangles, geometry::MinDecimateTriangles, 100000, 10000,
+                                       "入力がこれ以下なら何もしません。Ctrl + クリックで 500000 まで入力できます。");
+            changed |= ui::PropertyFloat("形のずれの上限", &edited.maxError, 0, .02f, .004f,
+                                         "形の最長辺に対する比。これを超える縮約はしないので、目標に届かないことがあります。0 なら上限なしで目標まで減らします。",
+                                         "%.4f");
+            changed |= ui::PropertyFloat("稜線の保護", &edited.creaseWeight, 0, 10, 1,
+                                         "折れ角の大きい辺を動かしにくくします。0 で保護なし。");
+            ui::EndPropertyTable();
+        }
+        if (EvaluatingNode() == selected->id) {
+            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
+            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
+                               EvaluationProgressText().c_str());
+        } else if (!m_pieceUpdating) {
+            // 実際に何枚になったかを出す。上限や形の制約で、目標に届かないことがある。
+            size_t triangles = 0;
+            bool shown = false;
+            for (size_t i = 0; i < m_rockMeshReferences.size() && i < m_rockTriangleCounts.size(); ++i)
+                if (m_rockMeshReferences[i].source == selected->id) {
+                    triangles += m_rockTriangleCounts[i];
+                    shown = true;
+                }
+            if (shown && triangles > size_t(edited.targetTriangles) + size_t(edited.targetTriangles) / 20)
+                ui::HintText("現在の出力: %zu 三角形。目標に届いていません。形のずれの上限を上げる（0 で上限なし）と、さらに減ります。", triangles);
+            else if (shown)
+                ui::HintText("現在の出力: %zu 三角形", triangles);
+        }
+        ui::HintText("形をできるだけ保ったまま三角形を減らします（QEM による辺の縮約）。平らな場所は大きく減り、稜線や割れ目の縁は残ります。"
+                     "UV Unwrap の前に置くと、展開が大幅に速くなります。");
+        ui::HintText("入力は閉じたメッシュです。面の裏返りや穴を作る縮約は行いません。細かい凹凸は失われ、UV は引き継ぎません。");
+        if (changed) {
+            edited.targetTriangles = std::clamp(edited.targetTriangles, geometry::MinDecimateTriangles, geometry::MaxDecimateTriangles);
+            edited.maxError = std::clamp(edited.maxError, 0.0f, 0.1f);
+            edited.creaseWeight = std::clamp(edited.creaseWeight, 0.0f, 10.0f);
+            *decimate = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
     } else if (auto* uvSettings = std::get_if<geometry::UvUnwrapSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("uvUnwrapRows")) {
