@@ -47,6 +47,7 @@ bool MeshBounds(const renderer::MeshData& data, DirectX::BoundingBox& outBounds)
 // 判定は分割前・変位前の形なので、凹凸のある路面では数 cm ずれるが、ホバー表示には足りる。
 void Application::HandleMeshHover(bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax) {
     using namespace DirectX;
+    if (m_pieceUpdating) return;
     auto& state = m_meshHighlight;
     const auto& meshes = m_renderer.Scene().meshes;
     std::erase_if(state.selected, [&](int index) { return index < 0 || static_cast<size_t>(index) >= meshes.size(); });
@@ -236,6 +237,10 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
     }
 
     // ノード設定欄が閉じていても、生成できない理由をビューポートで確認できるようにする。
+    if (m_pieceUpdating) {
+        ImGui::SetCursorScreenPos(ImVec2(viewportMin.x + margin, viewportMin.y + margin + ui::Scaled(32.0f)));
+        ImGui::TextUnformatted("更新中…前回の結果を表示しています");
+    }
     if (!m_meshGraphError.empty()) {
         const float padding = ui::Scaled(8.0f);
         const float wrap = std::max(1.0f, viewportMax.x - viewportMin.x - 2 * (margin + padding));
@@ -590,7 +595,10 @@ void Application::DrawViewportPanel() {
                 m_modelInstanceDrag = {};
             }
             if (m_renderer.HasMeshScene() && !lightDragging && !io.KeyAlt && !modelInput) {
+                const bool wasSelecting = m_meshHighlight.boxPending;
                 HandleMeshHover(itemHovered, imageOrigin, imageMax);
+                if ((itemHovered || wasSelecting) && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                    CommitPieceViewportSelection();
             } else {
                 m_meshHighlight.hovered = -1;
                 m_meshHighlight.boxPending = m_meshHighlight.boxSelecting = false;

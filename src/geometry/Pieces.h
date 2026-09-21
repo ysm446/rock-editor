@@ -1,0 +1,90 @@
+#pragma once
+#include "geometry/Mesh.h"
+#include <memory>
+#include <string>
+#include <stop_token>
+
+namespace rock::geometry {
+struct ScatterSettings {
+    int count = 24;
+    uint32_t seed = 1;
+    int version = 1;
+    bool operator==(const ScatterSettings &) const = default;
+};
+struct VoronoiSettings {
+    std::array<float, 3> rotation{0, 0, 0}, stretch{1, 1, 1};
+    int version = 1;
+    bool operator==(const VoronoiSettings &) const = default;
+};
+struct PointSet {
+    uint64_t source = 0, fingerprint = 0;
+    std::vector<Vec3> positions;
+};
+struct Piece {
+    uint32_t id = 0;
+    std::shared_ptr<const Mesh> mesh;
+    // 行優先の3x4アフィン変換。メッシュを複製せず配置を変更する。
+    std::array<double, 12> transform{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
+    Vec3 centroid;
+    double volume = 0;
+    uint32_t outerFaces = 0;
+    // 0:切断面、1:元の外面。三角形ごとに保持する。
+    std::shared_ptr<const std::vector<uint8_t>> faceOrigins;
+};
+struct PieceCollection {
+    int producer = 0;
+    uint64_t generation = 0, fingerprint = 0;
+    std::vector<Piece> pieces;
+};
+enum class PieceSelectMode {
+    Manual,
+    Outer,
+    Region,
+    Volume,
+    Random
+};
+struct PieceSelectSettings {
+    PieceSelectMode mode = PieceSelectMode::Outer;
+    uint32_t outerFaces = 63, seed = 1;
+    std::array<float, 3> minimum{-1, -1, -1}, maximum{1, 1, 1};
+    float minVolume = 0, maxVolume = 1000000, fraction = .5f;
+    bool invert = false;
+    int producer = 0;
+    uint64_t generation = 0;
+    std::vector<uint32_t> ids;
+};
+struct PieceSelection {
+    int producer = 0;
+    uint64_t generation = 0, input = 0;
+    std::vector<uint32_t> ids;
+};
+struct PieceFilterSettings {
+    bool keep = false;
+};
+struct PiecePose {
+    std::array<float, 3> position{0, 0, 0}, rotation{0, 0, 0}, scale{1, 1, 1};
+};
+struct PieceOverride {
+    uint32_t id = 0;
+    PiecePose pose;
+};
+struct PieceTransformSettings {
+    PiecePose pose;
+    bool individual = false;
+    int producer = 0;
+    uint64_t generation = 0;
+    std::vector<PieceOverride> overrides;
+};
+uint64_t MeshFingerprint(const Mesh &mesh);
+PointSet ScatterPoints(const Mesh &, const ScatterSettings &, std::string &, std::stop_token = {});
+PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSettings &, int producer,
+                                std::string &, std::stop_token = {});
+PieceSelection SelectPieces(const PieceCollection &, const PieceSelectSettings &, std::string &);
+PieceCollection FilterPieces(const PieceCollection &, const PieceSelection &, bool keep, std::string &);
+PieceCollection TransformPieces(const PieceCollection &, const PieceSelection *,
+                                const PieceTransformSettings &, std::string &);
+Mesh PieceMesh(const Piece &);
+Mesh PiecesMesh(const PieceCollection &);
+Vec3 PieceCenter(const Piece &);
+void RefreshPieceFingerprint(PieceCollection &);
+} // namespace rock::geometry

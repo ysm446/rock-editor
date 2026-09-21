@@ -1,4 +1,5 @@
 #include "graph/RockEvaluator.h"
+#include "graph/PieceEvaluator.h"
 
 #include <algorithm>
 #include <cmath>
@@ -58,8 +59,9 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
 }
 }  // namespace
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvaluationCache* persistent,
-                            geometry::VolumeMeshingMethod previewMethod) {
+                            geometry::VolumeMeshingMethod previewMethod, std::stop_token stop) {
     if (persistent) {
+        std::erase_if(persistent->pieceEntries, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->uvs, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->entries, [&](const auto& item) {
             const auto key = VolumeKey(graph, item.first);
@@ -74,6 +76,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
     std::unordered_set<GraphId> active;
     std::function<RockEvaluation(GraphId, size_t)> evaluate;
     evaluate = [&](GraphId id, size_t depth) -> RockEvaluation {
+        if (stop.stop_requested()) return Failure(id, "Graph", "評価をキャンセルしました");
         if (const auto found = cache.find(id); found != cache.end()) return found->second;
         if (depth > 256 || active.contains(id))
             return Failure(id, "Graph", "循環または評価深さの上限を検出しました");
@@ -93,7 +96,9 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 persistent->entries[id] = {*persistentKey, value};
             return value;
         };
-        if (node->kind == NodeKind::UvUnwrap || node->kind == NodeKind::MaterialBake) {
+        if (IsPieceNodeKind(node->kind)) {
+            return finish(EvaluatePieceNode(graph, *node, persistent, [&](GraphId upstream) { return evaluate(upstream, depth+1); }, stop));
+        } else if (node->kind == NodeKind::UvUnwrap || node->kind == NodeKind::MaterialBake) {
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
             if (!upstream) return finish(Failure(id, "UV / Bake", "Mesh入力を接続してください"));
             result = evaluate(upstream->id, depth+1);
@@ -200,7 +205,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             std::string error;
             auto mesh = settings ? geometry::MakeBaseRock(*settings, error) : geometry::Mesh{};
             if (!settings || !error.empty())
-                return finish(Failure(id, "Base Rock", settings ? error : "設定がありません"));
+                return finish(Failure(id, "Base Shape", settings ? error : "設定がありません"));
             GeneratedRock rock;
             rock.source = id;
             rock.mesh = std::move(mesh);
@@ -244,7 +249,11 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         }
         return result;
     };
-    if (preview != 0) return preparePreview(evaluate(preview, 0));
+    if (preview != 0) {
+        auto result = evaluate(preview, 0);
+        PreparePiecePreview(result, preview);
+        return preparePreview(std::move(result));
+    }
     RockEvaluation result;
     for (const auto& node : graph.Nodes())
         if (node.kind == NodeKind::MeshOutput) {

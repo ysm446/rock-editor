@@ -6,6 +6,7 @@
 
 #include "TestSupport.h"
 
+void RunPieceTests();
 void RunRockTests();
 void RunBaseRockTests();
 void RunVolumeTests();
@@ -19,6 +20,7 @@ void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
 
 int main() {
+    RunPieceTests();
     RunRockTests();
     RunBaseRockTests();
     RunVolumeTests();

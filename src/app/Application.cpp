@@ -424,6 +424,11 @@ int Application::Run() {
             testInput.deleteKey = m_options.testDelete && m_frameCounter == 18;
             testInput.shift = m_options.testDragShift && m_frameCounter < 17;
             testInput.escape = m_options.testDragCancel && m_frameCounter == 15;
+            if (m_options.testClickAfterDrag && m_frameCounter >= 30) {
+                testInput.mouse = m_options.testClickPosition;
+                testInput.leftDown = m_frameCounter == 31;
+                testInput.shift = m_options.testDragShift;
+            }
         }
         m_imgui.BeginFrame(testDrag ? &testInput : nullptr);
         DrawUi();

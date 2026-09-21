@@ -367,3 +367,11 @@ set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT
 set_target_properties(rock_editor PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:rock_editor>"
 )
+
+target_sources(rock_editor PRIVATE src/geometry/Pieces.cpp)
+target_sources(rock_editor_tests PRIVATE src/geometry/Pieces.cpp tests/PieceTests.cpp)
+
+target_sources(rock_editor PRIVATE src/graph/PieceEvaluator.cpp)
+target_sources(rock_editor_tests PRIVATE src/graph/PieceEvaluator.cpp)
+
+target_sources(rock_editor PRIVATE src/app/ApplicationPiecePanel.cpp)

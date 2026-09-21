@@ -1,3 +1,4 @@
+#include "io/PieceSettings.h"
 #include "io/ProjectIo.h"
 
 #include "core/PathUtf8.h"
@@ -467,7 +468,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
             outputs.push_back(pin.id);
         }
         item["outputs"] = std::move(outputs);
-        if (const auto* boxes = std::get_if<geometry::BoxClusterSettings>(&node.settings)) {
+        if (graph::IsPieceNodeKind(node.kind)) {
+            item["pieces"] = WritePieceSettings(node);
+        } else if (const auto* boxes = std::get_if<geometry::BoxClusterSettings>(&node.settings)) {
             item["randomBoxes"] = {{"count", boxes->count}, {"size", boxes->size},
                                    {"sizeVariation", boxes->sizeVariation}, {"spread", boxes->spread},
                                    {"rotation", boxes->rotation}, {"seed", boxes->seed}};
@@ -626,7 +629,10 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 }
             }
 
-            if (created.kind == graph::NodeKind::UvUnwrap) {
+            if (graph::IsPieceNodeKind(created.kind)) {
+                const json* v = FindMember(item, "pieces");
+                ReadPieceSettings(created, v && v->is_object() ? *v : json::object());
+            } else if (created.kind == graph::NodeKind::UvUnwrap) {
                 geometry::UvUnwrapSettings settings;
                 if (const json* v = FindMember(item, "uvUnwrap"); v && v->is_object()) {
                     settings.resolution = geometry::NormalizeUvResolution(ReadInt(*v, "resolution", 1024));

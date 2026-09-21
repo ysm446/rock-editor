@@ -274,6 +274,10 @@ void Application::ResetProject() {
     // メッシュシーンは次のフレームの SyncMeshGraph が作り直す（改版を 0 に戻す）。
     m_meshHighlight = MeshHighlightState{};
     m_graph = graph::NodeGraph::CreateDefault();
+    ++m_pieceEpoch;
+    m_pieceStop.request_stop();
+    m_pieceCompletedKey.clear();
+    m_pieceSelectionEditing = false;
     m_selectedGraphNode = 0;
     m_previewGraphNode = 0;
     m_previewGraphPin = 0;
@@ -361,7 +365,12 @@ void Application::ProcessPendingFileWork() {
             m_assetRefresh = true;
             m_selectedGraphNode = m_graph.FindNode(m_options.selectNode) ? m_options.selectNode : 0;
             m_options.selectNode = 0;
-            m_previewGraphNode = 0;
+            ++m_pieceEpoch;
+            m_pieceStop.request_stop();
+            m_pieceCompletedKey.clear();
+            m_pieceSelectionEditing = false;
+            m_previewGraphNode = m_graph.FindNode(m_options.previewNode) ? m_options.previewNode : 0;
+            m_options.previewNode = 0;
             m_previewGraphPin = 0;
             m_meshGraphRevision = 0;
             m_meshGraphActive = false;

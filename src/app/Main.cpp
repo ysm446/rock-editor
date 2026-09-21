@@ -60,12 +60,18 @@ rock::StartupOptions ParseCommandLine() {
             options.testDragCancel = true;
         } else if (argument == L"--test-double-click") {
             options.testDoubleClick = true;
+        } else if (argument == L"--test-click-after-drag" && (i + 2) < argc) {
+            options.testClickAfterDrag = true;
+            options.testClickPosition.x = float(::_wtof(argv[++i]));
+            options.testClickPosition.y = float(::_wtof(argv[++i]));
         } else if (argument == L"--test-delete") {
             options.testDelete = true;
         } else if (argument == L"--select-node" && (i + 1) < argc) {
             options.selectNode = ::_wtoi(argv[++i]);
         } else if (argument == L"--bake-node" && (i + 1) < argc) {
             options.bakeNode = ::_wtoi(argv[++i]);
+        } else if (argument == L"--preview-node" && (i + 1) < argc) {
+            options.previewNode = ::_wtoi(argv[++i]);
         } else if (argument == L"--import-model" && (i + 1) < argc) {
             options.importModel = argv[++i];
         } else if (argument == L"--gizmo-rotate") {

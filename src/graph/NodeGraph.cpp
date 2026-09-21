@@ -56,14 +56,25 @@ constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, Va
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 3> kBakePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 12> kNodeDefinitions = {{
+constexpr std::array<PinDefinition, 2> kScatterPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"}, {PinKind::Output, ValueType::Points, "Points"}}};
+constexpr std::array<PinDefinition, 3> kVoronoiPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"}, {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
+constexpr std::array<PinDefinition, 2> kSelectPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Selection, "Selection"}}};
+constexpr std::array<PinDefinition, 3> kPieceFilterPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Input, ValueType::Selection, "Selection"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
+constexpr std::array<PinDefinition, 2> kPiecesMeshPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<NodeDefinition, 18> kNodeDefinitions = {{
+    {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
+    {NodeKind::VoronoiFracture, "voronoiFracture", "Voronoi Fracture", kVoronoiPins},
+    {NodeKind::PieceSelect, "pieceSelect", "Piece Select", kSelectPins},
+    {NodeKind::PieceFilter, "pieceFilter", "Piece Filter", kPieceFilterPins},
+    {NodeKind::PieceTransform, "pieceTransform", "Piece Transform", kPieceFilterPins},
+    {NodeKind::PiecesToMesh, "piecesToMesh", "Pieces to Mesh", kPiecesMeshPins},
     {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kMeshFilterPins},
     {NodeKind::MaterialBake, "materialBake", "Material Bake", kBakePins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
     {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
-    {NodeKind::BaseRock, "baseRock", "Base Rock", kBaseRockPins},
+    {NodeKind::BaseRock, "baseRock", "Base Shape", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
     {NodeKind::Model, "model", "Model", kModelPins},
     {NodeKind::Transform, "transform", "Transform", kTransformPins},
@@ -99,8 +110,11 @@ bool IsLayerNodeKind(NodeKind kind) {
     return kind == NodeKind::Surface;
 }
 
+bool IsPieceNodeKind(NodeKind kind) {
+    return kind >= NodeKind::ScatterPoints && kind <= NodeKind::PiecesToMesh;
+}
 bool IsMeshNodeKind(NodeKind kind) {
-    return kind == NodeKind::Merge || kind == NodeKind::BaseRock ||
+    return IsPieceNodeKind(kind) || kind == NodeKind::Merge || kind == NodeKind::BaseRock ||
            kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
            kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake;
@@ -385,6 +399,16 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeSettings{};
     } else if (kind == NodeKind::VolumeTransform) {
         node.settings = geometry::VolumeTransformSettings{};
+    } else if (kind == NodeKind::ScatterPoints) {
+        node.settings = geometry::ScatterSettings{};
+    } else if (kind == NodeKind::VoronoiFracture) {
+        node.settings = geometry::VoronoiSettings{};
+    } else if (kind == NodeKind::PieceSelect) {
+        node.settings = geometry::PieceSelectSettings{};
+    } else if (kind == NodeKind::PieceFilter) {
+        node.settings = geometry::PieceFilterSettings{};
+    } else if (kind == NodeKind::PieceTransform) {
+        node.settings = geometry::PieceTransformSettings{};
     } else if (kind == NodeKind::UvUnwrap) {
         node.settings = geometry::UvUnwrapSettings{};
     } else if (kind == NodeKind::MaterialBake) {

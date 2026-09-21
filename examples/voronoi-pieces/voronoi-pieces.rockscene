@@ -1,0 +1,385 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "baseRock": {
+          "size": [
+            2,
+            6,
+            1.4
+          ],
+          "shape": "box",
+          "noiseStrength": 0,
+          "seed": 1,
+          "subdivisions": 4,
+          "roundness": 0.15,
+          "noiseScale": 2
+        }
+      },
+      {
+        "id": 10,
+        "kind": "scatterPoints",
+        "inputs": [
+          11
+        ],
+        "outputs": [
+          12
+        ],
+        "position": [
+          0,
+          160
+        ],
+        "pieces": {
+          "count": 32,
+          "seed": 5,
+          "version": 1
+        }
+      },
+      {
+        "id": 20,
+        "kind": "voronoiFracture",
+        "inputs": [
+          21,
+          22
+        ],
+        "outputs": [
+          23
+        ],
+        "position": [
+          250,
+          0
+        ],
+        "pieces": {
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "stretch": [
+            1,
+            6,
+            1
+          ],
+          "version": 1
+        }
+      },
+      {
+        "id": 30,
+        "kind": "pieceSelect",
+        "inputs": [
+          31
+        ],
+        "outputs": [
+          32
+        ],
+        "position": [
+          500,
+          140
+        ],
+        "pieces": {
+          "mode": 1,
+          "outerFaces": 3
+        }
+      },
+      {
+        "id": 40,
+        "kind": "pieceFilter",
+        "inputs": [
+          41,
+          42
+        ],
+        "outputs": [
+          43
+        ],
+        "position": [
+          750,
+          0
+        ],
+        "pieces": {
+          "keep": false
+        }
+      },
+      {
+        "id": 50,
+        "kind": "pieceSelect",
+        "inputs": [
+          51
+        ],
+        "outputs": [
+          52
+        ],
+        "position": [
+          1000,
+          140
+        ],
+        "pieces": {
+          "mode": 4,
+          "seed": 1,
+          "fraction": 0.6
+        }
+      },
+      {
+        "id": 60,
+        "kind": "pieceFilter",
+        "inputs": [
+          61,
+          62
+        ],
+        "outputs": [
+          63
+        ],
+        "position": [
+          1250,
+          0
+        ],
+        "pieces": {
+          "keep": true
+        }
+      },
+      {
+        "id": 70,
+        "kind": "pieceTransform",
+        "inputs": [
+          71,
+          72
+        ],
+        "outputs": [
+          73
+        ],
+        "position": [
+          1500,
+          0
+        ],
+        "pieces": {
+          "pose": {
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "scale": [
+              0.93,
+              0.98,
+              0.93
+            ]
+          },
+          "individual": true
+        }
+      },
+      {
+        "id": 80,
+        "kind": "piecesToMesh",
+        "inputs": [
+          81
+        ],
+        "outputs": [
+          82
+        ],
+        "position": [
+          1750,
+          0
+        ]
+      },
+      {
+        "id": 90,
+        "kind": "uvUnwrap",
+        "inputs": [
+          91
+        ],
+        "outputs": [
+          92
+        ],
+        "position": [
+          1950,
+          0
+        ],
+        "uvUnwrap": {
+          "resolution": 512,
+          "padding": 4,
+          "quality": 1
+        }
+      },
+      {
+        "id": 100,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          101
+        ],
+        "position": [
+          1950,
+          200
+        ],
+        "layer": {
+          "name": "Stone",
+          "enabled": true,
+          "baseColor": [
+            0.5,
+            0.45,
+            0.4
+          ],
+          "roughness": 0.8,
+          "metallic": 0,
+          "ambientOcclusion": 1,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar",
+            "repeatMeters": 1
+          }
+        }
+      },
+      {
+        "id": 110,
+        "kind": "materialBake",
+        "inputs": [
+          111,
+          112
+        ],
+        "outputs": [
+          113
+        ],
+        "position": [
+          2200,
+          0
+        ]
+      },
+      {
+        "id": 120,
+        "kind": "meshOutput",
+        "inputs": [
+          121,
+          122
+        ],
+        "outputs": [],
+        "position": [
+          2450,
+          0
+        ]
+      }
+    ],
+    "links": [
+      {
+        "id": 1000,
+        "start": 2,
+        "end": 11
+      },
+      {
+        "id": 1001,
+        "start": 2,
+        "end": 21
+      },
+      {
+        "id": 1002,
+        "start": 12,
+        "end": 22
+      },
+      {
+        "id": 1003,
+        "start": 23,
+        "end": 31
+      },
+      {
+        "id": 1004,
+        "start": 23,
+        "end": 41
+      },
+      {
+        "id": 1005,
+        "start": 32,
+        "end": 42
+      },
+      {
+        "id": 1006,
+        "start": 43,
+        "end": 51
+      },
+      {
+        "id": 1007,
+        "start": 43,
+        "end": 61
+      },
+      {
+        "id": 1008,
+        "start": 52,
+        "end": 62
+      },
+      {
+        "id": 1009,
+        "start": 63,
+        "end": 71
+      },
+      {
+        "id": 1010,
+        "start": 73,
+        "end": 81
+      },
+      {
+        "id": 1011,
+        "start": 82,
+        "end": 91
+      },
+      {
+        "id": 1012,
+        "start": 92,
+        "end": 111
+      },
+      {
+        "id": 1013,
+        "start": 101,
+        "end": 112
+      },
+      {
+        "id": 1014,
+        "start": 113,
+        "end": 121
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 10,
+      "fovY": 0.785398,
+      "pitch": 0.1,
+      "yaw": 0.65
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky"
+      }
+    }
+  ],
+  "activeSky": 0
+}

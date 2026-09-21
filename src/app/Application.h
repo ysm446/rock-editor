@@ -1,4 +1,6 @@
 #pragma once
+#include <future>
+#include <stop_token>
 
 #include "compositor/MaterialLibrary.h"
 #include "compositor/MaterialStack.h"
@@ -86,6 +88,7 @@ struct StartupOptions {
     bool measurePreview = false;
     // プロジェクト読込後に選択するノード。スクリーンショット検証用。
     graph::GraphId selectNode = 0;
+    graph::GraphId previewNode = 0;
     bool testDrag = false;
     bool testLayerThumbnailCache = false;
     bool testDragShift = false;
@@ -95,6 +98,8 @@ struct StartupOptions {
     bool testDelete = false;
     ImVec2 testDragStart{};
     ImVec2 testDragEnd{};
+    bool testClickAfterDrag = false;
+    ImVec2 testClickPosition{};
 };
 
 // アプリ本体。ウィンドウ、デバイス、UI の生存期間とフレームループを持つ。
@@ -135,6 +140,23 @@ private:
     bool DrawLayerSettings(compositor::MaterialLayer& layer);
     // グラフの変更をメッシュシーンへ反映する。フレームの頭（フレームの外）で呼ぶ。
     void SyncMeshGraph();
+    void DrawPieceSettings(graph::Node&);
+    void CommitPieceViewportSelection();
+    bool m_pieceSelectionEditing = false;
+    bool m_pieceUpdating = false;
+    uint64_t m_pieceEpoch = 1;
+    std::string m_pieceTaskKey, m_pieceCompletedKey;
+    struct PieceTaskResult {
+        graph::RockEvaluation output, input, selection;
+        graph::RockEvaluationCache cache;
+    };
+    std::future<PieceTaskResult> m_pieceTask;
+    std::stop_source m_pieceStop;
+    std::shared_ptr<const geometry::PieceCollection> m_pieceInput, m_piecePreview;
+    graph::GraphId m_pieceInputNode = 0;
+    int m_pieceGizmoId = -1;
+    std::shared_ptr<const geometry::PieceSelection> m_pieceTransformSelection;
+
     void DrawUvPanel();
     void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked);
     std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input) const;
@@ -158,6 +180,7 @@ private:
     std::string m_meshGraphError;
     struct RockMeshReference {
         graph::GraphId source = 0;
+        int pieceId = -1;
     };
     std::vector<RockMeshReference> m_rockMeshReferences;
     // 選択中のノードを控える / 貼り付ける（Ctrl+C / Ctrl+V）。
@@ -215,6 +238,7 @@ private:
         float* scale = nullptr;
         // 形そのものを作り直す設定か（Volume Transform）。真ならグラフを改版して再評価する。
         bool regenerate = false;
+        float* scaleXYZ = nullptr;
     };
     bool NodeTransform(graph::GraphId nodeId, NodeTransformRef& out);
     // 選んでいる Model / Transform / Volume Transform ノードのギズモの基準。
@@ -416,6 +440,7 @@ private:
     // コピーした集合の中を指していれば貼った側どうしで繋ぎ直し、
     // 外を指していれば**元の親へ繋いだまま**にする。
     struct GraphClipboardNode {
+        graph::GraphId originalId = 0;
         graph::NodeKind kind = graph::NodeKind::Surface;
         graph::NodeSettings settings;
         float posX = 0.0f;
@@ -492,6 +517,7 @@ private:
         float startPosition[3] = {};
         float startRotation[3] = {};
         float startScale = 1.0f;
+        float startScaleXYZ[3] = {1,1,1};
         float planeY = 0.0f;
         // ノード用のギズモで FBX のノードを回しているとき。軸はワールド、角度は掴んだときのノードの回転（度）。
         bool nodeRotation = false;

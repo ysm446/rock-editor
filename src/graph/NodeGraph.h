@@ -1,5 +1,6 @@
 #pragma once
 #include "geometry/UvUnwrap.h"
+#include "geometry/Pieces.h"
 
 #include "compositor/MaterialLayer.h"
 #include "geometry/BaseRock.h"
@@ -35,6 +36,7 @@ enum class PinKind : uint32_t {
 
 // ピンを流れる値の型。同じ型どうしだけ接続できる。
 enum class ValueType : uint32_t {
+    Points = 10, Pieces = 11, Selection = 12,
     Material = 0,
     Mesh = 3,
     // 置いたモデルの集まり。Model / Transform が受け渡す。
@@ -58,6 +60,8 @@ enum class NodeKind : uint32_t {
     VolumeTransform = 41,
     UvUnwrap = 42,
     MaterialBake = 43,
+    ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
+    PieceFilter = 47, PieceTransform = 48, PiecesToMesh = 49,
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
@@ -147,7 +151,10 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   TransformNodeSettings, BaseRockNodeSettings,
                                   geometry::BoxClusterSettings, geometry::VolumeSettings,
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
-                                  geometry::UvUnwrapSettings, MaterialBakeSettings, std::monostate>;
+                                  geometry::UvUnwrapSettings, MaterialBakeSettings,
+                                  geometry::ScatterSettings, geometry::VoronoiSettings,
+                                  geometry::PieceSelectSettings, geometry::PieceFilterSettings,
+                                  geometry::PieceTransformSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;
@@ -263,6 +270,7 @@ bool IsLayerNodeKind(NodeKind kind);
 // メッシュの鎖を成す種類か（Base Rock / Volume 系 / Merge など）。Mesh Output は含まない。
 // 出力ピンを選ぶと、そのノードまでの鎖がメッシュシーンに出る。
 bool IsMeshNodeKind(NodeKind kind);
+bool IsPieceNodeKind(NodeKind kind);
 // 選ぶとプレビューの対象になる種類か。
 bool IsPreviewableNodeKind(NodeKind kind);
 // モデルの系統の種類か（Model / Transform）。選ぶとその枝のモデルだけをプレビューに出す。

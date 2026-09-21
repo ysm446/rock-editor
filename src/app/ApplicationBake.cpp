@@ -128,6 +128,7 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
 }
 
 void Application::ProcessPendingBake() {
+    if (m_pieceUpdating) return;
     if (!m_pendingBake)
         return;
     const auto id = m_pendingBake;

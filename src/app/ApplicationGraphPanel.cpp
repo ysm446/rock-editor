@@ -50,6 +50,9 @@ ImVec4 NodeAccentColor(graph::NodeKind kind) {
 ImVec4 PinTypeColor(graph::ValueType valueType) {
     switch (valueType) {
         // メッシュは緑。
+        case graph::ValueType::Points: return ImVec4(.8f,.65f,.35f,1);
+        case graph::ValueType::Pieces: return ImVec4(.75f,.5f,.32f,1);
+        case graph::ValueType::Selection: return ImVec4(.85f,.75f,.25f,1);
         case graph::ValueType::Mesh:
             return ImGui::GetStyleColorVec4(ImGuiCol_PlotLines);
         // モデルは藤色。メッシュ（Mesh）とは繋がらないことを色でも分ける。
@@ -211,6 +214,8 @@ void Application::SyncMeshGraph() {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
             previous && previous->kind == graph::NodeKind::UvUnwrap && m_previewGraphNode == previous->id)
             SetPreviewGraphNode(m_uvPreviousPreviewNode, m_uvPreviousPreviewPin);
+        m_pieceSelectionEditing = false;
+        m_pieceGizmoId = -1;
         m_uvLastSelectedNode = m_selectedGraphNode;
         if (const auto* node = m_graph.FindNode(m_selectedGraphNode); node && node->kind == graph::NodeKind::UvUnwrap) {
             m_uvPreviousPreviewNode = m_previewGraphNode;
@@ -225,29 +230,78 @@ void Application::SyncMeshGraph() {
         previewMeshNode = node->id;
     }
     m_uvCheckerPreview = previewMeshNode && m_graph.FindNode(previewMeshNode)->kind == graph::NodeKind::UvUnwrap;
-    if (m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
+    const bool hasPieces = std::any_of(m_graph.Nodes().begin(), m_graph.Nodes().end(), [](const auto& n) { return graph::IsPieceNodeKind(n.kind); });
+    const std::string taskKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(m_selectedGraphNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
+    if ((!hasPieces || m_pieceCompletedKey == taskKey) && m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
         m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod)
         return;
     m_meshGraphSmoothShading = m_settings.Display().smoothShading;
     m_meshGraphSdfPreviewMethod = m_settings.Display().sdfPreviewMethod;
-    const auto evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache,
-                                               m_settings.Display().sdfPreviewMethod);
+    graph::RockEvaluation evaluated;
+    if (hasPieces) {
+        m_pieceUpdating = true;
+        if (m_pieceTask.valid()) {
+            if (m_pieceTaskKey != taskKey) m_pieceStop.request_stop();
+            if (m_pieceTask.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+            auto finished = m_pieceTask.get();
+            m_rockEvaluationCache = std::move(finished.cache);
+            if (m_pieceTaskKey == taskKey) {
+                evaluated = std::move(finished.output);
+                m_pieceInput = finished.input.pieces;
+                m_pieceInputNode = m_selectedGraphNode;
+                m_pieceTransformSelection = finished.selection.selection;
+                m_pieceCompletedKey = taskKey;
+                m_pieceUpdating = false;
+            }
+        }
+        if (m_pieceUpdating) {
+            m_pieceTaskKey = taskKey;
+            m_pieceStop = std::stop_source{};
+            m_pieceTask = std::async(std::launch::async, [snapshot=m_graph, previewMeshNode, selected=m_selectedGraphNode,
+                method=m_settings.Display().sdfPreviewMethod, cache=m_rockEvaluationCache, stop=m_pieceStop.get_token()]() mutable {
+                PieceTaskResult result;
+                result.output = graph::EvaluateRocks(snapshot, previewMeshNode, &cache, method, stop);
+                if (const auto* n = snapshot.FindNode(selected); n && graph::IsPieceNodeKind(n->kind) && !n->inputs.empty())
+                    if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[0].id))
+                        result.input = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
+                if (const auto* n = snapshot.FindNode(selected); n && n->kind == graph::NodeKind::PieceTransform && n->inputs.size() > 1)
+                    if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[1].id))
+                        result.selection = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop);
+                result.cache = std::move(cache);
+                return result;
+            });
+            return;
+        }
+    } else {
+        m_pieceStop.request_stop();
+        m_pieceUpdating = false; m_pieceInput.reset();
+        evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod);
+    }
+    m_piecePreview = evaluated.pieces;
     renderer::MeshScene scene;
     m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();
+    std::vector<int> selectedPieces;
     for (const auto& rock : evaluated.rocks) {
         if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading);
         mesh.material.baseColor = DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
-        m_rockMeshReferences.push_back({rock.source});
+        if (rock.pieceId >= 0) {
+            float r,g,b;
+            ImGui::ColorConvertHSVtoRGB(std::fmod(float(rock.pieceId)*.618034f,.999f),.5f,.75f,r,g,b);
+            mesh.material.baseColor = {r,g,b};
+            if (rock.pieceSelected) selectedPieces.push_back(int(scene.meshes.size()));
+        }
+        m_rockMeshReferences.push_back({rock.source, rock.pieceId});
         mesh.material.roughness = 0.8f;
         ApplyRockMaterial(mesh, rock, true);
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;
     m_meshHighlight = MeshHighlightState{};
+    m_meshHighlight.selected = std::move(selectedPieces);
     if (scene.meshes.empty()) {
         if (m_meshGraphActive) m_renderer.ClearMeshScene(m_device);
         m_meshGraphActive = false;
@@ -279,6 +333,7 @@ void Application::CopySelectedGraphNodes() {
     m_graphPasteCount = 0;
     for (const graph::Node* node : nodes) {
         GraphClipboardNode entry;
+        entry.originalId = node->id;
         entry.kind = node->kind;
         entry.settings = node->settings;
         entry.posX = node->posX;
@@ -386,6 +441,16 @@ void Application::PasteGraphNodes(const ImVec2& viewCenter) {
         }
     }
 
+    for (const auto id : created) if (auto* pasted = m_graph.FindMutableNode(id)) {
+        const auto remap = [&](int& producer) {
+            for (size_t i=0; i<m_graphClipboard.size(); ++i)
+                if (m_graphClipboard[i].kind == graph::NodeKind::VoronoiFracture && m_graphClipboard[i].originalId == producer) {
+                    producer = created[i]; break;
+                }
+        };
+        if (auto* s = std::get_if<geometry::PieceSelectSettings>(&pasted->settings)) remap(s->producer);
+        if (auto* s = std::get_if<geometry::PieceTransformSettings>(&pasted->settings)) remap(s->producer);
+    }
     for (const graph::GraphId id : created) {
         if (id != 0) {
             m_selectedGraphNode = id;
@@ -765,9 +830,17 @@ void Application::DrawGraphEditor() {
         };
         // 扱う型ごとに分けて並べる。見出しは出力する型（変換ノードは変換後の型）で選ぶ。
         ImGui::TextDisabled("メッシュ（ポリゴン）");
-        addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
+        addNodeMenuItem(graph::NodeKind::BaseRock, "Base Shape — 基本形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
+        ImGui::Separator();
+        ImGui::TextDisabled("分割・ピース操作");
+        addNodeMenuItem(graph::NodeKind::ScatterPoints, "Scatter Points — 内部に点を配置");
+        addNodeMenuItem(graph::NodeKind::VoronoiFracture, "Voronoi Fracture — 凸形状を立体分割");
+        addNodeMenuItem(graph::NodeKind::PieceSelect, "Piece Select — ピースを選別");
+        addNodeMenuItem(graph::NodeKind::PieceFilter, "Piece Filter — 選択を削除・抽出");
+        addNodeMenuItem(graph::NodeKind::PieceTransform, "Piece Transform — ピースを配置");
+        addNodeMenuItem(graph::NodeKind::PiecesToMesh, "Pieces to Mesh — UV・材質工程へ変換");
         ImGui::Separator();
         ImGui::TextDisabled("ボリューム");
         addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体を重ねて塊を作る");
@@ -931,6 +1004,8 @@ void Application::DrawGraphPanel() {
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
                      "ピンをドラッグして接続、Ctrl+C / Ctrl+V でコピー");
+    } else if (graph::IsPieceNodeKind(selected->kind)) {
+        DrawPieceSettings(*selected);
     } else if (auto* boxes = std::get_if<geometry::BoxClusterSettings>(&selected->settings)) {
         auto edited = *boxes;
         bool changed = false;
@@ -1073,7 +1148,9 @@ void Application::DrawGraphPanel() {
         ui::HintText("選択するとUVチェッカーを表示します。UVビューのタブで島の配置を確認できます。複数の入力メッシュは1枚のアトラスへまとめます。");
     } else if (selected->kind == graph::NodeKind::MaterialBake) {
         ui::HintText("UV UnwrapのMeshとSurfaceのMaterialを接続してください。");
+        ImGui::BeginDisabled(m_pieceUpdating);
         if (ImGui::Button("ベイク実行")) m_pendingBake=selected->id;
+        ImGui::EndDisabled();
         if (const auto status=m_bakeStatus.find(selected->id); status!=m_bakeStatus.end())
             ui::HintText(status->second.c_str());
         else ui::HintText("未ベイク。ノードの出力をプレビューして状態を確認してください。");

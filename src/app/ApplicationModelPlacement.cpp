@@ -383,6 +383,17 @@ bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
         out = {volume->position.data(), volume->rotationDegrees.data(), &volume->scale, true};
         return true;
     }
+    if (auto* pieces = std::get_if<geometry::PieceTransformSettings>(&node->settings)) {
+        auto* pose = &pieces->pose;
+        if (m_pieceGizmoId >= 0) {
+            auto it = std::find_if(pieces->overrides.begin(), pieces->overrides.end(),
+                                   [&](const auto& p) { return p.id == uint32_t(m_pieceGizmoId); });
+            if (it == pieces->overrides.end()) return false;
+            pose = &it->pose;
+        }
+        out = {pose->position.data(), pose->rotation.data(), pose->scale.data(), true, pose->scale.data()};
+        return true;
+    }
     return false;
 }
 
@@ -407,6 +418,41 @@ bool Application::RockMeshUsesNode(graph::GraphId nodeId) const {
 
 bool Application::NodeGizmoFrame(graph::GraphId nodeId, XMFLOAT3& pivot, XMFLOAT4X4& parent) const {
     const graph::Node* node = m_graph.FindNode(nodeId);
+    if (node && node->kind == graph::NodeKind::PieceTransform) {
+        if (m_modelInstanceDrag.pending && m_modelInstanceDrag.node == nodeId) {
+            pivot = m_modelInstanceDrag.pivot; parent = m_modelInstanceDrag.parent; return true;
+        }
+        if (m_pieceUpdating || !m_pieceInput || m_pieceInputNode != nodeId ||
+            !m_meshGraphError.empty() || m_previewGraphNode != nodeId) return false;
+        const auto& settings = std::get<geometry::PieceTransformSettings>(node->settings);
+        const auto eligible = [&](uint32_t id) { return !m_pieceTransformSelection ||
+            std::find(m_pieceTransformSelection->ids.begin(), m_pieceTransformSelection->ids.end(), id) != m_pieceTransformSelection->ids.end(); };
+        XMStoreFloat4x4(&parent, XMMatrixIdentity());
+        if (m_pieceGizmoId >= 0) {
+            if (!eligible(uint32_t(m_pieceGizmoId))) return false;
+            std::string error;
+            const auto output = geometry::TransformPieces(*m_pieceInput, m_pieceTransformSelection.get(), settings, error);
+            if (!error.empty()) return false;
+            for (const auto& piece : output.pieces) if (piece.id == uint32_t(m_pieceGizmoId)) {
+                const auto center = geometry::PieceCenter(piece); pivot = {center.x, center.y, center.z};
+                const auto& p = settings.pose;
+                XMStoreFloat4x4(&parent, XMMatrixScaling(p.scale[0], p.scale[1], p.scale[2]) *
+                    XMMatrixRotationRollPitchYaw(XMConvertToRadians(p.rotation[0]), XMConvertToRadians(p.rotation[1]), XMConvertToRadians(p.rotation[2])));
+                return true;
+            }
+            return false;
+        }
+        double x=0,y=0,z=0,total=0;
+        for (const auto& piece : m_pieceInput->pieces) if (eligible(piece.id)) {
+            const auto center = geometry::PieceCenter(piece);
+            const auto& m = piece.transform;
+            const auto weight = piece.volume * (m[0]*(m[5]*m[10]-m[6]*m[9])-m[1]*(m[4]*m[10]-m[6]*m[8])+m[2]*(m[4]*m[9]-m[5]*m[8]));
+            x += center.x*weight; y += center.y*weight; z += center.z*weight; total += weight;
+        }
+        if (total <= 0) return false;
+        pivot = {float(x/total)+settings.pose.position[0], float(y/total)+settings.pose.position[1], float(z/total)+settings.pose.position[2]};
+        return true;
+    }
     if (node && node->kind == graph::NodeKind::VolumeTransform) {
         // ボリュームは倍率 → 回転 → 移動の順に原点まわりで動かすので、移動量がそのまま
         // 回転・倍率の中心になる。表示中の岩がこのノードを通っているときだけ出す。
@@ -619,6 +665,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
                 std::copy(std::begin(drag.startPosition), std::end(drag.startPosition), target.position);
                 std::copy(std::begin(drag.startRotation), std::end(drag.startRotation), target.rotation);
                 if (target.scale) *target.scale = drag.startScale;
+                if (target.scaleXYZ) std::copy(std::begin(drag.startScaleXYZ), std::end(drag.startScaleXYZ), target.scaleXYZ);
                 documentChanged();
             }
             drag = {};
@@ -704,7 +751,10 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
             // Ctrl で 0.1 刻み。
             if (io.KeyCtrl) scale = std::max(0.1f, std::round(scale * 10.0f) / 10.0f);
             if (scale != *target.scale) {
-                *target.scale = scale;
+                if (target.scaleXYZ) {
+                    const float ratio = scale / drag.startScale;
+                    for (int axis=0; axis<3; ++axis) target.scaleXYZ[axis] = drag.startScaleXYZ[axis] * ratio;
+                } else *target.scale = scale;
                 documentChanged();
             }
         } else if (drag.handle >= kHandleRing) {
@@ -781,6 +831,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         std::copy(target.position, target.position + 3, drag.startPosition);
         std::copy(target.rotation, target.rotation + 3, drag.startRotation);
         drag.startScale = target.scale ? *target.scale : 1.0f;
+        if (target.scaleXYZ) std::copy(target.scaleXYZ, target.scaleXYZ+3, drag.startScaleXYZ);
         const XMVECTOR p = XMLoadFloat3(&framePivot);
         if (handle >= kHandleAxis && handle < kHandlePlane) {
             ClosestOnLine(rayOrigin, rayDirection, p, XMLoadFloat3(&kAxes[handle - kHandleAxis]), drag.pressParameter);
