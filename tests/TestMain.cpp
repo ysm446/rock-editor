@@ -5,6 +5,7 @@
 // フレームレート上限の待ち時間。
 
 #include "TestSupport.h"
+#include <cstring>
 
 void RunPieceTests();
 void RunMeshVolumeTests();
@@ -26,7 +27,11 @@ void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
 
 void RunApplyMaterialTests();
-int main() {
+void RunDisplaceTests();
+int main(int argc, char** argv) {
+    RunDisplaceTests();
+    if (argc == 2 && std::strcmp(argv[1], "--displace-only") == 0)
+        return rock::tests::g_failures == 0 ? 0 : 1;
     RunApplyMaterialTests();
     RunPieceTests();
     RunMeshVolumeTests();

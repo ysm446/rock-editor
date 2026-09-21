@@ -1,0 +1,233 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "baseRock": {
+          "size": [
+            2,
+            2.4,
+            1.8
+          ],
+          "shape": "roundedBox",
+          "subdivisions": 8,
+          "roundness": 0.2
+        }
+      },
+      {
+        "id": 21,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          22
+        ],
+        "position": [
+          200,
+          240
+        ],
+        "layer": {
+          "name": "Height rock",
+          "material": 1,
+          "mapping": {
+            "method": "triplanar",
+            "repeatMeters": 0.8,
+            "rotationDegrees": [
+              10,
+              20,
+              0
+            ],
+            "sharpness": 4
+          }
+        }
+      },
+      {
+        "id": 80,
+        "kind": "applyMaterial",
+        "inputs": [
+          81,
+          82,
+          83
+        ],
+        "outputs": [
+          84
+        ],
+        "position": [
+          260,
+          0
+        ]
+      },
+      {
+        "id": 120,
+        "kind": "subdivide",
+        "inputs": [
+          121
+        ],
+        "outputs": [
+          122
+        ],
+        "position": [
+          500,
+          0
+        ],
+        "subdivide": {
+          "levels": 2
+        }
+      },
+      {
+        "id": 130,
+        "kind": "displace",
+        "inputs": [
+          131
+        ],
+        "outputs": [
+          132
+        ],
+        "position": [
+          740,
+          0
+        ],
+        "displace": {
+          "amount": 0.08,
+          "midpoint": 0.5
+        }
+      },
+      {
+        "id": 50,
+        "kind": "uvUnwrap",
+        "inputs": [
+          51
+        ],
+        "outputs": [
+          52
+        ],
+        "position": [
+          980,
+          0
+        ],
+        "uvUnwrap": {
+          "resolution": 512,
+          "padding": 4,
+          "quality": 1
+        }
+      },
+      {
+        "id": 60,
+        "kind": "materialBake",
+        "inputs": [
+          61,
+          62
+        ],
+        "outputs": [
+          63
+        ],
+        "position": [
+          1220,
+          0
+        ],
+        "materialBake": {
+          "geometryAo": true,
+          "aoDistance": 0.3,
+          "aoSamples": 16,
+          "aoStrength": 1
+        }
+      },
+      {
+        "id": 6,
+        "kind": "meshOutput",
+        "inputs": [
+          7,
+          20
+        ],
+        "outputs": [],
+        "position": [
+          1460,
+          0
+        ]
+      }
+    ],
+    "links": [
+      {
+        "id": 300,
+        "start": 2,
+        "end": 81
+      },
+      {
+        "id": 301,
+        "start": 22,
+        "end": 82
+      },
+      {
+        "id": 302,
+        "start": 84,
+        "end": 121
+      },
+      {
+        "id": 303,
+        "start": 122,
+        "end": 131
+      },
+      {
+        "id": 304,
+        "start": 132,
+        "end": 51
+      },
+      {
+        "id": 305,
+        "start": 52,
+        "end": 61
+      },
+      {
+        "id": 306,
+        "start": 63,
+        "end": 7
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 8,
+      "fovY": 0.785398,
+      "pitch": 0.4,
+      "yaw": 0.65
+    },
+    "exposure": {
+      "compensation": 1.5
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0,
+  "materials": [
+    {
+      "id": 1,
+      "asset": {
+        "path": "Materials/height.rockmat"
+      }
+    }
+  ],
+  "textures": []
+}

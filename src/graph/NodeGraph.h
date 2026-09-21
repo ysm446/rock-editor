@@ -1,4 +1,5 @@
 #pragma once
+#include "geometry/Displace.h"
 #include "geometry/Decimate.h"
 #include "geometry/UvUnwrap.h"
 #include "geometry/Pieces.h"
@@ -71,6 +72,7 @@ enum class NodeKind : uint32_t {
     VolumeNoise = 55,
     // 形を保ったまま Mesh の三角形を減らす。UV Unwrap の前に置く。
     Decimate = 56,
+    Subdivide = 57, Displace = 58,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -171,7 +173,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::DecimateSettings,
-                                  geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
+                                  geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
                                   geometry::PieceTransformSettings, std::monostate>;

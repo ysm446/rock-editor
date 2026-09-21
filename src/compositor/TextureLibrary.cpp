@@ -373,6 +373,7 @@ bool TextureLibrary::LoadInto(rhi::Device& device, rhi::PipelineCache& pipelineC
     // チャンネルを分けて見る SRV は、描く相手が決まってから張る。
     CreateChannelViews(device, entry);
     entry.missing = false;
+    entry.contentRevision = m_nextContentRevision++;
     return true;
 }
 

@@ -14,6 +14,7 @@ namespace rock::compositor {
 
 struct LibraryTexture {
     TextureId id = kNoTexture;
+    uint64_t contentRevision = 0; // 読込・再読込で更新。GPU由来のCPUキャッシュの無効化に使う。
     std::string name;
     std::filesystem::path path;
     rhi::GpuTexture texture;
@@ -130,6 +131,7 @@ private:
 
     std::vector<LibraryTexture> m_entries;
     TextureId m_nextId = 1;
+    uint64_t m_nextContentRevision = 1;
 };
 
 }  // namespace rock::compositor

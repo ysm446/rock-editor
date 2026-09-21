@@ -6,10 +6,12 @@
 
 #include "geometry/Mesh.h"
 #include "graph/NodeGraph.h"
+#include "graph/MaterialHeight.h"
 namespace rock::graph {
 struct GeneratedRock {
     GraphId source = 0;
     geometry::Mesh mesh;
+    std::vector<GraphId> meshHistory;
     std::shared_ptr<const std::vector<geometry::OrientedBox>> boxes;
     std::shared_ptr<const geometry::VolumeGrid> volume;
     struct MaterialBinding {
@@ -34,6 +36,8 @@ struct RockEvaluation {
 struct RockEvaluationCache {
     struct Entry { std::string key; RockEvaluation result; };
     std::map<GraphId, Entry> entries;
+    // キャッシュ対象ノードの実計算回数。再利用時は増加しない。
+    std::map<GraphId, uint64_t> computations;
     std::map<GraphId, Entry> pieceEntries;
     struct Surface {
         std::shared_ptr<const geometry::VolumeGrid> volume;
@@ -43,6 +47,7 @@ struct RockEvaluationCache {
     std::map<GraphId, Surface> surfaces;
     struct UvEntry { geometry::Mesh input, output; geometry::UvUnwrapSettings settings; };
     std::map<GraphId, UvEntry> uvs;
+    std::map<GraphId, std::pair<size_t,size_t>> detailCounts;
 };
 // 別スレッドで走る評価が、いま計算しているノードと段階を UI へ伝える。UI は読むだけ。
 struct RockEvaluationProgress {
@@ -54,5 +59,6 @@ struct RockEvaluationProgress {
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview = 0,
                             RockEvaluationCache* persistent = nullptr,
                             geometry::VolumeMeshingMethod previewMethod = geometry::VolumeMeshingMethod::MarchingTetrahedra,
-                            std::stop_token stop = {}, RockEvaluationProgress* progress = nullptr);
+                            std::stop_token stop = {}, RockEvaluationProgress* progress = nullptr,
+                            const MaterialHeight* heights = nullptr);
 }  // namespace rock::graph

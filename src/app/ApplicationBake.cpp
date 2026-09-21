@@ -183,7 +183,7 @@ void Application::ProcessPendingBake() {
         } while (!job.ao.Complete() && std::chrono::steady_clock::now() - start < std::chrono::milliseconds(6));
         if (!job.ao.Complete()) return;
         // 素材ライブラリや表示設定の変更はグラフのRevisionだけでは検出できない。
-        const auto result = graph::EvaluateRocks(m_graph, job.id, &m_rockEvaluationCache);
+        const auto result = graph::EvaluateRocks(m_graph, job.id, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod, {}, nullptr, m_materialHeights.get());
         if (!result.error.empty() || result.rocks.size() != 1) { discard("入力が変更されたためベイクを中止しました"); return; }
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(result.rocks[0].mesh, m_settings.Display().smoothShading);
@@ -212,7 +212,7 @@ void Application::ProcessPendingBake() {
     auto *node = m_graph.FindMutableNode(id);
     if (!node || node->kind != graph::NodeKind::MaterialBake)
         return;
-    const auto result = graph::EvaluateRocks(m_graph, id, &m_rockEvaluationCache);
+    const auto result = graph::EvaluateRocks(m_graph, id, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod, {}, nullptr, m_materialHeights.get());
     if (!result.error.empty() || result.rocks.size() != 1) {
         fail(result.error.empty() ? "ベイク入力がありません" : result.error);
         return;

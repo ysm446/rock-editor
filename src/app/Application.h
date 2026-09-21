@@ -174,6 +174,9 @@ private:
     void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked);
     std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input, graph::GraphId bakeNode = 0) const;
     void ProcessPendingBake();
+    void PrepareMaterialHeights();
+    std::shared_ptr<const graph::MaterialHeight> m_materialHeights;
+    std::string m_materialHeightKey;
     bool ValidateGpuAo();
     void FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images, const std::string& fingerprint);
     struct BakeJob {

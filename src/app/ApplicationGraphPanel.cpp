@@ -332,7 +332,8 @@ void Application::SyncMeshGraph() {
         // UV Unwrap は大きなメッシュで数秒〜数十秒かかる。UI スレッドで走らせるとアプリが固まり、
         // 計算中であることも表示できない。
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
-               n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate;
+               n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate ||
+               n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace;
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
     const std::string geometryKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
@@ -368,20 +369,21 @@ void Application::SyncMeshGraph() {
             m_pieceStop = std::stop_source{};
             m_pieceProgress = std::make_shared<graph::RockEvaluationProgress>();
             m_pieceTaskStart = std::chrono::steady_clock::now();
+            PrepareMaterialHeights();
             m_pieceTask = std::async(std::launch::async, [snapshot=m_graph, previewMeshNode, selected=m_selectedGraphNode,
                 method=m_settings.Display().sdfPreviewMethod, cache=m_rockEvaluationCache, stop=m_pieceStop.get_token(),
-                progress=m_pieceProgress]() mutable {
+                progress=m_pieceProgress, heights=m_materialHeights]() mutable {
                 PieceTaskResult result;
                 // ここから漏れた例外は get() でUIスレッドへ再送出され、未保存の編集ごとアプリが落ちる。
                 // メモリ不足などは生成エラーとして表示する。
                 try {
-                    result.output = graph::EvaluateRocks(snapshot, previewMeshNode, &cache, method, stop, progress.get());
+                    result.output = graph::EvaluateRocks(snapshot, previewMeshNode, &cache, method, stop, progress.get(), heights.get());
                     if (const auto* n = snapshot.FindNode(selected); n && graph::IsPieceNodeKind(n->kind) && !n->inputs.empty())
                         if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[0].id))
-                            result.input = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop, progress.get());
+                            result.input = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop, progress.get(), heights.get());
                     if (const auto* n = snapshot.FindNode(selected); n && n->kind == graph::NodeKind::PieceTransform && n->inputs.size() > 1)
                         if (const auto* parent = snapshot.FindUpstreamNodeForPin(n->inputs[1].id))
-                            result.selection = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop, progress.get());
+                            result.selection = graph::EvaluateRocks(snapshot, parent->id, &cache, method, stop, progress.get(), heights.get());
                     result.cache = std::move(cache);
                 } catch (const std::exception& e) {
                     result = {};
@@ -966,6 +968,8 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Shape — 基本形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体メッシュを重ねて塊を作る");
         addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
+        addNodeMenuItem(graph::NodeKind::Subdivide, "Subdivide — 形を保ったまま細分化");
+        addNodeMenuItem(graph::NodeKind::Displace, "Displace — 素材ハイトで頂点を変位");
         addNodeMenuItem(graph::NodeKind::Decimate, "Decimate — 形を保ったまま三角形を減らす");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
@@ -1413,6 +1417,28 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は上流の To Volume で調整します。Marching Tetrahedra は従来方式、Dual Contouring は角や稜線を保つために頂点位置を調整する方式です。");
         if (method == 1)
             ui::HintText("Dual Contouring は格子から交点・法線を推定します。細部や角の再現には入力の解像度も影響します。");
+    } else if (auto* subdivide = std::get_if<geometry::SubdivideSettings>(&selected->settings)) {
+        bool changed = false;
+        if (ui::BeginPropertyTable("subdivide")) {
+            changed |= ui::PropertyInt("細分化の段階数", &subdivide->levels, 0, 6, 1);
+            ui::EndPropertyTable();
+        }
+        uint64_t factor = 1; for (int i=0;i<std::clamp(subdivide->levels,0,6);++i) factor*=4;
+        ui::HintText("三角形数は入力の%llu倍。出力上限は100万面です。", static_cast<unsigned long long>(factor));
+        if (const auto counts=m_rockEvaluationCache.detailCounts.find(selected->id); counts!=m_rockEvaluationCache.detailCounts.end())
+            ui::HintText("前回入力 %llu面 → 予測 %llu面", static_cast<unsigned long long>(counts->second.first), static_cast<unsigned long long>(counts->second.first*factor));
+        ui::HintText("辺の中点を共有して分割します。元の形とUVを保持し、丸めません。");
+        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+    } else if (auto* displace = std::get_if<geometry::DisplaceSettings>(&selected->settings)) {
+        bool changed = false;
+        if (ui::BeginPropertyTable("displace")) {
+            changed |= ui::PropertyFloat("変位量 (m)", &displace->amount, -10, 10, .05f);
+            changed |= ui::PropertyFloat("基準ハイト", &displace->midpoint, 0, 1, .5f);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("Apply Materialの合成ハイトを読み、(ハイト－基準値)×変位量だけ頂点を動かします。細分化は上流のSubdivideで行います。");
+        ui::HintText("UVなしではTriplanarを使用してください。UVの継ぎ目はハイトを平均し、共有頂点が割れるのを防ぎます。大きな変位では自己交差が生じる場合があります。");
+        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
     } else if (auto* decimate = std::get_if<geometry::DecimateSettings>(&selected->settings)) {
         auto edited = *decimate;
         bool changed = false;

@@ -17,12 +17,12 @@ RockEvaluation Failure(GraphId id, const char* kind, const std::string& message)
 void Append(RockEvaluation& target, const RockEvaluation& source) {
     for (const auto& item : source.rocks)
         if (std::none_of(target.rocks.begin(), target.rocks.end(),
-                         [&](const auto& other) { return other.source == item.source && other.materials == item.materials && other.materialSource == item.materialSource && other.bakeSource == item.bakeSource; }))
+                         [&](const auto& other) { return other.source == item.source && other.meshHistory == item.meshHistory && other.materials == item.materials && other.materialSource == item.materialSource && other.bakeSource == item.bakeSource; }))
             target.rocks.push_back(item);
     target.hasModels |= source.hasModels;
 }
 // 対応する枝を完全な値で比較し、改版番号の巻き戻りにも対応する。
-std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t depth = 0) {
+std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const std::map<GraphId,std::string>& heightKeys, size_t depth = 0, bool usesHeight = false) {
     const auto* node = graph.FindNode(id);
     if (!node || depth > 256) return std::nullopt;
     std::string key;
@@ -87,6 +87,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
     } else if (const auto* transform = std::get_if<geometry::PieceTransformSettings>(&node->settings)) {
         pose(transform->pose); add(transform->individual); add(transform->producer); add(transform->generation); add(transform->overrides.size());
         for (const auto& value : transform->overrides) { add(value.id); pose(value.pose); }
+    } else if (const auto* displace = std::get_if<geometry::DisplaceSettings>(&node->settings)) {
+        add(displace->amount); add(displace->midpoint); usesHeight = true;
+    } else if (const auto* subdivide = std::get_if<geometry::SubdivideSettings>(&node->settings)) {
+        add(subdivide->levels);
     } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node->settings)) {
         add(decimate->targetTriangles); add(decimate->maxError); add(decimate->creaseWeight);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
@@ -100,13 +104,29 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         if (pin.valueType == ValueType::Material || pin.valueType == ValueType::Mask) {
             if (node->kind == NodeKind::MaterialBake || node->kind == NodeKind::ApplyMaterial)
                 add(graph.FindUpstreamPin(pin.id));
+            // 無効なApply Materialは入力の素材束をそのまま通す。細分化のキャッシュにも反映する。
+            if (node->kind == NodeKind::ApplyMaterial && pin.valueType == ValueType::Material)
+                if (const auto* surface = graph.FindUpstreamNodeForPin(pin.id))
+                    if (const auto* layer = std::get_if<LayerNodeSettings>(&surface->settings)) add(layer->layer.enabled);
+            if (usesHeight) {
+                const auto* source = graph.FindUpstreamNodeForPin(pin.id);
+                if (source) {
+                    if (const auto* mask = std::get_if<MaterialMaskSettings>(&source->settings)) {
+                        add(mask->texture); add(mask->value); add(mask->repeatMeters); add(mask->invert); add(mask->triplanar);
+                        if (!mask->texture) continue;
+                    }
+                    const auto found = heightKeys.find(source->id);
+                    if (found == heightKeys.end()) return std::nullopt;
+                    add(found->second.size()); key += found->second;
+                }
+            }
             continue;
         }
         const auto* upstream = graph.FindUpstreamNodeForPin(pin.id);
         add(pin.id);
         const GraphId source = upstream ? upstream->id : 0; add(source);
         if (!upstream) continue;
-        const auto parent = VolumeKey(graph, upstream->id, depth + 1);
+        const auto parent = VolumeKey(graph, upstream->id, heightKeys, depth + 1, usesHeight);
         if (!parent) return std::nullopt;
         key += *parent;
     }
@@ -115,12 +135,15 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
 }  // namespace
 RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvaluationCache* persistent,
                             geometry::VolumeMeshingMethod previewMethod, std::stop_token stop,
-                            RockEvaluationProgress* progress) {
+                            RockEvaluationProgress* progress, const MaterialHeight* heights) {
+    const auto heightKeys = heights ? heights->CacheKeys() : std::map<GraphId,std::string>{};
     if (persistent) {
+        std::erase_if(persistent->computations, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->pieceEntries, [&](const auto& item) { return !graph.FindNode(item.first); });
+        std::erase_if(persistent->detailCounts, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->uvs, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->entries, [&](const auto& item) {
-            const auto key = VolumeKey(graph, item.first);
+            const auto key = VolumeKey(graph, item.first, heightKeys);
             return !key || *key != item.second.key;
         });
         std::erase_if(persistent->surfaces, [&](const auto& item) {
@@ -142,12 +165,13 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate ||
-                                 node->kind == NodeKind::VolumeToMesh;
-        const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id) : std::nullopt;
+                                 node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace;
+        const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id, heightKeys) : std::nullopt;
         if (persistentKey) {
             const auto found = persistent->entries.find(id);
             if (found != persistent->entries.end()) return found->second.result;
         }
+        if (persistent && volumeCache) ++persistent->computations[id];
         active.insert(id);
         // 計算中のノードを UI へ伝える。上流の評価から戻ったら、このノードへ戻す。
         const GraphId outer = progress ? progress->node.load(std::memory_order_relaxed) : 0;
@@ -195,6 +219,69 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 rock.materials.push_back({material->id, mask ? mask->id : 0});
                 rock.materialSource = 0;
                 rock.bakeSource = 0;
+            }
+        } else if (node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace) {
+            const char* name = node->kind == NodeKind::Subdivide ? "Subdivide" : "Displace";
+            const auto* upstream = graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!upstream) return finish(Failure(id, name, "Mesh入力を接続してください"));
+            result = evaluate(upstream->id, depth+1);
+            report(id, 0, 0);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty()) return finish(Failure(id, name, "生成メッシュを接続してください"));
+            size_t inputCount = 0;
+            for (const auto& rock : result.rocks) inputCount += rock.mesh.triangles.size();
+            size_t predicted = inputCount;
+            if (const auto* settings = std::get_if<geometry::SubdivideSettings>(&node->settings)) {
+                if (settings->levels < 0 || settings->levels > 6) return finish(Failure(id, name, "細分化の段階数は0〜6です"));
+                for (int level=0;level<settings->levels;++level) {
+                    if (predicted > geometry::kMaxDetailTriangles/4) return finish(Failure(id, name, "出力合計が100万面を超えます"));
+                    predicted *= 4;
+                }
+            }
+            if (predicted > geometry::kMaxDetailTriangles) return finish(Failure(id, name, "出力合計が100万面を超えます"));
+            if (persistent) persistent->detailCounts[id] = {inputCount,predicted};
+            size_t total = 0;
+            for (auto& rock : result.rocks) {
+                if (rock.volume) return finish(Failure(id, name, "Volume to Meshを通してください"));
+                std::string error;
+                if (node->kind == NodeKind::Subdivide) {
+                    rock.mesh = geometry::SubdivideMesh(rock.mesh, std::get<geometry::SubdivideSettings>(node->settings), error, stop,
+                                                       [&](int p) { report(id, 0, p); });
+                } else {
+                    if (!heights) return finish(Failure(id, name, "素材ハイトが準備されていません"));
+                    auto bindings = rock.materials;
+                    if (bindings.empty() && rock.materialSource) bindings.push_back({rock.materialSource, 0});
+                    if (bindings.empty()) return finish(Failure(id, name, "先にApply Materialで素材を適用してください"));
+                    for (const auto& binding : bindings) {
+                        const auto found = heights->surfaces.find(binding.surface);
+                        if (found == heights->surfaces.end()) return finish(Failure(id, name, "Surfaceのハイトがありません"));
+                        if (!found->second.error.empty()) return finish(Failure(id, name, found->second.error));
+                        const auto* maskNode = graph.FindNode(binding.mask);
+                        const auto* mask = maskNode ? std::get_if<MaterialMaskSettings>(&maskNode->settings) : nullptr;
+                        if (mask && mask->texture && !heights->masks.contains(binding.mask))
+                            return finish(Failure(id, name, "マスク画像を読み込めません"));
+                        if (!geometry::HasValidUvs(rock.mesh) && (found->second.mapping.method == compositor::MappingMethod::UV ||
+                            (mask && mask->texture && !mask->triplanar)))
+                            return finish(Failure(id, name, "UV投影には先にUV Unwrapが必要です。UVなしではTriplanarを使用してください"));
+                    }
+                    const bool wrap = heights->surfaces.at(bindings.front().surface).mapping.method == compositor::MappingMethod::Triplanar;
+                    const auto sample = [&](geometry::Vec3 p, geometry::Vec3 n, geometry::Mesh::Uv uv) {
+                        float h = .5f;
+                        for (const auto& binding : bindings) {
+                            const auto* maskNode = graph.FindNode(binding.mask);
+                            const auto* mask = maskNode ? std::get_if<MaterialMaskSettings>(&maskNode->settings) : nullptr;
+                            h = heights->Sample(binding.surface, mask, binding.mask, p, n, uv, h, wrap);
+                        }
+                        return h;
+                    };
+                    rock.mesh = geometry::DisplaceMesh(rock.mesh, std::get<geometry::DisplaceSettings>(node->settings), sample, error, stop,
+                                                      [&](int p) { report(id, 0, p); });
+                }
+                if (!error.empty()) return finish(Failure(id, name, error));
+                total += rock.mesh.triangles.size();
+                if (total > geometry::kMaxDetailTriangles) return finish(Failure(id, name, "出力合計が100万面を超えます"));
+                rock.meshHistory.push_back(rock.source);
+                rock.source = id; rock.boxes.reset(); rock.bakeSource = 0;
             }
         } else if (node->kind == NodeKind::UvUnwrap || node->kind == NodeKind::MaterialBake) {
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);

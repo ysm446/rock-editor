@@ -476,6 +476,10 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                    {"rotation", boxes->rotation}, {"seed", boxes->seed}};
         } else if (const auto* volume = std::get_if<geometry::VolumeSettings>(&node.settings)) {
             item["toVolume"] = {{"resolution", volume->resolution}};
+        } else if (const auto* subdivide = std::get_if<geometry::SubdivideSettings>(&node.settings)) {
+            item["subdivide"] = {{"levels",subdivide->levels}};
+        } else if (const auto* displace = std::get_if<geometry::DisplaceSettings>(&node.settings)) {
+            item["displace"] = {{"amount",displace->amount},{"midpoint",displace->midpoint}};
         } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node.settings)) {
             item["decimate"] = {{"targetTriangles", decimate->targetTriangles},
                                 {"maxError", decimate->maxError},
@@ -674,6 +678,16 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
             if (graph::IsPieceNodeKind(created.kind)) {
                 const json* v = FindMember(item, "pieces");
                 ReadPieceSettings(created, v && v->is_object() ? *v : json::object());
+            } else if (created.kind == graph::NodeKind::Subdivide) {
+                geometry::SubdivideSettings settings;
+                if (const json* v = FindMember(item, "subdivide"); v && v->is_object()) settings.levels=ReadInt(*v,"levels",1);
+                created.settings=settings;
+            } else if (created.kind == graph::NodeKind::Displace) {
+                geometry::DisplaceSettings settings;
+                if (const json* v = FindMember(item, "displace"); v && v->is_object()) {
+                    settings.amount=ReadFloat(*v,"amount",.05f); settings.midpoint=ReadFloat(*v,"midpoint",.5f);
+                }
+                created.settings=settings;
             } else if (created.kind == graph::NodeKind::Decimate) {
                 geometry::DecimateSettings settings;
                 if (const json* v = FindMember(item, "decimate"); v && v->is_object()) {
