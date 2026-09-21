@@ -62,6 +62,8 @@ enum class NodeKind : uint32_t {
     VolumeTransform = 41,
     // 2つの Volume の和・交差・差。入力は A（基準の格子）と B。
     VolumeBoolean = 52,
+    // 平面の群で Volume を切り落とし、角張った面を作る。
+    PlaneCuts = 53,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -159,7 +161,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   TransformNodeSettings, BaseRockNodeSettings,
                                   geometry::BoxClusterSettings, geometry::VolumeSettings,
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
-                                  geometry::VolumeBooleanSettings,
+                                  geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,

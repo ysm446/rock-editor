@@ -13,6 +13,12 @@ namespace {
 // To Volume の最大解像度96に、余白と任意方向への回転による外接箱の拡大を許容する。
 // 密な配列のため上限は残す（最大約28MiBの距離データ）。
 constexpr uint32_t kMaxGridPointsPerAxis = 192;
+// Plane Cuts の局所モード。等方の法線へ混ぜるランダムな向きの割合と、
+// 主方向の法線が表面の外向きと成す余弦の下限。
+constexpr double kLocalCutTilt = .75;
+constexpr double kLocalCutFacing = .35;
+constexpr int kLocalCutConvexNeighbours = 13;
+constexpr double kLocalCutRimLimit = 1.3;
 // 格子生成・変換・表面抽出で同じ上限を使う。
 bool ValidGrid(const VolumeGrid& g) {
     const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];
@@ -36,6 +42,41 @@ bool FillSlices(const VolumeGrid& grid, Sample sample) {
         inside[z] = any ? 1 : 0;
     });
     return std::find(inside.begin(), inside.end(), uint8_t(1)) != inside.end();
+}
+// 内部の格子点を6近傍でつないだ塊のうち、最大のものだけを残す。
+// 重なった切り落としが角を切り離すと、浮いた小片ができる。小片は外部にする。
+void KeepLargestComponent(VolumeGrid& grid) {
+    const size_t nx = grid.dimensions[0], ny = grid.dimensions[1], nz = grid.dimensions[2];
+    std::vector<uint32_t> labels(grid.values.size(), 0);
+    std::vector<size_t> sizes{0}, stack;
+    for (size_t start = 0; start < grid.values.size(); ++start) {
+        if (grid.values[start] >= 0 || labels[start] != 0) continue;
+        const uint32_t label = uint32_t(sizes.size());
+        sizes.push_back(0);
+        labels[start] = label;
+        stack.push_back(start);
+        while (!stack.empty()) {
+            const size_t index = stack.back();
+            stack.pop_back();
+            ++sizes[label];
+            const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
+            const auto visit = [&](bool valid, size_t next) {
+                if (!valid || grid.values[next] >= 0 || labels[next] != 0) return;
+                labels[next] = label;
+                stack.push_back(next);
+            };
+            visit(x > 0, index - 1);
+            visit(x + 1 < nx, index + 1);
+            visit(y > 0, index - nx);
+            visit(y + 1 < ny, index + nx);
+            visit(z > 0, index - nx * ny);
+            visit(z + 1 < nz, index + nx * ny);
+        }
+    }
+    if (sizes.size() <= 2) return;
+    const uint32_t largest = uint32_t(std::max_element(sizes.begin() + 1, sizes.end()) - sizes.begin());
+    for (size_t i = 0; i < grid.values.size(); ++i)
+        if (labels[i] != 0 && labels[i] != largest) grid.values[i] = -grid.values[i];
 }
 // 右手系 Z → X → Y。Model と同じ向きに回す。
 Vec3 Rotate(Vec3 p, const std::array<float, 3>& degrees) {
@@ -317,6 +358,279 @@ VolumeGrid CombineVolumes(const VolumeGrid& a, const VolumeGrid& b, const Volume
         error = "演算の結果に内部が残りません。A と B の位置や演算を見直してください";
         return {};
     }
+    return out;
+}
+const char* PlaneCutsDistributionName(PlaneCutsDistribution distribution) {
+    return distribution == PlaneCutsDistribution::Directional ? "directional" : "isotropic";
+}
+PlaneCutsDistribution ParsePlaneCutsDistribution(std::string_view name) {
+    return name == "directional" ? PlaneCutsDistribution::Directional : PlaneCutsDistribution::Isotropic;
+}
+const char* PlaneCutsScopeName(PlaneCutsScope scope) {
+    return scope == PlaneCutsScope::Local ? "local" : "global";
+}
+PlaneCutsScope ParsePlaneCutsScope(std::string_view name) {
+    return name == "local" ? PlaneCutsScope::Local : PlaneCutsScope::Global;
+}
+std::vector<CutPlane> MakeCutPlanes(const VolumeGrid& g, const PlaneCutsSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (s.count < 1 || s.count > MaxPlaneCuts) {
+        error = "平面の枚数は 1～256 にしてください";
+        return {};
+    }
+    if (!range(s.depthMin, 0, MaxPlaneCutDepth) || !range(s.depthMax, 0, MaxPlaneCutDepth) ||
+        s.depthMin > s.depthMax) {
+        error = "切り込みの深さは 0～0.45 で、最小を最大以下にしてください";
+        return {};
+    }
+    if (s.distribution != PlaneCutsDistribution::Isotropic &&
+        s.distribution != PlaneCutsDistribution::Directional) {
+        error = "不明な法線の分布です";
+        return {};
+    }
+    if (s.scope != PlaneCutsScope::Global && s.scope != PlaneCutsScope::Local) {
+        error = "不明な適用範囲です";
+        return {};
+    }
+    if (!range(s.radius, .02f, 1)) {
+        error = "局所の半径は 0.02～1 にしてください";
+        return {};
+    }
+    if (s.systems < 1 || s.systems > 3) {
+        error = "主方向の系統数は 1～3 にしてください";
+        return {};
+    }
+    for (float v : s.rotationDegrees)
+        if (!range(v, -360, 360)) {
+            error = "向きは有限の -360～360 度にしてください";
+            return {};
+        }
+    if (!range(s.spreadDegrees, 0, 90)) {
+        error = "ばらつきは 0～90 度にしてください";
+        return {};
+    }
+    if (!range(s.blend, 0, 10)) {
+        error = "なめらかさは 0～10 m にしてください";
+        return {};
+    }
+    // 形の幅は表面のすぐ内側の格子点から測る。ある方向の端は必ず表面にある。
+    // 表面の点は距離の小ささではなく、隣に外部の点があることで選ぶ。重なった立体から作ったボリュームは
+    // 内部に残る面の近くでも距離が小さくなり、距離で選ぶと形の内側を中心に選んでしまう。
+    // 局所の中心もこの点から選ぶ。外周は必ず空なので、内部の点には全方向の隣がある。
+    std::vector<Vec3> shell;
+    std::vector<std::array<uint32_t, 3>> shellCells;
+    Vec3 lowest{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                std::numeric_limits<float>::max()},
+        highest{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
+                std::numeric_limits<float>::lowest()};
+    for (uint32_t z = 1; z + 1 < g.dimensions[2]; ++z)
+        for (uint32_t y = 1; y + 1 < g.dimensions[1]; ++y)
+            for (uint32_t x = 1; x + 1 < g.dimensions[0]; ++x) {
+                if (g.values[g.Index(x, y, z)] >= 0) continue;
+                if (g.values[g.Index(x - 1, y, z)] < 0 && g.values[g.Index(x + 1, y, z)] < 0 &&
+                    g.values[g.Index(x, y - 1, z)] < 0 && g.values[g.Index(x, y + 1, z)] < 0 &&
+                    g.values[g.Index(x, y, z - 1)] < 0 && g.values[g.Index(x, y, z + 1)] < 0)
+                    continue;
+                const auto p = g.Position(x, y, z);
+                shell.push_back(p);
+                shellCells.push_back({x, y, z});
+                lowest = {std::min(lowest.x, p.x), std::min(lowest.y, p.y), std::min(lowest.z, p.z)};
+                highest = {std::max(highest.x, p.x), std::max(highest.y, p.y), std::max(highest.z, p.z)};
+            }
+    if (shell.empty()) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    const float longest = std::max({highest.x - lowest.x, highest.y - lowest.y, highest.z - lowest.z, g.spacing});
+    // 局所の欠けは稜線や角で起こす。平らな面の中央では球の縁が丸いくぼみとして残るが、
+    // 凸な場所なら縁が形の外へ出て、平面の小面だけが残る。26近傍の外部の点の数で凸さを測る
+    // （平面で約9、稜線で約15、角で約19）。凸な点がなければ表面全体から選ぶ。
+    std::vector<uint32_t> candidates;
+    if (s.scope == PlaneCutsScope::Local) {
+        for (uint32_t i = 0; i < shellCells.size(); ++i) {
+            const auto [x, y, z] = shellCells[i];
+            int outside = 0;
+            for (int dz = -1; dz <= 1; ++dz)
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) outside += g.values[g.Index(x + dx, y + dy, z + dz)] >= 0 ? 1 : 0;
+            if (outside >= kLocalCutConvexNeighbours) candidates.push_back(i);
+        }
+        if (candidates.empty()) {
+            candidates.resize(shellCells.size());
+            std::iota(candidates.begin(), candidates.end(), 0u);
+        }
+    }
+    // 固定の乱数列（splitmix64）。標準ライブラリの分布は処理系で結果が変わるので使わない。
+    uint64_t state = (uint64_t(uint32_t(s.seed)) << 32) ^ 0x9E3779B97F4A7C15ull;
+    const auto uniform = [&state]() {
+        state += 0x9E3779B97F4A7C15ull;
+        uint64_t z = state;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+        z ^= z >> 31;
+        return double(z >> 11) / 9007199254740992.0;  // [0, 1)
+    };
+    const Vec3 axes[3] = {Rotate({1, 0, 0}, s.rotationDegrees), Rotate({0, 1, 0}, s.rotationDegrees),
+                          Rotate({0, 0, 1}, s.rotationDegrees)};
+    constexpr double pi = std::numbers::pi;
+    std::vector<CutPlane> planes;
+    planes.reserve(size_t(s.count));
+    for (int i = 0; i < s.count; ++i) {
+        // 分布によらず1枚あたり同じ個数の乱数を使い、設定を切り替えても他の平面の乱数がずれないようにする。
+        const double u0 = uniform(), u1 = uniform(), u2 = uniform(), u3 = uniform(), u4 = uniform(),
+                     u5 = uniform();
+        double n[3];
+        if (s.distribution == PlaneCutsDistribution::Isotropic) {
+            const double z = 1 - 2 * u0, r = std::sqrt(std::max(0.0, 1 - z * z)), phi = 2 * pi * u1;
+            n[0] = r * std::cos(phi);
+            n[1] = r * std::sin(phi);
+            n[2] = z;
+        } else {
+            const int system = std::min(int(u0 * s.systems), s.systems - 1);
+            const double sign = u1 < .5 ? -1 : 1;
+            const Vec3 main = axes[system], side = axes[(system + 1) % 3], up = axes[(system + 2) % 3];
+            // 主方向まわりの円錐の中で一様に傾ける。
+            const double tilt = double(s.spreadDegrees) * pi / 180 * std::sqrt(u2), phi = 2 * pi * u3;
+            const double c = std::cos(tilt) * sign, a = std::sin(tilt) * std::cos(phi), b = std::sin(tilt) * std::sin(phi);
+            n[0] = main.x * c + side.x * a + up.x * b;
+            n[1] = main.y * c + side.y * a + up.y * b;
+            n[2] = main.z * c + side.z * a + up.z * b;
+        }
+        const double length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        for (double& v : n) v /= length;
+        double low = std::numeric_limits<double>::max(), high = std::numeric_limits<double>::lowest();
+        for (const auto& p : shell) {
+            const double d = n[0] * p.x + n[1] * p.y + n[2] * p.z;
+            low = std::min(low, d);
+            high = std::max(high, d);
+        }
+        const double depth = s.depthMin + (double(s.depthMax) - s.depthMin) * u4;
+        if (s.scope == PlaneCutsScope::Global) {
+            planes.push_back({{float(n[0]), float(n[1]), float(n[2])}, float(high - depth * (high - low)), {}, 0});
+            continue;
+        }
+        // 局所。表面の点を中心に選ぶ。平面が表面に対して急だと、浅い欠けにならず球の半径いっぱいまで
+        // 食い込む。法線はその点の外向き（距離場の勾配）に近いものへ寄せる。
+        const size_t pick = candidates[std::min(size_t(u5 * double(candidates.size())), candidates.size() - 1)];
+        const auto [cx, cy, cz] = shellCells[pick];
+        double outward[3] = {double(g.values[g.Index(cx + 1, cy, cz)]) - g.values[g.Index(cx - 1, cy, cz)],
+                             double(g.values[g.Index(cx, cy + 1, cz)]) - g.values[g.Index(cx, cy - 1, cz)],
+                             double(g.values[g.Index(cx, cy, cz + 1)]) - g.values[g.Index(cx, cy, cz - 1)]};
+        const double steepness = std::sqrt(outward[0] * outward[0] + outward[1] * outward[1] + outward[2] * outward[2]);
+        if (steepness > 0) {
+            for (double& v : outward) v /= steepness;
+            const auto facing = [&](const double* v) { return v[0] * outward[0] + v[1] * outward[1] + v[2] * outward[2]; };
+            if (s.distribution == PlaneCutsDistribution::Directional) {
+                // 外を向く側へ反転する。それでも表面と向きが合わない系統なら、最も合う系統の軸を
+                // 同じ傾きのまま使う（節理に沿う面は、その向きの表面にだけ現れる）。
+                if (facing(n) < 0)
+                    for (double& v : n) v = -v;
+                if (facing(n) < kLocalCutFacing) {
+                    int best = 0;
+                    double bestFacing = -1;
+                    for (int a = 0; a < s.systems; ++a) {
+                        const double axis[3] = {axes[a].x, axes[a].y, axes[a].z};
+                        if (std::abs(facing(axis)) > bestFacing) {
+                            bestFacing = std::abs(facing(axis));
+                            best = a;
+                        }
+                    }
+                    const double sign = axes[best].x * outward[0] + axes[best].y * outward[1] + axes[best].z * outward[2] < 0 ? -1 : 1;
+                    const Vec3 main = axes[best], side = axes[(best + 1) % 3], up = axes[(best + 2) % 3];
+                    const double tilt = double(s.spreadDegrees) * pi / 180 * std::sqrt(u2), phi = 2 * pi * u3;
+                    const double c = std::cos(tilt) * sign, a = std::sin(tilt) * std::cos(phi),
+                                 b = std::sin(tilt) * std::sin(phi);
+                    n[0] = main.x * c + side.x * a + up.x * b;
+                    n[1] = main.y * c + side.y * a + up.y * b;
+                    n[2] = main.z * c + side.z * a + up.z * b;
+                }
+            } else {
+                // 外向きの法線にランダムな向きを混ぜる。傾きは最大で約50度。
+                for (int a = 0; a < 3; ++a) n[a] = outward[a] + n[a] * kLocalCutTilt;
+                const double mixed = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+                for (double& v : n) v /= mixed;
+            }
+        }
+        const Vec3 center = shell[pick];
+        const double radius = double(s.radius) * longest;
+        const double along = n[0] * center.x + n[1] * center.y + n[2] * center.z;
+        // 切り取る材料が球の縁に多く掛かると、球の壁が丸いくぼみとして残る。縁に掛かる割合を
+        // 半径で正規化すると、平らな面のくぼみで約2、稜線の面取りで約1、角の欠けで約0になる。
+        // 稜線と角だけを通し、掛かりすぎる欠けは浅くして試し直す。それでも駄目なら使わない
+        // （枚数は設定より減る）。
+        const int reach = int(std::ceil(radius / g.spacing)) + 1;
+        const auto clipped = [&](int value, uint32_t limit) { return uint32_t(std::clamp(value, 0, int(limit) - 1)); };
+        const uint32_t x0 = clipped(int(cx) - reach, g.dimensions[0]), x1 = clipped(int(cx) + reach, g.dimensions[0]),
+                       y0 = clipped(int(cy) - reach, g.dimensions[1]), y1 = clipped(int(cy) + reach, g.dimensions[1]),
+                       z0 = clipped(int(cz) - reach, g.dimensions[2]), z1 = clipped(int(cz) + reach, g.dimensions[2]);
+        const double rim = std::max(radius - 1.5 * g.spacing, 0.0);
+        double chipDepth = depth * radius;
+        for (int attempt = 0; attempt < 4; ++attempt, chipDepth *= .5) {
+            const double offset = along - chipDepth;
+            size_t removed = 0, onRim = 0;
+            for (uint32_t z = z0; z <= z1; ++z)
+                for (uint32_t y = y0; y <= y1; ++y)
+                    for (uint32_t x = x0; x <= x1; ++x) {
+                        if (g.values[g.Index(x, y, z)] >= 0) continue;
+                        const auto p = g.Position(x, y, z);
+                        if (n[0] * p.x + n[1] * p.y + n[2] * p.z <= offset) continue;
+                        const double dx = p.x - center.x, dy = p.y - center.y, dz = p.z - center.z;
+                        const double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+                        if (distance > radius) continue;
+                        ++removed;
+                        if (distance >= rim) ++onRim;
+                    }
+            if (double(onRim) * radius > kLocalCutRimLimit * double(removed) * (radius - rim)) continue;
+            planes.push_back({{float(n[0]), float(n[1]), float(n[2])}, float(offset), center, float(radius)});
+            break;
+        }
+    }
+    return planes;
+}
+VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::string& error) {
+    const auto planes = MakeCutPlanes(g, s, error);
+    if (!error.empty()) return {};
+    VolumeGrid out;
+    out.origin = g.origin;
+    out.spacing = g.spacing;
+    out.dimensions = g.dimensions;
+    out.values.resize(g.values.size());
+    const float threshold = out.spacing * 1e-4f;
+    const float k = s.blend;
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const auto p = out.Position(x, y, z);
+        const size_t index = out.Index(x, y, z);
+        float value = g.values[index];
+        for (const auto& plane : planes) {
+            float cut = Dot(plane.normal, p) - plane.offset;
+            if (plane.radius > 0) {
+                // 局所の欠け。切り落とす領域は「平面の外側」かつ「球の中」。
+                // 球の壁が形に当たらない欠けだけを MakeCutPlanes が選ぶので、切断面は平面だけになる。
+                const Vec3 d{p.x - plane.center.x, p.y - plane.center.y, p.z - plane.center.z};
+                cut = std::min(cut, plane.radius - std::sqrt(Dot(d, d)));
+            }
+            if (k > 0) {
+                // 多項式のなめらかな最大値。差が幅以上なら通常の最大値と同じ。
+                const float h = std::max(k - std::abs(value - cut), 0.f) / k;
+                value = std::max(value, cut) + h * h * k * .25f;
+            } else {
+                value = std::max(value, cut);
+            }
+        }
+        // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
+        out.values[index] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
+    if (!inside) {
+        error = "切り落とした結果に内部が残りません。枚数か切り込みの深さを減らしてください";
+        return {};
+    }
+    KeepLargestComponent(out);
     return out;
 }
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {

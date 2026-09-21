@@ -39,6 +39,45 @@ struct VolumeBooleanSettings {
     VolumeBooleanOperation operation = VolumeBooleanOperation::Union;
     float blend = 0;  // つなぎ目を丸める幅 (m)。0 で角を残す。0～10。
 };
+// Plane Cuts。平面の群で形を切り落とし、角張った面（ファセット）を作る。
+enum class PlaneCutsDistribution { Isotropic, Directional };
+// Global は形全体を半空間で切る（枚数が増えるほど凸な形に近づく）。
+// Local は表面の凸な点（稜線・角）のまわりだけを切り、凹凸を残したまま欠けを作る。
+// 法線は表面の外向きに近いものへ寄せ、浅い欠けにする。球の壁が形に当たる欠けは使わないので、
+// 実際の枚数は設定より少なくなることがある。
+enum class PlaneCutsScope { Global, Local };
+const char* PlaneCutsScopeName(PlaneCutsScope scope);
+// 不明な名前は Global として読む。
+PlaneCutsScope ParsePlaneCutsScope(std::string_view name);
+const char* PlaneCutsDistributionName(PlaneCutsDistribution distribution);
+// 不明な名前は Isotropic として読む。
+PlaneCutsDistribution ParsePlaneCutsDistribution(std::string_view name);
+inline constexpr int MaxPlaneCuts = 256;
+inline constexpr float MaxPlaneCutDepth = .45f;
+struct PlaneCutsSettings {
+    int count = 12;  // 平面の枚数。1～256。
+    int seed = 1;
+    PlaneCutsScope scope = PlaneCutsScope::Global;
+    // 局所（Local）の欠けの半径。形の最長辺に対する比。0.02～1。
+    float radius = .2f;
+    // 切り込みの深さ。0～0.45。全体では平面の法線方向に測った形の幅に対する比、
+    // 局所では欠けの半径に対する比。
+    float depthMin = .05f, depthMax = .25f;
+    PlaneCutsDistribution distribution = PlaneCutsDistribution::Isotropic;
+    // 主方向（Directional）。向きを回した座標系の X / Y / Z 軸を、系統数だけ主方向に使う。
+    int systems = 2;  // 1～3。
+    std::array<float, 3> rotationDegrees{0, 0, 0};  // 右手系 Z → X → Y、度。
+    float spreadDegrees = 12;                       // 主方向からの法線のばらつき。0～90。
+    float blend = 0;                                // 稜線を丸める幅 (m)。0 で角を残す。0～10。
+};
+// 平面 dot(normal, p) = offset。normal は単位長で、切り落とす側（外）を向く。
+// radius が正なら局所の欠け。center を中心とする球の中だけを切る。0 なら形全体を切る。
+struct CutPlane {
+    Vec3 normal;
+    float offset = 0;
+    Vec3 center;
+    float radius = 0;
+};
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
 // 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。
@@ -51,6 +90,12 @@ VolumeGrid TransformVolume(const VolumeGrid& grid, const VolumeTransformSettings
 // 差は A から B を取り除く。結果の距離は内外の符号が正しい近似値になる。
 VolumeGrid CombineVolumes(const VolumeGrid& a, const VolumeGrid& b, const VolumeBooleanSettings& settings,
                           std::string& error);
+// 入力の形と設定から平面の群を決める。同じ入力と Seed から同じ平面を得る。
+// 局所では、使えない欠けを除いた分だけ count より少なくなることがある。
+std::vector<CutPlane> MakeCutPlanes(const VolumeGrid& grid, const PlaneCutsSettings& settings,
+                                    std::string& error);
+// 平面の外側を切り落とす。格子（範囲・セル間隔）は入力のまま。
+VolumeGrid CutVolume(const VolumeGrid& grid, const PlaneCutsSettings& settings, std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
 Mesh VolumeSurface(const VolumeGrid& grid, std::string& error,
                    VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra);

@@ -865,6 +865,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::ToVolume, "To Volume — メッシュをボリュームに変換");
         addNodeMenuItem(graph::NodeKind::VolumeTransform, "Volume Transform — ボリュームを移動・回転・拡大");
         addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
+        addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1060,6 +1061,59 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は最長辺の分割数です。高くすると角や細い形を保ちやすくなり、処理時間も増えます。");
         if (changed) {
             *volume = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* cuts = std::get_if<geometry::PlaneCutsSettings>(&selected->settings)) {
+        auto edited = *cuts;
+        bool changed = false;
+        const float zero[3] = {0, 0, 0};
+        if (ui::BeginPropertyTable("planeCutsRows")) {
+            changed |= ui::PropertyInt("枚数", &edited.count, 1, geometry::MaxPlaneCuts, 12);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
+            const char* scopes[] = {"全体（大きな面取り）", "局所（欠け）"};
+            int scope = std::clamp(static_cast<int>(edited.scope), 0, 1);
+            if (ui::PropertyCombo("適用範囲", &scope, scopes, 2, 0)) {
+                edited.scope = static_cast<geometry::PlaneCutsScope>(scope);
+                changed = true;
+            }
+            if (edited.scope == geometry::PlaneCutsScope::Local)
+                changed |= ui::PropertyFloat("半径", &edited.radius, .02f, 1, .2f,
+                                             "欠け1つが届く範囲。形の最長辺に対する比です。");
+            changed |= ui::PropertyFloat("深さ 最小", &edited.depthMin, 0, geometry::MaxPlaneCutDepth, .05f,
+                                         "切り込みの深さ。全体では平面の向きに測った形の幅、局所では欠けの半径に対する比です。");
+            changed |= ui::PropertyFloat("深さ 最大", &edited.depthMax, 0, geometry::MaxPlaneCutDepth, .25f);
+            const char* distributions[] = {"等方（あらゆる向き）", "主方向（節理の系統）"};
+            int distribution = std::clamp(static_cast<int>(edited.distribution), 0, 1);
+            if (ui::PropertyCombo("法線の分布", &distribution, distributions, 2, 0)) {
+                edited.distribution = static_cast<geometry::PlaneCutsDistribution>(distribution);
+                changed = true;
+            }
+            if (edited.distribution == geometry::PlaneCutsDistribution::Directional) {
+                changed |= ui::PropertyInt("系統数", &edited.systems, 1, 3, 2,
+                                           "向きを回した座標系の X / Y / Z 軸を、この数だけ主方向に使います。");
+                changed |= ui::PropertyFloat3Input("向き (度)", edited.rotationDegrees.data(), zero) != 0;
+                changed |= ui::PropertyFloat("ばらつき (度)", &edited.spreadDegrees, 0, 90, 12);
+            }
+            changed |= ui::PropertyFloat("なめらかさ (m)", &edited.blend, 0, 1, 0,
+                                         "稜線を丸める幅。0 で角を残します。Ctrl + クリックで 10 m まで入力できます。");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("平面の群でボリュームを切り落とし、割れた岩のような角張った面を作ります。入力・出力とも Volume 型で、格子は変わりません。");
+        ui::HintText("「全体」は形全体を平面で切ります。枚数を増やすほど凸な形に近づき、凹みが消えるので、少ない枚数（3〜8）で大きな面取りに使います。"
+                     "「局所」は稜線や角を平面で欠き、凹凸を残したまま小面を増やします。平らな面の中央のように、切り口が丸い壁になる欠けは自動で除きます（枚数 40〜、半径 0.1〜0.3）。");
+        ui::HintText("2つ直列につなぐと両方を重ねられます。稜線を残すには Volume to Mesh を Dual Contouring にします。");
+        if (changed) {
+            edited.count = std::clamp(edited.count, 1, geometry::MaxPlaneCuts);
+            edited.systems = std::clamp(edited.systems, 1, 3);
+            edited.depthMin = std::clamp(edited.depthMin, 0.0f, geometry::MaxPlaneCutDepth);
+            // 片方を動かして大小が逆転したら、動かした側へもう一方を合わせる。
+            if (edited.depthMin != cuts->depthMin) edited.depthMax = std::max(edited.depthMax, edited.depthMin);
+            edited.depthMax = std::clamp(edited.depthMax, 0.0f, geometry::MaxPlaneCutDepth);
+            edited.depthMin = std::min(edited.depthMin, edited.depthMax);
+            edited.blend = std::clamp(edited.blend, 0.0f, 10.0f);
+            edited.radius = std::clamp(edited.radius, 0.02f, 1.0f);
+            *cuts = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

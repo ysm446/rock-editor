@@ -486,6 +486,18 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
+        } else if (const auto* cuts = std::get_if<geometry::PlaneCutsSettings>(&node.settings)) {
+            item["planeCuts"] = {{"count", cuts->count},
+                                 {"scope", geometry::PlaneCutsScopeName(cuts->scope)},
+                                 {"radius", cuts->radius},
+                                 {"seed", cuts->seed},
+                                 {"depthMin", cuts->depthMin},
+                                 {"depthMax", cuts->depthMax},
+                                 {"distribution", geometry::PlaneCutsDistributionName(cuts->distribution)},
+                                 {"systems", cuts->systems},
+                                 {"rotation", cuts->rotationDegrees},
+                                 {"spread", cuts->spreadDegrees},
+                                 {"blend", cuts->blend}};
         } else if (const auto* boolean = std::get_if<geometry::VolumeBooleanSettings>(&node.settings)) {
             item["volumeBoolean"] = {{"operation", geometry::VolumeBooleanOperationName(boolean->operation)},
                                      {"blend", boolean->blend}};
@@ -699,6 +711,24 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.position = {position.x, position.y, position.z};
                     settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
                     settings.scale = ReadFloat(*v, "scale", settings.scale);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::PlaneCuts) {
+                geometry::PlaneCutsSettings settings;
+                if (const json* v = FindMember(item, "planeCuts"); v && v->is_object()) {
+                    settings.count = ReadInt(*v, "count", settings.count);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
+                    settings.scope = geometry::ParsePlaneCutsScope(ReadString(*v, "scope", "global"));
+                    settings.radius = ReadFloat(*v, "radius", settings.radius);
+                    settings.depthMin = ReadFloat(*v, "depthMin", settings.depthMin);
+                    settings.depthMax = ReadFloat(*v, "depthMax", settings.depthMax);
+                    settings.distribution =
+                        geometry::ParsePlaneCutsDistribution(ReadString(*v, "distribution", "isotropic"));
+                    settings.systems = ReadInt(*v, "systems", settings.systems);
+                    const auto rotation = ReadFloat3(*v, "rotation", {});
+                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    settings.spreadDegrees = ReadFloat(*v, "spread", settings.spreadDegrees);
+                    settings.blend = ReadFloat(*v, "blend", settings.blend);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeBoolean) {

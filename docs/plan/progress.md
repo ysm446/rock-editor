@@ -1,9 +1,17 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 00:36
+更新日時: 2026-09-22 01:22
 
 ## 現在地
+
+### 2026-09-22 Plane Cuts
+
+- [設計メモ](../reference/rock-shaping-nodes.md) の2番目として **Plane Cuts** を追加。平面の群で Volume を切り落とす。枚数・Seed・適用範囲（全体 / 局所）・半径・深さの最小と最大・法線の分布（等方 / 主方向1〜3系統、向き、ばらつき）・なめらかさを持つ。長さの設定は形に対する比で持ち、格子は入力のまま。保存名 `planeCuts`、右クリックメニュー、設定欄、保存/読込、Undo/Redo（既存スナップショット）、ボリューム枝のキャッシュに接続。仕様は [Plane Cuts](../reference/plane-cuts.md)、サンプルは `examples/plane-cuts/`。
+- **実画面を見て設計を直した。** (1) 全体に効く半空間だけでは、枚数を増やすと凸包へ近づき、直方体の塊の凹凸が消えた。表面の点まわりの球の中だけを切る「局所」を追加した。(2) 局所の中心が形の内側に選ばれ、空洞と破片ができた。重なった立体のボリュームは内部に残る面の近くでも距離が小さいためで、表面の点を「隣に外部の点を持つ内部点」で選ぶよう直した。(3) 球の壁が丸いくぼみとして残った。切断面を斜めに持ち上げる案は上方の形まで削るため取りやめ、中心を凸な点に限り、法線を表面の外向きへ寄せ、切り取る材料が球の縁に掛かる割合で欠けを選別する方式にした（稜線と角は通し、平らな面のくぼみは除く）。浮いた小片は最大の塊だけを残して除く。
+- 単体テスト58項目を追加（`tests/PlaneCutsTests.cpp`）。球冠の体積、格子の不変、形を広げないこと、影響のない点の完全一致、再現性、枚数追加時の既存平面の不変、等方の偏りのなさ、主方向の円錐と系統、不正設定の拒否、局所の中心・法線・深さ、十字形での全体と局所の差、浮いた小片の除去、グラフの型制約とキャッシュを確認。Release/Debug ビルドと全2,534項目が成功。
+- Release 実アプリでサンプルを開き、切り落とす前・全体5枚・局所256枚指定の3段の形、設定欄、`--save-project` による保存で2ノードの全設定と5本の接続が残ることを確認。検証は `build/statusbar/rock_editor.exe`。実マウスでのメニュー操作と Undo/Redo の手動確認は未実施。
+- 制限：局所で実際に使われた枚数は表示していない。局所の欠けは稜線と角に集まり、平らな面の中央は欠けない（Volume Displace / Noise の役割）。距離値は符号が正しい近似。
 
 ### 2026-09-22 設計メモと Volume Boolean
 
@@ -134,9 +142,9 @@
 | 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
-| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる |
+| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる |
 | 材質 | Apply Material / Material Mask、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
-| 次の作業 | [設計メモ](../reference/rock-shaping-nodes.md) の順に、Plane Cuts（平面群によるファセット化）、Volume Crack が候補 |
+| 次の作業 | [設計メモ](../reference/rock-shaping-nodes.md) の順に、Volume Crack（割れ目）、Volume Displace / Noise が候補 |
 
 ## 完了
 
