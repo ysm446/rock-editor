@@ -400,6 +400,7 @@ void Application::SyncMeshGraph() {
         evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod);
     }
     m_piecePreview = evaluated.pieces;
+    m_pointPreview = evaluated.points;
     renderer::MeshScene scene;
     m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();

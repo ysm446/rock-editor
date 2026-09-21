@@ -123,18 +123,6 @@ void PreparePiecePreview(RockEvaluation &result, GraphId source) {
                                                p.id) != result.selection->ids.end();
             result.rocks.push_back(std::move(rock));
         }
-    if (result.points) {
-        // 点は小さな八面体で表示し、通常の照明・奥行きを利用する。
-        for (auto p : result.points->positions) {
-            GeneratedRock rock;
-            rock.source = source;
-            float r = .025f;
-            rock.mesh.positions = {{p.x + r, p.y, p.z}, {p.x - r, p.y, p.z}, {p.x, p.y + r, p.z},
-                                   {p.x, p.y - r, p.z}, {p.x, p.y, p.z + r}, {p.x, p.y, p.z - r}};
-            rock.mesh.triangles = {{{2, 4, 0}}, {{2, 1, 4}}, {{2, 5, 1}}, {{2, 0, 5}},
-                                   {{3, 0, 4}}, {{3, 4, 1}}, {{3, 1, 5}}, {{3, 5, 0}}};
-            result.rocks.push_back(std::move(rock));
-        }
-    }
+    // 点（result.points）はメッシュにしない。ビューポートが画面上の 2D の点として重ねて描く。
 }
 } // namespace rock::graph

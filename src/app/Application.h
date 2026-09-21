@@ -164,6 +164,8 @@ private:
     graph::GraphId EvaluatingNode() const;
     std::string EvaluationProgressText() const;
     std::shared_ptr<const geometry::PieceCollection> m_pieceInput, m_piecePreview;
+    // Scatter Points をプレビューしているときの点。ビューポートに 2D の点で重ねる。
+    std::shared_ptr<const geometry::PointSet> m_pointPreview;
     graph::GraphId m_pieceInputNode = 0;
     int m_pieceGizmoId = -1;
     std::shared_ptr<const geometry::PieceSelection> m_pieceTransformSelection;
@@ -304,6 +306,8 @@ private:
     bool HandleModelInstanceInput(bool itemActive, bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax);
     // 選んでいる Model / Transform ノードのギズモを ImGui で重ね、範囲の枠をレンダラの深度付きの線で出す。
     void DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVec2& viewportMax);
+    // プレビュー中の点（m_pointPreview）を画面上の丸で重ねる。奥行きでは隠さない。
+    void DrawPointPreview(const ImVec2& viewportMin, const ImVec2& viewportMax);
     // アセットの帯のモデルをビューポートへ落としたときの受け口。
     void ModelDropTarget(const ImVec2& viewportMin, const ImVec2& viewportMax);
     // Model / Transform ノードの設定（グラフパネルのプロパティ欄）。変えたら真。

@@ -1,9 +1,14 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 06:00
+更新日時: 2026-09-22 04:18
 
 ## 現在地
+
+### 2026-09-22 Scatter Points の点を 2D で描く
+
+- ユーザー依頼により、Scatter Points のプレビューを八面体のメッシュから、ビューポートに ImGui で重ねる 2D の点（半径 3px・縁取り付きの丸）に変更。`PreparePiecePreview` は点をメッシュにしなくなり、`RockEvaluation::points` を `Application::m_pointPreview` に控えて `DrawPointPreview` が描く。奥行きでは隠さないので、形の内側の点も見える。
+- Release でコンパイルとテスト全項目が成功。起動中のアプリが exe を掴んでいたため `rock_editor.exe` のリンクは未完了で、実画面では未確認。
 
 ### 2026-09-22 Normal もエッジパディングにする
 

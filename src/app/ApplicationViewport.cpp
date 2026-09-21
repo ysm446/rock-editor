@@ -398,6 +398,27 @@ void Application::HandleCameraInput(renderer::PreviewRenderer& preview, bool ite
     }
 }
 
+// Scatter Points の点。形の内側にある点も見えるよう、奥行きで隠さず画面に重ねる。
+// 大きさは距離によらず一定。色はギズモと同じく固定する。
+void Application::DrawPointPreview(const ImVec2& viewportMin, const ImVec2& viewportMax) {
+    if (!m_pointPreview || m_pointPreview->positions.empty()) return;
+    using namespace DirectX;
+    const ImVec2 size(viewportMax.x - viewportMin.x, viewportMax.y - viewportMin.y);
+    if (size.x <= 0.0f || size.y <= 0.0f) return;
+    const auto& camera = m_renderer.GetCamera();
+    const XMMATRIX viewProjection = camera.ViewMatrix() * camera.ProjectionMatrix();
+    const float radius = ui::Scaled(3.0f);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->PushClipRect(viewportMin, viewportMax, true);
+    for (const auto& p : m_pointPreview->positions) {
+        const ProjectedPoint point = ProjectToViewport(viewProjection, XMFLOAT3{p.x, p.y, p.z}, viewportMin, size);
+        if (!point.visible) continue;
+        drawList->AddCircleFilled(point.screen, radius + ui::Scaled(1.0f), IM_COL32(20, 20, 20, 220));
+        drawList->AddCircleFilled(point.screen, radius, IM_COL32(255, 196, 64, 255));
+    }
+    drawList->PopClipRect();
+}
+
 // ライトの向きを示すギズモ。地面のリング、水平方向、仰角の弧、光が来る向きの矢印。
 //
 // 色はテーマから引かない。座標軸ギズモと同じく「意味を持つ色」として固定する。
@@ -611,6 +632,7 @@ void Application::DrawViewportPanel() {
             DrawAxisGizmo(camera, imageOrigin, imageMax);
             DrawLightGizmo(m_renderer.Light(), m_viewportLightInteraction, camera, imageOrigin, imageMax);
             DrawModelInstanceOverlay(imageOrigin, imageMax);
+            DrawPointPreview(imageOrigin, imageMax);
 
             // ビューポートに重ねる操作。左上に表示モードの切り替え、右上に FPS。
             DrawViewportOverlay(imageOrigin, imageMax);
