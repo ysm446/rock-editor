@@ -91,6 +91,23 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview) {
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(volume));
             result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::VolumeTransform) {
+            const auto* settings = std::get_if<geometry::VolumeTransformSettings>(&node->settings);
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream)
+                return finish(Failure(id, "Volume Transform", "Volume 出力を接続してください"));
+            const auto input = evaluate(upstream->id, depth + 1);
+            if (!input.error.empty()) return finish(input);
+            if (input.rocks.size() != 1 || !input.rocks[0].volume)
+                return finish(Failure(id, "Volume Transform", "ボリュームが必要です"));
+            std::string error;
+            auto moved = geometry::TransformVolume(*input.rocks[0].volume, *settings, error);
+            if (!error.empty()) return finish(Failure(id, "Volume Transform", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(moved));
+            result.rocks.push_back(std::move(rock));
         } else if (node->kind == NodeKind::VolumeToMesh) {
             const auto* upstream =
                 node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);

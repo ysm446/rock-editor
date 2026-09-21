@@ -1,20 +1,28 @@
 # 直方体の塊とボリューム
 
 作成日時: 2026-09-21 01:02
-更新日時: 2026-09-21 01:26
+更新日時: 2026-09-21 14:00
 
 ## 使い方
 
-グラフの右クリックから Random Boxes、To Volume、Volume to Mesh、Mesh Output を追加し、次の順でつなぐ。
+グラフの右クリックメニューは扱う型ごとに「メッシュ（ポリゴン）」「ボリューム」「モデル」「共通」「材質」へ分かれている。見出しは出力する型で選び、変換ノードは変換後の型の側に置く（Volume to Mesh はメッシュ側）。
+
+Random Boxes、To Volume、Volume to Mesh、Mesh Output を追加し、次の順でつなぐ。
 
 ```text
 Random Boxes [Boxes] → [Boxes] To Volume [Volume]
   → [Volume] Volume to Mesh [Mesh] → [Geometry] Mesh Output
 ```
 
+ボリュームのまま加工するノードは To Volume と Volume to Mesh の間に挟む。
+
+```text
+To Volume [Volume] → [Volume] Volume Transform [Volume] → [Volume] Volume to Mesh
+```
+
 Random Boxes の出力ピンをクリックすると変換前の直方体集合を見られる。To Volume の出力ピンでは変換後の表面を確認できる。Random Boxes を直接 Mesh Output へつないでも表示できる。
 
-サンプルは [random-boxes.rockscene](../../examples/random-boxes/random-boxes.rockscene)。アプリで `examples/random-boxes` をルートとして開き、このシーンを開く。サンプル用の空アセットも同じフォルダに含む。
+サンプルは [random-boxes.rockscene](../../examples/random-boxes/random-boxes.rockscene) と [volume-transform.rockscene](../../examples/volume-transform/volume-transform.rockscene)。アプリでそれぞれのフォルダをルートとして開き、そのシーンを開く。サンプル用の空アセットも同じフォルダに含む。
 
 ## Random Boxes
 
@@ -35,6 +43,27 @@ Boxes 型の入力を受け、全ての直方体の符号付き距離の最小�
 
 解像度は最長辺のセル数（16～96、既定48）。各軸共通のセル寸法で、周囲に2セル以上の空の余白を確保する。最大約106万点、スカラー値は約4.3MB。表示用メッシュと作業メモリは別に必要。細い形・鋭い角は格子の解像度に応じて近似される。
 
+## Volume Transform
+
+Volume 型を受け、倍率 → 回転 → 平行移動の順に原点まわりで動かした Volume 型を返す。回転は右手系で Z → X → Y の順（Crack / Model と同じ規約）。
+
+| 設定 | 範囲・意味 |
+| --- | --- |
+| 移動 | 各軸 -10000～10000 m |
+| 回転 | 各軸 -360～360 度 |
+| 倍率 | 0.05～20。全軸共通 |
+
+格子を作り直して実装する。出力の各サンプル点を逆変換して入力の格子をトリリニア補間で読み、距離の単位を保つため倍率を掛け戻す。入力の範囲外は外周の正値に外へ出た距離を足して返すので、符号は外部のまま保たれる。
+
+- セル間隔は倍率に比例させる。拡大・縮小しても格子の数は変わらず、解像度は保たれる。
+- 範囲は入力の格子の8隅を変換した AABB に2セルの余白を足して決める。回転すると AABB が広がるためセル数が増え、各軸102を超える場合は上流の解像度を下げるよう診断する。
+- 再サンプルのため、回転すると境界がセル1個ぶん程度なまる。軸に沿う90度単位の回転と平行移動でも、格子の位相がずれる分だけ再サンプルの誤差が出る。
+- 変換後に内部が1点も残らない場合は診断する。非有限値・範囲外の設定は入力を変えずに拒否する。
+
+このノードを選ぶと、ビューポートにギズモが出る（Model / Transform / Chunk と同じもの）。`W` 移動、`E` 回転、`R` 倍率で持ち替え、`Ctrl` を押しながらで刻み（移動は軸の目盛り、回転15度、倍率0.1）、ドラッグ中の `Esc` で掴む前へ戻す。ギズモの中心は移動量の位置で、回転と倍率もその点が中心になる（原点を移動量の位置へ写すため）。数値欄とギズモは同じ設定を編集し、1回のドラッグが Undo の1段になる。
+
+ギズモは、表示中の岩がこのノードを通っているときだけ出す。設定を変えるたびに格子を作り直すので、ドラッグ中は毎フレーム上流から再評価する。解像度を上げると重くなる。
+
 ## Volume to Mesh
 
 Volume 型を受け取り、ゼロ等値面を通常の Mesh 型へ変換する。追加設定はなく、細かさは上流の To Volume の解像度で調整する。Mesh Output や Merge へ接続できる。
@@ -47,5 +76,6 @@ To Volume はグリッドを生成し、Volume to Mesh はメッシュを生成�
 
 - CPU 上の密なグリッドと表示用の外皮。新しい外部ライブラリは不要。
 - Random Boxes 専用の変換。任意 Mesh/Model の変換、VDB、Sparse Grid、平滑化は未対応。
+- Volume Transform は全軸共通の倍率のみ。VolumeGrid が単一のセル間隔を持つため、軸ごとの倍率は異方的なセル間隔の対応が要る。平面を境に片側だけずらす操作も未対応。
 - Boxes / Volume は Mesh と異なる型。Volume to Mesh を通して Mesh 入力へ接続する。Crack/Fracture には未加工 Box・三角形数などの入力制約があり、接続できても全ての加工に対応するわけではない。
 - 単純な塊を編集する基盤として使う。今回の出力を参考写真のような岩の完成形とはしない。

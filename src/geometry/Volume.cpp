@@ -3,8 +3,56 @@
 #include <cmath>
 #include <unordered_map>
 #include <numeric>
+#include <numbers>
+#include <limits>
 
 namespace rock::geometry {
+namespace {
+// 格子として読める最低条件。VolumeSurface の上限（各軸102）に合わせる。
+bool ValidGrid(const VolumeGrid& g) {
+    const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];
+    return nx >= 2 && ny >= 2 && nz >= 2 && nx <= 102 && ny <= 102 && nz <= 102 &&
+           g.values.size() == size_t(nx) * ny * nz && std::isfinite(g.spacing) && g.spacing > 0 &&
+           std::isfinite(g.origin.x) && std::isfinite(g.origin.y) && std::isfinite(g.origin.z) &&
+           std::none_of(g.values.begin(), g.values.end(), [](float v) { return !std::isfinite(v); });
+}
+// 右手系 Z → X → Y。Crack / Model と同じ向きに回す。
+Vec3 Rotate(Vec3 p, const std::array<float, 3>& degrees) {
+    const float x = degrees[0] * std::numbers::pi_v<float> / 180;
+    const float y = degrees[1] * std::numbers::pi_v<float> / 180;
+    const float z = degrees[2] * std::numbers::pi_v<float> / 180;
+    const Vec3 rz{std::cos(z) * p.x - std::sin(z) * p.y, std::sin(z) * p.x + std::cos(z) * p.y, p.z};
+    const Vec3 rx{rz.x, std::cos(x) * rz.y - std::sin(x) * rz.z, std::sin(x) * rz.y + std::cos(x) * rz.z};
+    return {std::cos(y) * rx.x + std::sin(y) * rx.z, rx.y, -std::sin(y) * rx.x + std::cos(y) * rx.z};
+}
+float Dot(Vec3 a, Vec3 b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+// 格子の外側は、外周の正値に外へ出た距離を足して返す。外周は必ず空なので符号は正のまま。
+float SampleVolume(const VolumeGrid& g, Vec3 p) {
+    const float f[3] = {(p.x - g.origin.x) / g.spacing, (p.y - g.origin.y) / g.spacing,
+                        (p.z - g.origin.z) / g.spacing};
+    float clamped[3];
+    double outside = 0;
+    uint32_t base[3];
+    float fraction[3];
+    for (int i = 0; i < 3; ++i) {
+        clamped[i] = std::clamp(f[i], 0.f, float(g.dimensions[i] - 1));
+        outside += double(f[i] - clamped[i]) * (f[i] - clamped[i]);
+        const float floored = std::floor(clamped[i]);
+        base[i] = std::min(static_cast<uint32_t>(floored), g.dimensions[i] - 2);
+        fraction[i] = clamped[i] - base[i];
+    }
+    double value = 0;
+    for (int c = 0; c < 8; ++c) {
+        const int dx = c & 1, dy = (c >> 1) & 1, dz = (c >> 2) & 1;
+        const double weight = (dx ? fraction[0] : 1 - fraction[0]) * (dy ? fraction[1] : 1 - fraction[1]) *
+                              (dz ? fraction[2] : 1 - fraction[2]);
+        if (weight > 0) value += weight * g.values[g.Index(base[0] + dx, base[1] + dy, base[2] + dz)];
+    }
+    return float(value + std::sqrt(outside) * g.spacing);
+}
+}  // namespace
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error) {
     error.clear();
@@ -65,13 +113,88 @@ VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSett
     }
     return grid;
 }
+VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    for (float v : s.position)
+        if (!range(v, -10000, 10000)) {
+            error = "移動量は有限の -10000～10000 m にしてください";
+            return {};
+        }
+    for (float v : s.rotationDegrees)
+        if (!range(v, -360, 360)) {
+            error = "回転は有限の -360～360 度にしてください";
+            return {};
+        }
+    if (!range(s.scale, .05f, 20)) {
+        error = "倍率は 0.05～20 にしてください";
+        return {};
+    }
+    // 回転後の基底。列が x / y / z 軸の行き先になる。
+    const Vec3 ax = Rotate({1, 0, 0}, s.rotationDegrees), ay = Rotate({0, 1, 0}, s.rotationDegrees),
+               az = Rotate({0, 0, 1}, s.rotationDegrees);
+    const auto forward = [&](Vec3 p) {
+        const float x = p.x * s.scale, y = p.y * s.scale, z = p.z * s.scale;
+        return Vec3{ax.x * x + ay.x * y + az.x * z + s.position[0],
+                    ax.y * x + ay.y * y + az.y * z + s.position[1],
+                    ax.z * x + ay.z * y + az.z * z + s.position[2]};
+    };
+    // 元の格子の8隅を動かし、その AABB を新しい格子の範囲にする。
+    Vec3 minimum{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                 std::numeric_limits<float>::max()},
+        maximum{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
+                std::numeric_limits<float>::lowest()};
+    for (int c = 0; c < 8; ++c) {
+        const auto corner = forward(g.Position(c & 1 ? g.dimensions[0] - 1 : 0, c & 2 ? g.dimensions[1] - 1 : 0,
+                                               c & 4 ? g.dimensions[2] - 1 : 0));
+        minimum = {std::min(minimum.x, corner.x), std::min(minimum.y, corner.y), std::min(minimum.z, corner.z)};
+        maximum = {std::max(maximum.x, corner.x), std::max(maximum.y, corner.y), std::max(maximum.z, corner.z)};
+    }
+    VolumeGrid out;
+    // セル間隔を倍率に比例させ、拡大しても格子の数を増やさない。
+    out.spacing = g.spacing * s.scale;
+    if (!std::isfinite(out.spacing) || out.spacing <= 0) {
+        error = "変換後のセル間隔が不正です";
+        return {};
+    }
+    out.origin = {minimum.x - out.spacing * 2, minimum.y - out.spacing * 2, minimum.z - out.spacing * 2};
+    const float extent[3] = {maximum.x - minimum.x, maximum.y - minimum.y, maximum.z - minimum.z};
+    for (int i = 0; i < 3; ++i) {
+        const double cells = std::ceil(extent[i] / out.spacing) + 5;
+        if (!std::isfinite(cells) || cells < 2 || cells > 102) {
+            error = "回転で格子が上限を超えます。上流の To Volume の解像度を下げてください";
+            return {};
+        }
+        out.dimensions[i] = static_cast<uint32_t>(cells);
+    }
+    out.values.resize(size_t(out.dimensions[0]) * out.dimensions[1] * out.dimensions[2]);
+    const float threshold = out.spacing * 1e-4f;
+    bool inside = false;
+    for (uint32_t z = 0; z < out.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < out.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < out.dimensions[0]; ++x) {
+                // 逆変換で元の格子を読む。距離の単位を保つため倍率を掛け戻す。
+                const auto p = out.Position(x, y, z);
+                const Vec3 d{p.x - s.position[0], p.y - s.position[1], p.z - s.position[2]};
+                const Vec3 source{Dot(d, ax) / s.scale, Dot(d, ay) / s.scale, Dot(d, az) / s.scale};
+                const float value = SampleVolume(g, source) * s.scale;
+                out.values[out.Index(x, y, z)] = std::abs(value) < threshold ? threshold : value;
+                inside |= value < 0;
+            }
+    if (!inside) {
+        error = "変換後に内部が残りません。倍率や上流の解像度を見直してください";
+        return {};
+    }
+    return out;
+}
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error) {
     error.clear();
     const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];
-    if (nx < 2 || ny < 2 || nz < 2 || nx > 102 || ny > 102 || nz > 102 ||
-        g.values.size() != size_t(nx) * ny * nz || !std::isfinite(g.spacing) || g.spacing <= 0 ||
-        !std::isfinite(g.origin.x) || !std::isfinite(g.origin.y) || !std::isfinite(g.origin.z) ||
-        std::any_of(g.values.begin(), g.values.end(), [](float v) { return !std::isfinite(v); })) {
+    if (!ValidGrid(g)) {
         error = "ボリュームの格子が不正です";
         return {};
     }

@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cwctype>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rock {
 namespace fs = std::filesystem;
@@ -380,7 +381,7 @@ bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
         } else if (m_selectedChunk >= 1 && m_selectedChunk <= 2)
             chunk = &fracture->chunks[m_selectedChunk - 1];
         if (!chunk || chunk->locked) return false;
-        out = {chunk->position.data(), chunk->rotationDegrees.data(), nullptr};
+        out = {chunk->position.data(), chunk->rotationDegrees.data(), nullptr, true};
         return true;
     }
     if (auto* model = std::get_if<graph::ModelNodeSettings>(&node->settings)) {
@@ -390,6 +391,30 @@ bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
     if (auto* transform = std::get_if<graph::TransformNodeSettings>(&node->settings)) {
         out = {transform->position, transform->rotationDegrees, &transform->scale};
         return true;
+    }
+    if (auto* volume = std::get_if<geometry::VolumeTransformSettings>(&node->settings)) {
+        // ボリュームは設定を変えるたびに格子を作り直すので、再評価が要る。
+        out = {volume->position.data(), volume->rotationDegrees.data(), &volume->scale, true};
+        return true;
+    }
+    return false;
+}
+
+bool Application::RockMeshUsesNode(graph::GraphId nodeId) const {
+    if (nodeId == 0) return false;
+    std::vector<graph::GraphId> pending;
+    std::unordered_set<graph::GraphId> seen;
+    for (const auto& ref : m_rockMeshReferences) pending.push_back(ref.source);
+    while (!pending.empty()) {
+        const graph::GraphId id = pending.back();
+        pending.pop_back();
+        if (id == nodeId) return true;
+        if (!seen.insert(id).second) continue;
+        const graph::Node* node = m_graph.FindNode(id);
+        if (node == nullptr) continue;
+        for (const auto& pin : node->inputs)
+            if (const graph::Node* upstream = m_graph.FindUpstreamNodeForPin(pin.id))
+                pending.push_back(upstream->id);
     }
     return false;
 }
@@ -418,6 +443,16 @@ bool Application::NodeGizmoFrame(graph::GraphId nodeId, XMFLOAT3& pivot, XMFLOAT
                 return true;
             }
         return false;
+    }
+    if (node && node->kind == graph::NodeKind::VolumeTransform) {
+        // ボリュームは倍率 → 回転 → 移動の順に原点まわりで動かすので、移動量がそのまま
+        // 回転・倍率の中心になる。表示中の岩がこのノードを通っているときだけ出す。
+        const auto* settings = std::get_if<geometry::VolumeTransformSettings>(&node->settings);
+        if (settings == nullptr || !m_meshGraphError.empty() || !m_meshGraphActive) return false;
+        if (!RockMeshUsesNode(nodeId)) return false;
+        pivot = {settings->position[0], settings->position[1], settings->position[2]};
+        XMStoreFloat4x4(&parent, XMMatrixIdentity());
+        return true;
     }
     if (node == nullptr || (node->kind != graph::NodeKind::Model && node->kind != graph::NodeKind::Transform)) return false;
     const float* position = nullptr;
@@ -608,7 +643,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         }
         const auto documentChanged = [&]() {
             m_documentDirty = true;
-            if (!target.scale) m_graph.MarkDirty();
+            if (target.regenerate) m_graph.MarkDirty();
         };
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             // 掴む前の値へ戻す。
@@ -852,7 +887,10 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         return true;
     }
     if (hasGizmo && !io.WantTextInput) {
-        if (selected.scale && ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+        const graph::Node* selectedNode = m_graph.FindNode(m_selectedGraphNode);
+        // Delete はモデルの系統のノードだけ。岩の枝はグラフパネルから消す。
+        if (selectedNode && graph::IsModelNodeKind(selectedNode->kind) &&
+            ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
             // ノードごと消す（グラフのノードの削除と同じ。アンドゥで戻る）。
             m_graph.DeleteNode(m_selectedGraphNode);
             m_graph.NormalizeVariablePins();

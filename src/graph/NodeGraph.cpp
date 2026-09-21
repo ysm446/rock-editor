@@ -49,11 +49,14 @@ constexpr std::array<PinDefinition, 2> kCrackPins = {{{PinKind::Input, ValueType
 constexpr std::array<PinDefinition, 1> kRandomBoxesPins = {{{PinKind::Output, ValueType::Boxes, "Boxes"}}};
 constexpr std::array<PinDefinition, 2> kToVolumePins = {{{PinKind::Input, ValueType::Boxes, "Boxes"},
     {PinKind::Output, ValueType::Volume, "Volume"}}};
+constexpr std::array<PinDefinition, 2> kVolumeTransformPins = {
+    {{PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 12> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 13> kNodeDefinitions = {{
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
+    {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::JointSet, "jointSet", "Joint Set", kCrackPins},
     {NodeKind::Crack, "crack", "Crack", kCrackPins},
@@ -97,7 +100,8 @@ bool IsLayerNodeKind(NodeKind kind) {
 bool IsMeshNodeKind(NodeKind kind) {
     return kind == NodeKind::Merge || kind == NodeKind::BaseRock || kind == NodeKind::Crack ||
            kind == NodeKind::Fracture || kind == NodeKind::JointSet ||
-           kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume || kind == NodeKind::VolumeToMesh;
+           kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
+           kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeToMesh;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -377,6 +381,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::BoxClusterSettings{};
     } else if (kind == NodeKind::ToVolume) {
         node.settings = geometry::VolumeSettings{};
+    } else if (kind == NodeKind::VolumeTransform) {
+        node.settings = geometry::VolumeTransformSettings{};
     } else if (kind == NodeKind::JointSet) {
         node.settings = crack::JointSetSettings{};
     } else if (kind == NodeKind::Fracture) {

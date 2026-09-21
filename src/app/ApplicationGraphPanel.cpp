@@ -768,21 +768,28 @@ void Application::DrawGraphEditor() {
             // ステータスバーに残す。追加が効いたかを画面で確かめられるようにする。
             ROCK_LOG_INFO("ノードを追加しました: %s", NodeDisplayName(*node));
         };
-        // メッシュ系（Mesh を受け渡す）とモデル系（Model を受け渡す）を分けて並べる。
-        ImGui::TextDisabled("モデル");
+        // 扱う型ごとに分けて並べる。見出しは出力する型（変換ノードは変換後の型）で選ぶ。
+        ImGui::TextDisabled("メッシュ（ポリゴン）");
+        addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::JointSet, "Joint Set — 方向と間隔を持つ有限パッチ列");
-        addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
         addNodeMenuItem(graph::NodeKind::Crack, "Crack — 有限亀裂と部分切断");
+        addNodeMenuItem(graph::NodeKind::Fracture, "Fracture — 平面で完全分割、Chunk を操作");
+        addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
+        ImGui::Separator();
+        ImGui::TextDisabled("ボリューム");
         addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体を重ねて塊を作る");
         addNodeMenuItem(graph::NodeKind::ToVolume, "To Volume — 直方体の塊をボリュームに変換");
-        addNodeMenuItem(graph::NodeKind::VolumeToMesh, "Volume to Mesh — ボリュームをメッシュに変換");
-        addNodeMenuItem(graph::NodeKind::BaseRock, "Base Rock — 母岩の形状と弱いノイズ");
+        addNodeMenuItem(graph::NodeKind::VolumeTransform, "Volume Transform — ボリュームを移動・回転・拡大");
+        ImGui::Separator();
+        ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
         ImGui::Separator();
+        ImGui::TextDisabled("共通");
         addNodeMenuItem(graph::NodeKind::Merge, "Merge — メッシュとモデルをまとめる（モデルだけなら Transform へ繋げる）");
         addNodeMenuItem(graph::NodeKind::MeshOutput, "Mesh Output — メッシュとモデルを表示");
         ImGui::Separator();
+        ImGui::TextDisabled("材質");
         addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Material スロットへ渡す");
         ImGui::EndPopup();
     }
@@ -1132,6 +1139,25 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は最長辺の分割数です。高くすると角や細い形を保ちやすくなり、処理時間も増えます。");
         if (changed) {
             *volume = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* moved = std::get_if<geometry::VolumeTransformSettings>(&selected->settings)) {
+        auto edited = *moved;
+        bool changed = false;
+        const float zero[3] = {0, 0, 0};
+        if (ui::BeginPropertyTable("volumeTransformRows")) {
+            changed |= ui::PropertyFloat3Input("移動 (m)", edited.position.data(), zero) != 0;
+            changed |= ui::PropertyFloat3Input("回転 (度)", edited.rotationDegrees.data(), zero) != 0;
+            changed |= ui::PropertyFloat("倍率", &edited.scale, .05f, 20, 1);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("ボリュームを、倍率 → 回転 → 移動の順に原点まわりで動かします。入力・出力とも Volume 型です。");
+        ui::HintText("格子を作り直すため、回転すると境界がセル1個ぶん程度なまります。セル間隔は倍率に比例し、解像度は保たれます。");
+        ui::HintText("このノードを選ぶとビューポートにギズモが出ます。W 移動 / E 回転 / R 倍率、Ctrl で刻み、Esc で取り消し。"
+                     "ギズモの中心は移動量の位置で、回転と倍率もその点が中心です。");
+        if (changed) {
+            *moved = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

@@ -202,11 +202,16 @@ private:
         float* position = nullptr;
         float* rotation = nullptr;
         float* scale = nullptr;
+        // 形そのものを作り直す設定か（Chunk / Volume Transform）。真ならグラフを改版して再評価する。
+        bool regenerate = false;
     };
     bool NodeTransform(graph::GraphId nodeId, NodeTransformRef& out);
-    // 選んでいる Model / Transform ノードのギズモの基準。pivot はそのノードの原点のワールド位置、
-    // parent は下流の Transform をまとめた行列。ビューポートに出ていなければ偽。
+    // 選んでいる Model / Transform / Fracture の Chunk / Volume Transform ノードのギズモの基準。
+    // pivot はそのノードの原点のワールド位置、parent は下流の Transform をまとめた行列。
+    // ビューポートに出ていなければ偽。
     bool NodeGizmoFrame(graph::GraphId nodeId, DirectX::XMFLOAT3& pivot, DirectX::XMFLOAT4X4& parent) const;
+    // 表示中の岩メッシュのどれかが、このノードを上流に持つか（Volume Transform のギズモの表示条件）。
+    bool RockMeshUsesNode(graph::GraphId nodeId) const;
     // レンダラの drawSceneExtras から呼ぶ。ビューポートに出すモデルを本描画・シャドウパスへ描く。
     void DrawSceneModels(ID3D12GraphicsCommandList* commandList, const renderer::SceneDrawContext& context);
     // ビューポートに出すモデルを包む球の半径（原点中心）。無ければ 0。

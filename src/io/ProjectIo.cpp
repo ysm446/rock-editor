@@ -500,6 +500,10 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                    {"rotation", boxes->rotation}, {"seed", boxes->seed}};
         } else if (const auto* volume = std::get_if<geometry::VolumeSettings>(&node.settings)) {
             item["toVolume"] = {{"resolution", volume->resolution}};
+        } else if (const auto* moved = std::get_if<geometry::VolumeTransformSettings>(&node.settings)) {
+            item["volumeTransform"] = {{"position", moved->position},
+                                       {"rotation", moved->rotationDegrees},
+                                       {"scale", moved->scale}};
         } else if (const auto* rock = std::get_if<graph::BaseRockNodeSettings>(&node.settings)) {
             item["baseRock"] = {{"size", rock->size},
                                 {"seed", rock->seed},
@@ -726,6 +730,16 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 geometry::VolumeSettings settings;
                 if (const json* v = FindMember(item, "toVolume"); v && v->is_object())
                     settings.resolution = ReadInt(*v, "resolution", settings.resolution);
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeTransform) {
+                geometry::VolumeTransformSettings settings;
+                if (const json* v = FindMember(item, "volumeTransform"); v && v->is_object()) {
+                    const auto position = ReadFloat3(*v, "position", {});
+                    const auto rotation = ReadFloat3(*v, "rotation", {});
+                    settings.position = {position.x, position.y, position.z};
+                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    settings.scale = ReadFloat(*v, "scale", settings.scale);
+                }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::BaseRock) {
                 graph::BaseRockNodeSettings settings;

@@ -59,6 +59,7 @@ enum class NodeKind : uint32_t {
     RandomBoxes = 38,
     ToVolume = 39,
     VolumeToMesh = 40,
+    VolumeTransform = 41,
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
@@ -142,7 +143,8 @@ struct CompiledGraph {
 // 設定を持たないノード（Mesh Output / Volume to Mesh）は std::monostate。
 using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNodeSettings,
                                   TransformNodeSettings, BaseRockNodeSettings, crack::CrackSettings,
-                                  fracture::FractureSettings, crack::JointSetSettings, geometry::BoxClusterSettings, geometry::VolumeSettings, std::monostate>;
+                                  fracture::FractureSettings, crack::JointSetSettings, geometry::BoxClusterSettings, geometry::VolumeSettings,
+                                  geometry::VolumeTransformSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;

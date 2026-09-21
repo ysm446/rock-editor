@@ -17,8 +17,18 @@ struct VolumeGrid {
         return {origin.x + x * spacing, origin.y + y * spacing, origin.z + z * spacing};
     }
 };
+// Volume Transform。倍率 → 回転 → 平行移動の順に、原点まわりで動かす。
+// 回転は右手系 Z → X → Y、度（Crack / Model と同じ規約）。
+struct VolumeTransformSettings {
+    std::array<float, 3> position{0, 0, 0};
+    std::array<float, 3> rotationDegrees{0, 0, 0};
+    float scale = 1;
+};
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
+// 格子を作り直して移動・回転・拡大する。セル間隔は倍率に比例させ、解像度を保つ。
+VolumeGrid TransformVolume(const VolumeGrid& grid, const VolumeTransformSettings& settings,
+                           std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
 Mesh VolumeSurface(const VolumeGrid& grid, std::string& error);
 }  // namespace rock::geometry

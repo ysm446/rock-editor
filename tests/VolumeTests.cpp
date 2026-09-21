@@ -200,4 +200,139 @@ void RunVolumeTests() {
               graph::EvaluateRocks(graph).error.empty(),
           "変換した Mesh を Merge 経由でも評価できる");
 
+    tests::Section("Volume Transform の移動・回転・拡大");
+    geometry::BoxClusterSettings single;
+    single.count = 1;
+    single.rotation = 0;
+    single.size = {2, 2, 2};
+    const auto unitCube = geometry::MakeBoxCluster(single, error);
+    const auto base = geometry::BoxesToVolume(unitCube, {32}, error);
+    const auto measure = [](const geometry::VolumeGrid& g, geometry::MeshInfo& info) {
+        std::string local;
+        const auto mesh = geometry::VolumeSurface(g, local);
+        return local.empty() && geometry::InspectMesh(mesh, info) && info.closed && info.components == 1;
+    };
+    geometry::MeshInfo baseInfo;
+    Check(error.empty() && measure(base, baseInfo), "変換元の単独 Box のボリューム");
+    const auto identity = geometry::TransformVolume(base, {}, error);
+    geometry::MeshInfo identityInfo;
+    Check(error.empty() && measure(identity, identityInfo) &&
+              std::abs(identityInfo.volume - baseInfo.volume) < baseInfo.volume * .02 &&
+              std::abs(identity.spacing - base.spacing) < 1e-6f,
+          "既定の設定では形も体積もほぼ変わらない");
+    geometry::VolumeTransformSettings move;
+    move.position = {3, -1, .5f};
+    const auto moved = geometry::TransformVolume(base, move, error);
+    geometry::MeshInfo movedInfo;
+    Check(error.empty() && measure(moved, movedInfo) &&
+              std::abs((movedInfo.minimum.x - baseInfo.minimum.x) - 3) < base.spacing &&
+              std::abs((movedInfo.minimum.y - baseInfo.minimum.y) + 1) < base.spacing &&
+              std::abs((movedInfo.maximum.z - baseInfo.maximum.z) - .5f) < base.spacing &&
+              std::abs(movedInfo.volume - baseInfo.volume) < baseInfo.volume * .02,
+          "移動は体積を保ったまま境界だけをずらす");
+    Check(moved.values.size() == identity.values.size(), "移動だけでは格子の大きさが変わらない");
+    geometry::VolumeTransformSettings spin;
+    spin.rotationDegrees = {0, 45, 0};
+    const auto spun = geometry::TransformVolume(base, spin, error);
+    geometry::MeshInfo spunInfo;
+    Check(error.empty() && measure(spun, spunInfo) &&
+              std::abs(spunInfo.volume - baseInfo.volume) < baseInfo.volume * .05,
+          "45度回転でも閉じた1連結体と体積を保つ");
+    Check(spunInfo.maximum.x - spunInfo.minimum.x > (baseInfo.maximum.x - baseInfo.minimum.x) * 1.2f,
+          "回転した Box の外接箱が対角方向へ広がる");
+    geometry::VolumeTransformSettings grow;
+    grow.scale = 2;
+    const auto grown = geometry::TransformVolume(base, grow, error);
+    geometry::MeshInfo grownInfo;
+    Check(error.empty() && measure(grown, grownInfo) &&
+              std::abs(grownInfo.volume - baseInfo.volume * 8) < baseInfo.volume * 8 * .03,
+          "倍率2で体積が8倍になる");
+    Check(grown.values.size() == identity.values.size() &&
+              std::abs(grown.spacing - base.spacing * 2) < 1e-6f,
+          "倍率を上げてもセル数は変えずセル間隔を比例させる");
+    Check(geometry::TransformVolume(base, grow, error).values == grown.values, "変換結果を完全再現");
+    geometry::VolumeTransformSettings chain;
+    chain.position = {1, 0, 0};
+    chain.rotationDegrees = {0, 90, 0};
+    chain.scale = .5f;
+    const auto chained = geometry::TransformVolume(base, chain, error);
+    geometry::MeshInfo chainedInfo;
+    Check(error.empty() && measure(chained, chainedInfo) &&
+              std::abs(chainedInfo.volume - baseInfo.volume / 8) < baseInfo.volume / 8 * .05,
+          "倍率→回転→移動を続けても閉じた形を保つ");
+    geometry::VolumeTransformSettings invalid;
+    invalid.scale = 0;
+    Check(geometry::TransformVolume(base, invalid, error).values.empty() && !error.empty(), "0 倍率を診断");
+    invalid = {};
+    invalid.position[0] = std::numeric_limits<float>::quiet_NaN();
+    Check(geometry::TransformVolume(base, invalid, error).values.empty() && !error.empty(),
+          "非有限の移動量を拒否");
+    Check(geometry::TransformVolume({}, {}, error).values.empty() && !error.empty(), "空の格子を拒否");
+    const auto dense = geometry::BoxesToVolume(unitCube, {96}, error);
+    Check(geometry::TransformVolume(dense, spin, error).values.empty() && !error.empty(),
+          "回転で格子上限を超える場合は解像度を下げるよう診断");
+
+    tests::Section("Volume Transform の型・評価・Undo");
+    graph::NodeGraph moveGraph;
+    const auto boxSource = moveGraph.CreateNode(graph::NodeKind::RandomBoxes),
+               toVolume = moveGraph.CreateNode(graph::NodeKind::ToVolume),
+               transform = moveGraph.CreateNode(graph::NodeKind::VolumeTransform),
+               toMesh = moveGraph.CreateNode(graph::NodeKind::VolumeToMesh),
+               viewer = moveGraph.CreateNode(graph::NodeKind::MeshOutput);
+    const auto out = [&](auto id) { return moveGraph.FindNode(id)->outputs[0].id; };
+    const auto in = [&](auto id) { return moveGraph.FindNode(id)->inputs[0].id; };
+    Check(!moveGraph.CanCreateLink(out(boxSource), in(transform)) &&
+              !moveGraph.CanCreateLink(out(toMesh), in(transform)),
+          "Boxes や Mesh を Volume と偽って受けない");
+    Check(moveGraph.CanCreateLink(out(transform), in(viewer)) &&
+              moveGraph.CanCreateLink(out(transform), in(toMesh)),
+          "Volume 出力はプレビューと Volume to Mesh へ繋げる");
+    const auto unconnected = graph::EvaluateRocks(moveGraph, transform);
+    Check(unconnected.rocks.empty() && unconnected.error.find("Volume Transform") != std::string::npos,
+          "未接続の入力を対象ノード名付きで診断");
+    Check(moveGraph.CreateLink(out(boxSource), in(toVolume)) &&
+              moveGraph.CreateLink(out(toVolume), in(transform)) &&
+              moveGraph.CreateLink(out(transform), in(toMesh)) &&
+              moveGraph.CreateLink(out(toMesh), in(viewer)),
+          "Random Boxes → To Volume → Volume Transform → Volume to Mesh → Mesh Output を接続");
+    std::get<geometry::VolumeSettings>(moveGraph.FindMutableNode(toVolume)->settings).resolution = 24;
+    const auto untouched = graph::EvaluateRocks(moveGraph);
+    geometry::MeshInfo untouchedInfo;
+    Check(untouched.error.empty() && untouched.rocks.size() == 1 &&
+              geometry::InspectMesh(untouched.rocks[0].mesh, untouchedInfo) && untouchedInfo.closed,
+          "既定の設定を通しても閉じたメッシュになる");
+    const auto sourceBefore = graph::EvaluateRocks(moveGraph, toVolume);
+    DocumentSnapshot beforeMove;
+    beforeMove.graphNodes = moveGraph.Nodes();
+    beforeMove.graphLinks = moveGraph.Links();
+    std::get<geometry::VolumeTransformSettings>(moveGraph.FindMutableNode(transform)->settings).position = {
+        5, 0, 0};
+    const auto shifted = graph::EvaluateRocks(moveGraph);
+    geometry::MeshInfo shiftedInfo;
+    Check(shifted.error.empty() && shifted.rocks.size() == 1 &&
+              geometry::InspectMesh(shifted.rocks[0].mesh, shiftedInfo) && shiftedInfo.closed &&
+              shiftedInfo.minimum.x > untouchedInfo.maximum.x,
+          "移動した結果が下流のメッシュへ伝わる");
+    const auto sourceAfter = graph::EvaluateRocks(moveGraph, toVolume);
+    Check(sourceBefore.rocks.size() == 1 && sourceAfter.rocks.size() == 1 &&
+              sourceBefore.rocks[0].volume && sourceAfter.rocks[0].volume &&
+              sourceBefore.rocks[0].volume->origin == sourceAfter.rocks[0].volume->origin &&
+              sourceBefore.rocks[0].volume->values == sourceAfter.rocks[0].volume->values,
+          "上流のボリュームは非破壊で保持");
+    DocumentSnapshot afterMove;
+    afterMove.graphNodes = moveGraph.Nodes();
+    afterMove.graphLinks = moveGraph.Links();
+    UndoHistory moveHistory;
+    moveHistory.Push(beforeMove, 0);
+    const auto back = moveHistory.Undo(afterMove);
+    moveGraph.Replace(back.graphNodes, back.graphLinks);
+    const auto restoredMesh = graph::EvaluateRocks(moveGraph);
+    Check(restoredMesh.error.empty() && restoredMesh.rocks.size() == 1 && untouched.rocks.size() == 1 &&
+              restoredMesh.rocks[0].mesh.positions == untouched.rocks[0].mesh.positions,
+          "Undo で移動前のメッシュへ戻る");
+    const auto forward = moveHistory.Redo(back);
+    moveGraph.Replace(forward.graphNodes, forward.graphLinks);
+    Check(std::get<geometry::VolumeTransformSettings>(moveGraph.FindNode(transform)->settings).position[0] ==
+              5,
+          "Redo で移動量を復元");
 }
