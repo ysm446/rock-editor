@@ -866,6 +866,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeTransform, "Volume Transform — ボリュームを移動・回転・拡大");
         addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
+        addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 点の群の境界に沿って割れ目を彫る");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1061,6 +1062,36 @@ void Application::DrawGraphPanel() {
         ui::HintText("解像度は最長辺の分割数です。高くすると角や細い形を保ちやすくなり、処理時間も増えます。");
         if (changed) {
             *volume = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* crack = std::get_if<geometry::VolumeCrackSettings>(&selected->settings)) {
+        auto edited = *crack;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeCrackRows")) {
+            changed |= ui::PropertyFloat("幅", &edited.width, 0, .2f, .03f,
+                                         "表面での割れ目の幅。形の最長辺に対する比です。セル間隔より細い割れ目は格子で潰れます。");
+            changed |= ui::PropertyFloat("深さ", &edited.depth, .01f, 1, .15f,
+                                         "割れ目が届く深さ。形の最長辺に対する比です。深くなるほど狭まり、この深さで閉じます。1 で形を貫きます。");
+            changed |= ui::PropertyFloat("ばらつき", &edited.variation, 0, 1, .6f,
+                                         "割れ目ごとの幅の差。大きいほど細い割れ目が増え、一部は閉じます。");
+            changed |= ui::PropertyFloat("ゆらぎ", &edited.noise, 0, 1, .5f,
+                                         "割れ目に沿った幅の変化。大きいほど途中で細くなり、途切れます。");
+            changed |= ui::PropertyFloat("ゆらぎの細かさ", &edited.noiseScale, .5f, 16, 3);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("Points の点が作る Voronoi の境界面に沿って、Volume の表面から割れ目を彫ります。格子は変わりません。"
+                     "Points には Scatter Points をつなぎます。点を増やすと割れ目が細かくなります。");
+        ui::HintText("割れ目の配置は Scatter Points の点数と Seed、幅の散らばり方はこのノードの Seed で変わります。"
+                     "細い割れ目を出すには、上流の To Volume の解像度を上げます。");
+        if (changed) {
+            edited.width = std::clamp(edited.width, 0.0f, 0.2f);
+            edited.depth = std::clamp(edited.depth, 0.01f, 1.0f);
+            edited.variation = std::clamp(edited.variation, 0.0f, 1.0f);
+            edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
+            edited.noiseScale = std::clamp(edited.noiseScale, 0.5f, 16.0f);
+            *crack = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

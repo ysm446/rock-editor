@@ -13,6 +13,7 @@ void RunBaseRockTests();
 void RunVolumeTests();
 void RunVolumeBooleanTests();
 void RunPlaneCutsTests();
+void RunVolumeCrackTests();
 void RunUvTests();
 void RunShadowCascadeTests();
 void RunMeshSceneTests();
@@ -32,6 +33,7 @@ int main() {
     RunVolumeTests();
     RunVolumeBooleanTests();
     RunPlaneCutsTests();
+    RunVolumeCrackTests();
     RunUvTests();
     RunShadowCascadeTests();
     RunMeshSceneTests();

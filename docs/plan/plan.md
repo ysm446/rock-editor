@@ -1,7 +1,7 @@
 # plan — v2 仕様に基づく実装計画
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 01:22
+更新日時: 2026-09-22 01:58
 
 ## 方針
 
@@ -43,7 +43,8 @@ P 番号は本計画の作業単位。原仕様の Milestone 番号とは別。P
 - 追加済み: `Volume to Mesh` の方式選択。2026-09-21のユーザー依頼で Dual Contouring の比較を前倒しし、従来の Marching Tetrahedra と同じSDFから比較する。適応格子・簡略化は対象外。
 - 追加済み: `Volume Boolean`（和・交差・差、なめらかさ）。仕様は [Volume Boolean](../reference/volume-boolean.md)。
 - 追加済み: `Plane Cuts`（平面の群による面取りと欠け。全体 / 局所、等方 / 主方向）。仕様は [Plane Cuts](../reference/plane-cuts.md)。Field 型は入れず、単体のノードとして実装した。
-- 2026-09-22 のユーザー依頼で、参考画像のような岩に必要な処理を [設計メモ](../reference/rock-shaping-nodes.md) に整理した。次の候補は Volume Crack（割れ目）→ Volume Displace / Smooth → 形状からの材質マスク。Field（スカラー場）型は、ノイズで割れ幅や平滑量を変える段階（Crack / Displace）で改めて判断する。
+- 追加済み: `Volume Crack`（点の群の Voronoi 境界に沿う割れ目。V 字の断面、割れ目ごとのばらつき、ゆらぎ）。仕様は [Volume Crack](../reference/volume-crack.md)。幅のゆらぎはノード内のノイズで持ち、Field 型は入れていない。
+- 2026-09-22 のユーザー依頼で、参考画像のような岩に必要な処理を [設計メモ](../reference/rock-shaping-nodes.md) に整理した。形を作る 1〜3（Boolean / Plane Cuts / Crack）は実装済み。次の候補は Volume Displace / Noise → Volume Smooth → 形状からの材質マスク。Field（スカラー場）型は、材質マスク（ノイズ・曲率・AO を Volume と Material の両方へ渡す段階）で改めて判断する。
 - その他の候補: 平面を境に片側だけずらす断層ノード、軸ごとの倍率。
 - ノードの右クリックメニューは扱う型ごとに分ける（メッシュ / ボリューム / モデル / 共通 / 材質）。
 

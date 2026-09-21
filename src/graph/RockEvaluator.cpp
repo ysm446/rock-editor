@@ -51,6 +51,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, size_t 
         const auto* s = std::get_if<geometry::VolumeTransformSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->position); add(s->rotationDegrees); add(s->scale);
+    } else if (node->kind == NodeKind::VolumeCrack) {
+        const auto* s = std::get_if<geometry::VolumeCrackSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->width); add(s->depth); add(s->variation); add(s->noise); add(s->noiseScale); add(s->seed);
     } else if (node->kind == NodeKind::PlaneCuts) {
         const auto* s = std::get_if<geometry::PlaneCutsSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -128,7 +132,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         if (!node) return {};
         const bool volumeCache = node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
-                                 node->kind == NodeKind::PlaneCuts ||
+                                 node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeToMesh;
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id) : std::nullopt;
         if (persistentKey) {
@@ -276,6 +280,29 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             GeneratedRock rock;
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(moved));
+            result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::VolumeCrack) {
+            const auto* settings = std::get_if<geometry::VolumeCrackSettings>(&node->settings);
+            const bool wired = node->inputs.size() >= 2;
+            const auto* upstream = wired ? graph.FindUpstreamNodeForPin(node->inputs[0].id) : nullptr;
+            const auto* scatter = wired ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
+            if (!settings || !upstream || !scatter)
+                return finish(Failure(id, "Volume Crack", "Volume と Points の両方を接続してください"));
+            const auto input = evaluate(upstream->id, depth + 1);
+            if (!input.error.empty()) return finish(input);
+            const auto scattered = evaluate(scatter->id, depth + 1);
+            if (!scattered.error.empty()) return finish(scattered);
+            if (input.rocks.size() != 1 || !input.rocks[0].volume)
+                return finish(Failure(id, "Volume Crack", "ボリュームが必要です"));
+            if (!scattered.points)
+                return finish(Failure(id, "Volume Crack", "Scatter Points の出力が必要です"));
+            std::string error;
+            auto cracked =
+                geometry::CrackVolume(*input.rocks[0].volume, scattered.points->positions, *settings, error);
+            if (!error.empty()) return finish(Failure(id, "Volume Crack", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(cracked));
             result.rocks.push_back(std::move(rock));
         } else if (node->kind == NodeKind::PlaneCuts) {
             const auto* settings = std::get_if<geometry::PlaneCutsSettings>(&node->settings);

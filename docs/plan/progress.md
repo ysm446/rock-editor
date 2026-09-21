@@ -1,9 +1,18 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 01:22
+更新日時: 2026-09-22 01:58
 
 ## 現在地
+
+### 2026-09-22 Volume Crack
+
+- [設計メモ](../reference/rock-shaping-nodes.md) の3番目として **Volume Crack** を追加。入力は Volume と Points（Scatter Points の出力）。点が作る Voronoi の境界面までの厳密な距離（垂直二等分面までの距離の最小）で溝を彫る。断面は表面で最も広く、指定の深さで閉じる V 字。割れ目ごとの幅のばらつき（点の対から決める固定の倍率。一部は閉じる）と、割れ目に沿ったゆらぎ（3D の値ノイズ。途切れる）を持つ。幅と深さは形の最長辺に対する比。格子は入力のまま。保存名 `volumeCrack`、右クリックメニュー、設定欄、保存/読込、Undo/Redo（既存スナップショット）、ボリューム枝のキャッシュ（Volume 側と Points 側の両方の上流をキーに含む）に接続。仕様は [Volume Crack](../reference/volume-crack.md)、サンプルは `examples/volume-crack/`。
+- Plane Cuts で分かった「重なった立体のボリュームは内部に残る面の近くでも距離が小さい」問題は、ここでは内部の空洞として現れる。彫ったあとで格子の外周から外部をたどり、届かない彫り跡を入力の値へ戻す。入力にもとからある空洞は残す。浮いた塊は除かない（深さ 1 で形を分けるのは意図した使い方）。
+- Scatter Points は凸な Mesh を必要とするので、凸でない形に割れ目を入れるときは、形を囲む Base Shape の Box に点を散らす。点は形の外にあってもよい。この使い方をサンプルと仕様に書いた。
+- 単体テスト42項目を追加（`tests/VolumeCrackTests.cpp`）。溝の位置と深さ、V 字、対称、格子の不変、離れた点の完全一致、深さ 1 での分割、幅 0 の恒等、再現性、ばらつき・ゆらぎ、形の外の点、内部の空洞を作らないこと、不正な設定と点の拒否、グラフの型制約・診断・キャッシュを確認。Release/Debug ビルドと全2,576項目が成功。
+- Release 実アプリでサンプル（面取り → 割れ目 → 稜線の欠け）を開き、割れ目が複数の面をまたいで連続し、太さに差があり、途中で消えるものがあることを確認。設定欄と、`--save-project` による保存で設定と8本の接続が残ることを確認。検証は `build/statusbar/rock_editor.exe`。実マウスでのメニュー操作と Undo/Redo の手動確認は未実施。
+- 制限：セル間隔より細い割れ目は格子で潰れる（幅 0.03 は解像度96で約3セル）。割れ目は平面の組み合わせで直線的。方向性を付ける設定は無い。512点・各軸192点では重い。
 
 ### 2026-09-22 Plane Cuts
 
@@ -142,9 +151,9 @@
 | 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
-| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる |
+| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる |
 | 材質 | Apply Material / Material Mask、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
-| 次の作業 | [設計メモ](../reference/rock-shaping-nodes.md) の順に、Volume Crack（割れ目）、Volume Displace / Noise が候補 |
+| 次の作業 | [設計メモ](../reference/rock-shaping-nodes.md) の順に、Volume Displace / Noise（直線的な割れ目と平らな面を崩す）、Volume Smooth、形状からの材質マスクが候補 |
 
 ## 完了
 

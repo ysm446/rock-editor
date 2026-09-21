@@ -64,6 +64,8 @@ enum class NodeKind : uint32_t {
     VolumeBoolean = 52,
     // 平面の群で Volume を切り落とし、角張った面を作る。
     PlaneCuts = 53,
+    // 点の群が作る Voronoi の境界面に沿って、Volume の表面から割れ目を彫る。
+    VolumeCrack = 54,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -162,6 +164,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::BoxClusterSettings, geometry::VolumeSettings,
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
+                                  geometry::VolumeCrackSettings,
                                   geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,

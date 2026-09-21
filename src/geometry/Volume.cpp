@@ -78,6 +78,45 @@ void KeepLargestComponent(VolumeGrid& grid) {
     for (size_t i = 0; i < grid.values.size(); ++i)
         if (labels[i] != 0 && labels[i] != largest) grid.values[i] = -grid.values[i];
 }
+// 内部の格子点を囲む箱の最長辺。長さの設定を形に対する比で持つノードが使う。内部が無ければ 0。
+float InteriorLongestSide(const VolumeGrid& g) {
+    uint32_t lowest[3] = {g.dimensions[0], g.dimensions[1], g.dimensions[2]}, highest[3] = {0, 0, 0};
+    bool any = false;
+    for (uint32_t z = 0; z < g.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < g.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < g.dimensions[0]; ++x) {
+                if (g.values[g.Index(x, y, z)] >= 0) continue;
+                const uint32_t cell[3] = {x, y, z};
+                for (int i = 0; i < 3; ++i) {
+                    lowest[i] = std::min(lowest[i], cell[i]);
+                    highest[i] = std::max(highest[i], cell[i]);
+                }
+                any = true;
+            }
+    if (!any) return 0;
+    return float(std::max({highest[0] - lowest[0], highest[1] - lowest[1], highest[2] - lowest[2], 1u})) * g.spacing;
+}
+// 固定のハッシュ（splitmix64 の仕上げ）。[0, 1) を返す。
+double HashUnit(uint64_t value) {
+    value += 0x9E3779B97F4A7C15ull;
+    value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ull;
+    value = (value ^ (value >> 27)) * 0x94D049BB133111EBull;
+    value ^= value >> 31;
+    return double(value >> 11) / 9007199254740992.0;
+}
+// 整数格子の値を滑らかに補間する 3D ノイズ。[0, 1)。
+float ValueNoise(float x, float y, float z, uint64_t seed) {
+    const float fx = std::floor(x), fy = std::floor(y), fz = std::floor(z);
+    const auto fade = [](float t) { return t * t * (3 - 2 * t); };
+    const float tx = fade(x - fx), ty = fade(y - fy), tz = fade(z - fz);
+    const auto corner = [&](int dx, int dy, int dz) {
+        const uint64_t ix = uint64_t(int64_t(fx) + dx), iy = uint64_t(int64_t(fy) + dy), iz = uint64_t(int64_t(fz) + dz);
+        return float(HashUnit(seed ^ (ix * 0x8DA6B343ull) ^ (iy * 0xD8163841ull) ^ (iz * 0xCB1AB31Full)));
+    };
+    const auto mix = [](float a, float b, float t) { return a + (b - a) * t; };
+    return mix(mix(mix(corner(0, 0, 0), corner(1, 0, 0), tx), mix(corner(0, 1, 0), corner(1, 1, 0), tx), ty),
+               mix(mix(corner(0, 0, 1), corner(1, 0, 1), tx), mix(corner(0, 1, 1), corner(1, 1, 1), tx), ty), tz);
+}
 // 右手系 Z → X → Y。Model と同じ向きに回す。
 Vec3 Rotate(Vec3 p, const std::array<float, 3>& degrees) {
     const float x = degrees[0] * std::numbers::pi_v<float> / 180;
@@ -631,6 +670,144 @@ VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::strin
         return {};
     }
     KeepLargestComponent(out);
+    return out;
+}
+VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, const VolumeCrackSettings& s,
+                       std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (points.size() < 2 || points.size() > size_t(MaxCrackPoints)) {
+        error = "割れ目には2～512個の点が必要です";
+        return {};
+    }
+    for (const auto& p : points)
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) {
+            error = "点が不正です";
+            return {};
+        }
+    if (!range(s.width, 0, .2f)) {
+        error = "割れ目の幅は 0～0.2 にしてください";
+        return {};
+    }
+    if (!range(s.depth, .01f, 1)) {
+        error = "割れ目の深さは 0.01～1 にしてください";
+        return {};
+    }
+    if (!range(s.variation, 0, 1) || !range(s.noise, 0, 1)) {
+        error = "ばらつきとゆらぎは 0～1 にしてください";
+        return {};
+    }
+    if (!range(s.noiseScale, .5f, 16)) {
+        error = "ゆらぎの細かさは 0.5～16 にしてください";
+        return {};
+    }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    const size_t count = points.size();
+    // 点の対ごとの距離と幅の倍率。倍率は対で決まるので、境界面のどちら側から見ても同じ割れ目になる。
+    std::vector<float> separation(count * count, 0), factor(count * count, 0);
+    const uint64_t seed = uint64_t(uint32_t(s.seed)) << 40;
+    for (size_t i = 0; i < count; ++i)
+        for (size_t j = i + 1; j < count; ++j) {
+            const Vec3 d{points[j].x - points[i].x, points[j].y - points[i].y, points[j].z - points[i].z};
+            const float length = std::sqrt(Dot(d, d));
+            if (!(length > longest * 1e-6f)) {
+                error = "重複または近接しすぎた点があります";
+                return {};
+            }
+            // ばらつき 1 では半分ほどの割れ目が閉じ、残りは 0～1 倍に散らばる。
+            const float scale = std::clamp(1 - s.variation * 2 * float(HashUnit(seed ^ (uint64_t(i) << 20) ^ uint64_t(j))), 0.f, 1.f);
+            separation[i * count + j] = separation[j * count + i] = length;
+            factor[i * count + j] = factor[j * count + i] = scale;
+        }
+    VolumeGrid out;
+    out.origin = g.origin;
+    out.spacing = g.spacing;
+    out.dimensions = g.dimensions;
+    out.values.resize(g.values.size());
+    const float threshold = out.spacing * 1e-4f;
+    const float halfWidth = s.width * longest * .5f, depth = s.depth * longest;
+    const float frequency = s.noiseScale / longest;
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const size_t index = out.Index(x, y, z);
+        float value = g.values[index];
+        // 割れ目は深くなるほど狭まる。表面（と外側）で最も広く、指定の深さで幅が 0 になる。
+        const float profile = std::clamp(1 + value / depth, 0.f, 1.f);
+        float reach = halfWidth * profile;
+        // 最大の幅でも届かない点（形の外側の遠くと、深い内部）は境界面までの距離を求めない。
+        if (reach > 0 && value < reach) {
+            const auto p = out.Position(x, y, z);
+            if (s.noise > 0) {
+                const float n = ValueNoise(p.x * frequency, p.y * frequency, p.z * frequency, seed);
+                // ゆらぎ 1 なら、ノイズの低いところで割れ目が途切れる。
+                reach *= std::clamp(1 - s.noise * 2 * (1 - n), 0.f, 1.f);
+            }
+            size_t nearest = 0;
+            float nearestSquared = std::numeric_limits<float>::max();
+            thread_local std::vector<float> squared;
+            squared.resize(count);
+            for (size_t i = 0; i < count; ++i) {
+                const Vec3 d{p.x - points[i].x, p.y - points[i].y, p.z - points[i].z};
+                squared[i] = Dot(d, d);
+                if (squared[i] < nearestSquared) {
+                    nearestSquared = squared[i];
+                    nearest = i;
+                }
+            }
+            // Voronoi のセルは凸なので、各垂直二等分面までの距離の最小が境界面までの厳密な距離になる。
+            // 割れ目ごとに幅が違うため、最小ではなく「幅 − 距離」の最大を取る。
+            float carve = -std::numeric_limits<float>::max();
+            for (size_t j = 0; j < count; ++j) {
+                if (j == nearest) continue;
+                const float boundary = (squared[j] - nearestSquared) / (2 * separation[nearest * count + j]);
+                carve = std::max(carve, reach * factor[nearest * count + j] - boundary);
+            }
+            value = std::max(value, carve);
+        }
+        // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
+        out.values[index] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
+    if (!inside) {
+        error = "割れ目を彫った結果に内部が残りません。幅か深さを減らしてください";
+        return {};
+    }
+    // 重なった立体から作ったボリュームは、内部に残る面の近くでも距離が小さい。そこは表面と
+    // 同じ幅で彫られ、外へつながらない空洞になる。格子の外周から届かない彫り跡は埋め戻す。
+    std::vector<uint8_t> reached(out.values.size(), 0);
+    std::vector<size_t> stack;
+    const size_t nx = out.dimensions[0], ny = out.dimensions[1], nz = out.dimensions[2];
+    const auto visit = [&](size_t next) {
+        if (out.values[next] < 0 || reached[next]) return;
+        reached[next] = 1;
+        stack.push_back(next);
+    };
+    for (size_t z = 0; z < nz; ++z)
+        for (size_t y = 0; y < ny; ++y)
+            for (size_t x = 0; x < nx; ++x)
+                if (x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz)
+                    visit((z * ny + y) * nx + x);
+    while (!stack.empty()) {
+        const size_t index = stack.back();
+        stack.pop_back();
+        const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
+        if (x > 0) visit(index - 1);
+        if (x + 1 < nx) visit(index + 1);
+        if (y > 0) visit(index - nx);
+        if (y + 1 < ny) visit(index + nx);
+        if (z > 0) visit(index - nx * ny);
+        if (z + 1 < nz) visit(index + nx * ny);
+    }
+    // 入力にもとからある空洞（内向きの殻）は残す。
+    for (size_t i = 0; i < out.values.size(); ++i)
+        if (out.values[i] >= 0 && !reached[i] && g.values[i] < 0) out.values[i] = g.values[i];
     return out;
 }
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {

@@ -486,6 +486,10 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
+        } else if (const auto* crack = std::get_if<geometry::VolumeCrackSettings>(&node.settings)) {
+            item["volumeCrack"] = {{"width", crack->width},       {"depth", crack->depth},
+                                   {"variation", crack->variation}, {"noise", crack->noise},
+                                   {"noiseScale", crack->noiseScale}, {"seed", crack->seed}};
         } else if (const auto* cuts = std::get_if<geometry::PlaneCutsSettings>(&node.settings)) {
             item["planeCuts"] = {{"count", cuts->count},
                                  {"scope", geometry::PlaneCutsScopeName(cuts->scope)},
@@ -711,6 +715,17 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.position = {position.x, position.y, position.z};
                     settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
                     settings.scale = ReadFloat(*v, "scale", settings.scale);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeCrack) {
+                geometry::VolumeCrackSettings settings;
+                if (const json* v = FindMember(item, "volumeCrack"); v && v->is_object()) {
+                    settings.width = ReadFloat(*v, "width", settings.width);
+                    settings.depth = ReadFloat(*v, "depth", settings.depth);
+                    settings.variation = ReadFloat(*v, "variation", settings.variation);
+                    settings.noise = ReadFloat(*v, "noise", settings.noise);
+                    settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::PlaneCuts) {
