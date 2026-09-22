@@ -9,7 +9,8 @@ namespace rock::geometry {
 // Remesh。三角形を一様な大きさの正三角形に近い形へ作り直す（等方リメッシュ。Botsch & Kobbelt の
 // 分割 → 縮約 → 反転 → 接線方向の平滑化を繰り返し、元の表面へ投影する）。
 // Volume to Mesh の不揃いな三角形（Marching Tetrahedra の細長い面、Dual Contouring の大きさのばらつき）を
-// 揃える。UV Unwrap の前に置く。UV は引き継がない（UV付きの入力は診断する）。
+// 揃える。UV付きの入力は、UVの島の境界（継ぎ目）を固定して内部のUVを補間して引き継ぐ（Decimate と同じ方針）。
+// UV Unwrap の後に置けるので、展開を重くせずに Displace のための密度を稼げる。
 inline constexpr float kMinRemeshEdge = .002f, kMaxRemeshEdge = .2f;
 inline constexpr int kMaxRemeshIterations = 20;
 inline constexpr size_t kMaxRemeshTriangles = 3000000;
@@ -26,6 +27,7 @@ struct RemeshSettings {
 // 0～100 の進み具合。ワーカースレッドから呼ばれる。
 using RemeshProgress = std::function<void(int percent)>;
 // 入力は閉じた向き付きの多様体メッシュ。出力も同じ性質を保ち、連結成分の数は変わらない。
+// UV付きなら、継ぎ目の頂点は動かさず縮約もしない。内部の頂点のUVは元の三角形へ投影して重心座標で読む。
 // 出力の三角形数は概ね 表面積 ÷ (√3/4 × 辺の長さ²)。300万面を超える設定は診断する。
 Mesh RemeshMesh(const Mesh& input, const RemeshSettings& settings, std::string& error,
                 std::stop_token stop = {}, const RemeshProgress& progress = {});

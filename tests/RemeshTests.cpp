@@ -181,8 +181,65 @@ void RunRemeshTests() {
     geometry::UvUnwrapSettings atlas;
     atlas.resolution = 128;
     const auto unwrapped = geometry::UnwrapMesh(geometry::MakeBox({1, 1, 1}), atlas, error);
-    Check(error.empty() && geometry::RemeshMesh(unwrapped, s, error).triangles.empty() && error.find("UV") != std::string::npos,
-          "UV付きの入力を診断する");
+    Check(error.empty() && geometry::HasValidUvs(unwrapped), "UV展開した立方体");
+    geometry::RemeshSettings uvSettings;
+    uvSettings.edgeLength = .05f;
+    uvSettings.iterations = 6;
+    const auto uvRemeshed = geometry::RemeshMesh(unwrapped, uvSettings, error);
+    geometry::MeshInfo uvInfo;
+    Check(error.empty() && geometry::InspectMesh(uvRemeshed, uvInfo) && uvInfo.closed && uvInfo.components == 1 &&
+              uvRemeshed.triangles.size() > unwrapped.triangles.size() * 10,
+          "UV付き：閉じたまま細かくなる");
+    Check(geometry::HasValidUvs(uvRemeshed) && uvRemeshed.uvCharts.size() == uvRemeshed.triangles.size() &&
+              uvRemeshed.uvWidth == unwrapped.uvWidth && uvRemeshed.uvHeight == unwrapped.uvHeight,
+          "UV付き：UVと島とアトラスの寸法を引き継ぐ");
+    Check(std::abs(uvInfo.volume - 1) < .01, "UV付き：体積を保つ");
+    // 島ごとのUVの面積は変わらない（継ぎ目を固定し、内部を補間しているだけ）。UVが裏返った面も無い。
+    const auto chartAreas = [](const geometry::Mesh& m) {
+        std::map<uint32_t, double> areas;
+        bool flipped = false;
+        double sign = 0;
+        for (size_t f = 0; f < m.triangles.size(); ++f) {
+            const auto& uv = m.cornerUvs[f];
+            const double area = double(uv[1].u - uv[0].u) * (uv[2].v - uv[0].v) - double(uv[1].v - uv[0].v) * (uv[2].u - uv[0].u);
+            if (sign == 0) sign = area < 0 ? -1 : 1;
+            flipped |= area * sign <= 0;  // 面積の符号は向きの規約。全ての面で同じ符号なら裏返っていない。
+            areas[m.uvCharts[f]] += area * sign;
+        }
+        return std::make_pair(areas, flipped);
+    };
+    const auto [beforeAreas, beforeFlipped] = chartAreas(unwrapped);
+    const auto [afterAreas, afterFlipped] = chartAreas(uvRemeshed);
+    bool areasKept = !beforeFlipped && !afterFlipped && beforeAreas.size() == afterAreas.size();
+    for (const auto& [chart, area] : beforeAreas)
+        areasKept &= afterAreas.contains(chart) && std::abs(afterAreas.at(chart) - area) < area * .02;
+    Check(areasKept, "UV付き：島ごとのUVの面積を保ち、UVが裏返った面は無い");
+    // 継ぎ目（元の島の境界）の頂点は残る。
+    std::vector<geometry::Vec3> seamPositions;
+    {
+        std::map<std::pair<uint32_t, uint32_t>, std::vector<std::pair<uint32_t, geometry::Mesh::Uv>>> edgeUvs;
+        for (size_t f = 0; f < unwrapped.triangles.size(); ++f)
+            for (int k = 0; k < 3; ++k) {
+                const uint32_t a = unwrapped.triangles[f][k], b = unwrapped.triangles[f][(k + 1) % 3];
+                edgeUvs[{std::min(a, b), std::max(a, b)}].push_back({unwrapped.uvCharts[f], unwrapped.cornerUvs[f][size_t(k)]});
+            }
+        for (const auto& [edge, sides] : edgeUvs)
+            if (sides.size() == 2 && sides[0].first != sides[1].first) {
+                seamPositions.push_back(unwrapped.positions[edge.first]);
+                seamPositions.push_back(unwrapped.positions[edge.second]);
+            }
+    }
+    bool seamsKept = !seamPositions.empty();
+    for (const auto& p : seamPositions) {
+        bool found = false;
+        for (const auto& q : uvRemeshed.positions) found |= q == p;
+        seamsKept &= found;
+    }
+    Check(seamsKept, "UV付き：継ぎ目の頂点は残る");
+    Check(FractionWithin(EdgeLengths(uvRemeshed), .05 * .5, .05 * 1.5) > .7, "UV付き：継ぎ目以外の辺の長さは揃う");
+    geometry::Mesh badUv = unwrapped;
+    badUv.cornerUvs.pop_back();
+    Check(geometry::RemeshMesh(badUv, uvSettings, error).triangles.empty() && error.find("UV") != std::string::npos, "不正なUVを診断する");
     geometry::Mesh open = sphere;
     open.triangles.pop_back();
     Check(geometry::RemeshMesh(open, s, error).triangles.empty() && !error.empty(), "閉じていない入力を診断する");
@@ -228,5 +285,9 @@ void RunRemeshTests() {
     Check(unwrappedGraph.error.empty() && geometry::HasValidUvs(unwrappedGraph.rocks[0].mesh), "Remesh の後で UV Unwrap できる");
     const auto after = g.CreateNode(graph::NodeKind::Remesh);
     link(uv, after);
-    Check(!graph::EvaluateRocks(g, after, &cache).error.empty(), "UV Unwrap の後に置くと診断する");
+    std::get<geometry::RemeshSettings>(g.FindMutableNode(after)->settings).edgeLength = .05f;
+    const auto afterUnwrap = graph::EvaluateRocks(g, after, &cache);
+    Check(afterUnwrap.error.empty() && afterUnwrap.rocks.size() == 1 && geometry::HasValidUvs(afterUnwrap.rocks[0].mesh) &&
+              afterUnwrap.rocks[0].mesh.triangles.size() > unwrappedGraph.rocks[0].mesh.triangles.size(),
+          "UV Unwrap の後に置いてもUV付きの細かいメッシュを得る");
 }

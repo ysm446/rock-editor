@@ -985,7 +985,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Subdivide, "Subdivide — 形を保ったまま細分化");
         addNodeMenuItem(graph::NodeKind::Displace, "Displace — 素材ハイトで頂点を変位");
         addNodeMenuItem(graph::NodeKind::Decimate, "Decimate — 形を保ったまま三角形を減らす");
-        addNodeMenuItem(graph::NodeKind::Remesh, "Remesh — 三角形を一様な大きさに作り直す（UV Unwrap の前）");
+        addNodeMenuItem(graph::NodeKind::Remesh, "Remesh — 三角形を一様な大きさに作り直す");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
         ImGui::TextDisabled("分割・ピース操作");
@@ -1611,8 +1611,8 @@ void Application::DrawGraphPanel() {
         }
         ui::HintText("三角形を一様な大きさの正三角形に近い形へ作り直します（等方リメッシュ）。Volume to Mesh の細長い面や大きさのばらつきを揃え、"
                      "Displace の密度を均一にします。頂点は元の表面へ投影するので形は保たれます。");
-        ui::HintText("UV は引き継げないので、UV Unwrap の前に置きます。入力は閉じたメッシュです。細かく揃えるほど面数が増えるので、"
-                     "UV Unwrap が遅くなる場合は辺の長さを大きくするか、後ろに Decimate を置きます。");
+        ui::HintText("UV Unwrap の後に置くと、展開を重くせずに Displace のための密度を稼げます。UVの島の境界（継ぎ目）は固定し、"
+                     "内部のUVを補間して引き継ぎます。継ぎ目のまわりは三角形の揃いが悪くなります。入力は閉じたメッシュです。");
         if (changed) {
             edited.edgeLength = std::clamp(edited.edgeLength, geometry::kMinRemeshEdge, geometry::kMaxRemeshEdge);
             edited.iterations = std::clamp(edited.iterations, 1, geometry::kMaxRemeshIterations);

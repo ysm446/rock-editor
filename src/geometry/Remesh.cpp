@@ -1,5 +1,6 @@
 #include "geometry/Remesh.h"
 #include "geometry/Displace.h"
+#include "geometry/UvUnwrap.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -116,8 +117,9 @@ struct SurfaceGrid {
         stamp.assign(mesh.triangles.size(), 0);
     }
     size_t Index(int x, int y, int z) const { return (size_t(z) * dims[1] + y) * dims[0] + x; }
-    P Closest(const P& p) const {
+    P Closest(const P& p, uint32_t* hit = nullptr) const {
         ++query;
+        uint32_t bestFace = 0;
         std::array<int, 3> c;
         for (int i = 0; i < 3; ++i) c[i] = std::clamp(int(std::floor((p[i] - origin[i]) / cell)), 0, dims[i] - 1);
         P best = p;
@@ -140,26 +142,45 @@ struct SurfaceGrid {
                             stamp[f] = query;
                             const P q = ClosestPointOnTriangle(p, corners[f * 3], corners[f * 3 + 1], corners[f * 3 + 2]);
                             const double distance = Length(Sub(q, p));
-                            if (distance < bestDistance) { bestDistance = distance; best = q; }
+                            if (distance < bestDistance) { bestDistance = distance; best = q; bestFace = f; }
                         }
                     }
                 }
             }
         }
+        if (hit) *hit = bestFace;
         return best;
     }
 };
+// 三角形 (a, b, c) の中の点 q の重心座標。
+std::array<double, 3> Barycentric(const P& q, const P& a, const P& b, const P& c) {
+    const P v0 = Sub(b, a), v1 = Sub(c, a), v2 = Sub(q, a);
+    const double d00 = Dot(v0, v0), d01 = Dot(v0, v1), d11 = Dot(v1, v1), d20 = Dot(v2, v0), d21 = Dot(v2, v1);
+    const double denominator = d00 * d11 - d01 * d01;
+    if (!(std::abs(denominator) > 1e-30)) return {1, 0, 0};
+    const double v = (d11 * d20 - d01 * d21) / denominator, w = (d00 * d21 - d01 * d20) / denominator;
+    return {std::clamp(1 - v - w, 0.0, 1.0), std::clamp(v, 0.0, 1.0), std::clamp(w, 0.0, 1.0)};
+}
+double UvArea(const std::array<Mesh::Uv, 3>& uv) {
+    return double(uv[1].u - uv[0].u) * (uv[2].v - uv[0].v) - double(uv[1].v - uv[0].v) * (uv[2].u - uv[0].u);
+}
 
 struct Remesher {
     struct Vertex {
         P p{};
         std::vector<uint32_t> faces;
         bool alive = true;
+        // UV付きのとき。継ぎ目（UVの島の境界）の頂点は動かさず、縮約しない。chart は継ぎ目でない頂点の島。
+        bool seam = false;
+        uint32_t chart = 0;
     };
     struct Face {
         std::array<uint32_t, 3> v{};
         bool alive = true;
+        std::array<Mesh::Uv, 3> uv{};
+        uint32_t chart = 0;
     };
+    bool hasUvs = false;
     std::vector<Vertex> vertices;
     std::vector<Face> faces;
     size_t aliveFaces = 0;
@@ -196,7 +217,30 @@ struct Remesher {
             if (Quality(vertices[faces[f].v[0]].p, vertices[faces[f].v[1]].p, vertices[faces[f].v[2]].p) < .1) return false;
         return Dot(Unit(m0), Unit(m1)) < cosFeature;
     }
-    bool EdgeIsFeature(uint32_t a, uint32_t b) const { return useFeatures && featureEdges.contains(Key(a, b)); }
+    bool EdgeIsFeature(uint32_t a, uint32_t b) const { return featureEdges.contains(Key(a, b)); }
+    // 継ぎ目でない頂点のUV（どの面でも同じ）。
+    Mesh::Uv UvOf(uint32_t v) const {
+        for (const uint32_t f : vertices[v].faces)
+            for (int k = 0; k < 3; ++k)
+                if (faces[f].v[k] == v) return faces[f].uv[k];
+        return {};
+    }
+    // UVの継ぎ目を特徴辺と同じ扱いにする（反転しない、稜線に沿う）。継ぎ目の頂点は縮約も平滑化もしない。
+    void DetectSeams() {
+        if (!hasUvs) return;
+        for (const auto [a, b] : Edges()) {
+            uint32_t f0, f1;
+            if (!EdgeFaces(a, b, f0, f1)) continue;
+            const auto cornerUv = [&](uint32_t f, uint32_t v) {
+                for (int k = 0; k < 3; ++k) if (faces[f].v[k] == v) return faces[f].uv[k];
+                return Mesh::Uv{};
+            };
+            const bool seam = faces[f0].chart != faces[f1].chart || cornerUv(f0, a) != cornerUv(f1, a) || cornerUv(f0, b) != cornerUv(f1, b);
+            if (!seam) continue;
+            featureEdges.insert(Key(a, b));
+            vertices[a].seam = vertices[b].seam = true;
+        }
+    }
     // 最初の特徴辺を決める。折れ角の大きい辺をつなぎ、合計の長さが短い（目標の辺の長さの 3 倍未満）鎖は
     // 格子の段差とみなして捨てる。残った鎖だけが稜線になる。
     void DetectFeatures() {
@@ -264,12 +308,21 @@ struct Remesher {
             while (!((face.v[i] == a && face.v[(i + 1) % 3] == b) || (face.v[i] == b && face.v[(i + 1) % 3] == a))) ++i;
             const uint32_t s = face.v[i], t = face.v[(i + 1) % 3], o = face.v[(i + 2) % 3];
             face.v = {s, m, o};
-            if (f == f0 && featureEdges.erase(Key(a, b))) {
-                featureEdges.insert(Key(a, m));
-                featureEdges.insert(Key(m, b));
+            // UVは面ごとに補間する（継ぎ目の辺なら両側の島でそれぞれ補間される）。
+            const auto uvS = face.uv[size_t(i)], uvT = face.uv[size_t((i + 1) % 3)], uvO = face.uv[size_t((i + 2) % 3)];
+            const Mesh::Uv uvM{(uvS.u + uvT.u) * .5f, (uvS.v + uvT.v) * .5f};
+            face.uv = {uvS, uvM, uvO};
+            const uint32_t chart = face.chart;
+            if (f == f0) {
+                vertices[m].chart = chart;
+                if (featureEdges.erase(Key(a, b))) {
+                    featureEdges.insert(Key(a, m));
+                    featureEdges.insert(Key(m, b));
+                }
+                if (hasUvs && vertices[a].seam && vertices[b].seam && IsSeamEdgeFaces(f0, f1, a, b)) vertices[m].seam = true;
             }
             const uint32_t added = uint32_t(faces.size());
-            faces.push_back({{m, t, o}});
+            faces.push_back({{m, t, o}, true, {uvM, uvT, uvO}, chart});
             std::erase(vertices[t].faces, f);
             vertices[t].faces.push_back(added);
             vertices[o].faces.push_back(added);
@@ -278,6 +331,15 @@ struct Remesher {
             ++aliveFaces;
         }
         return m;
+    }
+    // 辺 (a, b) を挟む2面の間で、UVまたは島が食い違うか（継ぎ目か）。
+    bool IsSeamEdgeFaces(uint32_t f0, uint32_t f1, uint32_t a, uint32_t b) const {
+        if (!hasUvs) return false;
+        const auto cornerUv = [&](uint32_t f, uint32_t v) {
+            for (int k = 0; k < 3; ++k) if (faces[f].v[k] == v) return faces[f].uv[k];
+            return Mesh::Uv{};
+        };
+        return faces[f0].chart != faces[f1].chart || cornerUv(f0, a) != cornerUv(f1, a) || cornerUv(f0, b) != cornerUv(f1, b);
     }
     bool SplitLongEdges(std::string& error) {
         const double limit = target * 4 / 3;
@@ -296,7 +358,7 @@ struct Remesher {
 
     // --- 縮約 ---
     // b を a の位置 p へまとめられるか（閉じた多様体のまま、面が裏返らない、辺が長くなりすぎない）。
-    bool CanCollapse(uint32_t a, uint32_t b, const P& p) {
+    bool CanCollapse(uint32_t a, uint32_t b, const P& p, const Mesh::Uv& uvNew) {
         Neighbours(a, scratchA);
         Neighbours(b, scratchB);
         uint32_t common[3];
@@ -332,6 +394,14 @@ struct Remesher {
                 const P after = Cross(Sub(corner[1], corner[0]), Sub(corner[2], corner[0]));
                 const double lengthAfter = Length(after);
                 if (!(lengthAfter > 1e-18)) return false;
+                if (hasUvs) {
+                    // UV上でも面が裏返らず、潰れないこと。
+                    auto afterUv = face.uv;
+                    for (int k = 0; k < 3; ++k)
+                        if (face.v[k] == a || face.v[k] == b) afterUv[size_t(k)] = uvNew;
+                    const double beforeArea = UvArea(face.uv), afterArea = UvArea(afterUv);
+                    if (std::abs(afterArea) < 1e-16 || beforeArea * afterArea <= 0 || std::abs(afterArea) < std::abs(beforeArea) * .05) return false;
+                }
                 // 面積がほぼ無い面は向きが決まらないので、裏返りの検査を通す。
                 if (lengthBefore > 1e-14 && Dot(before, after) < .2 * lengthBefore * lengthAfter) return false;
                 worstAfter = std::min(worstAfter, Quality(corner[0], corner[1], corner[2]));
@@ -339,7 +409,7 @@ struct Remesher {
         if (worstAfter < kMinQuality && worstAfter < worstBefore) return false;
         return true;
     }
-    void Collapse(uint32_t a, uint32_t b, const P& p) {
+    void Collapse(uint32_t a, uint32_t b, const P& p, const Mesh::Uv& uvNew) {
         auto &keep = vertices[a], &gone = vertices[b];
         for (const uint32_t f : gone.faces) {
             auto& face = faces[f];
@@ -361,6 +431,10 @@ struct Remesher {
             for (const uint32_t n : scratchB)
                 if (n != a && featureEdges.erase(Key(b, n))) featureEdges.insert(Key(a, n));
         }
+        if (hasUvs)
+            for (const uint32_t f : keep.faces)
+                for (int k = 0; k < 3; ++k)
+                    if (faces[f].v[k] == a) faces[f].uv[size_t(k)] = uvNew;
         gone.faces.clear();
         gone.alive = false;
         keep.p = p;
@@ -371,10 +445,12 @@ struct Remesher {
             uint32_t f0, f1;
             if (!vertices[a].alive || !vertices[b].alive || !EdgeFaces(a, b, f0, f1)) continue;
             if (EdgeLength(a, b) >= low) continue;
+            // 継ぎ目の頂点は縮約しない（Decimate と同じ。島の境界を固定する）。
+            if (hasUvs && (vertices[a].seam || vertices[b].seam)) continue;
             // 特徴の扱い。稜線どうしを混ぜず、角は動かさない。
             uint32_t keep = a, drop = b;
             P p = Scale(Add(vertices[a].p, vertices[b].p), .5);
-            if (useFeatures) {
+            if (!featureEdges.empty()) {
                 const bool feature = EdgeIsFeature(a, b);
                 const int degreeA = FeatureDegree(a), degreeB = FeatureDegree(b);
                 if (feature) {
@@ -388,8 +464,17 @@ struct Remesher {
                     else if (degreeB > 0) { keep = b; drop = a; p = vertices[b].p; }
                 }
             }
-            if (!CanCollapse(keep, drop, p)) continue;
-            Collapse(keep, drop, p);
+            Mesh::Uv uvNew{};
+            if (hasUvs) {
+                // UVは辺上の比率で補間する。
+                const P &pk = vertices[keep].p, &pd = vertices[drop].p;
+                const P delta = Sub(pd, pk);
+                const double t = std::clamp(Dot(Sub(p, pk), delta) / std::max(Dot(delta, delta), 1e-30), 0.0, 1.0);
+                const auto uvK = UvOf(keep), uvD = UvOf(drop);
+                uvNew = {std::lerp(uvK.u, uvD.u, float(t)), std::lerp(uvK.v, uvD.v, float(t))};
+            }
+            if (!CanCollapse(keep, drop, p, uvNew)) continue;
+            Collapse(keep, drop, p, uvNew);
         }
     }
 
@@ -427,8 +512,21 @@ struct Remesher {
             if (Length(old) > 1e-14 && (Dot(n0, old) <= 0 || Dot(n1, old) <= 0)) continue;
             if (!(Length(n0) > 1e-18) || !(Length(n1) > 1e-18)) continue;
             if (qualityAfter < kMinQuality && qualityAfter < qualityBefore) continue;
+            // 継ぎ目でない辺なので両面は同じ島。UVは各面のコーナーから引き継ぐ。
+            const auto cornerUv = [&](uint32_t f, uint32_t v) {
+                for (int k = 0; k < 3; ++k) if (faces[f].v[k] == v) return faces[f].uv[k];
+                return Mesh::Uv{};
+            };
+            const auto uvA = cornerUv(f0, a), uvB = cornerUv(f0, b), uvC = cornerUv(f0, c), uvD = cornerUv(f1, d);
+            if (hasUvs) {
+                const double beforeUv = UvArea(faces[f0].uv);
+                const double area0 = UvArea({uvC, uvA, uvD}), area1 = UvArea({uvD, uvB, uvC});
+                if (std::abs(area0) < 1e-16 || std::abs(area1) < 1e-16 || area0 * beforeUv <= 0 || area1 * beforeUv <= 0) continue;
+            }
             faces[f0].v = {c, a, d};
             faces[f1].v = {d, b, c};
+            faces[f0].uv = {uvC, uvA, uvD};
+            faces[f1].uv = {uvD, uvB, uvC};
             std::erase(vertices[a].faces, f1);
             std::erase(vertices[b].faces, f0);
             vertices[c].faces.push_back(f1);
@@ -437,7 +535,7 @@ struct Remesher {
     }
 
     // --- 平滑化と投影 ---
-    void SmoothAndProject(const SurfaceGrid& surface) {
+    void SmoothAndProject(const SurfaceGrid& surface, const Mesh& input) {
         std::vector<P> normals(vertices.size(), P{0, 0, 0});
         for (const auto& f : faces) {
             if (!f.alive) continue;
@@ -445,13 +543,16 @@ struct Remesher {
             for (const uint32_t v : f.v) normals[v] = Add(normals[v], n);
         }
         std::vector<P> moved(vertices.size());
+        std::vector<Mesh::Uv> movedUv(vertices.size());
+        std::vector<uint8_t> uvMoved(vertices.size(), 0);
         std::vector<uint32_t> around;
         for (uint32_t v = 0; v < vertices.size(); ++v) {
             const auto& vertex = vertices[v];
             moved[v] = vertex.p;
             if (!vertex.alive || vertex.faces.empty()) continue;
+            if (hasUvs && vertex.seam) continue;  // 継ぎ目の頂点は動かさない。
             std::array<uint32_t, 2> along{};
-            const int degree = useFeatures ? FeatureDegree(v, &along) : 0;
+            const int degree = featureEdges.empty() ? 0 : FeatureDegree(v, &along);
             if (degree >= 3 || degree == 1) continue;  // 角と稜線の端は動かさない。
             Neighbours(v, around);
             if (around.empty()) continue;
@@ -469,7 +570,21 @@ struct Remesher {
                 const P n = Unit(normals[v]);
                 delta = Sub(delta, Scale(n, Dot(delta, n)));
             }
-            moved[v] = surface.Closest(Add(vertex.p, delta));
+            uint32_t hit = 0;
+            const P projected = surface.Closest(Add(vertex.p, delta), &hit);
+            if (hasUvs) {
+                // 当たった元の三角形が同じ島なら、重心座標でUVを読む。別の島（継ぎ目の向こう）なら動かさない。
+                if (input.uvCharts[hit] != vertex.chart) continue;
+                const auto& t = input.triangles[hit];
+                const P a{input.positions[t[0]].x, input.positions[t[0]].y, input.positions[t[0]].z};
+                const P b{input.positions[t[1]].x, input.positions[t[1]].y, input.positions[t[1]].z};
+                const P c{input.positions[t[2]].x, input.positions[t[2]].y, input.positions[t[2]].z};
+                const auto w = Barycentric(projected, a, b, c);
+                const auto& uv = input.cornerUvs[hit];
+                movedUv[v] = {float(w[0] * uv[0].u + w[1] * uv[1].u + w[2] * uv[2].u), float(w[0] * uv[0].v + w[1] * uv[1].v + w[2] * uv[2].v)};
+                uvMoved[v] = 1;
+            }
+            moved[v] = projected;
         }
         // 動かしたことで面が裏返る頂点は元に戻す。
         for (uint32_t v = 0; v < vertices.size(); ++v) {
@@ -481,8 +596,18 @@ struct Remesher {
                 for (int k = 0; k < 3; ++k) corner[k] = face.v[k] == v ? moved[v] : vertices[face.v[k]].p;
                 const P before = Normal(face), after = Cross(Sub(corner[1], corner[0]), Sub(corner[2], corner[0]));
                 if (!(Length(after) > 1e-18) || Dot(before, after) <= 0) { ok = false; break; }
+                if (hasUvs && uvMoved[v]) {
+                    auto afterUv = face.uv;
+                    for (int k = 0; k < 3; ++k) if (face.v[k] == v) afterUv[size_t(k)] = movedUv[v];
+                    const double beforeArea = UvArea(face.uv), afterArea = UvArea(afterUv);
+                    if (std::abs(afterArea) < 1e-16 || beforeArea * afterArea <= 0) { ok = false; break; }
+                }
             }
-            if (ok) vertices[v].p = moved[v];
+            if (!ok) continue;
+            vertices[v].p = moved[v];
+            if (hasUvs && uvMoved[v])
+                for (const uint32_t f : vertices[v].faces)
+                    for (int k = 0; k < 3; ++k) if (faces[f].v[k] == v) faces[f].uv[size_t(k)] = movedUv[v];
         }
     }
 };
@@ -503,8 +628,9 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
         error = "特徴辺の角度は 0～180 にしてください";
         return {};
     }
-    if (!input.cornerUvs.empty() || !input.uvCharts.empty()) {
-        error = "UVは引き継げません。Remesh は UV Unwrap の前に置いてください";
+    const bool hasUvs = !input.cornerUvs.empty() || !input.uvCharts.empty();
+    if (hasUvs && !HasValidUvs(input)) {
+        error = "入力のUVが不正です";
         return {};
     }
     MeshInfo info;
@@ -569,6 +695,11 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
     for (size_t f = 0; f < coarse.triangles.size(); ++f) {
         r.faces[f].v = coarse.triangles[f];
         for (const uint32_t v : coarse.triangles[f]) r.vertices[v].faces.push_back(uint32_t(f));
+        if (hasUvs) {
+            r.faces[f].uv = coarse.cornerUvs[f];
+            r.faces[f].chart = coarse.uvCharts[f];
+            for (const uint32_t v : coarse.triangles[f]) r.vertices[v].chart = coarse.uvCharts[f];
+        }
     }
     r.aliveFaces = coarse.triangles.size();
     for (const auto [a, b] : r.Edges()) {
@@ -578,14 +709,17 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
             return {};
         }
     }
+    r.hasUvs = hasUvs;
     r.DetectFeatures();
+    r.DetectSeams();
     SurfaceGrid surface;
     surface.Build(input, std::max(target * 2, longest / 128));
     for (int iteration = 0; iteration < s.iterations; ++iteration) {
         if (stop.stop_requested()) { error = "Remesh をキャンセルしました"; return {}; }
+        if (!r.SplitLongEdges(error)) return {};
         r.CollapseShortEdges();
         r.EqualizeValences();
-        r.SmoothAndProject(surface);
+        r.SmoothAndProject(surface, input);
         if (progress) progress(int((iteration + 1) * 100 / s.iterations));
     }
     if (stop.stop_requested()) { error = "Remesh をキャンセルしました"; return {}; }
@@ -600,6 +734,18 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
     for (const auto& f : r.faces) {
         if (!f.alive) continue;
         out.triangles.push_back({remap[f.v[0]], remap[f.v[1]], remap[f.v[2]]});
+        if (hasUvs) {
+            out.cornerUvs.push_back(f.uv);
+            out.uvCharts.push_back(f.chart);
+        }
+    }
+    if (hasUvs) {
+        out.uvWidth = input.uvWidth;
+        out.uvHeight = input.uvHeight;
+        if (!HasValidUvs(out)) {
+            error = "Remesh の結果のUVが不正になりました";
+            return {};
+        }
     }
     MeshInfo outInfo;
     if (!InspectMesh(out, outInfo) || !outInfo.closed) {
