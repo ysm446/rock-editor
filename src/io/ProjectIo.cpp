@@ -492,7 +492,7 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) {
             const char* type = shape->type == geometry::ShapeMaskType::Direction ? "direction"
                              : shape->type == geometry::ShapeMaskType::Height  ? "height" : "occlusion";
-            item["shapeMask"] = {{"type", type}, {"resolution", shape->resolution}, {"low", shape->low}, {"high", shape->high},
+            item["shapeMask"] = {{"type", type}, {"resolution", shape->resolution}, {"low", shape->low}, {"high", shape->high}, {"gamma", shape->gamma},
                 {"invert", shape->invert}, {"distance", shape->distance}, {"samples", shape->samples}};
         } else if (const auto* bake = std::get_if<graph::MaterialBakeSettings>(&node.settings)) {
             // ベイク結果は一時的なもので、保存しない。開き直したら未ベイクへ戻る。指紋だけ残すと、結果が無いのに
@@ -731,6 +731,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.low = std::clamp(ReadFloat(*v, "low", settings.low), 0.f, .999f);
                     settings.high = std::clamp(ReadFloat(*v, "high", settings.high), settings.low + .001f, 1.f);
                     settings.invert = ReadBool(*v, "invert", false);
+                    settings.gamma = std::clamp(ReadFloat(*v, "gamma", 1), .1f, 10.f);
                     settings.distance = std::clamp(ReadFloat(*v, "distance", settings.distance), .001f, 1000.f);
                     settings.samples = std::clamp(ReadInt(*v, "samples", settings.samples), geometry::kMinOcclusionSamples, geometry::kMaxOcclusionSamples);
                 }

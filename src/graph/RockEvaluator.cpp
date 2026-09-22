@@ -97,7 +97,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(uv->resolution); add(uv->padding); add(uv->quality);
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
         // 反転は画像を変えない（使う側で掛ける）ので含めない。
-        add(occlusion->type); add(occlusion->distance); add(occlusion->samples); add(occlusion->resolution); add(occlusion->low); add(occlusion->high);
+        add(occlusion->type); add(occlusion->distance); add(occlusion->samples); add(occlusion->resolution); add(occlusion->low); add(occlusion->high); add(occlusion->gamma);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
                node->kind != NodeKind::UvUnwrap && node->kind != NodeKind::MaterialBake &&
                node->kind != NodeKind::ApplyMaterial && node->kind != NodeKind::MeshOutput) return std::nullopt;

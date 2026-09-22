@@ -50,6 +50,14 @@ void RunShapeMaskTests() {
     auto levels = raw; levels.low = .2f; levels.high = .4f;
     const auto leveled = geometry::ShapeMask(scene, levels, error);
     Check(floorAt(leveled, 0) == 1 && floorAt(leveled, 40) == 0 && floorAt(leveled, 8) <= 1, "low and high stretch the value and clamp");
+    auto curved = levels; curved.gamma = 2;
+    const auto curvedImage = geometry::ShapeMask(scene, curved, error);
+    bool gammaOk = error.empty() && curvedImage.pixels[size_t(64) * 128 + 0] == leveled.pixels[size_t(64) * 128 + 0];
+    for (int x = 0; x < 128 && gammaOk; ++x) {
+        const float a = leveled.pixels[size_t(64) * 128 + x] / 255.f, b = curvedImage.pixels[size_t(64) * 128 + x] / 255.f;
+        gammaOk &= std::abs(b - a * a) < 1.5f / 255;
+    }
+    Check(gammaOk, "gamma curves the stretched value and keeps 0 and 1");
     auto inverted = raw; inverted.invert = true;
     Check(geometry::ShapeMask(scene, inverted, error).pixels == image.pixels, "invert is applied by the consumer, not baked into the image");
     auto large = raw; large.resolution = 256;
@@ -82,7 +90,8 @@ void RunShapeMaskTests() {
                      [](auto s) { s.samples = 500; return s; }(raw), [](auto s) { s.low = .5f; s.high = .5f; return s; }(raw),
                      [](auto s) { s.high = 1.5f; return s; }(raw), [](auto s) { s.resolution = 100; return s; }(raw),
                      [](auto s) { s.resolution = 8192; return s; }(raw), [](auto s) { s.distance = NAN; return s; }(raw),
-                     [](auto s) { s.type = geometry::ShapeMaskType(9); return s; }(raw)}) {
+                     [](auto s) { s.type = geometry::ShapeMaskType(9); return s; }(raw),
+                     [](auto s) { s.gamma = 0; return s; }(raw), [](auto s) { s.gamma = 11; return s; }(raw)}) {
         Check(geometry::ShapeMask(scene, bad, error).pixels.empty() && !error.empty(), "invalid setting rejected");
     }
     Check(geometry::ShapeMask(geometry::MakeBox({2, 2, 2}), raw, error).pixels.empty() && !error.empty(), "mesh without UVs rejected");

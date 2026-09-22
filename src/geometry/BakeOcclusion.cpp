@@ -206,7 +206,8 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
         settings.samples < kMinOcclusionSamples || settings.samples > kMaxOcclusionSamples ||
         resolution < kMinShapeMaskResolution || resolution > kMaxShapeMaskResolution ||
         (resolution & (resolution - 1)) != 0 || !std::isfinite(settings.low) || !std::isfinite(settings.high) ||
-        settings.low < 0 || settings.high > 1 || settings.high - settings.low < .001f) {
+        settings.low < 0 || settings.high > 1 || settings.high - settings.low < .001f ||
+        !std::isfinite(settings.gamma) || settings.gamma < .1f || settings.gamma > 10) {
         error = "Shape Maskの設定が不正です";
         return {};
     }
@@ -313,7 +314,8 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
                 }
                 ratio = counted > 0 ? double(occluded) / counted : 0;
             }
-            const double level = std::clamp((ratio - settings.low) / double(settings.high - settings.low), 0., 1.);
+            double level = std::clamp((ratio - settings.low) / double(settings.high - settings.low), 0., 1.);
+            if (settings.gamma != 1) level = std::pow(level, double(settings.gamma));
             image.pixels[y * width + x] = uint8_t(std::lround(255 * level));
         }
         if (progress)

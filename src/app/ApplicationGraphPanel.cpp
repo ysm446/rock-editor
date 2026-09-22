@@ -1563,6 +1563,8 @@ void Application::DrawGraphPanel() {
             }
             changed |= ui::PropertyFloat("下限", &edited.low, 0, 1, .2f, "元の値がこれ以下の所を黒（0）にします。");
             changed |= ui::PropertyFloat("上限", &edited.high, 0, 1, .8f, "元の値がこれ以上の所を白（1）にします。");
+            changed |= ui::PropertyFloat("カーブ（ガンマ）", &edited.gamma, .1f, 10, 1,
+                                         "中間の階調を寄せます。1 で直線、大きいほど白い範囲が細く、小さいほど白い範囲が太くなります（値 ^ ガンマ）。", "%.2f", ImGuiSliderFlags_Logarithmic);
             changed |= ui::PropertyBool("反転", &edited.invert, false);
             ui::EndPropertyTable();
         }
@@ -1584,6 +1586,7 @@ void Application::DrawGraphPanel() {
             edited.samples = std::clamp(edited.samples, geometry::kMinOcclusionSamples, geometry::kMaxOcclusionSamples);
             edited.low = std::clamp(edited.low, 0.0f, .999f);
             edited.high = std::clamp(edited.high, edited.low + .001f, 1.0f);
+            edited.gamma = std::clamp(edited.gamma, .1f, 10.0f);
             *shape = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

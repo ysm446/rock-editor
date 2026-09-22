@@ -23,6 +23,9 @@ struct ShapeMaskSettings {
     ShapeMaskType type = ShapeMaskType::Occlusion;
     int resolution = 1024;        // マスク画像の一辺（2のべき乗）
     float low = .2f, high = .8f;  // 元の値（0〜1）の low を 0、high を 1 へ伸ばす
+    // 伸ばした後の中間の階調を寄せるカーブ。1 で直線、2 で中間が暗く（白が細く）、0.5 で中間が明るく（白が太く）。
+    // 値 = 伸ばした値 ^ gamma。0.1〜10。
+    float gamma = 1;
     bool invert = false;          // 使う側（描画・Displace・プレビュー）で 1 - mask にする。画像には掛けない。
     // 遮蔽だけが使う。
     float distance = .3f;  // 遮蔽物を探す距離（m）
