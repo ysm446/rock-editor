@@ -88,6 +88,7 @@ struct CutFaceFrame {
 struct PlaneCutsGuide {
     std::vector<CutPlane> planes;
     std::vector<CutFaceFrame> frames;
+    float spacing = 0;  // 切り落とした格子のセル間隔。断面の判定の許容幅に使う。
 };
 // Volume Crack。点の群が作る Voronoi の境界面に沿って、表面から割れ目を彫る。
 inline constexpr int MaxCrackPoints = 512;
@@ -141,6 +142,10 @@ VolumeGrid CutVolume(const VolumeGrid& grid, const PlaneCutsSettings& settings, 
                      std::vector<CutPlane>* usedPlanes = nullptr);
 // 切り落とした結果（cut）と使った平面から、表示用の枠を求める。
 std::vector<CutFaceFrame> CutFaceFrames(const VolumeGrid& cut, const std::vector<CutPlane>& planes);
+// 断面の色分け用。メッシュの面ごとに、その面が乗っている平面の番号（CutPlane の添字）を返す。
+// 乗っていない面は -1。枠を持つ平面だけを見る。面の中心が平面から1セル以内で、面の向きが平面の
+// 法線とほぼ揃い、局所なら欠けの球の中にあるものを乗っているとみなす。
+std::vector<int> CutFaceAssignments(const Mesh& mesh, const PlaneCutsGuide& guide);
 // 点は2～512個。形の外にあってもよい。格子（範囲・セル間隔）は入力のまま。
 VolumeGrid CrackVolume(const VolumeGrid& grid, const std::vector<Vec3>& points,
                        const VolumeCrackSettings& settings, std::string& error);

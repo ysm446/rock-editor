@@ -412,6 +412,8 @@ void Application::SyncMeshGraph() {
     m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();
     m_rockTriangleCounts.clear();
+    m_rockPreviewSurfaces.clear();
+    ++m_rockPreviewStamp;
     std::vector<int> selectedPieces;
     for (const auto& rock : evaluated.rocks) {
         if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
@@ -426,6 +428,7 @@ void Application::SyncMeshGraph() {
         }
         m_rockMeshReferences.push_back({rock.source, rock.pieceId});
         m_rockTriangleCounts.push_back(rock.mesh.triangles.size());
+        m_rockPreviewSurfaces.push_back({rock.mesh.positions, rock.mesh.triangles});
         mesh.material.roughness = 0.8f;
         ApplyRockMaterial(mesh, rock, true);
         scene.meshes.push_back(std::move(mesh));
@@ -1306,6 +1309,9 @@ void Application::DrawGraphPanel() {
         if (ui::BeginPropertyTable("planeCutsView")) {
             ui::PropertyBool("平面を表示", &m_planeCutsShowFrames, true,
                              "このノードを選んでいる間、切り口を囲む平面の枠をビューポートに表示します。ノードの設定には保存しません。");
+            ui::PropertyBool("断面を色分け", &m_planeCutsColorFaces, false,
+                             "表示中のメッシュのうち、各平面の切り口に乗る面を枠と同じ色で塗ります。"
+                             "下流の Volume Noise などで形が変わった面は塗られません。");
             ui::EndPropertyTable();
         }
         if (changed) {

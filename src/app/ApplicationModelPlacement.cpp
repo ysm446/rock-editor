@@ -15,6 +15,7 @@
 #include <DirectXCollision.h>
 
 #include <algorithm>
+#include <map>
 #include <array>
 #include <cfloat>
 #include <cmath>
@@ -922,8 +923,8 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
     return m_hoveredModelNode != 0 || m_modelGizmoHover >= 0;
 }
 
-void Application::AppendPlaneCutFrames(std::vector<renderer::OverlayLineSet>& lines) const {
-    if (!m_planeCutsShowFrames) return;
+void Application::AppendPlaneCutOverlay(std::vector<renderer::OverlayLineSet>& lines) {
+    if (!m_planeCutsShowFrames && !m_planeCutsColorFaces) return;
     const graph::Node* node = m_graph.FindNode(m_selectedGraphNode);
     if (!node || node->kind != graph::NodeKind::PlaneCuts) return;
     // 評価のキャッシュに残る、このノードの結果から読む。評価中は前回の結果を出し続ける。
@@ -931,11 +932,44 @@ void Application::AppendPlaneCutFrames(std::vector<renderer::OverlayLineSet>& li
     if (found == m_rockEvaluationCache.entries.end() || found->second.result.rocks.empty()) return;
     const auto& guide = found->second.result.rocks[0].planeCuts;
     if (!guide) return;
-    for (const auto& frame : guide->frames) {
-        // 平面ごとに色相を変える（ピースの色分けと同じ黄金比の刻み）。
+    // 平面ごとに色相を変える（ピースの色分けと同じ黄金比の刻み）。枠と断面で同じ色にする。
+    const auto planeColor = [](uint32_t plane, float alpha) {
         float r, g, b;
-        ImGui::ColorConvertHSVtoRGB(std::fmod(float(frame.plane) * .618034f, .999f), .65f, 1.f, r, g, b);
-        renderer::OverlayLineSet set{XMFLOAT4{r, g, b, 1}, {}};
+        ImGui::ColorConvertHSVtoRGB(std::fmod(float(plane) * .618034f, .999f), .65f, 1.f, r, g, b);
+        return XMFLOAT4{r, g, b, alpha};
+    };
+    if (m_planeCutsColorFaces) {
+        if (m_cutFaceOverlay.node != node->id || m_cutFaceOverlay.guide != guide ||
+            m_cutFaceOverlay.stamp != m_rockPreviewStamp) {
+            m_cutFaceOverlay = {node->id, guide, m_rockPreviewStamp, {}};
+            // 表示中のメッシュの面を平面ごとに振り分ける。下流で形が変わった面は、どの平面にも乗らない。
+            std::map<int, size_t> setOf;
+            // 面と同じ位置に描くとちらつくので、平面の外側へ少し浮かせる。
+            const float lift = guide->spacing * .2f;
+            for (const auto& mesh : m_rockPreviewSurfaces) {
+                const auto assigned = geometry::CutFaceAssignments(mesh, *guide);
+                for (size_t f = 0; f < assigned.size(); ++f) {
+                    if (assigned[f] < 0) continue;
+                    auto [entry, added] = setOf.try_emplace(assigned[f], m_cutFaceOverlay.sets.size());
+                    if (added) {
+                        renderer::OverlayLineSet set{planeColor(uint32_t(assigned[f]), .45f), {}};
+                        set.triangles = true;
+                        m_cutFaceOverlay.sets.push_back(std::move(set));
+                    }
+                    const auto n = guide->planes[size_t(assigned[f])].normal;
+                    auto& points = m_cutFaceOverlay.sets[entry->second].points;
+                    for (uint32_t v : mesh.triangles[f]) {
+                        const auto& p = mesh.positions[v];
+                        points.push_back({p.x + n.x * lift, p.y + n.y * lift, p.z + n.z * lift});
+                    }
+                }
+            }
+        }
+        lines.insert(lines.end(), m_cutFaceOverlay.sets.begin(), m_cutFaceOverlay.sets.end());
+    }
+    if (!m_planeCutsShowFrames) return;
+    for (const auto& frame : guide->frames) {
+        renderer::OverlayLineSet set{planeColor(frame.plane, 1), {}};
         for (size_t i = 0; i < frame.corners.size(); ++i) {
             const auto& a = frame.corners[i];
             const auto& c = frame.corners[(i + 1) % frame.corners.size()];
@@ -1015,7 +1049,7 @@ void Application::DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVe
     }
     if (!hovered.points.empty()) lines.push_back(std::move(hovered));
     if (!selectedSet.points.empty()) lines.push_back(std::move(selectedSet));
-    AppendPlaneCutFrames(lines);
+    AppendPlaneCutOverlay(lines);
     m_renderer.SetOverlayLines(std::move(lines));
 
     // --- ギズモ（ImGui。深度は見ず常に手前） ---------------------------------------

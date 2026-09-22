@@ -9,8 +9,8 @@
 
 #include "Common.hlsli"
 
-// 端点の最大数（線分 128 本ぶん）。C++ 側の kOverlayLineMaxVertices と一致させること。
-#define ROCK_OVERLAY_MAX_VERTICES 256
+// 端点の最大数（定数バッファの 64 KiB に収まる数）。C++ 側の kOverlayLineMaxVertices と一致させること。
+#define ROCK_OVERLAY_MAX_VERTICES 4000
 
 struct OverlayLineConstants
 {

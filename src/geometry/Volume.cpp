@@ -762,6 +762,34 @@ std::vector<CutFaceFrame> CutFaceFrames(const VolumeGrid& g, const std::vector<C
     }
     return frames;
 }
+std::vector<int> CutFaceAssignments(const Mesh& mesh, const PlaneCutsGuide& guide) {
+    std::vector<int> assigned(mesh.triangles.size(), -1);
+    const float tolerance = guide.spacing;
+    if (!(tolerance > 0)) return assigned;
+    for (size_t f = 0; f < mesh.triangles.size(); ++f) {
+        const auto& t = mesh.triangles[f];
+        if (t[0] >= mesh.positions.size() || t[1] >= mesh.positions.size() || t[2] >= mesh.positions.size()) continue;
+        const Vec3 a = mesh.positions[t[0]], b = mesh.positions[t[1]], c = mesh.positions[t[2]];
+        const Vec3 center{(a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3};
+        const Vec3 normal = FaceNormal(mesh, t);
+        float best = tolerance;
+        for (const CutFaceFrame& frame : guide.frames) {
+            const CutPlane& plane = guide.planes[frame.plane];
+            // 平面に沿う面だけ。元の表面が平面と交わる線の近くの面を拾わないようにする。
+            if (Dot(normal, plane.normal) < .9f) continue;
+            const float distance = std::abs(Dot(plane.normal, center) - plane.offset);
+            if (distance > best) continue;
+            if (plane.radius > 0) {
+                const Vec3 d{center.x - plane.center.x, center.y - plane.center.y, center.z - plane.center.z};
+                const float reach = plane.radius + tolerance;
+                if (Dot(d, d) > reach * reach) continue;
+            }
+            best = distance;
+            assigned[f] = int(frame.plane);
+        }
+    }
+    return assigned;
+}
 VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, const VolumeCrackSettings& s,
                        std::string& error) {
     error.clear();

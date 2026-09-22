@@ -454,8 +454,20 @@ private:
     MeshHighlightState m_meshHighlight;
     // Plane Cuts を選んでいる間の表示。ノードの設定ではない（評価・Undo・保存に関わらない）。
     bool m_planeCutsShowFrames = true;
-    // 選んだ Plane Cuts の平面の枠を、深度付きの線として lines へ加える。
-    void AppendPlaneCutFrames(std::vector<renderer::OverlayLineSet>& lines) const;
+    bool m_planeCutsColorFaces = false;
+    // 表示中の岩メッシュ（位置と面だけ）。断面の色分けで、どの面がどの平面に乗るかを調べる。
+    std::vector<geometry::Mesh> m_rockPreviewSurfaces;
+    uint64_t m_rockPreviewStamp = 0;  // m_rockPreviewSurfaces を作り直すたびに増やす。
+    // 断面の色分けの三角形。ノード・平面の群・表示中のメッシュが変わったときだけ作り直す。
+    struct CutFaceOverlay {
+        graph::GraphId node = 0;
+        std::shared_ptr<const geometry::PlaneCutsGuide> guide;
+        uint64_t stamp = 0;
+        std::vector<renderer::OverlayLineSet> sets;
+    };
+    CutFaceOverlay m_cutFaceOverlay;
+    // 選んだ Plane Cuts の平面の枠（深度付きの線）と断面の色分け（半透明の面）を lines へ加える。
+    void AppendPlaneCutOverlay(std::vector<renderer::OverlayLineSet>& lines);
     // カーソル直下のメッシュを CPU のレイ交差で探し、クリックか矩形で選ぶ。
     void HandleMeshHover(bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax);
     bool HandleLightDrag(renderer::LightSettings& light, LightInteraction& interaction, bool itemActive);

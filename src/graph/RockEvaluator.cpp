@@ -594,6 +594,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             auto cut = geometry::CutVolume(*input.rocks[0].volume, *settings, error, &guide.planes);
             if (!error.empty()) return finish(Failure(id, "Plane Cuts", error));
             guide.frames = geometry::CutFaceFrames(cut, guide.planes);
+            guide.spacing = cut.spacing;
             GeneratedRock rock;
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(cut));

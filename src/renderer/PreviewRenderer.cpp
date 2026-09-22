@@ -8,6 +8,7 @@
 #include <pix3.h>
 
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 
 using namespace DirectX;
@@ -23,7 +24,8 @@ constexpr float kDecalSlopeScaledDepthBias = -2.0f;
 constexpr DXGI_FORMAT kOutputFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 
 // ガイド線の端点の最大数。シェーダの ROCK_OVERLAY_MAX_VERTICES と一致させること。
-constexpr uint32_t kOverlayLineMaxVertices = 256;
+// 定数バッファの上限（64 KiB）に収まる数。断面の色分けのような三角形の多いオーバーレイを少ない描画回数で送る。
+constexpr uint32_t kOverlayLineMaxVertices = 4000;
 
 // GPU 側の OverlayLineConstants と一致させること。
 struct OverlayLineConstants {
@@ -1746,11 +1748,13 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
     commandList->IASetIndexBuffer(nullptr);
 
     // 端点を定数バッファへ詰めて 1 回描く。上限を超えたら分けて描く。
+    // 使う端点の分だけ送る（シェーダは count より先を読まない）。
     const auto submit = [&](const OverlayLineConstants& constants, uint32_t count) {
         if (count == 0) return;
-        const rhi::UploadAllocation cb = device.Upload().Allocate(sizeof(OverlayLineConstants), 256);
+        const size_t bytes = offsetof(OverlayLineConstants, positions) + sizeof(XMFLOAT4) * count;
+        const rhi::UploadAllocation cb = device.Upload().Allocate(bytes, 256);
         if (!cb.IsValid()) return;
-        std::memcpy(cb.cpu, &constants, sizeof(constants));
+        std::memcpy(cb.cpu, &constants, bytes);
         commandList->SetGraphicsRootConstantBufferView(1, cb.gpuAddress);
         commandList->DrawInstanced(count, 1, 0, 0);
         ++m_stats.drawCalls;
@@ -1765,7 +1769,9 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
         commandList->SetPipelineState(guidePipeline);
         commandList->IASetPrimitiveTopology(set.triangles ? D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST
                                                           : D3D_PRIMITIVE_TOPOLOGY_LINELIST);
-        OverlayLineConstants constants = {};
+        // 端点の配列は大きいので 0 で埋めない。使う分だけ書いて送る。
+        OverlayLineConstants constants;
+        constants.options = {};
         XMStoreFloat4x4(&constants.viewProjection,
                         XMMatrixMultiply(m_camera.ViewMatrix(), m_camera.ProjectionMatrix()));
         constants.color[0] = set.color.x;

@@ -78,6 +78,28 @@ void RunPlaneCutsTests() {
             square = std::abs(Dot(edge(0, 1), edge(1, 2))) < 1e-4f && fits(side) && fits(other);
         }
         Check(error.empty() && onPlane && square, "枠は平面上にあり、切り口の円を少しの余白で囲む正方形になる");
+        // 断面の色分け。切り口に乗る面の面積は、切り口の円（π × 0.75）に近い。
+        geometry::PlaneCutsGuide guide{used, frames, framed.spacing};
+        for (const auto method : {geometry::VolumeMeshingMethod::MarchingTetrahedra, geometry::VolumeMeshingMethod::DualContouring}) {
+            const auto surface = geometry::VolumeSurface(framed, error, method);
+            const auto assigned = geometry::CutFaceAssignments(surface, guide);
+            double area = 0;
+            bool onlyPlane = assigned.size() == surface.triangles.size();
+            for (size_t f = 0; onlyPlane && f < assigned.size(); ++f) {
+                if (assigned[f] < 0) continue;
+                onlyPlane = assigned[f] == 0;
+                const auto& t = surface.triangles[f];
+                const auto a = surface.positions[t[0]], b = surface.positions[t[1]], c = surface.positions[t[2]];
+                const geometry::Vec3 u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+                const geometry::Vec3 n{u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+                area += .5 * std::sqrt(Dot(n, n));
+            }
+            const double disk = std::numbers::pi * .75;
+            Check(error.empty() && onlyPlane && std::abs(area - disk) < disk * .15,
+                  method == geometry::VolumeMeshingMethod::DualContouring
+                      ? "断面の色分けは切り口の面だけを選ぶ（Dual Contouring）"
+                      : "断面の色分けは切り口の面だけを選ぶ（Marching Tetrahedra）");
+        }
         // 同じ向きで浅い平面は、深い平面に切り口ごと削られるので枠を持たない。
         std::vector<geometry::CutPlane> shadowed = used;
         shadowed.push_back(used[0]);
