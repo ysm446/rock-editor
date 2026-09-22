@@ -140,7 +140,13 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
             layer.heightSource = compositor::ValueSource::Constant;
             applied.stack.Layers() = {layer};
             applied.stack.SetTerrainScale(1, 0);
-            if (stage == 1) { applied.mask.texture = texture; applied.mask.invert = rock.previewMaskInvert; }
+            if (stage == 1) {
+                applied.mask.texture = texture;
+                // 反転は画像を作り直さず、キャッシュキーにも入れていない。評価結果の値ではなく、いま見ているノードの設定から読む。
+                applied.mask.invert = rock.previewMaskInvert;
+                if (const auto* node = m_graph.FindNode(m_previewGraphNode))
+                    if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) applied.mask.invert = shape->invert;
+            }
             mesh.appliedMaterials.push_back(std::move(applied));
         }
         mesh.materialStack = mesh.appliedMaterials[0].stack;
