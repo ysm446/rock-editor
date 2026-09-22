@@ -41,8 +41,15 @@ std::map<GraphId,std::string> MaterialHeight::CacheKeys() const {
     for(const auto& [id,error]:maskErrors) keys[id]+="error:"+error;
     return keys;
 }
+float MaterialHeight::HeightBlendWeight(float mask,float height,float below,float range) {
+    // 差 (height - below) を 0〜1 へ（等しければ 0.5）。マスクがしきい値 (1 - mask) を動かし、その周りを range で伸ばす。
+    // マスク 0 は必ず 0、マスク 1 は必ず 1。マスク 0.5 でハイトが等しければ 0.5。
+    const float d=(height-below)*.5f+.5f;
+    return std::clamp((d-(1-mask))/std::max(range,.01f)+mask,0.f,1.f);
+}
 float MaterialHeight::Sample(GraphId surface,const compositor::MaterialMask* mask,GraphId maskId,
-                              geometry::Vec3 p,geometry::Vec3 n,geometry::Mesh::Uv uv,float below,bool uvWrap) const {
+                              geometry::Vec3 p,geometry::Vec3 n,geometry::Mesh::Uv uv,float below,bool uvWrap,
+                              bool heightBlend,float heightBlendRange) const {
     const auto& s=surfaces.at(surface);
     if(!(s.channels&compositor::ChannelBit(compositor::Channel::Height))) return below;
     const auto weights=[](geometry::Vec3 normal,float sharp) {
@@ -70,6 +77,8 @@ float MaterialHeight::Sample(GraphId surface,const compositor::MaterialMask* mas
         } else alpha*=field.Sample(uv.u*inv,uv.v*inv,true);
     }
     if(mask && mask->invert) alpha=1-alpha;
-    return std::lerp(below,height,std::clamp(alpha,0.f,1.f));
+    alpha=std::clamp(alpha,0.f,1.f);
+    if(heightBlend) alpha=HeightBlendWeight(alpha,height,below,heightBlendRange);
+    return std::lerp(below,height,alpha);
 }
 }

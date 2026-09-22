@@ -489,6 +489,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings)) {
             item["materialMask"] = {{"texture", writeTexture(mask->texture)}, {"value", mask->value},
                 {"repeatMeters", mask->repeatMeters}, {"invert", mask->invert}, {"triplanar", mask->triplanar}};
+        } else if (const auto* apply = std::get_if<graph::ApplyMaterialSettings>(&node.settings)) {
+            item["applyMaterial"] = {{"heightBlend", apply->heightBlend}, {"heightBlendRange", apply->heightBlendRange}};
         } else if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) {
             const char* type = shape->type == geometry::ShapeMaskType::Direction ? "direction"
                              : shape->type == geometry::ShapeMaskType::Height  ? "height" : "occlusion";
@@ -717,6 +719,13 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.repeatMeters = std::clamp(ReadFloat(*v, "repeatMeters", 1), .001f, 10000.f);
                     settings.invert = ReadBool(*v, "invert", false);
                     settings.triplanar = ReadBool(*v, "triplanar", false);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::ApplyMaterial) {
+                graph::ApplyMaterialSettings settings;
+                if (const json* v = FindMember(item, "applyMaterial"); v && v->is_object()) {
+                    settings.heightBlend = ReadBool(*v, "heightBlend", false);
+                    settings.heightBlendRange = std::clamp(ReadFloat(*v, "heightBlendRange", .2f), .01f, 1.f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::ShapeMask) {

@@ -70,6 +70,22 @@ void RunApplyMaterialTests() {
     auto excess = g.CreateNode(graph::NodeKind::ApplyMaterial);
     link(last, excess); link(s, excess, 1); link(mask, excess, 2);
     Check(!graph::EvaluateRocks(g, excess).error.empty(), "excess material stages diagnosed");
+    // ハイトで合成。設定が束へ届き、重みの式がマスク 0 / 1 を保つ。
+    auto& applySettings = std::get<graph::ApplyMaterialSettings>(g.FindMutableNode(b)->settings);
+    applySettings.heightBlend = true; applySettings.heightBlendRange = .1f;
+    r = graph::EvaluateRocks(g, b);
+    Check(r.error.empty() && r.rocks[0].materials.size() == 2 && r.rocks[0].materials[1].heightBlend &&
+              r.rocks[0].materials[1].heightBlendRange == .1f && !r.rocks[0].materials[0].heightBlend,
+          "height blend settings reach the material binding of that stage");
+    using graph::MaterialHeight;
+    Check(MaterialHeight::HeightBlendWeight(0, 1, 0, .2f) == 0 && MaterialHeight::HeightBlendWeight(1, 0, 1, .2f) == 1,
+          "mask 0 and 1 stay fully transparent / opaque regardless of height");
+    Check(MaterialHeight::HeightBlendWeight(.5f, .9f, .1f, .2f) == 1 && MaterialHeight::HeightBlendWeight(.5f, .1f, .9f, .2f) == 0 &&
+              std::abs(MaterialHeight::HeightBlendWeight(.5f, .5f, .5f, .2f) - .5f) < 1e-6f,
+          "at half mask the higher material wins, equal heights blend evenly");
+    Check(MaterialHeight::HeightBlendWeight(.5f, .6f, .5f, 1.f) < MaterialHeight::HeightBlendWeight(.5f, .6f, .5f, .1f),
+          "smaller range makes the transition sharper");
+    applySettings.heightBlend = false;
     geometry::Mesh plane;
     plane.positions = {{-1, 0, -1}, {1, 0, -1}, {1, 0, 1}, {-1, 0, 1}};
     plane.triangles = {{0, 2, 1}, {0, 3, 2}};

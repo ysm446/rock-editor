@@ -101,6 +101,7 @@ std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const 
         add(applied.mapping.method); add(applied.mapping.offset); add(applied.mapping.rotationDegrees);
         add(applied.mapping.repeatMeters); add(applied.mapping.sharpness);
         add(applied.mask.value); add(applied.mask.repeatMeters); add(applied.mask.invert); add(applied.mask.triplanar);
+        if (applied.heightBlend) { add(applied.heightBlend); add(applied.heightBlendRange); }  // 既存のベイクの指紋は変えない。
         texture(applied.mask.texture); hashStack(applied.stack);
     }
     std::ostringstream out;
@@ -166,6 +167,8 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
             }
             applied.mapping = layer->layer.mapping;
             applied.channels = layer->layer.channelMask;
+            applied.heightBlend = binding.heightBlend;
+            applied.heightBlendRange = binding.heightBlendRange;
             applied.stack.SetTerrainScale(applied.mapping.repeatMeters, 0);
             if (const auto* mask = m_graph.FindNode(binding.mask))
                 if (const auto* settings = std::get_if<graph::MaterialMaskSettings>(&mask->settings)) applied.mask = *settings;

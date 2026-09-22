@@ -98,6 +98,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
         // 反転は画像を変えない（使う側で掛ける）ので含めない。
         add(occlusion->type); add(occlusion->distance); add(occlusion->samples); add(occlusion->resolution); add(occlusion->low); add(occlusion->high); add(occlusion->gamma);
+    } else if (const auto* apply = std::get_if<ApplyMaterialSettings>(&node->settings)) {
+        add(apply->heightBlend); add(apply->heightBlendRange);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
                node->kind != NodeKind::UvUnwrap && node->kind != NodeKind::MaterialBake &&
                node->kind != NodeKind::ApplyMaterial && node->kind != NodeKind::MeshOutput) return std::nullopt;
@@ -252,7 +254,12 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 if (!mask) { rock.materials.clear(); rock.maskImages.clear(); }
                 else if (rock.materials.empty() && rock.materialSource) rock.materials.push_back({rock.materialSource, 0});
                 if (rock.materials.size() >= 8) return finish(Failure(id, "Apply Material", "素材の重ね合わせは8段までです"));
-                rock.materials.push_back({material->id, mask ? mask->id : 0});
+                GeneratedRock::MaterialBinding binding{material->id, mask ? mask->id : 0};
+                if (const auto* apply = std::get_if<ApplyMaterialSettings>(&node->settings)) {
+                    binding.heightBlend = apply->heightBlend;
+                    binding.heightBlendRange = std::clamp(apply->heightBlendRange, .01f, 1.f);
+                }
+                rock.materials.push_back(binding);
                 if (shapeMask) rock.maskImages[mask->id] = shapeMask;
                 rock.previewMask.reset();
                 rock.materialSource = 0;
@@ -368,7 +375,8 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                 shape.invert = std::get<geometry::ShapeMaskSettings>(maskNode->settings).invert;
                                 mask = &shape;
                             }
-                            h = heights->Sample(binding.surface, mask, binding.mask, p, n, uv, h, wrap);
+                            h = heights->Sample(binding.surface, mask, binding.mask, p, n, uv, h, wrap,
+                                                binding.heightBlend, binding.heightBlendRange);
                         }
                         return h;
                     };

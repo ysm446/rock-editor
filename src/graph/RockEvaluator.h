@@ -16,6 +16,9 @@ struct GeneratedRock {
     std::shared_ptr<const geometry::VolumeGrid> volume;
     struct MaterialBinding {
         GraphId surface = 0, mask = 0;
+        // 素材のハイトで合成する（Apply Material の設定）。
+        bool heightBlend = false;
+        float heightBlendRange = .2f;
         bool operator==(const MaterialBinding&) const = default;
     };
     std::vector<MaterialBinding> materials;

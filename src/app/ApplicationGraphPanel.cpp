@@ -1523,8 +1523,20 @@ void Application::DrawGraphPanel() {
                          "表示は前回の結果です。");
         }
         ui::HintText("選択するとUVチェッカーを表示します。UVビューのタブで島の配置を確認できます。複数の入力メッシュは1枚のアトラスへまとめます。");
-    } else if (selected->kind == graph::NodeKind::ApplyMaterial) {
+    } else if (auto* apply = std::get_if<graph::ApplyMaterialSettings>(&selected->settings)) {
+        bool changed = false;
+        const bool masked = selected->inputs.size() > 2 && m_graph.FindUpstreamNodeForPin(selected->inputs[2].id);
+        if (ui::BeginPropertyTable("applyMaterialRows")) {
+            changed |= ui::PropertyBool("ハイトで合成", &apply->heightBlend, false,
+                                        "マスクを基準に、この素材のハイトが下地より高い所を前に出します。石の隙間に砂が溜まる、苔が凹みに入る、といった合成になります。");
+            if (apply->heightBlend)
+                changed |= ui::PropertyFloat("なだらかさ", &apply->heightBlendRange, .01f, 1, .2f,
+                                             "境目の幅。小さいほどハイトの差でくっきり分かれます。");
+            ui::EndPropertyTable();
+        }
         ui::HintText("MeshとSurfaceを接続します。Mask未接続なら全面を置換。Mask接続時は白で新しい素材、黒で上流の素材、中間値で混合します。最大8段まで重ねられます。");
+        if (apply->heightBlend && !masked) ui::HintText("Maskが未接続なので全面置換です。ハイトで合成するにはMaskを接続してください（定数0.5のMaterial Maskでも可）。");
+        if (changed) { apply->heightBlendRange = std::clamp(apply->heightBlendRange, .01f, 1.0f); m_graph.MarkDirty(); MarkDocumentChanged(); }
     } else if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("materialMask")) {

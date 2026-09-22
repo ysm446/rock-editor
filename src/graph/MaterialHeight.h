@@ -23,6 +23,9 @@ struct MaterialHeight {
     std::map<GraphId,std::string> maskErrors;
     std::map<GraphId,std::string> CacheKeys() const;
     float Sample(GraphId surface, const compositor::MaterialMask* mask, GraphId maskId,
-                 geometry::Vec3 position,geometry::Vec3 normal,geometry::Mesh::Uv uv,float below,bool uvWrap) const;
+                 geometry::Vec3 position,geometry::Vec3 normal,geometry::Mesh::Uv uv,float below,bool uvWrap,
+                 bool heightBlend=false,float heightBlendRange=.2f) const;
+    // マスクの重みを、この素材のハイトと下地のハイトの差で寄せる。シェーダの HeightBlendWeight と同じ式。
+    static float HeightBlendWeight(float mask,float height,float below,float range);
 };
 }

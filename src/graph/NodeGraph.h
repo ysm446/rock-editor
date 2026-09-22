@@ -129,6 +129,14 @@ struct LayerNodeSettings {
     compositor::MaterialLayer layer;
 };
 using MaterialMaskSettings = compositor::MaterialMask;
+// Apply Material。マスクに加えて、素材のハイトで合成する。
+struct ApplyMaterialSettings {
+    // 真なら、マスクを基準にこの素材のハイトが下地より高い所を前に出す（道路のレイヤーの「ハイトで競合」と同じ）。
+    bool heightBlend = false;
+    // 境目のなだらかさ。0.01〜1。小さいほどハイトの差でくっきり分かれる。
+    float heightBlendRange = .2f;
+    bool operator==(const ApplyMaterialSettings&) const = default;
+};
 struct MaterialBakeSettings {
     bool geometryAo = false;
     float aoDistance = 0.5f, aoStrength = 1;
@@ -177,7 +185,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::DecimateSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
-                                  geometry::ShapeMaskSettings,
+                                  geometry::ShapeMaskSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
                                   geometry::PieceTransformSettings, std::monostate>;

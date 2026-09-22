@@ -192,10 +192,12 @@ void FillApplied(AppliedConstants& out, const SceneMesh::AppliedMaterial& source
         XMConvertToRadians(m.rotationDegrees.y), XMConvertToRadians(m.rotationDegrees.z));
     XMStoreFloat4(&out.axisX, rotation.r[0]); XMStoreFloat4(&out.axisY, rotation.r[1]); XMStoreFloat4(&out.axisZ, rotation.r[2]);
     out.axisX.w = 1 / m.repeatMeters; out.axisY.w = m.sharpness;
+    // axisZ.w はハイト合成のなだらかさ（maskFlags の 4 が立つときだけ読む）。
+    out.axisZ.w = std::clamp(source.heightBlendRange, .01f, 1.f);
     out.offset = m.offset; out.method = uint32_t(m.method);
     out.maskIndex = textures.SrvIndex(source.mask.texture, false);
     out.maskValue = source.mask.value; out.maskRepeat = source.mask.repeatMeters;
-    out.maskFlags = (source.mask.invert ? 1u : 0u) | (source.mask.triplanar ? 2u : 0u) | (source.channels << 8);
+    out.maskFlags = (source.mask.invert ? 1u : 0u) | (source.mask.triplanar ? 2u : 0u) | (source.heightBlend ? 4u : 0u) | (source.channels << 8);
 }
 
 // 道路空間マスク（RGBA8）を GPU へ上げる。ミップは持たない（低解像度でぼかして読む）。

@@ -935,6 +935,11 @@ AppliedValue EvaluateApplied(VsOutput input) {
         }
         if ((a.maskFlags & 1u) != 0u) mask = 1-mask;
         mask = saturate(mask);
+        // ハイトで合成。マスクを基準に、この素材のハイトが下地より高い所を前に出す（C++ の HeightBlendWeight と同じ式）。
+        if ((a.maskFlags & 4u) != 0u) {
+            const float d = (height - result.height) * 0.5f + 0.5f;
+            mask = saturate((d - (1.0f - mask)) / max(a.axisZ.w, 0.01f) + mask);
+        }
         if ((a.maskFlags & 256u) != 0u) result.color = lerp(result.color,color,mask);
         if ((a.maskFlags & 512u) != 0u) result.normal = normalize(lerp(result.normal,normal,mask));
         if ((a.maskFlags & 1024u) != 0u) result.surface = lerp(result.surface,surface,mask);

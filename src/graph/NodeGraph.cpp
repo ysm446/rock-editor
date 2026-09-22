@@ -457,6 +457,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::DecimateSettings{};
     } else if (kind == NodeKind::MaterialMask) {
         node.settings = MaterialMaskSettings{};
+    } else if (kind == NodeKind::ApplyMaterial) {
+        node.settings = ApplyMaterialSettings{};
     } else if (kind == NodeKind::ShapeMask) {
         node.settings = geometry::ShapeMaskSettings{};
     } else if (kind == NodeKind::MaterialBake) {

@@ -1,9 +1,15 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 15:05
+更新日時: 2026-09-22 15:40
 
 ## 現在地
+
+### 2026-09-22 Apply Material に「ハイトで合成」
+
+- ユーザー依頼「マスクに加えて固有テクスチャのハイトマップの変位で合成するチェックボックス」への対応。Apply Material に設定（`ApplyMaterialSettings`：ハイトで合成 / なだらかさ）を追加。マスクの重みを、その素材のハイトと下地のハイトの差で寄せる（式は [素材の適用](../reference/material-application.md)）。マスク 0 / 1 は必ず 0 / 1 になるよう式を選んだ（最初の式は満たさず、テストで直した）。
+- シェーダ（`EvaluateApplied`。`maskFlags` の 4、`axisZ.w` になだらかさ）と Displace の CPU ハイト（`MaterialHeight::HeightBlendWeight`）で同じ式。素材の束（`MaterialBinding`）に設定を運び、キャッシュキーとベイクの指紋（有効時のみ）に含める。保存/読込、設定欄、単体テスト4項目。Release で全件成功。
+- Release 実アプリで `rock_crack.rockscene` の検証コピー（割れ目の Apply Material をオン、なだらかさ 0.15）を描き、割れ目の縁で下地の凸部が残って境目がハイトに沿うことを確認（`data/test/claude-session-2026-09-22/hblend/compare-zoom.png`）。素材が2つとも岩なので差は控えめ。実マウスでの操作は未確認。
 
 ### 2026-09-22 Shape Mask の選択時プレビューが「反転」に追従しない問題を修正
 
