@@ -286,9 +286,16 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
             std::snprintf(text, sizeof(text), "パッチ %s (x%.0f まで)",
                           GroupDigits(stats.patches).c_str(), stats.tessellationFactor);
         } else {
-            std::snprintf(text, sizeof(text), "三角形 %s", GroupDigits(stats.triangles).c_str());
+            // 描画した三角形は、影のカスケード（最大4回）ぶん重なって数えられる。メッシュそのものの数と分けて出す。
+            std::snprintf(text, sizeof(text), "描画三角形 %s（影を含む）", GroupDigits(stats.triangles).c_str());
         }
         lines.emplace_back(text);
+        if (!m_rockTriangleCounts.empty()) {
+            uint64_t meshTriangles = 0;
+            for (const auto count : m_rockTriangleCounts) meshTriangles += count;
+            std::snprintf(text, sizeof(text), "メッシュ三角形 %s", GroupDigits(meshTriangles).c_str());
+            lines.emplace_back(text);
+        }
         // VRAM はプロセス全体の使用量とバジェット。合成の解像度を上げたときに
         // どれだけ余裕が残っているかを、その場で見えるようにする。
         const rhi::Device::VideoMemory vram = m_device.QueryVideoMemory();
