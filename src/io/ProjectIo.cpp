@@ -521,6 +521,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                     {"radius", smooth->radius},
                                     {"amount", smooth->amount},
                                     {"upwardFocus", smooth->upwardFocus}};
+        } else if (const auto* wear = std::get_if<geometry::VolumeEdgeWearSettings>(&node.settings)) {
+            item["volumeEdgeWear"] = {{"radius", wear->radius}, {"amount", wear->amount}, {"noise", wear->noise},
+                                      {"noiseScale", wear->noiseScale}, {"upwardFocus", wear->upwardFocus}, {"seed", wear->seed}};
         } else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node.settings)) {
             item["volumeClose"] = {{"mode", geometry::VolumeCloseModeName(close->mode)}, {"width", close->width},
                                    {"distance", close->distance}, {"threshold", close->threshold},
@@ -847,6 +850,17 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.radius = ReadFloat(*v, "radius", settings.radius);
                     settings.amount = ReadFloat(*v, "amount", settings.amount);
                     settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeEdgeWear) {
+                geometry::VolumeEdgeWearSettings settings;
+                if (const json* v = FindMember(item, "volumeEdgeWear"); v && v->is_object()) {
+                    settings.radius = ReadFloat(*v, "radius", settings.radius);
+                    settings.amount = ReadFloat(*v, "amount", settings.amount);
+                    settings.noise = ReadFloat(*v, "noise", settings.noise);
+                    settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
+                    settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeClose) {

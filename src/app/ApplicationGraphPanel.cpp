@@ -1006,6 +1006,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeSmooth, "Volume Smooth — 表面をなまらせる / 角を立てる（上面だけ、など）");
         addNodeMenuItem(graph::NodeKind::VolumeTerrace, "Volume Terrace — 層状の段（棚）を刻む");
         addNodeMenuItem(graph::NodeKind::VolumeClose, "Volume Close — 外から見えない隙間（割れ目の奥）を埋める");
+        addNodeMenuItem(graph::NodeKind::VolumeEdgeWear, "Volume Edge Wear — 凸な稜線と角だけを削る（角の摩耗）");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1266,6 +1267,35 @@ void Application::DrawGraphPanel() {
             edited.amount = std::clamp(edited.amount, 0.0f, 1.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *smooth = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* wear = std::get_if<geometry::VolumeEdgeWearSettings>(&selected->settings)) {
+        auto edited = *wear;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeEdgeWearRows")) {
+            changed |= ui::PropertyFloat("半径", &edited.radius, .005f, .2f, .03f,
+                                         "稜線を見つける範囲。形の最長辺に対する比です。丸まる幅の目安になり、これより鈍い稜線は弱くしか削れません。");
+            changed |= ui::PropertyFloat("量", &edited.amount, 0, .2f, .02f,
+                                         "稜線を削る深さの最大。形の最長辺に対する比です。直角の稜線と頂点でこの深さ、鈍い稜線では浅くなります。");
+            changed |= ui::PropertyFloat("ばらつき", &edited.noise, 0, 1, .5f,
+                                         "稜線に沿った削れ方のばらつき。0 で一様。1 ではノイズの低い所が削れず、欠けた角のようになります。");
+            changed |= ui::PropertyFloat("ばらつきの細かさ", &edited.noiseScale, .5f, 16, 4,
+                                         "最長辺あたりのノイズの山の数。");
+            changed |= ui::PropertyFloat("上向きに集中", &edited.upwardFocus, 0, 1, 0,
+                                         "0 で全ての稜線。1 で上を向いた面の稜線だけに効き、下側の角は鋭いまま残ります。");
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1, "ばらつきの乱数。");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("凸な稜線と角だけを削り、平らな面と凹な隅は動かしません。Volume Smooth と違い面がなまらないので、"
+                     "Plane Cuts の切り口を保ったまま角だけを摩耗させられます。半径がセル間隔に近いと効きません。");
+        if (changed) {
+            edited.radius = std::clamp(edited.radius, .005f, .2f);
+            edited.amount = std::clamp(edited.amount, 0.0f, .2f);
+            edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
+            edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
+            edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
+            *wear = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

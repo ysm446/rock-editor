@@ -135,6 +135,20 @@ struct VolumeSmoothSettings {
     // 上向きの面への集中。0 で全面に同じ量、1 で上（+Y）を向いた面だけに効き、垂直な面と下面には効かない。0～1。
     float upwardFocus = 0;
 };
+// Volume Edge Wear。凸な稜線と角だけを削り、面と谷は残す（角の摩耗）。
+// 稜線はぼかした距離場と元の差で見つけ、最も近い表面の点で評価する。削る方向にだけ効き、形は広がらない。
+struct VolumeEdgeWearSettings {
+    // 稜線を見つける半径（ガウスの σ）。形の最長辺に対する比。丸まる幅の目安。0.005～0.2。
+    float radius = .03f;
+    // 稜線を削る深さの最大。形の最長辺に対する比。0～0.2。
+    float amount = .02f;
+    // 稜線に沿った削れ方のばらつき。0 で一様、1 ではノイズの低い所が削れない。0～1。
+    float noise = .5f;
+    float noiseScale = 4;  // 最長辺あたりのノイズの山の数。0.5～16。
+    // 上向きの面への集中。0 で全ての稜線、1 で上（+Y）を向いた稜線だけ。0～1。
+    float upwardFocus = 0;
+    int seed = 1;
+};
 // Volume Terrace。ある方向に層をなす段（棚）を作る。層状の剥離。
 // 方向に沿った位置を段の間隔で割った端数で、へこませる層と残す層を交互に作る。削る方向にだけ効き、形は広がらない。
 struct VolumeTerraceSettings {
@@ -211,6 +225,9 @@ VolumeGrid NoiseVolume(const VolumeGrid& grid, const VolumeNoiseSettings& settin
 // 格子（範囲・セル間隔）は入力のまま。外周の1点は入力の値を保つ。
 // なめらかにすると凸な角は削れ、凹な隅は埋まる（体積はほぼ保たれる）。加工でできた浮いた小片と閉じた空洞は除く。
 VolumeGrid SmoothVolume(const VolumeGrid& grid, const VolumeSmoothSettings& settings, std::string& error);
+// 格子（範囲・セル間隔）は入力のまま。外周の1点は入力の値を保つ。凸な稜線と角だけが削れ、平らな面と凹な隅は動かない。
+// 加工でできた浮いた小片と閉じた空洞は除く。
+VolumeGrid EdgeWearVolume(const VolumeGrid& grid, const VolumeEdgeWearSettings& settings, std::string& error);
 // 格子（範囲・セル間隔）は入力のまま。層の位相は内部の外接箱の中心を基準にする。
 // 加工でできた浮いた小片と閉じた空洞は除く。
 VolumeGrid TerraceVolume(const VolumeGrid& grid, const VolumeTerraceSettings& settings, std::string& error);

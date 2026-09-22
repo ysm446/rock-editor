@@ -1,9 +1,16 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 22:30
+更新日時: 2026-09-22 23:10
 
 ## 現在地
+
+### 2026-09-22 Volume Edge Wear（角の摩耗）
+
+- `Volume Edge Wear` を追加。仕様は [Volume Edge Wear](../reference/volume-edge-wear.md)。設定は半径・量・ばらつき・細かさ・上向きに集中・Seed。保存名 `volumeEdgeWear`。
+- 実装: `src/geometry/Volume.cpp` の `EdgeWearVolume`。Volume Smooth のぼかしを `BlurGrid` として切り出して共用。稜線の強さ `(ぼかし − 元) / σ` を最も近い表面の点で三線形補間して読む。格子点で読むと稜線の二等分面に沿って残る差で薄い板の中心が削れる（プローブで確認し、テストに残した）。
+- 検証: `tests/VolumeEdgeWearTests.cpp`（46 項目）。Release で全テスト成功。サンプル `examples/volume-edge-wear/` をヘッドレスの `--screenshot-ui` で描画し、ノードの設定欄とプレビューを確認した。
+- 注意: 半径に対して薄い部分（厚さ 2σ 程度）は面もわずかに削れる。半径がセル間隔に近いと効かない。鈍い稜線（150 度以上）はほとんど削れない。
 
 ### 2026-09-22 Remesh の UV 引き継ぎ（UV Unwrap の後に置ける）
 
