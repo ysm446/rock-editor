@@ -119,7 +119,7 @@ void RunVolumeNoiseTests() {
     auto heavy = warped;
     heavy.warp = .2f;
     geometry::NoiseVolume(turned, heavy, error);
-    Check(error.find("192") != std::string::npos, "歪みで広げた格子が上限を超える設定を診断する");
+    Check(error.find("256") != std::string::npos, "歪みで広げた格子が上限を超える設定を診断する");
     const auto rejects = [&](const char* name, auto change) {
         geometry::VolumeNoiseSettings bad;
         change(bad);

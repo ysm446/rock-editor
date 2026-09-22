@@ -163,8 +163,8 @@ struct Bvh {
 VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::string &error,
                         std::stop_token stop) {
     error.clear();
-    if (settings.resolution < 16 || settings.resolution > 96) {
-        error = "ボリュームの解像度は16〜96にしてください";
+    if (settings.resolution < 16 || settings.resolution > 128) {
+        error = "ボリュームの解像度は16〜128にしてください";
         return {};
     }
     if (mesh.triangles.size() > 250000 || mesh.positions.size() > 1000000) {

@@ -1187,7 +1187,7 @@ void Application::DrawGraphPanel() {
         auto edited = *volume;
         bool changed = false;
         if (ui::BeginPropertyTable("volumeRows")) {
-            changed |= ui::PropertyInt("解像度", &edited.resolution, 16, 96, 48);
+            changed |= ui::PropertyInt("解像度", &edited.resolution, 16, 128, 48);
             ui::EndPropertyTable();
         }
         ui::HintText("閉じたMeshをボリュームに変換します。Random Boxes、Base Shape、Pieces to Meshなどを接続できます。重なった外向きの立体は和集合になります。");
@@ -1333,7 +1333,7 @@ void Application::DrawGraphPanel() {
         ui::HintText("A を基準に B との和・交差・差を取ります。入力・出力とも Volume 型です。"
                      "B を動かすには、B の上流に Volume Transform を置きます。");
         ui::HintText("結果は A の格子（セル間隔）を引き継ぎます。和は B を含む範囲まで格子を広げ、"
-                     "各軸192点を超えると生成できません。B が A より細かくても、細部は A のセル間隔までしか残りません。");
+                     "各軸256点を超えると生成できません。B が A より細かくても、細部は A のセル間隔までしか残りません。");
         if (changed) {
             edited.blend = std::clamp(edited.blend, 0.0f, 10.0f);
             *boolean = edited;

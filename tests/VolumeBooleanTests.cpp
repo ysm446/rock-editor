@@ -125,7 +125,7 @@ void RunVolumeBooleanTests() {
     const auto distant = geometry::TransformVolume(small, veryFar, error);
     settings = {};
     geometry::CombineVolumes(a, distant, settings, error);
-    Check(error.find("192") != std::string::npos, "和の格子が上限を超える配置を診断する");
+    Check(error.find("256") != std::string::npos, "和の格子が上限を超える配置を診断する");
     settings.blend = -1;
     geometry::CombineVolumes(a, b, settings, error);
     Check(!error.empty(), "負のなめらかさを拒否する");

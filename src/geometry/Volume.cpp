@@ -10,9 +10,9 @@
 
 namespace rock::geometry {
 namespace {
-// To Volume の最大解像度96に、余白と任意方向への回転による外接箱の拡大を許容する。
-// 密な配列のため上限は残す（最大約28MiBの距離データ）。
-constexpr uint32_t kMaxGridPointsPerAxis = 192;
+// To Volume の最大解像度128に、余白と任意方向への回転による外接箱の拡大を許容する。
+// 密な配列のため上限は残す（256³ で約64MiBの距離データ。ノードごとにキャッシュに持つ）。
+constexpr uint32_t kMaxGridPointsPerAxis = 256;
 // Plane Cuts の局所モード。等方の法線へ混ぜるランダムな向きの割合と、
 // 主方向の法線が表面の外向きと成す余弦の下限。
 constexpr double kLocalCutTilt = .75;
@@ -187,8 +187,8 @@ float SampleVolume(const VolumeGrid& g, Vec3 p) {
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error) {
     error.clear();
-    if (boxes.empty() || boxes.size() > 32 || settings.resolution < 16 || settings.resolution > 96) {
-        error = "Box は1～32個、ボリュームの解像度は16～96にしてください";
+    if (boxes.empty() || boxes.size() > 32 || settings.resolution < 16 || settings.resolution > 128) {
+        error = "Box は1～32個、ボリュームの解像度は16～128にしてください";
         return {};
     }
     // 内部生成の Box も検証し、NaN や過大な格子を確保しない。
@@ -294,7 +294,7 @@ VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s
     for (int i = 0; i < 3; ++i) {
         const double cells = std::ceil(extent[i] / out.spacing) + 5;
         if (!std::isfinite(cells) || cells < 2 || cells > kMaxGridPointsPerAxis) {
-            error = "変換後の格子が各軸192点の上限を超えます。連続する Volume Transform をまとめるか、上流の解像度を下げてください";
+            error = "変換後の格子が各軸256点の上限を超えます。連続する Volume Transform をまとめるか、上流の解像度を下げてください";
             return {};
         }
         out.dimensions[i] = static_cast<uint32_t>(cells);
@@ -382,7 +382,7 @@ VolumeGrid CombineVolumes(const VolumeGrid& a, const VolumeGrid& b, const Volume
             return {};
         }
         if (high - low + 1 > kMaxGridPointsPerAxis) {
-            error = "結果の格子が各軸192点の上限を超えます。A と B を近づけるか、A の解像度を下げてください";
+            error = "結果の格子が各軸256点の上限を超えます。A と B を近づけるか、A の解像度を下げてください";
             return {};
         }
         first[i] = int64_t(low);
@@ -895,7 +895,7 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
                   g.origin.z - float(pad) * g.spacing};
     for (int i = 0; i < 3; ++i) {
         if (uint64_t(g.dimensions[i]) + 2 * pad > kMaxGridPointsPerAxis) {
-            error = "歪みで広げた格子が各軸192点の上限を超えます。歪みを減らすか、上流の解像度を下げてください";
+            error = "歪みで広げた格子が各軸256点の上限を超えます。歪みを減らすか、上流の解像度を下げてください";
             return {};
         }
         out.dimensions[i] = g.dimensions[i] + 2 * pad;

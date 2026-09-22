@@ -5,7 +5,7 @@
 
 namespace rock::geometry {
 struct VolumeSettings {
-    int resolution = 48;  // 母岩の最長辺のセル数。16～96。
+    int resolution = 48;  // 母岩の最長辺のセル数。16～128。
 };
 enum class VolumeMeshingMethod { MarchingTetrahedra, DualContouring };
 struct VolumeToMeshSettings {

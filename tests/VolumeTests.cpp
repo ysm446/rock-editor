@@ -107,6 +107,14 @@ void RunVolumeTests() {
               maxInfo.components == 2 && maxInfo.volume > 0,
           "最大設定では内部空洞の境界も含む閉じた和集合を抽出");
     Check(maxGrid.values.size() <= 102u * 102u * 102u, "格子のメモリ量を上限内に保つ");
+    // 最大解像度 128。閉じた表面が出て、格子が 128 + 余白に収まる。
+    const auto finest = geometry::BoxesToVolume(maximum, {128}, error);
+    const auto finestSurface = geometry::VolumeSurface(finest, error);
+    geometry::MeshInfo finestInfo;
+    Check(error.empty() && geometry::InspectMesh(finestSurface, finestInfo) && finestInfo.closed && finestInfo.volume > 0 &&
+              finest.values.size() <= 134u * 134u * 134u,
+          "解像度128でも閉じた表面を抽出し、格子を上限内に保つ");
+    Check(geometry::BoxesToVolume(maximum, {129}, error).values.empty() && !error.empty(), "解像度129は拒否");
     const auto maxDual = geometry::VolumeSurface(maxGrid, error, geometry::VolumeMeshingMethod::DualContouring);
     geometry::MeshInfo maxDualInfo;
     Check(error.empty(), error.empty() ? "Dual Contouring の最大設定" : error.c_str());
@@ -409,13 +417,13 @@ void RunVolumeTests() {
               "最大解像度の回転でも精度と閉包・体積を保って表面を抽出");
     }
     auto excessive = dense;
-    excessive.dimensions[0] = 193;
+    excessive.dimensions[0] = 257;
     Check(geometry::TransformVolume(excessive, spin, error).values.empty() && !error.empty(),
           "上限を超える入力グリッドは確保前に拒否");
     geometry::VolumeGrid wide;
-    wide.dimensions = {192, 2, 192};
+    wide.dimensions = {256, 2, 256};
     wide.spacing = 1;
-    wide.values.resize(size_t(192) * 2 * 192, 1);
+    wide.values.resize(size_t(256) * 2 * 256, 1);
     Check(geometry::TransformVolume(wide, spin, error).values.empty() && !error.empty(),
           "回転後の格子が新しい上限を超える場合も確保前に拒否");
 
