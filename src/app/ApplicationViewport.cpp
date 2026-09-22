@@ -228,6 +228,7 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
         changed |= ImGui::MenuItem("統計", nullptr, &settings.showStats);
         changed |= ImGui::MenuItem("グリッド（50 m × 50 m / 1 m間隔）", nullptr, &settings.showReferenceGrid);
         changed |= ImGui::MenuItem("UVチェッカー", nullptr, &settings.showUvChecker);
+        changed |= ImGui::MenuItem("ワイヤーフレームを重ねる", nullptr, &settings.showWireframeOverlay);
         // 法線は頂点に焼くので、切り替えると SyncMeshGraph がメッシュを作り直す。
         changed |= ImGui::MenuItem("スムーズシェーディング（折れ角 40 度）", nullptr, &settings.smoothShading);
         if (changed) {

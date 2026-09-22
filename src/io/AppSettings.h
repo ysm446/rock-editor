@@ -44,6 +44,8 @@ struct DisplaySettings {
     // 原点中心の50m四方、1m刻みの作業グリッド。
     bool showReferenceGrid = true;
     bool showUvChecker = false;
+    // 陰影の上に三角形の辺を黒い線で重ねるか。表示モードは変えない。
+    bool showWireframeOverlay = false;
     // 岩メッシュの法線を、折れ角つきで平均して滑らかに見せるか。偽なら面法線（面ごとの陰影）。
     bool smoothShading = false;
     // Volumeを直接表示するときだけ使用。Volume to Meshの出力方式とは独立。

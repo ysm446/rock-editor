@@ -460,6 +460,7 @@ int Application::Run() {
         // だが、レンダラは AppSettings を知らないので、描く直前に毎フレーム渡す。
         m_renderer.ShowReferenceGrid() = m_settings.Display().showReferenceGrid;
         m_renderer.ShowUvChecker() = m_settings.Display().showUvChecker || m_uvCheckerPreview;
+        m_renderer.ShowWireframeOverlay() = m_settings.Display().showWireframeOverlay;
 
         m_renderer.SetExtraSceneRadius(ModelInstancesRadius());
         m_renderer.Render(m_device, m_pipelineCache, commandList, m_textureLibrary,

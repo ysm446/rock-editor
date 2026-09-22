@@ -328,6 +328,8 @@ public:
     float& TessellationFactor() { return m_tessellationFactor; }
     float& TessellationTargetPixels() { return m_tessellationTargetPixels; }
     bool& ShowUvChecker() { return m_showUvChecker; }
+    // 陰影の上に三角形の辺を黒い線で重ねる。
+    bool& ShowWireframeOverlay() { return m_showWireframeOverlay; }
     bool& ShowReferenceGrid() { return m_showReferenceGrid; }
     // 直前のフレームの描画の量。
     void EnableDiagnostics(bool enabled) { m_diagnostics.SetEnabled(enabled); }
@@ -431,6 +433,7 @@ private:
     float m_tessellationTargetPixels = kPreviewDefaults.tessellationTargetPixels;
     bool m_showReferenceGrid = true;
     bool m_showUvChecker = false;
+    bool m_showWireframeOverlay = false;
     // シーンの材質とは別に保持し、保存データやベイクへ混ぜない。
     compositor::TextureLibrary m_previewTextures;
     compositor::TextureId m_uvCheckerTexture = compositor::kNoTexture;

@@ -108,6 +108,7 @@ void AppSettings::Load() {
             m_display.showStats = showStats->get<bool>();
         }
         for (const auto& setting : {std::pair{"showUvChecker", &m_display.showUvChecker},
+                                     std::pair{"showWireframeOverlay", &m_display.showWireframeOverlay},
                                      std::pair{"smoothShading", &m_display.smoothShading}}) {
             const auto it = display->find(setting.first);
             if (it != display->end() && it->is_boolean()) *setting.second = it->get<bool>();
@@ -162,6 +163,7 @@ bool AppSettings::Save() const {
     display["showStats"] = m_display.showStats;
     display["showReferenceGrid"] = m_display.showReferenceGrid;
     display["showUvChecker"] = m_display.showUvChecker;
+    display["showWireframeOverlay"] = m_display.showWireframeOverlay;
     display["smoothShading"] = m_display.smoothShading;
     display["sdfPreviewMethod"] = m_display.sdfPreviewMethod == geometry::VolumeMeshingMethod::DualContouring
         ? "dualContouring" : "marchingTetrahedra";

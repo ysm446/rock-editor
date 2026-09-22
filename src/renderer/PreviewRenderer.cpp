@@ -1487,6 +1487,22 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
                 drawMeshes(constants, kPassTranslucent, useTessellation);
             }
         }
+        // 陰影の上に三角形の辺を重ねる。本描画と同じ変位・分割で線を引き、
+        // 深度バイアスで面の手前に寄せる。深度は読むだけで、色は黒の単色。
+        if (m_showWireframeOverlay && displayView != DebugView::Wireframe) {
+            rhi::GraphicsPipelineDesc wireDesc = meshPipelineDesc;
+            wireDesc.pixelEntry = L"PsWireframeOverlay";
+            wireDesc.fillMode = D3D12_FILL_MODE_WIREFRAME;
+            wireDesc.depthWrite = false;
+            wireDesc.depthBias = kDecalDepthBias;
+            wireDesc.slopeScaledDepthBias = kDecalSlopeScaledDepthBias;
+            if (ID3D12PipelineState* wirePipeline = pipelineCache.GetGraphics(wireDesc)) {
+                PIXBeginEvent(commandList, PIX_COLOR(60, 60, 60), "PreviewWireframeOverlay");
+                commandList->SetPipelineState(wirePipeline);
+                drawMeshes(constants, kPassOpaque | kPassDecal | kPassTranslucent, useTessellation);
+                PIXEndEvent(commandList);
+            }
+        }
         commandList->SetPipelineState(meshPipeline);
     }
     m_stats.tessellation = useTessellation;

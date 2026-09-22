@@ -816,6 +816,12 @@ float4 PsOutline(VsOutput input) : SV_Target0
     return float4(0.55f, 0.85f, 1.0f, 0.9f);
 }
 
+// 陰影に重ねるワイヤーフレーム。ラスタライザを線にして、辺だけを黒で描く。
+float4 PsWireframeOverlay(VsOutput input) : SV_Target0
+{
+    return float4(0.0f, 0.0f, 0.0f, 1.0f);
+}
+
 // ワールド空間の投影フレーム。負側の面も右手系の接空間を保つ。
 struct TriplanarFrame {
     float2 x, y, z;
