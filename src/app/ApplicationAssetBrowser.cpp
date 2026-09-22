@@ -362,19 +362,26 @@ void Application::RefreshAssetBrowser() {
         return a.path().filename() < b.path().filename();
     });
     // フォルダ階層。ドット始まりと symlink は出さない。深さは 32 まで。
+    // 同じ走査で画像ファイルも集める（テクスチャのコンボに未読み込みの候補として出す）。
     m_assetFolders.clear();
+    m_workspaceImages.clear();
     const auto collect = [&](auto&& self, const fs::path& directory, int depth) -> void {
         if (depth > 32) return;
         auto& children = m_assetFolders[directory.wstring()];
         std::error_code scanError;
         fs::directory_iterator child(directory, fs::directory_options::skip_permission_denied, scanError), childEnd;
-        for (; child != childEnd && !scanError; child.increment(scanError))
-            if (child->is_directory(scanError) && !child->is_symlink(scanError) &&
-                !child->path().filename().wstring().starts_with(L".")) children.push_back(child->path());
+        for (; child != childEnd && !scanError; child.increment(scanError)) {
+            if (child->is_symlink(scanError) || child->path().filename().wstring().starts_with(L".")) continue;
+            if (child->is_directory(scanError)) children.push_back(child->path());
+            else if (IsImage(Extension(child->path()))) m_workspaceImages.push_back(child->path());
+        }
         std::sort(children.begin(), children.end());
         for (const auto& path : children) self(self, path, depth + 1);
     };
     collect(collect, m_workspace.Root(), 0);
+    std::sort(m_workspaceImages.begin(), m_workspaceImages.end(), [](const fs::path& a, const fs::path& b) {
+        return _wcsicmp(a.filename().c_str(), b.filename().c_str()) < 0;
+    });
     std::error_code stampError;
     m_assetDirectoryStamp = fs::last_write_time(m_assetDirectory, stampError);
     m_assetDirectoryChecked = ImGui::GetTime();

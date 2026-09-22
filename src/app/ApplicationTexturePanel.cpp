@@ -424,6 +424,23 @@ void Application::RequestTextureRelinkFolder() {
     }
 }
 
+TextureChoices Application::TextureChoicesForUi() {
+    return TextureChoices(m_textureLibrary, m_workspace.IsOpen() ? &m_workspaceImages : nullptr, m_workspace.Root(),
+                          [this](const std::filesystem::path& path) { return RequestTextureLoad(path); });
+}
+
+// 読み込みは GPU 待機を伴うのでフレームの中ではできない。先にリンク切れとして ID を払い出して割り当て、
+// 繋ぎ直しの予約で次のフレームの頭に読む（読めなければリンク切れのまま残り、警告色で分かる）。
+compositor::TextureId Application::RequestTextureLoad(const std::filesystem::path& path) {
+    const compositor::TextureId id = m_textureLibrary.AddMissing(path, "");
+    const compositor::LibraryTexture* entry = m_textureLibrary.Find(id);
+    if (entry != nullptr && entry->missing) {
+        m_pendingTextureRelinks.push_back({id, path});
+        m_assetRefresh = true;
+    }
+    return id;
+}
+
 bool Application::MaterialHasMissingTexture(const compositor::MaterialAsset& asset) const {
     const auto missing = [this](compositor::TextureId id) {
         const compositor::LibraryTexture* entry = m_textureLibrary.Find(id);

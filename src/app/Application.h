@@ -47,6 +47,8 @@ struct EditorContext;
 
 namespace rock {
 
+struct TextureChoices;  // ApplicationUiHelpers.h
+
 // コマンドラインから渡せる起動オプション。
 struct StartupOptions {
     // 起動時に読み込む HDRI。空なら手続き的な空を使う。
@@ -364,6 +366,10 @@ private:
     void RequestTextureRelinkFolder();
     // 予約した再リンクを処理する。繋ぎ直せたら、参照しているサムネイルと合成を作り直す。
     void ProcessPendingTextureRelinks();
+    // テクスチャのコンボに渡す候補（読み込み済み + ルート内の未読み込みの画像）。
+    TextureChoices TextureChoicesForUi();
+    // 未読み込みの画像をその場で割り当てられるよう、リンク切れとして登録して読み込みを予約する。
+    compositor::TextureId RequestTextureLoad(const std::filesystem::path& path);
     // マテリアルが参照しているテクスチャのどれかがリンク切れか。一覧の目印に使う。
     bool MaterialHasMissingTexture(const compositor::MaterialAsset& asset) const;
     // テクスチャプレビューの窓（拡大表示 + 詳細）。
@@ -676,6 +682,8 @@ private:
     std::vector<std::filesystem::directory_entry> m_assetEntries;
     // フォルダ階層（親 → 子フォルダの一覧）。毎フレーム列挙せず、更新のときに作り直す。
     std::unordered_map<std::wstring, std::vector<std::filesystem::path>> m_assetFolders;
+    // ルート内の画像ファイル（全フォルダ）。テクスチャのコンボに未読み込みの候補として出す。フォルダ階層と同時に作り直す。
+    std::vector<std::filesystem::path> m_workspaceImages;
     // 一覧で選んでいるファイル・フォルダ。クリックで単独、Ctrl+クリックで追加 / 除外、Shift+クリックで起点からの範囲。
     std::vector<std::filesystem::path> m_selectedAssets;
     std::filesystem::path m_assetSelectionAnchor;

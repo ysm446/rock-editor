@@ -1736,7 +1736,7 @@ void Application::DrawGraphPanel() {
     } else if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("materialMask")) {
-            changed |= DrawTextureSlotRow("画像（R）", mask->texture, m_textureLibrary);
+            changed |= DrawTextureSlotRow("画像（R）", mask->texture, TextureChoicesForUi());
             changed |= ui::PropertyFloat("値・画像の強度", &mask->value, 0, 1, 1);
             changed |= ui::PropertyBool("反転", &mask->invert, false);
             changed |= ui::PropertyBool("Triplanar", &mask->triplanar, false);

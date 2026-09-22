@@ -21,9 +21,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cwctype>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 namespace rock {
 
@@ -241,9 +245,28 @@ inline bool DrawMeshMaterialSlotRow(const char* label, std::optional<compositor:
     return true;
 }
 
+// テクスチャを選ぶコンボの候補。読み込み済みのライブラリに加えて、
+// ルートフォルダにある**未読み込みの画像**も出す（アセットの帯で一度開かなくても選べるように）。
+// files が null なら、読み込み済みのものだけを出す。
+struct TextureChoices {
+    TextureChoices(const compositor::TextureLibrary& library) : library(library) {}
+    TextureChoices(const compositor::TextureLibrary& library, const std::vector<std::filesystem::path>* files,
+                   std::filesystem::path root, std::function<compositor::TextureId(const std::filesystem::path&)> request)
+        : library(library), files(files), root(std::move(root)), request(std::move(request)) {}
+
+    const compositor::TextureLibrary& library;
+    // ルート内の画像ファイル（読み込み済みのものも含む。コンボの側で除く）。
+    const std::vector<std::filesystem::path>* files = nullptr;
+    // ツールチップに出す相対パスの基準。
+    std::filesystem::path root;
+    // 未読み込みの画像を選んだときに呼ぶ。割り当てる ID を返す（読み込みはフレームの外で行う）。
+    std::function<compositor::TextureId(const std::filesystem::path&)> request;
+};
+
 // テクスチャを選ぶコンボ。行の中に置く部品。
 inline bool DrawTextureCombo(const char* id, compositor::TextureId& slot,
-                      const compositor::TextureLibrary& library, float width) {
+                      const TextureChoices& choices, float width) {
+    const compositor::TextureLibrary& library = choices.library;
     std::string preview = "なし";
     bool missing = false;
     if (const compositor::LibraryTexture* current = library.Find(slot); current != nullptr) {
@@ -281,6 +304,41 @@ inline bool DrawTextureCombo(const char* id, compositor::TextureId& slot,
             }
             ImGui::PopID();
         }
+        // 未読み込みの画像。選ぶとその場で割り当て、読み込みは次のフレームの頭で行う。
+        // 突き合わせはファイルシステムに触らない比較で行う（開いている間は毎フレーム回るため）。
+        if (choices.files != nullptr && choices.request) {
+            const auto key = [](const std::filesystem::path& path) {
+                std::wstring text = path.lexically_normal().wstring();
+                for (wchar_t& c : text) c = c == L'/' ? L'\\' : static_cast<wchar_t>(std::towlower(c));
+                return text;
+            };
+            std::unordered_set<std::wstring> loaded;
+            for (const compositor::LibraryTexture& entry : library.Entries())
+                if (!entry.path.empty()) loaded.insert(key(entry.path));
+            bool header = false;
+            // 読み込み済みの行は ID を数値で積むので、別の名前空間に入れて衝突させない。
+            ImGui::PushID("unloaded");
+            for (size_t i = 0; i < choices.files->size(); ++i) {
+                const std::filesystem::path& file = (*choices.files)[i];
+                if (loaded.contains(key(file))) continue;
+                if (!header) {
+                    ImGui::SeparatorText("未読み込み");
+                    header = true;
+                }
+                ImGui::PushID(static_cast<int>(i));
+                if (ImGui::Selectable(ToUtf8Display(file.filename()).c_str(), false)) {
+                    if (const compositor::TextureId requested = choices.request(file); requested != compositor::kNoTexture) {
+                        slot = requested;
+                        changed = true;
+                    }
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s\n選ぶと読み込む", ToUtf8Display(file.lexically_relative(choices.root)).c_str());
+                }
+                ImGui::PopID();
+            }
+            ImGui::PopID();
+        }
         ImGui::EndCombo();
     }
 
@@ -291,6 +349,25 @@ inline bool DrawTextureCombo(const char* id, compositor::TextureId& slot,
             payload != nullptr) {
             slot = *static_cast<const compositor::TextureId*>(payload->Data);
             changed = true;
+        }
+        // アセットの帯から未読み込みの画像を落としたとき。パスで届くので、読み込みを予約して割り当てる。
+        // 複数選択（改行区切り）と画像以外のファイルは受けない（受け口を光らせない）。
+        if (const ImGuiPayload* dragging = ImGui::GetDragDropPayload();
+            choices.request && dragging != nullptr && dragging->IsDataType(kAssetPathDragDropType)) {
+            const std::wstring text(static_cast<const wchar_t*>(dragging->Data));
+            const std::filesystem::path path(text);
+            std::wstring ext = path.extension().wstring();
+            for (wchar_t& c : ext) c = static_cast<wchar_t>(std::towlower(c));
+            const bool image = ext == L".png" || ext == L".jpg" || ext == L".jpeg" || ext == L".exr" ||
+                               ext == L".tga" || ext == L".bmp";
+            if (image && text.find(L'\n') == std::wstring::npos) {
+                if (ImGui::AcceptDragDropPayload(kAssetPathDragDropType) != nullptr) {
+                    if (const compositor::TextureId requested = choices.request(path); requested != compositor::kNoTexture) {
+                        slot = requested;
+                        changed = true;
+                    }
+                }
+            }
         }
         ImGui::EndDragDropTarget();
     }
@@ -314,7 +391,7 @@ inline bool DrawTextureCombo(const char* id, compositor::TextureId& slot,
                                   current->texture.height);
             }
         } else {
-            ImGui::SetTooltip("なし\nテクスチャ一覧からドラッグしても割り当てられる");
+            ImGui::SetTooltip("なし\nアセットの画像をドラッグしても割り当てられる");
         }
     }
     return changed;
@@ -338,7 +415,7 @@ inline constexpr float kUvSetComboWidth = 60.0f;
 // テクスチャスロットを選ぶ行。RGB をそのまま使うマップ（ベースカラー / 法線）用。
 // uvSets を渡すと、テクスチャがあるときに右へ UV の選択を出す（map はそのビット）。
 inline bool DrawTextureSlotRow(const char* label, compositor::TextureId& slot,
-                        const compositor::TextureLibrary& library, uint32_t* uvSets = nullptr,
+                        const TextureChoices& library, uint32_t* uvSets = nullptr,
                         compositor::MaterialMap map = compositor::MaterialMap::BaseColor) {
     ui::PropertyLabel(label, uvSets ? "「なし」なら定数値を使う。右は読む UV（UV2 はモデルの 2 つ目の UV）"
                                     : "「なし」なら定数値を使う");
@@ -361,7 +438,7 @@ inline bool DrawTextureSlotRow(const char* label, compositor::TextureId& slot,
 // Megascans の _ORD のように 1 枚へ複数のマップを詰めたテクスチャがあるため。
 // uvSets を渡すと、チャンネルの右へ UV の選択も出す（map はそのビット）。
 inline bool DrawMapSlotRow(const char* label, compositor::MapSlot& slot,
-                    const compositor::TextureLibrary& library, uint32_t* uvSets = nullptr,
+                    const TextureChoices& library, uint32_t* uvSets = nullptr,
                     compositor::MaterialMap map = compositor::MaterialMap::Roughness) {
     ui::PropertyLabel(label, uvSets ? "「なし」なら定数値を使う。右は読むチャンネルと UV（UV2 はモデルの 2 つ目の UV）"
                                     : "「なし」なら定数値を使う。右は読むチャンネル");
