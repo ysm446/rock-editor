@@ -1302,6 +1302,12 @@ void Application::DrawGraphPanel() {
         ui::HintText("「全体」は形全体を平面で切ります。枚数を増やすほど凸な形に近づき、凹みが消えるので、少ない枚数（3〜8）で大きな面取りに使います。"
                      "「局所」は稜線や角を平面で欠き、凹凸を残したまま小面を増やします。平らな面の中央のように、切り口が丸い壁になる欠けは自動で除きます（枚数 40〜、半径 0.1〜0.3）。");
         ui::HintText("2つ直列につなぐと両方を重ねられます。稜線を残すには Volume to Mesh を Dual Contouring にします。");
+        ui::SectionHeader("表示");
+        if (ui::BeginPropertyTable("planeCutsView")) {
+            ui::PropertyBool("平面を表示", &m_planeCutsShowFrames, true,
+                             "このノードを選んでいる間、切り口を囲む平面の枠をビューポートに表示します。ノードの設定には保存しません。");
+            ui::EndPropertyTable();
+        }
         if (changed) {
             edited.count = std::clamp(edited.count, 1, geometry::MaxPlaneCuts);
             edited.systems = std::clamp(edited.systems, 1, 3);

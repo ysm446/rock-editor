@@ -590,11 +590,14 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (input.rocks.size() != 1 || !input.rocks[0].volume)
                 return finish(Failure(id, "Plane Cuts", "ボリュームが必要です"));
             std::string error;
-            auto cut = geometry::CutVolume(*input.rocks[0].volume, *settings, error);
+            geometry::PlaneCutsGuide guide;
+            auto cut = geometry::CutVolume(*input.rocks[0].volume, *settings, error, &guide.planes);
             if (!error.empty()) return finish(Failure(id, "Plane Cuts", error));
+            guide.frames = geometry::CutFaceFrames(cut, guide.planes);
             GeneratedRock rock;
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(cut));
+            rock.planeCuts = std::make_shared<const geometry::PlaneCutsGuide>(std::move(guide));
             result.rocks.push_back(std::move(rock));
         } else if (node->kind == NodeKind::VolumeBoolean) {
             const auto* settings = std::get_if<geometry::VolumeBooleanSettings>(&node->settings);

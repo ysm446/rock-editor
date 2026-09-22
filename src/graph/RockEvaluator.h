@@ -14,6 +14,8 @@ struct GeneratedRock {
     std::vector<GraphId> meshHistory;
     std::shared_ptr<const std::vector<geometry::OrientedBox>> boxes;
     std::shared_ptr<const geometry::VolumeGrid> volume;
+    // Plane Cuts が作った結果だけが持つ。選択時に平面の枠を表示するために使う。
+    std::shared_ptr<const geometry::PlaneCutsGuide> planeCuts;
     struct MaterialBinding {
         GraphId surface = 0, mask = 0;
         // 素材のハイトで合成する（Apply Material の設定）。

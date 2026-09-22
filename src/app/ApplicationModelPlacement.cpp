@@ -922,6 +922,30 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
     return m_hoveredModelNode != 0 || m_modelGizmoHover >= 0;
 }
 
+void Application::AppendPlaneCutFrames(std::vector<renderer::OverlayLineSet>& lines) const {
+    if (!m_planeCutsShowFrames) return;
+    const graph::Node* node = m_graph.FindNode(m_selectedGraphNode);
+    if (!node || node->kind != graph::NodeKind::PlaneCuts) return;
+    // 評価のキャッシュに残る、このノードの結果から読む。評価中は前回の結果を出し続ける。
+    const auto found = m_rockEvaluationCache.entries.find(node->id);
+    if (found == m_rockEvaluationCache.entries.end() || found->second.result.rocks.empty()) return;
+    const auto& guide = found->second.result.rocks[0].planeCuts;
+    if (!guide) return;
+    for (const auto& frame : guide->frames) {
+        // 平面ごとに色相を変える（ピースの色分けと同じ黄金比の刻み）。
+        float r, g, b;
+        ImGui::ColorConvertHSVtoRGB(std::fmod(float(frame.plane) * .618034f, .999f), .65f, 1.f, r, g, b);
+        renderer::OverlayLineSet set{XMFLOAT4{r, g, b, 1}, {}};
+        for (size_t i = 0; i < frame.corners.size(); ++i) {
+            const auto& a = frame.corners[i];
+            const auto& c = frame.corners[(i + 1) % frame.corners.size()];
+            set.points.push_back({a.x, a.y, a.z});
+            set.points.push_back({c.x, c.y, c.z});
+        }
+        lines.push_back(std::move(set));
+    }
+}
+
 void Application::DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVec2& viewportMax) {
     // --- 範囲の枠（レンダラが深度付きで描く） ------------------------------------------
     // 選んだ Model ノードはそのモデル、Transform はその枝のモデルすべて。ホバーは薄く。
@@ -991,6 +1015,7 @@ void Application::DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVe
     }
     if (!hovered.points.empty()) lines.push_back(std::move(hovered));
     if (!selectedSet.points.empty()) lines.push_back(std::move(selectedSet));
+    AppendPlaneCutFrames(lines);
     m_renderer.SetOverlayLines(std::move(lines));
 
     // --- ギズモ（ImGui。深度は見ず常に手前） ---------------------------------------

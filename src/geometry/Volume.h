@@ -78,6 +78,17 @@ struct CutPlane {
     Vec3 center;
     float radius = 0;
 };
+// 表示用の切り口の枠。平面上で、その平面の切り口（結果の表面のうち平面に乗る部分）を囲む矩形。
+// 矩形の辺はワールドの上方向（Y）を基準に揃える。plane は MakeCutPlanes の返した平面の番号。
+struct CutFaceFrame {
+    uint32_t plane = 0;
+    std::array<Vec3, 4> corners;  // 周に沿った順。
+};
+// Plane Cuts の評価で残す、表示用の平面と枠。切り口の残らない平面は枠を持たない。
+struct PlaneCutsGuide {
+    std::vector<CutPlane> planes;
+    std::vector<CutFaceFrame> frames;
+};
 // Volume Crack。点の群が作る Voronoi の境界面に沿って、表面から割れ目を彫る。
 inline constexpr int MaxCrackPoints = 512;
 struct VolumeCrackSettings {
@@ -125,7 +136,11 @@ VolumeGrid CombineVolumes(const VolumeGrid& a, const VolumeGrid& b, const Volume
 std::vector<CutPlane> MakeCutPlanes(const VolumeGrid& grid, const PlaneCutsSettings& settings,
                                     std::string& error);
 // 平面の外側を切り落とす。格子（範囲・セル間隔）は入力のまま。
-VolumeGrid CutVolume(const VolumeGrid& grid, const PlaneCutsSettings& settings, std::string& error);
+// usedPlanes を渡すと、切り落としに使った平面を返す。
+VolumeGrid CutVolume(const VolumeGrid& grid, const PlaneCutsSettings& settings, std::string& error,
+                     std::vector<CutPlane>* usedPlanes = nullptr);
+// 切り落とした結果（cut）と使った平面から、表示用の枠を求める。
+std::vector<CutFaceFrame> CutFaceFrames(const VolumeGrid& cut, const std::vector<CutPlane>& planes);
 // 点は2～512個。形の外にあってもよい。格子（範囲・セル間隔）は入力のまま。
 VolumeGrid CrackVolume(const VolumeGrid& grid, const std::vector<Vec3>& points,
                        const VolumeCrackSettings& settings, std::string& error);

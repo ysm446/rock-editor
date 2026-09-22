@@ -452,6 +452,10 @@ private:
         std::vector<int> boxPrevious;
     };
     MeshHighlightState m_meshHighlight;
+    // Plane Cuts を選んでいる間の表示。ノードの設定ではない（評価・Undo・保存に関わらない）。
+    bool m_planeCutsShowFrames = true;
+    // 選んだ Plane Cuts の平面の枠を、深度付きの線として lines へ加える。
+    void AppendPlaneCutFrames(std::vector<renderer::OverlayLineSet>& lines) const;
     // カーソル直下のメッシュを CPU のレイ交差で探し、クリックか矩形で選ぶ。
     void HandleMeshHover(bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax);
     bool HandleLightDrag(renderer::LightSettings& light, LightInteraction& interaction, bool itemActive);

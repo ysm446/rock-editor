@@ -661,8 +661,9 @@ std::vector<CutPlane> MakeCutPlanes(const VolumeGrid& g, const PlaneCutsSettings
     }
     return planes;
 }
-VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::string& error) {
-    const auto planes = MakeCutPlanes(g, s, error);
+VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::string& error,
+                     std::vector<CutPlane>* usedPlanes) {
+    auto planes = MakeCutPlanes(g, s, error);
     if (!error.empty()) return {};
     VolumeGrid out;
     out.origin = g.origin;
@@ -700,7 +701,66 @@ VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::strin
         return {};
     }
     KeepLargestComponent(out);
+    if (usedPlanes) *usedPlanes = std::move(planes);
     return out;
+}
+std::vector<CutFaceFrame> CutFaceFrames(const VolumeGrid& g, const std::vector<CutPlane>& planes) {
+    std::vector<CutFaceFrame> frames;
+    if (!ValidGrid(g) || planes.empty()) return frames;
+    // 切り口は結果の表面にある。表面のすぐ内側の格子点（隣に外部の点を持つ内部の点）のうち、
+    // 平面の近くにあるもの（局所なら欠けの球の中）を切り口の点とし、平面上の2軸へ投影した範囲を枠にする。
+    // なめらかさで稜線を丸めると切り口は内側へ少し下がるので、内側へ広めに拾う。
+    std::vector<Vec3> shell;
+    for (uint32_t z = 1; z + 1 < g.dimensions[2]; ++z)
+        for (uint32_t y = 1; y + 1 < g.dimensions[1]; ++y)
+            for (uint32_t x = 1; x + 1 < g.dimensions[0]; ++x) {
+                if (g.values[g.Index(x, y, z)] >= 0) continue;
+                if (g.values[g.Index(x - 1, y, z)] < 0 && g.values[g.Index(x + 1, y, z)] < 0 &&
+                    g.values[g.Index(x, y - 1, z)] < 0 && g.values[g.Index(x, y + 1, z)] < 0 &&
+                    g.values[g.Index(x, y, z - 1)] < 0 && g.values[g.Index(x, y, z + 1)] < 0)
+                    continue;
+                shell.push_back(g.Position(x, y, z));
+            }
+    const float inner = -1.5f * g.spacing, outer = .5f * g.spacing;
+    for (uint32_t i = 0; i < planes.size(); ++i) {
+        const CutPlane& plane = planes[i];
+        const Vec3 n = plane.normal;
+        // 枠の辺は上方向（Y）に揃える。平面が水平に近いときは X を基準にする。
+        const Vec3 reference = std::abs(n.y) > .9f ? Vec3{1, 0, 0} : Vec3{0, 1, 0};
+        Vec3 u{reference.y * n.z - reference.z * n.y, reference.z * n.x - reference.x * n.z,
+               reference.x * n.y - reference.y * n.x};
+        const float length = std::sqrt(Dot(u, u));
+        u = {u.x / length, u.y / length, u.z / length};
+        const Vec3 v{n.y * u.z - n.z * u.y, n.z * u.x - n.x * u.z, n.x * u.y - n.y * u.x};
+        float lowU = std::numeric_limits<float>::max(), highU = std::numeric_limits<float>::lowest();
+        float lowV = lowU, highV = highU;
+        size_t found = 0;
+        for (const Vec3& p : shell) {
+            const float side = Dot(n, p) - plane.offset;
+            if (side < inner || side > outer) continue;
+            if (plane.radius > 0) {
+                const Vec3 d{p.x - plane.center.x, p.y - plane.center.y, p.z - plane.center.z};
+                if (Dot(d, d) > plane.radius * plane.radius) continue;
+            }
+            const float a = Dot(u, p), b = Dot(v, p);
+            lowU = std::min(lowU, a);
+            highU = std::max(highU, a);
+            lowV = std::min(lowV, b);
+            highV = std::max(highV, b);
+            ++found;
+        }
+        // 数点だけなら、他の平面の稜線をかすめただけとみなす。
+        if (found < 4) continue;
+        // 格子点は表面の内側にあるので、表面まで届くよう半セル広げる。
+        const float pad = .5f * g.spacing;
+        lowU -= pad, highU += pad, lowV -= pad, highV += pad;
+        const Vec3 base{n.x * plane.offset, n.y * plane.offset, n.z * plane.offset};
+        const auto at = [&](float a, float b) {
+            return Vec3{base.x + u.x * a + v.x * b, base.y + u.y * a + v.y * b, base.z + u.z * a + v.z * b};
+        };
+        frames.push_back({i, {at(lowU, lowV), at(highU, lowV), at(highU, highV), at(lowU, highV)}});
+    }
+    return frames;
 }
 VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, const VolumeCrackSettings& s,
                        std::string& error) {

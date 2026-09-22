@@ -57,6 +57,34 @@ void RunPlaneCutsTests() {
     Check(error.empty() && Measure(capped, cappedInfo) && cappedInfo.components == 1 &&
               std::abs((sphereInfo.volume - cappedInfo.volume) - cap) < .08,
           "1枚の平面は球冠の体積だけを切り落とす");
+    {
+        // 枠は切り口の円（半径 √(1 − 0.5²) ≈ 0.866）を囲む平面上の正方形になる。
+        std::vector<geometry::CutPlane> used;
+        const auto framed = geometry::CutVolume(sphere, one, error, &used);
+        const auto frames = geometry::CutFaceFrames(framed, used);
+        bool onPlane = frames.size() == 1 && frames[0].plane == 0, square = onPlane;
+        if (onPlane) {
+            const auto& c = frames[0].corners;
+            for (const auto& p : c) onPlane &= std::abs(Dot(used[0].normal, p) - used[0].offset) < 1e-4f;
+            const auto edge = [&](int a, int b) {
+                return geometry::Vec3{c[b].x - c[a].x, c[b].y - c[a].y, c[b].z - c[a].z};
+            };
+            const float side = std::sqrt(Dot(edge(0, 1), edge(0, 1))), other = std::sqrt(Dot(edge(1, 2), edge(1, 2)));
+            const float expected = 2 * std::sqrt(.75f);
+            // 切り口を囲み、余白は格子数個分まで（格子点で拾うので、切り口より少し大きくなる）。
+            const auto fits = [&](float length) {
+                return length > expected - sphere.spacing && length < expected + sphere.spacing * 4;
+            };
+            square = std::abs(Dot(edge(0, 1), edge(1, 2))) < 1e-4f && fits(side) && fits(other);
+        }
+        Check(error.empty() && onPlane && square, "枠は平面上にあり、切り口の円を少しの余白で囲む正方形になる");
+        // 同じ向きで浅い平面は、深い平面に切り口ごと削られるので枠を持たない。
+        std::vector<geometry::CutPlane> shadowed = used;
+        shadowed.push_back(used[0]);
+        shadowed[1].offset += .3f;
+        const auto shadowFrames = geometry::CutFaceFrames(framed, shadowed);
+        Check(shadowFrames.size() == 1 && shadowFrames[0].plane == 0, "切り口の残らない平面は枠を持たない");
+    }
     Check(capped.dimensions == sphere.dimensions && capped.spacing == sphere.spacing &&
               capped.origin.x == sphere.origin.x && capped.values.size() == sphere.values.size(),
           "格子は入力のまま変わらない");
