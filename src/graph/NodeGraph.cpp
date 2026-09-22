@@ -71,6 +71,9 @@ constexpr std::array<PinDefinition, 4> kApplyPins = {{{PinKind::Input, ValueType
 // 形状から作るマスク。UV付きのメッシュを受けて、そのUVに対応するマスクを出す。
 constexpr std::array<PinDefinition, 2> kShapeMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Output, ValueType::Mask, "Mask"}}};
+// Subdivide。Mask で割る面を選ぶ（未接続なら全面）。
+constexpr std::array<PinDefinition, 3> kSubdividePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Input, ValueType::Mask, "Mask"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType::Mask, "Mask"}}};
 constexpr std::array<NodeDefinition, 28> kNodeDefinitions = {{
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -82,7 +85,7 @@ constexpr std::array<NodeDefinition, 28> kNodeDefinitions = {{
     {NodeKind::PieceFilter, "pieceFilter", "Piece Filter", kPieceFilterPins},
     {NodeKind::PieceTransform, "pieceTransform", "Piece Transform", kPieceFilterPins},
     {NodeKind::PiecesToMesh, "piecesToMesh", "Pieces to Mesh", kPiecesMeshPins},
-    {NodeKind::Subdivide, "subdivide", "Subdivide", kMeshFilterPins},
+    {NodeKind::Subdivide, "subdivide", "Subdivide", kSubdividePins},
     {NodeKind::Displace, "displace", "Displace", kMeshFilterPins},
     {NodeKind::Decimate, "decimate", "Decimate", kMeshFilterPins},
     {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kMeshFilterPins},

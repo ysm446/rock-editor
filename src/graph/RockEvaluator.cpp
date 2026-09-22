@@ -90,7 +90,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* displace = std::get_if<geometry::DisplaceSettings>(&node->settings)) {
         add(displace->amount); add(displace->midpoint); usesHeight = true;
     } else if (const auto* subdivide = std::get_if<geometry::SubdivideSettings>(&node->settings)) {
-        add(subdivide->levels);
+        add(subdivide->levels); add(subdivide->threshold);
     } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node->settings)) {
         add(decimate->targetTriangles); add(decimate->maxError); add(decimate->creaseWeight);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
@@ -113,13 +113,13 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
                     if (const auto* layer = std::get_if<LayerNodeSettings>(&surface->settings)) add(layer->layer.enabled);
             // 形状マスクの画像は下流の結果（rock.maskImages）に残る。マスクのノードの設定と、その入力メッシュで決まる。
             if (const auto* shape = graph.FindUpstreamNodeForPin(pin.id); shape && shape->kind == NodeKind::ShapeMask) {
-                if (usesHeight) add(std::get<geometry::ShapeMaskSettings>(shape->settings).invert);
+                if (usesHeight || node->kind == NodeKind::Subdivide) add(std::get<geometry::ShapeMaskSettings>(shape->settings).invert);
                 const auto maskKey = VolumeKey(graph, shape->id, heightKeys, depth + 1, false);
                 if (!maskKey) return std::nullopt;
                 add(maskKey->size()); key += *maskKey;
                 continue;
             }
-            if (usesHeight) {
+            if (usesHeight || node->kind == NodeKind::Subdivide) {
                 const auto* source = graph.FindUpstreamNodeForPin(pin.id);
                 if (source) {
                     if (const auto* mask = std::get_if<MaterialMaskSettings>(&source->settings)) {
@@ -283,8 +283,61 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 if (rock.volume) return finish(Failure(id, name, "Volume to Meshを通してください"));
                 std::string error;
                 if (node->kind == NodeKind::Subdivide) {
+                    // マスクで割る面を選ぶ。面の中心で値を読む。Shape Mask は UV の画像、Material Mask は定数か画像（UV / Triplanar）。
+                    std::vector<float> faceMask;
+                    if (const auto* maskNode = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr) {
+                        faceMask.assign(rock.mesh.triangles.size(), 1.f);
+                        const auto centroidUv = [&](size_t f) {
+                            const auto& u = rock.mesh.cornerUvs[f];
+                            return geometry::Mesh::Uv{(u[0].u + u[1].u + u[2].u) / 3, (u[0].v + u[1].v + u[2].v) / 3};
+                        };
+                        if (maskNode->kind == NodeKind::ShapeMask) {
+                            const auto masked = evaluate(maskNode->id, depth + 1);
+                            report(id, 0, 0);
+                            if (!masked.error.empty()) return finish(masked);
+                            const auto& image = masked.rocks[0].previewMask;
+                            if (!geometry::HasValidUvs(rock.mesh) || rock.mesh.uvWidth != masked.rocks[0].mesh.uvWidth ||
+                                rock.mesh.uvHeight != masked.rocks[0].mesh.uvHeight)
+                                return finish(Failure(id, name, "Shape MaskのMeshと同じUVのMeshを接続してください"));
+                            const bool invert = std::get<geometry::ShapeMaskSettings>(maskNode->settings).invert;
+                            for (size_t f = 0; f < faceMask.size(); ++f) {
+                                const auto uv = centroidUv(f);
+                                const float v = image->Sample(uv.u, uv.v);
+                                faceMask[f] = invert ? 1 - v : v;
+                            }
+                        } else if (const auto* mask = std::get_if<MaterialMaskSettings>(&maskNode->settings)) {
+                            const graph::ScalarField* field = nullptr;
+                            if (mask->texture) {
+                                if (!heights || !heights->masks.contains(maskNode->id)) return finish(Failure(id, name, "マスク画像を読み込めません"));
+                                field = &heights->masks.at(maskNode->id);
+                                if (!mask->triplanar && !geometry::HasValidUvs(rock.mesh))
+                                    return finish(Failure(id, name, "UVのマスク画像には先にUV Unwrapが必要です"));
+                            }
+                            for (size_t f = 0; f < faceMask.size(); ++f) {
+                                float v = mask->value;
+                                if (field) {
+                                    const float inv = 1 / mask->repeatMeters;
+                                    if (mask->triplanar) {
+                                        const auto t = rock.mesh.triangles[f];
+                                        const auto a = rock.mesh.positions[t[0]], b = rock.mesh.positions[t[1]], c = rock.mesh.positions[t[2]];
+                                        const geometry::Vec3 p{(a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3};
+                                        const auto n = geometry::FaceNormal(rock.mesh, t);
+                                        geometry::Vec3 w{std::pow(std::abs(n.x), 4.f), std::pow(std::abs(n.y), 4.f), std::pow(std::abs(n.z), 4.f)};
+                                        const float sum = std::max(w.x + w.y + w.z, 1e-8f);
+                                        v *= (field->Sample(p.z * inv, p.y * inv, true) * w.x + field->Sample(p.x * inv, p.z * inv, true) * w.y +
+                                              field->Sample(p.x * inv, p.y * inv, true) * w.z) / sum;
+                                    } else {
+                                        const auto uv = centroidUv(f);
+                                        v *= field->Sample(uv.u * inv, uv.v * inv, true);
+                                    }
+                                }
+                                if (mask->invert) v = 1 - v;
+                                faceMask[f] = std::clamp(v, 0.f, 1.f);
+                            }
+                        }
+                    }
                     rock.mesh = geometry::SubdivideMesh(rock.mesh, std::get<geometry::SubdivideSettings>(node->settings), error, stop,
-                                                       [&](int p) { report(id, 0, p); });
+                                                       [&](int p) { report(id, 0, p); }, faceMask);
                 } else {
                     if (!heights) return finish(Failure(id, name, "素材ハイトが準備されていません"));
                     auto bindings = rock.materials;

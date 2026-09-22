@@ -1433,14 +1433,20 @@ void Application::DrawGraphPanel() {
         bool changed = false;
         if (ui::BeginPropertyTable("subdivide")) {
             changed |= ui::PropertyInt("細分化の段階数", &subdivide->levels, 0, 6, 1);
+            const bool masked = selected->inputs.size() > 1 && m_graph.FindUpstreamNodeForPin(selected->inputs[1].id);
+            if (masked)
+                changed |= ui::PropertyFloat("マスクのしきい値", &subdivide->threshold, 0, 1, .5f,
+                                             "面の中心のマスク値がこれ以上の面だけを割ります。");
             ui::EndPropertyTable();
         }
         uint64_t factor = 1; for (int i=0;i<std::clamp(subdivide->levels,0,6);++i) factor*=4;
-        ui::HintText("三角形数は入力の%llu倍。出力上限は100万面です。", static_cast<unsigned long long>(factor));
+        ui::HintText("三角形数は最大で入力の%llu倍。出力上限は100万面です。", static_cast<unsigned long long>(factor));
+        ui::HintText("Maskをつなぐと、白い面だけを割ります（Shape Maskや画像マスクを使用。見える場所だけ細かくするなど）。"
+                     "隣の面は共有辺に合わせて2〜4分割し、閉じたまま保ちます。");
         if (const auto counts=m_rockEvaluationCache.detailCounts.find(selected->id); counts!=m_rockEvaluationCache.detailCounts.end())
             ui::HintText("前回入力 %llu面 → 予測 %llu面", static_cast<unsigned long long>(counts->second.first), static_cast<unsigned long long>(counts->second.first*factor));
         ui::HintText("辺の中点を共有して分割します。元の形とUVを保持し、丸めません。");
-        if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+        if (changed) { subdivide->threshold = std::clamp(subdivide->threshold, 0.0f, 1.0f); m_graph.MarkDirty(); MarkDocumentChanged(); }
     } else if (auto* displace = std::get_if<geometry::DisplaceSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("displace")) {

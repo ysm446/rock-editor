@@ -477,7 +477,7 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* volume = std::get_if<geometry::VolumeSettings>(&node.settings)) {
             item["toVolume"] = {{"resolution", volume->resolution}};
         } else if (const auto* subdivide = std::get_if<geometry::SubdivideSettings>(&node.settings)) {
-            item["subdivide"] = {{"levels",subdivide->levels}};
+            item["subdivide"] = {{"levels",subdivide->levels},{"threshold",subdivide->threshold}};
         } else if (const auto* displace = std::get_if<geometry::DisplaceSettings>(&node.settings)) {
             item["displace"] = {{"amount",displace->amount},{"midpoint",displace->midpoint}};
         } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node.settings)) {
@@ -685,7 +685,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 ReadPieceSettings(created, v && v->is_object() ? *v : json::object());
             } else if (created.kind == graph::NodeKind::Subdivide) {
                 geometry::SubdivideSettings settings;
-                if (const json* v = FindMember(item, "subdivide"); v && v->is_object()) settings.levels=ReadInt(*v,"levels",1);
+                if (const json* v = FindMember(item, "subdivide"); v && v->is_object()) { settings.levels=ReadInt(*v,"levels",1); settings.threshold=std::clamp(ReadFloat(*v,"threshold",.5f),0.f,1.f); }
                 created.settings=settings;
             } else if (created.kind == graph::NodeKind::Displace) {
                 geometry::DisplaceSettings settings;

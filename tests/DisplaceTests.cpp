@@ -16,6 +16,35 @@ void RunDisplaceTests() {
     geometry::MeshInfo info;
     Check(error.empty() && split.triangles.size()==192 && geometry::InspectMesh(split,info) && info.closed && std::abs(info.volume-8)<1e-5,
           "subdivision preserves shape, volume and closed shared topology");
+    // マスク付きの細分化。半分の面だけ割っても閉じたまま（隣の面は共有辺に合わせて割る）。
+    {
+        std::vector<float> half(box.triangles.size(),0.f);
+        for(size_t f=0;f<half.size();++f) if(geometry::FaceNormal(box,box.triangles[f]).y>.5f) half[f]=1;  // 上面だけ
+        geometry::SubdivideSettings one; one.levels=1;
+        auto partial=geometry::SubdivideMesh(box,one,error,{},{},half);
+        geometry::MeshInfo partialInfo;
+        // 上面2枚 → 8枚。側面8枚のうち上面と辺を共有する4枚は1辺が割れて2枚ずつ → 8枚、残り4枚と下面2枚はそのまま。
+        Check(error.empty() && partial.triangles.size()==8+8+4+2 && geometry::InspectMesh(partial,partialInfo) && partialInfo.closed &&
+                  std::abs(partialInfo.volume-8)<1e-5,"masked subdivision splits selected faces and keeps the mesh closed");
+        geometry::SubdivideSettings two; two.levels=2;
+        auto deeper=geometry::SubdivideMesh(box,two,error,{},{},half);
+        // 2段目は1段目の上面の子8枚だけを割る（32枚）。隣の面の子は割らない。
+        Check(error.empty() && geometry::InspectMesh(deeper,partialInfo) && partialInfo.closed && deeper.triangles.size()<box.triangles.size()*16 &&
+                  deeper.triangles.size()>=32+8+2,"only the descendants of selected faces keep splitting");
+        geometry::UvUnwrapSettings uvSettings; uvSettings.resolution=128;
+        auto unwrappedHalf=geometry::UnwrapMesh(box,uvSettings,error);
+        std::vector<float> uvHalf(unwrappedHalf.triangles.size(),0.f);
+        for(size_t f=0;f<uvHalf.size();++f) if(geometry::FaceNormal(unwrappedHalf,unwrappedHalf.triangles[f]).y>.5f) uvHalf[f]=1;
+        auto partialUv=geometry::SubdivideMesh(unwrappedHalf,one,error,{},{},uvHalf);
+        Check(error.empty() && geometry::HasValidUvs(partialUv) && partialUv.uvCharts.size()==partialUv.triangles.size(),
+              "masked subdivision keeps corner UVs and charts");
+        std::vector<float> none(box.triangles.size(),0.f);
+        auto untouched=geometry::SubdivideMesh(box,one,error,{},{},none);
+        Check(error.empty() && untouched.triangles==box.triangles,"all-black mask leaves the mesh unchanged");
+        geometry::SubdivideSettings strict=one; strict.threshold=1.1f;
+        Check(geometry::SubdivideMesh(box,strict,error,{},{},half).triangles==box.triangles,"threshold above every value selects nothing");
+        Check(geometry::SubdivideMesh(box,one,error,{},{},std::vector<float>(3,1.f)).positions.empty() && !error.empty(),"mask size mismatch is rejected");
+    }
     const auto same=geometry::SubdivideMesh(box,{0},error);
     Check(same.positions==box.positions && same.triangles==box.triangles,"zero subdivision is identity");
     auto oversized=split; oversized.triangles.resize(250001,split.triangles.front());
@@ -52,6 +81,7 @@ void RunDisplaceTests() {
          sub=g.CreateNode(graph::NodeKind::Subdivide),disp=g.CreateNode(graph::NodeKind::Displace);
     const auto link=[&](auto a,auto b,int pin=0){return g.CreateLink(g.FindNode(a)->outputs[0].id,g.FindNode(b)->inputs[pin].id);};
     Check(link(base,apply) && link(surface,apply,1) && link(apply,sub) && link(sub,disp),"detail nodes expose mesh input and output");
+    Check(g.FindNode(sub)->inputs.size()==2 && g.FindNode(sub)->inputs[1].valueType==graph::ValueType::Mask,"Subdivide has a Mask input");
     graph::MaterialHeight heights;
     auto& material=heights.surfaces[surface]; material.field={1,1,{1}}; material.mapping.method=compositor::MappingMethod::Triplanar;
     material.axes={geometry::Vec3{1,0,0},geometry::Vec3{0,1,0},geometry::Vec3{0,0,1}};
