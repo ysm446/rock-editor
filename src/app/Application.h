@@ -349,6 +349,11 @@ private:
     void DrawTextureContextMenu(compositor::TextureId target);
     // 削除の確認モーダルを開く。参照が無くても必ず通す。
     void RequestTextureRemove(compositor::TextureId id);
+    // 参照を外してからライブラリから消す（フレームの外で呼ぶ）。
+    void RemoveTextureNow(compositor::TextureId id);
+    // ファイルの無いテクスチャを消す。referenced が偽なら、どこからも使われていないものだけ。消した数を返す。
+    size_t PruneMissingTextures(bool referenced);
+    bool m_pendingMissingTexturePrune = false;
     // --- リンク切れの解消 ---------------------------------------------------
     // ファイルを選ぶダイアログを出し、選ばれたら再リンクを予約する
     // （読み込みは GPU 待機を伴うのでフレームの外で行う）。
@@ -671,6 +676,11 @@ private:
     io::AssetRelations m_assetDeleteRelations;
     bool m_assetDeleteDialog = false;
     bool m_pendingAssetDelete = false;
+    // Del キーで複数を選んで消すときの残り。確認は 1 件ずつ出し、終わる（か取り消す）たびに次を検査する。
+    std::vector<std::filesystem::path> m_assetDeleteQueue;
+    // 表示中のフォルダの更新時刻。外から消された・足されたファイルを、次の確認で一覧へ反映する。
+    std::filesystem::file_time_type m_assetDirectoryStamp{};
+    double m_assetDirectoryChecked = 0;
     // ルートの切り替え、共有アセットの保存、ファイルを開く要求。フレームの外で処理する。
     std::filesystem::path m_pendingRoot;
     std::filesystem::path m_pendingAssetOpen;

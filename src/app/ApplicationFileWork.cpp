@@ -367,6 +367,8 @@ void Application::ProcessPendingFileWork() {
             if (isScene) m_recentProjects.Add(m_workspace.Root(), path);
             m_projectPath = path;
             m_assetRefresh = true;
+            if (const size_t pruned = PruneMissingTextures(false); pruned > 0)
+                ROCK_LOG_INFO("ファイルが無く、どこからも使われていないテクスチャを %zu 件外しました", pruned);
             m_selectedGraphNode = m_graph.FindNode(m_options.selectNode) ? m_options.selectNode : 0;
             m_options.selectNode = 0;
             ++m_pieceEpoch;
@@ -455,47 +457,15 @@ void Application::ProcessPendingFileWork() {
     if (m_pendingTextureRemove != compositor::kNoTexture) {
         const compositor::TextureId removed = m_pendingTextureRemove;
         m_pendingTextureRemove = compositor::kNoTexture;
-
-        // 参照を先に外す。無効な ID を残すと、次に同じ番号が払い出されたときに
-        // 別の画像が割り当たってしまう。
-        const auto clearSlot = [removed](compositor::TextureId& slot) {
-            const bool hit = (slot == removed);
-            if (hit) {
-                slot = compositor::kNoTexture;
-            }
-            return hit;
-        };
-        const auto clearMap = [removed](compositor::MapSlot& slot) {
-            const bool hit = (slot.texture == removed);
-            if (hit) {
-                slot = compositor::MapSlot{};
-            }
-            return hit;
-        };
-
-        for (const compositor::MaterialAsset& entry : m_materialLibrary.Entries()) {
-            compositor::MaterialAsset* asset = m_materialLibrary.FindMutable(entry.id);
-            bool hit = clearSlot(asset->baseColor);
-            hit |= clearSlot(asset->normal);
-            hit |= clearMap(asset->roughness);
-            hit |= clearMap(asset->metallic);
-            hit |= clearMap(asset->ambientOcclusion);
-            hit |= clearMap(asset->height);
-            hit |= clearMap(asset->opacity);
-            if (hit) {
-                asset->thumbnailDirty = true;
-            }
+        RemoveTextureNow(removed);
+    }
+    if (m_pendingMissingTexturePrune) {
+        m_pendingMissingTexturePrune = false;
+        const size_t count = PruneMissingTextures(true);
+        if (count > 0) {
+            ROCK_LOG_INFO("リンク切れのテクスチャを %zu 件削除しました", count);
+            MarkDocumentChanged();
         }
-        for (const auto& entry : m_graph.Nodes()) {
-            auto* node = m_graph.FindMutableNode(entry.id);
-            if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&node->settings))
-                if (clearSlot(mask->texture)) { m_graph.MarkDirty(); MarkDocumentChanged(); }
-        }
-        clearSlot(m_ordTexture);
-
-        // 解放は DeferRelease でフレーム同期後に行われるため、GPU 待機は不要。
-        m_textureLibrary.Remove(m_device, removed);
-        m_renderer.InvalidateSceneMaterials();
     }
 
     if (m_pendingMaterialRemove != compositor::kNoMaterialAsset) {
@@ -541,6 +511,63 @@ void Application::ProcessPendingFileWork() {
 
     // ここまでの読み込み・改名・移動で付け替わったパスへ名前を揃える。
     SyncAssetNamesToFiles();
+}
+
+void Application::RemoveTextureNow(compositor::TextureId removed) {
+    // 参照を先に外す。無効な ID を残すと、次に同じ番号が払い出されたときに
+    // 別の画像が割り当たってしまう。
+    const auto clearSlot = [removed](compositor::TextureId& slot) {
+        const bool hit = (slot == removed);
+        if (hit) {
+            slot = compositor::kNoTexture;
+        }
+        return hit;
+    };
+    const auto clearMap = [removed](compositor::MapSlot& slot) {
+        const bool hit = (slot.texture == removed);
+        if (hit) {
+            slot = compositor::MapSlot{};
+        }
+        return hit;
+    };
+
+    for (const compositor::MaterialAsset& entry : m_materialLibrary.Entries()) {
+        compositor::MaterialAsset* asset = m_materialLibrary.FindMutable(entry.id);
+        bool hit = clearSlot(asset->baseColor);
+        hit |= clearSlot(asset->normal);
+        hit |= clearMap(asset->roughness);
+        hit |= clearMap(asset->metallic);
+        hit |= clearMap(asset->ambientOcclusion);
+        hit |= clearMap(asset->height);
+        hit |= clearMap(asset->opacity);
+        if (hit) {
+            asset->thumbnailDirty = true;
+        }
+    }
+    for (const auto& entry : m_graph.Nodes()) {
+        auto* node = m_graph.FindMutableNode(entry.id);
+        if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&node->settings))
+            if (clearSlot(mask->texture)) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+    }
+    clearSlot(m_ordTexture);
+
+    // 解放は DeferRelease でフレーム同期後に行われるため、GPU 待機は不要。
+    m_textureLibrary.Remove(m_device, removed);
+    m_renderer.InvalidateSceneMaterials();
+}
+
+// シーンを開いたあと、ファイルが無くてどこからも使われていないテクスチャは自動で消す。
+// 使われているものは、割り当てが消えたことが分かるようリンク切れとして残す（メニューからまとめて消せる）。
+size_t Application::PruneMissingTextures(bool referenced) {
+    std::vector<compositor::TextureId> targets;
+    for (const auto& entry : m_textureLibrary.Entries())
+        if (entry.missing && (referenced || CountTextureUsers(entry.id) == 0)) targets.push_back(entry.id);
+    for (const auto id : targets) RemoveTextureNow(id);
+    if (!targets.empty()) {
+        const int count = int(m_textureLibrary.Entries().size());
+        m_selectedTexture = std::clamp(m_selectedTexture, 0, std::max(0, count - 1));
+    }
+    return targets.size();
 }
 
 }  // namespace rock

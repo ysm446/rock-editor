@@ -349,6 +349,13 @@ void Application::DrawTextureContextMenu(compositor::TextureId target) {
             ImGui::SetTooltip("選んだフォルダ（とその下）から、リンク切れと同じ名前の"
                               "ファイルを探して繋ぎ直す");
         }
+        if (ImGui::MenuItem("リンク切れをすべて削除")) {
+            m_pendingMissingTexturePrune = true;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("ファイルの無いテクスチャ %zu 件を一覧から消す。マテリアルの割り当ては「なし」に戻る",
+                              m_textureLibrary.MissingCount());
+        }
     }
     if (entry != nullptr) {
         ImGui::Separator();

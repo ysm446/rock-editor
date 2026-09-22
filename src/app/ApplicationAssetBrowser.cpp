@@ -283,6 +283,7 @@ void Application::DrawAssetDeleteDialog() {
     if (!report.complete) ui::HintText("参照関係をすべて確認できませんでした。読めないファイルやリンクを確認してください。");
     if (loaded) ui::HintText("現在のシーンに読み込まれています。新規シーンなどへ切り替えてから削除してください。");
     ImGui::Separator();
+    if (!m_assetDeleteQueue.empty()) ui::HintText("残り %zu 件。続けて確認します。", m_assetDeleteQueue.size());
     ImGui::BeginDisabled(!report.complete || loaded);
     if (ImGui::Button("削除する")) {
         m_pendingAssetDelete = true;
@@ -293,6 +294,7 @@ void Application::DrawAssetDeleteDialog() {
     ImGui::SameLine();
     if (ImGui::Button("キャンセル") || ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
         m_assetDeleteDialog = false;
+        m_assetDeleteQueue.clear();  // 複数を選んで消している途中の取り消しは、残りも止める。
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
@@ -373,6 +375,9 @@ void Application::RefreshAssetBrowser() {
         for (const auto& path : children) self(self, path, depth + 1);
     };
     collect(collect, m_workspace.Root(), 0);
+    std::error_code stampError;
+    m_assetDirectoryStamp = fs::last_write_time(m_assetDirectory, stampError);
+    m_assetDirectoryChecked = ImGui::GetTime();
     m_assetRefresh = false;
 }
 
@@ -427,10 +432,29 @@ void Application::ProcessAssetWork() {
             m_pendingAssetDeleteInspect = path;
         }
     }
+    // Del キーの残り。ダイアログが閉じていて、削除の実行も待っていなければ次を検査する。
+    if (!m_assetDeleteQueue.empty() && m_pendingAssetDeleteInspect.empty() && !m_assetDeleteDialog && !m_pendingAssetDelete) {
+        m_pendingAssetDeleteInspect = m_assetDeleteQueue.front();
+        m_assetDeleteQueue.erase(m_assetDeleteQueue.begin());
+    }
     if (!m_pendingAssetDeleteInspect.empty()) {
-        m_assetDeleteRelations = io::InspectAssetRelations(m_workspace, m_pendingAssetDeleteInspect);
+        std::error_code e;
+        if (fs::exists(m_pendingAssetDeleteInspect, e)) {
+            m_assetDeleteRelations = io::InspectAssetRelations(m_workspace, m_pendingAssetDeleteInspect);
+            m_assetDeleteDialog = true;
+        } else {
+            // 外で先に消されていた。一覧から外すだけでよい。
+            m_assetRefresh = true;
+        }
         m_pendingAssetDeleteInspect.clear();
-        m_assetDeleteDialog = true;
+    }
+    // 表示中のフォルダが外で変わっていたら（エクスプローラでの削除など）、一覧を作り直す。
+    // 消えたファイルが幽霊のように残らないようにする。確認は 1 秒ごと。
+    if (!m_assetRefresh && m_workspace.IsOpen() && ImGui::GetTime() - m_assetDirectoryChecked > 1.0) {
+        m_assetDirectoryChecked = ImGui::GetTime();
+        std::error_code e;
+        const auto stamp = fs::last_write_time(m_assetDirectory, e);
+        if (e || stamp != m_assetDirectoryStamp) m_assetRefresh = true;
     }
     // --project にはシーンだけでなく、ルートのフォルダや目印ファイル（project.reproj）も渡せる。
     if (!m_pendingProjectOpen.empty()) {
@@ -661,6 +685,13 @@ void Application::DrawAssetBrowser() {
             m_assetRenameTarget.empty()) {
             if (m_selectedAssets.size() == 1 && ImGui::IsKeyPressed(ImGuiKey_F2, false)) {
                 OpenAssetRename(m_selectedAssets.front());
+            } else if (!m_selectedAssets.empty() && ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+                // 選んだものを順に削除（退避）する。確認は 1 件ずつ。フォルダは対象外（右クリックからも消せない）。
+                m_assetDeleteQueue.clear();
+                for (const auto& path : m_selectedAssets) {
+                    std::error_code e;
+                    if (!fs::is_directory(path, e)) m_assetDeleteQueue.push_back(path);
+                }
             } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_A, false)) {
                 m_selectedAssets.clear();
                 for (const auto& entry : m_assetEntries) m_selectedAssets.push_back(entry.path());
