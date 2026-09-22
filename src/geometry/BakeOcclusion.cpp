@@ -222,6 +222,18 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
         V a = Convert(mesh.positions[f[0]]), b = Convert(mesh.positions[f[1]]), c = Convert(mesh.positions[f[2]]);
         bvh.triangles.push_back({a, b, c, Min(a, Min(b, c)), Max(a, Max(b, c)), (a + b + c) * (1. / 3)});
     }
+    // 向きは頂点法線を補間して使う。面の法線のままだと、隣の面と向きが違う辺で値が段になる
+    // （上向き度は法線そのものなので、三角形の形がマスクに出る）。共有頂点で面積重み付き平均する。
+    std::vector<V> vertexNormals(mesh.positions.size(), V{0, 0, 0});
+    for (auto f : mesh.triangles) {
+        const V a = Convert(mesh.positions[f[0]]), b = Convert(mesh.positions[f[1]]), c = Convert(mesh.positions[f[2]]);
+        const V n = Cross(b - a, c - a);
+        for (auto i : f) vertexNormals[i] = vertexNormals[i] + n;
+    }
+    for (auto &n : vertexNormals) {
+        const double length = std::sqrt(Dot(n, n));
+        if (length > 0) n = n * (1 / length);
+    }
     // レイを飛ばすのは遮蔽だけ。
     if (occlusion) {
         bvh.order.resize(bvh.triangles.size());
@@ -274,7 +286,11 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
             if (texel.face == kNoFace)
                 continue;
             const auto &t = bvh.triangles[texel.face];
-            const V n = Unit(Cross(t.b - t.a, t.c - t.a));
+            const auto f = mesh.triangles[texel.face];
+            const double wa = 1 - texel.b - texel.c;
+            V n = vertexNormals[f[0]] * wa + vertexNormals[f[1]] * double(texel.b) + vertexNormals[f[2]] * double(texel.c);
+            const double nl = std::sqrt(Dot(n, n));
+            n = nl > 1e-12 ? n * (1 / nl) : Unit(Cross(t.b - t.a, t.c - t.a));
             const V surface = t.a + (t.b - t.a) * double(texel.b) + (t.c - t.a) * double(texel.c);
             double ratio = 0;
             if (settings.type == ShapeMaskType::Direction) {
@@ -282,16 +298,20 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
             } else if (settings.type == ShapeMaskType::Height) {
                 ratio = extent.y > 0 ? (surface.y - double(info.minimum.y)) / extent.y : 0;
             } else {
+                // 半球の軸は補間した法線。面の平面より下へ向くレイは隣の面に当たるだけなので数えない。
+                const V faceNormal = Unit(Cross(t.b - t.a, t.c - t.a));
                 const V tangent = Unit(Cross(std::abs(n.y) < .9 ? V{0, 1, 0} : V{1, 0, 0}, n)), bitangent = Cross(n, tangent);
-                const V p = surface + n * bias;
-                int occluded = 0;
+                const V p = surface + faceNormal * bias;
+                int occluded = 0, counted = 0;
                 for (int sample = 0; sample < settings.samples; ++sample) {
                     const double r = std::sqrt((sample + .5) / settings.samples), phi = sample * 2.399963229728653;
                     const V direction =
                         tangent * (r * std::cos(phi)) + bitangent * (r * std::sin(phi)) + n * std::sqrt(1 - r * r);
+                    if (Dot(direction, faceNormal) <= 1e-3) continue;
+                    ++counted;
                     occluded += bvh.Hit(p, direction, distance, texel.face);
                 }
-                ratio = double(occluded) / settings.samples;
+                ratio = counted > 0 ? double(occluded) / counted : 0;
             }
             const double level = std::clamp((ratio - settings.low) / double(settings.high - settings.low), 0., 1.);
             image.pixels[y * width + x] = uint8_t(std::lround(255 * level));

@@ -166,7 +166,8 @@ void TestWorkspace() {
     workspace.SetStartupScene(root / "Scenes" / "copy.rockscene");
 
     json broken = {{"materials", json::array({{{"id", 1}, {"asset", {{"uid", "missing"}, {"path", "Moved/renamed.rockmat"}}}}})}};
-    Check(!workspace.Expand(broken), "ID が見つからなければ同名へ付け替えず失敗する");
+    // 無いマテリアルはシーン全体を失敗にせず、その項目だけ外す（同名のファイルへ勝手に付け替えない）。
+    Check(workspace.Expand(broken) && broken["materials"].empty(), "ID が見つからなければ同名へ付け替えず、その項目を外す");
     const fs::path duplicate = workspace.UniquePath(root, "duplicate", ".rockmat");
     fs::copy_file(moved, duplicate, error);
     Check(!workspace.Scan(), "ID の重複を検出する");
