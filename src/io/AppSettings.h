@@ -48,8 +48,8 @@ struct DisplaySettings {
     bool showWireframeOverlay = false;
     // 岩メッシュの法線を、折れ角つきで平均して滑らかに見せるか。偽なら面法線（面ごとの陰影）。
     bool smoothShading = false;
-    // スムーズシェーディングの折れ角（度）。隣の面との角度がこれ以上の辺は折れ目を残す。0～180、既定 40。
-    float smoothShadingAngle = 40.0f;
+    // スムーズシェーディングの折れ角（度）。隣の面との角度がこれ以上の辺は折れ目を残す。0～180、既定 60。
+    float smoothShadingAngle = 60.0f;
     // Volumeを直接表示するときだけ使用。Volume to Meshの出力方式とは独立。
     geometry::VolumeMeshingMethod sdfPreviewMethod = geometry::VolumeMeshingMethod::MarchingTetrahedra;
     // アセットの帯（ルートのフォルダ階層とその中身）を出すか。畳むとビューポートが縦に広がる。
