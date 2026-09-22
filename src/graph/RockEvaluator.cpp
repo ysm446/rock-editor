@@ -60,6 +60,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         const auto* s = std::get_if<geometry::VolumeSmoothSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->mode); add(s->radius); add(s->amount); add(s->upwardFocus);
+    } else if (node->kind == NodeKind::VolumeClose) {
+        const auto* s = std::get_if<geometry::VolumeCloseSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->width);
     } else if (node->kind == NodeKind::VolumeTerrace) {
         const auto* s = std::get_if<geometry::VolumeTerraceSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -194,6 +198,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate ||
                                  node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace ||
+                                 node->kind == NodeKind::VolumeClose ||
                                  node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace ||
                                  node->kind == NodeKind::ShapeMask || node->kind == NodeKind::MaskCombine;
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id, heightKeys) : std::nullopt;
@@ -586,9 +591,9 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 rock.bakeSource = 0;
                 done += before;
             }
-        } else if (node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace) {
-            const bool smooth = node->kind == NodeKind::VolumeSmooth;
-            const char* name = smooth ? "Volume Smooth" : "Volume Terrace";
+        } else if (node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace || node->kind == NodeKind::VolumeClose) {
+            const char* name = node->kind == NodeKind::VolumeSmooth ? "Volume Smooth"
+                             : node->kind == NodeKind::VolumeTerrace ? "Volume Terrace" : "Volume Close";
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
             if (!upstream) return finish(Failure(id, name, "Volume 出力を接続してください"));
             const auto input = evaluate(upstream->id, depth + 1);
@@ -600,6 +605,8 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 processed = geometry::SmoothVolume(*input.rocks[0].volume, *settings, error);
             else if (const auto* terrace = std::get_if<geometry::VolumeTerraceSettings>(&node->settings))
                 processed = geometry::TerraceVolume(*input.rocks[0].volume, *terrace, error);
+            else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node->settings))
+                processed = geometry::CloseVolume(*input.rocks[0].volume, *close, error);
             else error = "設定がありません";
             if (!error.empty()) return finish(Failure(id, name, error));
             GeneratedRock rock;

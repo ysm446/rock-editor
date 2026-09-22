@@ -82,6 +82,8 @@ enum class NodeKind : uint32_t {
     VolumeSmooth = 61,
     // Volume にある方向の層状の段（棚）を作る。
     VolumeTerrace = 62,
+    // Volume の幅より狭い隙間（割れ目の奥）を埋める。
+    VolumeClose = 63,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -189,7 +191,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
-                                  geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings,
+                                  geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings, geometry::VolumeCloseSettings,
                                   geometry::DecimateSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ShapeMaskSettings, geometry::MaskCombineSettings, ApplyMaterialSettings,

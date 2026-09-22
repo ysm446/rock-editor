@@ -1,9 +1,17 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 19:10
+更新日時: 2026-09-22 20:20
 
 ## 現在地
+
+### 2026-09-22 Volume Close（割れ目の奥を埋める）
+
+- ユーザー依頼「割れた溝の内側を埋めるようなノード。溝は奥までなくてよいのに、深くまでメッシュが生成される」への対応。案として (1) 汎用のクロージングのノード、(2) Volume Crack に底の深さを足す、を示し、ユーザーが (1) を選んだ。仕様は [Volume Close](../reference/volume-close.md)。
+- 実装はモルフォロジーのクロージング。`d ≥ r` を「遠い外部」とし、そこまでの距離変換（Felzenszwalb & Huttenlocher、軸ごとに並列）から「半径 − 距離」を閉じた形の符号付き距離にする。元から内部の点は入力のまま、外部の点は入力との小さいほう。入口を埋めて閉じ込められた空洞も埋める。
+- 実装して分かったこと（3回直した）: (1) 格子の余白が2セルしかないので、格子の中だけでは遠い外部が見つからず、表面近くが埋まらない。外周の6方向へ「外周までのセル数 + 外周の値から r までの不足分」を候補にして外挿した。(2) 最初は埋めた点の値を「外部までの格子距離 − 半セル」で作ったが、埋めた面の等値面がセルの中間に揃い、表面が格子状に角張った（実画面でボクセルのように見えた）。距離変換に最も近い点の添字を持たせ、その点の値の超過分 (d − r) を引いて等値面までの連続な距離にした。平らな面ではこれが入力の値と一致する。(3) 表面の点をちょうど r の位置で拾うと表面が半セル外へ出たが、(2) の方式で解消。
+- 単体テスト29項目（`tests/VolumeCloseTests.cpp`。上面に V 字の溝を彫った立方体で、幅より狭い奥が埋まり広い入口が残ること、埋まる境の深さ、内部を減らさないこと、体積と外接箱、溝より広い幅で立方体に戻ること、凸な形の不変、狭い入口の奥の空洞、拒否、グラフ）。Release / Debug で全 2,931 項目が成功。テストの溝は最初、箱の上まで彫っていて外側の距離が実際より小さくなり、外挿の前提が崩れて落ちた。溝を箱の中に限った。
+- Release 実アプリで `examples/volume-close`（Volume Noise の後ろに Volume Close、幅 0.015）を撮影し、割れ目の入口は残って表面が滑らかなままなこと、幅 0.04 では割れ目が全て埋まることを確認（`data/test/claude-session-2026-09-22/volume-close/`。`after.png` は格子状に角張った初版、`after3.png` が最終）。`--save-project` で `volumeClose` の設定と2本の接続が残ることを確認。三角形数の減少は数値では未計測。実マウスでの操作、Undo/Redo の手動確認は未実施。
 
 ### 2026-09-22 Volume Smooth と Volume Terrace
 
@@ -338,7 +346,7 @@
 | 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
-| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる。Volume Terrace で層状の段を刻み、Volume Smooth で面の向きに応じてなまらせる / 角を立てられる |
+| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる。Volume Terrace で層状の段を刻み、Volume Smooth で面の向きに応じてなまらせる / 角を立てられる。Volume Close で割れ目の奥や細い隙間を埋められる |
 | 材質 | Apply Material / Material Mask / Shape Mask（オクルージョン・上向き度・高さ）/ Mask Combine（マスクの合成）、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
 | 次の作業 | 形を作る4ノード、Volume Terrace、Volume Smooth、Shape Mask、Mask Combine が入った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、Shape Mask の種類の追加（曲率 / 切断面）とディテールの焼き込みが候補 |
 

@@ -1004,6 +1004,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeNoise, "Volume Noise — 表面をノイズで削り、直線的な面を崩す");
         addNodeMenuItem(graph::NodeKind::VolumeSmooth, "Volume Smooth — 表面をなまらせる / 角を立てる（上面だけ、など）");
         addNodeMenuItem(graph::NodeKind::VolumeTerrace, "Volume Terrace — 層状の段（棚）を刻む");
+        addNodeMenuItem(graph::NodeKind::VolumeClose, "Volume Close — 幅より狭い隙間（割れ目の奥）を埋める");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1264,6 +1265,22 @@ void Application::DrawGraphPanel() {
             edited.amount = std::clamp(edited.amount, 0.0f, 1.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *smooth = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* close = std::get_if<geometry::VolumeCloseSettings>(&selected->settings)) {
+        auto edited = *close;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeCloseRows")) {
+            changed |= ui::PropertyFloat("幅", &edited.width, .005f, .3f, .05f,
+                                         "これより狭い隙間を埋めます。形の最長辺に対する比です。V 字の割れ目は、幅がこの値を下回る深さから下だけが埋まります。");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("割れ目の奥や細い切れ込みを埋めて、見えない所にメッシュが作られないようにします。外形と、元から内部だった所は変わりません。"
+                     "幅がセル間隔の2倍未満だと何も埋まりません。埋めた所の距離は格子の精度になります。");
+        if (changed) {
+            edited.width = std::clamp(edited.width, .005f, .3f);
+            *close = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

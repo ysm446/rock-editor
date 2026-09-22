@@ -18,6 +18,7 @@ void RunVolumeCrackTests();
 void RunVolumeNoiseTests();
 void RunVolumeSmoothTests();
 void RunVolumeTerraceTests();
+void RunVolumeCloseTests();
 void RunDecimateTests();
 void RunUvTests();
 void RunShadowCascadeTests();
@@ -50,6 +51,7 @@ int main(int argc, char** argv) {
     RunVolumeNoiseTests();
     RunVolumeSmoothTests();
     RunVolumeTerraceTests();
+    RunVolumeCloseTests();
     RunDecimateTests();
     RunUvTests();
     RunShadowCascadeTests();

@@ -155,6 +155,12 @@ struct VolumeTerraceSettings {
     std::array<float, 3> rotationDegrees{0, 0, 0};
     int seed = 1;
 };
+// Volume Close。幅より狭い隙間（割れ目の奥、細い切れ込み）を埋める。モルフォロジーのクロージング。
+// 外形と、元から内部だった所は変えない。V 字の割れ目は、幅がこの値を下回る深さから下だけが埋まり、入口は残る。
+struct VolumeCloseSettings {
+    // 埋める隙間の幅の上限。形の最長辺に対する比。0.005～0.3。
+    float width = .05f;
+};
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
 // 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。
@@ -193,6 +199,9 @@ VolumeGrid SmoothVolume(const VolumeGrid& grid, const VolumeSmoothSettings& sett
 // 格子（範囲・セル間隔）は入力のまま。層の位相は内部の外接箱の中心を基準にする。
 // 加工でできた浮いた小片と閉じた空洞は除く。
 VolumeGrid TerraceVolume(const VolumeGrid& grid, const VolumeTerraceSettings& settings, std::string& error);
+// 格子（範囲・セル間隔）は入力のまま。内部を減らすことはない。埋めた所の距離は格子の精度になる。
+// 埋めた結果として閉じ込められた空洞も埋める。
+VolumeGrid CloseVolume(const VolumeGrid& grid, const VolumeCloseSettings& settings, std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
 Mesh VolumeSurface(const VolumeGrid& grid, std::string& error,
                    VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra);

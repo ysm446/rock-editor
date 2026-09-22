@@ -1240,6 +1240,175 @@ VolumeGrid TerraceVolume(const VolumeGrid& g, const VolumeTerraceSettings& s, st
     FillNewVoids(out, g.values);
     return out;
 }
+namespace {
+constexpr float kEdtInfinity = 1e20f;
+// 1次元の二乗距離変換（Felzenszwalb & Huttenlocher）。f は各点の初期値（集合の点は 0、他は無限大）。
+void DistanceTransform1D(const float* f, float* d, int n, int* v, float* z, int stride, int* from) {
+    int k = -1;
+    for (int q = 0; q < n; ++q) {
+        const float fq = f[q * stride];
+        if (fq >= kEdtInfinity) continue;
+        if (k < 0) {
+            k = 0; v[0] = q; z[0] = -kEdtInfinity; z[1] = kEdtInfinity;
+            continue;
+        }
+        float s;
+        for (;;) {
+            const int p = v[k];
+            s = ((fq + float(q) * q) - (f[p * stride] + float(p) * p)) / (2.f * float(q - p));
+            if (s > z[k]) break;
+            if (--k < 0) break;
+        }
+        if (k < 0) {
+            k = 0; v[0] = q; z[0] = -kEdtInfinity; z[1] = kEdtInfinity;
+            continue;
+        }
+        ++k;
+        v[k] = q;
+        z[k] = s;
+        z[k + 1] = kEdtInfinity;
+    }
+    if (k < 0) {
+        for (int q = 0; q < n; ++q) { d[q * stride] = kEdtInfinity; from[q] = -1; }
+        return;
+    }
+    k = 0;
+    for (int q = 0; q < n; ++q) {
+        while (z[k + 1] < float(q)) ++k;
+        const int p = v[k];
+        d[q * stride] = float(q - p) * (q - p) + f[p * stride];
+        from[q] = p;
+    }
+}
+// 3次元のユークリッド距離変換。set が 1 の点までの距離（セル単位）と、その最も近い点の添字を返す。
+// 集合が空なら距離は無限大、添字は -1。
+struct DistanceField {
+    std::vector<float> distance;
+    std::vector<int64_t> source;
+};
+DistanceField DistanceToSet(const VolumeGrid& g, const std::vector<uint8_t>& set) {
+    const int nx = int(g.dimensions[0]), ny = int(g.dimensions[1]), nz = int(g.dimensions[2]);
+    std::vector<float> a(set.size()), b(set.size());
+    std::vector<int64_t> sourceA(set.size()), sourceB(set.size());
+    for (size_t i = 0; i < set.size(); ++i) {
+        a[i] = set[i] ? 0.f : kEdtInfinity;
+        sourceA[i] = set[i] ? int64_t(i) : -1;
+    }
+    const int n[3] = {nx, ny, nz};
+    const size_t stride[3] = {1, size_t(nx), size_t(nx) * ny};
+    for (int axis = 0; axis < 3; ++axis) {
+        // その軸に直交する線ごとに独立。線の先頭の添字を並べて並列に処理する。
+        std::vector<size_t> lines;
+        for (int z = 0; z < (axis == 2 ? 1 : nz); ++z)
+            for (int y = 0; y < (axis == 1 ? 1 : ny); ++y)
+                for (int x = 0; x < (axis == 0 ? 1 : nx); ++x) lines.push_back((size_t(z) * ny + y) * nx + x);
+        const size_t step = stride[axis];
+        std::for_each(std::execution::par, lines.begin(), lines.end(), [&](size_t startIndex) {
+            thread_local std::vector<int> v;
+            thread_local std::vector<float> z;
+            thread_local std::vector<int> from;
+            v.resize(size_t(n[axis]) + 1);
+            z.resize(size_t(n[axis]) + 2);
+            from.resize(size_t(n[axis]));
+            DistanceTransform1D(a.data() + startIndex, b.data() + startIndex, n[axis], v.data(), z.data(), int(step), from.data());
+            for (int q = 0; q < n[axis]; ++q) {
+                const size_t at = startIndex + size_t(q) * step;
+                sourceB[at] = from[size_t(q)] < 0 ? -1 : sourceA[startIndex + size_t(from[size_t(q)]) * step];
+            }
+        });
+        std::swap(a, b);
+        std::swap(sourceA, sourceB);
+    }
+    for (auto& value : a) value = value >= kEdtInfinity ? kEdtInfinity : std::sqrt(value);
+    return {std::move(a), std::move(sourceA)};
+}
+}  // namespace
+VolumeGrid CloseVolume(const VolumeGrid& g, const VolumeCloseSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    if (!std::isfinite(s.width) || s.width < .005f || s.width > .3f) {
+        error = "幅は 0.005～0.3 にしてください";
+        return {};
+    }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    // 半径（セル単位）。1セル未満では何も埋まらないので、そのまま返す。
+    const float radius = s.width * longest * .5f / g.spacing;
+    VolumeGrid out = g;
+    if (radius < 1) return out;
+    const size_t nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];
+    const float radiusMeters = radius * g.spacing;
+    // 1. 膨らませた形の外 = 表面から半径以上離れた外部（d ≥ r）。各点からそこまでの距離を距離変換で求める。
+    //    格子点は等値面 d = r より外にあるので、最も近い格子点の値の超過分 (d − r) を引いて等値面までの距離に直す。
+    std::vector<uint8_t> far(g.values.size());
+    for (size_t i = 0; i < far.size(); ++i) far[i] = g.values[i] >= radiusMeters ? 1 : 0;
+    auto field = DistanceToSet(g, far);
+    auto& toFar = field.distance;
+    for (size_t i = 0; i < toFar.size(); ++i)
+        if (field.source[i] >= 0) toFar[i] = std::max(0.f, toFar[i] - (g.values[size_t(field.source[i])] - radiusMeters) / g.spacing);
+    // 格子の余白は2セルしかないので、格子の中だけでは遠い外部が見つからないことがある。
+    // 外周の6方向について「外周までのセル数 + 外周の値から r までの不足分」も候補にする
+    // （格子の外は、外周の値に外へ出た距離を足したものとみなす。SampleVolume と同じ規約）。
+    for (size_t z = 0; z < nz; ++z)
+        for (size_t y = 0; y < ny; ++y)
+            for (size_t x = 0; x < nx; ++x) {
+                const size_t i = (z * ny + y) * nx + x;
+                const auto candidate = [&](size_t steps, size_t borderIndex) {
+                    const float missing = std::max(0.f, (radiusMeters - g.values[borderIndex]) / g.spacing);
+                    toFar[i] = std::min(toFar[i], float(steps) + missing);
+                };
+                candidate(x, (z * ny + y) * nx);
+                candidate(nx - 1 - x, (z * ny + y) * nx + nx - 1);
+                candidate(y, (z * ny) * nx + x);
+                candidate(ny - 1 - y, (z * ny + ny - 1) * nx + x);
+                candidate(z, y * nx + x);
+                candidate(nz - 1 - z, ((nz - 1) * ny + y) * nx + x);
+            }
+    // 2. 縮める：閉じた形の符号付き距離は「半径 − 遠い外部までの距離」。平らな面ではこれが入力の値と一致する。
+    //    元から内部の点は入力のまま。外部の点は入力とこの値の小さいほう（埋める所だけ負になる）。
+    const float threshold = g.spacing * 1e-4f;
+    for (size_t i = 0; i < out.values.size(); ++i) {
+        const float value = g.values[i];
+        if (value < 0) continue;
+        float closed = (radius - toFar[i]) * g.spacing;
+        closed = std::min(value, closed);
+        out.values[i] = std::abs(closed) < threshold ? (closed < 0 ? -threshold : threshold) : closed;
+    }
+    // 3. 埋めた結果として外周から届かなくなった外部（入口が狭く奥が広い穴）も埋める。
+    {
+        std::vector<uint8_t> reached(out.values.size(), 0);
+        std::vector<size_t> stack;
+        const auto visit = [&](size_t next) {
+            if (out.values[next] < 0 || reached[next]) return;
+            reached[next] = 1;
+            stack.push_back(next);
+        };
+        for (size_t z = 0; z < nz; ++z)
+            for (size_t y = 0; y < ny; ++y)
+                for (size_t x = 0; x < nx; ++x)
+                    if (x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz) visit((z * ny + y) * nx + x);
+        while (!stack.empty()) {
+            const size_t index = stack.back();
+            stack.pop_back();
+            const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
+            if (x > 0) visit(index - 1);
+            if (x + 1 < nx) visit(index + 1);
+            if (y > 0) visit(index - nx);
+            if (y + 1 < ny) visit(index + nx);
+            if (z > 0) visit(index - nx * ny);
+            if (z + 1 < nz) visit(index + nx * ny);
+        }
+        for (size_t i = 0; i < out.values.size(); ++i)
+            if (out.values[i] >= 0 && !reached[i]) out.values[i] = -std::max(out.values[i], g.spacing);
+    }
+    return out;
+}
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {
     error.clear();
     const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];

@@ -519,6 +519,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                     {"radius", smooth->radius},
                                     {"amount", smooth->amount},
                                     {"upwardFocus", smooth->upwardFocus}};
+        } else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node.settings)) {
+            item["volumeClose"] = {{"width", close->width}};
         } else if (const auto* terrace = std::get_if<geometry::VolumeTerraceSettings>(&node.settings)) {
             item["volumeTerrace"] = {{"step", terrace->step},
                                      {"depth", terrace->depth},
@@ -834,6 +836,11 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.amount = ReadFloat(*v, "amount", settings.amount);
                     settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
                 }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeClose) {
+                geometry::VolumeCloseSettings settings;
+                if (const json* v = FindMember(item, "volumeClose"); v && v->is_object())
+                    settings.width = ReadFloat(*v, "width", settings.width);
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeTerrace) {
                 geometry::VolumeTerraceSettings settings;
