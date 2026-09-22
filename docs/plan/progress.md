@@ -1,9 +1,19 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 17:57
+更新日時: 2026-09-22 18:30
 
 ## 現在地
+
+### 2026-09-22 Mask Combine（マスクの合成）
+
+- ユーザー合意の案（2入力、UV 画像限定、演算5種）で実装。A / B（Mask）を受けて Mask を出すノード。演算は乗算 / 最大 / 最小 / 差 / 混合。合成した値に下限 / 上限 / ガンマ / 反転を掛ける。仕様は [Mask Combine](../reference/mask-combine.md)。
+- 実装は Shape Mask の経路をそのまま使う。評価結果は A のメッシュに `previewMask` を付けたもので、Apply Material / Subdivide / Displace / 描画 / ベイクは `IsImageMaskNodeKind`（Shape Mask / Mask Combine）で判定する。使う側で掛ける反転は `ImageMaskInvert` に集めた（Mask Combine は反転を画像に焼き込むので false。Shape Mask は従来どおりノードの設定から読む）。`std::get<ShapeMaskSettings>` を使う側に残さないため。
+- 注意した点：入力の Shape Mask の反転は、キャッシュに残った評価結果の `previewMaskInvert` ではなくノードの設定から読む（Shape Mask のキーに反転は入っておらず、古い結果が返るため。最初はここで単体テストが落ちた）。Mask Combine のキーには入力の反転を含め、Shape Mask を再計算せずに合成だけ作り直す。
+- Material Mask（定数 / 画像。面の中心で読む）は合成の対象外にし、つなぐと診断する。A と B の UV のアトラス寸法か面数が違う場合も診断する。
+- 単体テスト39項目（`RunMaskCombineTests`。演算の値、反転、解像度の違い、拒否、ノード定義、診断、受け渡し、再計算、直列、Subdivide）。Release で全 2,825 項目が成功。
+- Release 実アプリで `examples/mask-combine`（錆のマスクを「オクルージョン − 上向き度」にしたもの）を開き、Mask Combine（#280）を `--select-node` で選ぶと、割れ目のうち上面を除いた所だけ白いマスクが貼られること、Mesh Output で割れ目に錆・上面に埃が載ること、`--save-project` で `maskCombine` の設定と3本の接続が残ることを確認（`data/test/claude-session-2026-09-22/mask-combine/`）。実マウスでの操作、Undo/Redo の手動確認は未実施。
+- 今回は起動中のアプリがなく、`rock_editor.exe` を直接リンクできた。
 
 ### 2026-09-22 Voronoi Fracture のワイヤーフレームとポイントの表示
 
@@ -320,8 +330,8 @@
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
 | ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる |
-| 材質 | Apply Material / Material Mask / Shape Mask（オクルージョン・上向き度・高さ）、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
-| 次の作業 | 形を作る4ノードと Shape Mask が入った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、Shape Mask の種類の追加（曲率 / 切断面）とマスクの合成、Volume Smooth、ディテールの焼き込みが候補 |
+| 材質 | Apply Material / Material Mask / Shape Mask（オクルージョン・上向き度・高さ）/ Mask Combine（マスクの合成）、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
+| 次の作業 | 形を作る4ノード、Shape Mask、Mask Combine が入った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、Shape Mask の種類の追加（曲率 / 切断面）、Volume Smooth、ディテールの焼き込みが候補 |
 
 ## 完了
 

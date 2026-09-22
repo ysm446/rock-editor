@@ -76,6 +76,8 @@ enum class NodeKind : uint32_t {
     Subdivide = 57, Displace = 58,
     // 形状の遮蔽から作るマスク。UV付きの Mesh を受け、Apply Material の Mask へ渡す。
     ShapeMask = 59,
+    // 2つのマスク（Shape Mask / Mask Combine）を画素ごとに合成する。出力は Mask。
+    MaskCombine = 60,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -185,7 +187,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::DecimateSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
-                                  geometry::ShapeMaskSettings, ApplyMaterialSettings,
+                                  geometry::ShapeMaskSettings, geometry::MaskCombineSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
                                   geometry::PieceTransformSettings, std::monostate>;
@@ -311,5 +313,10 @@ bool IsPreviewableNodeKind(NodeKind kind);
 bool IsModelNodeKind(NodeKind kind);
 // 入力数が可変の種類か（Merge）。
 bool IsVariableInputNodeKind(NodeKind kind);
+// UV空間の画像としてマスクを出す種類か（Shape Mask / Mask Combine）。選ぶと入力メッシュにマスクを貼って見せる。
+bool IsImageMaskNodeKind(NodeKind kind);
+// 画像マスクのノードの「反転」。使う側（描画・Displace・Subdivide）で 1 - mask にする分。
+// Mask Combine は反転を画像に焼き込むので false。
+bool ImageMaskInvert(const Node& node);
 
 }  // namespace rock::graph

@@ -496,6 +496,11 @@ json WriteGraph(const graph::NodeGraph& graphData,
                              : shape->type == geometry::ShapeMaskType::Height  ? "height" : "occlusion";
             item["shapeMask"] = {{"type", type}, {"resolution", shape->resolution}, {"low", shape->low}, {"high", shape->high}, {"gamma", shape->gamma},
                 {"invert", shape->invert}, {"distance", shape->distance}, {"samples", shape->samples}};
+        } else if (const auto* combine = std::get_if<geometry::MaskCombineSettings>(&node.settings)) {
+            static constexpr const char* kOperations[] = {"multiply", "maximum", "minimum", "subtract", "mix"};
+            const auto index = std::min<uint32_t>(static_cast<uint32_t>(combine->operation), 4);
+            item["maskCombine"] = {{"operation", kOperations[index]}, {"mix", combine->mix}, {"low", combine->low},
+                {"high", combine->high}, {"gamma", combine->gamma}, {"invert", combine->invert}};
         } else if (const auto* bake = std::get_if<graph::MaterialBakeSettings>(&node.settings)) {
             // ベイク結果は一時的なもので、保存しない。開き直したら未ベイクへ戻る。指紋だけ残すと、結果が無いのに
             // 「ベイク済み」と判定されるので、材質を書けないときは指紋も書かない。
@@ -743,6 +748,22 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.gamma = std::clamp(ReadFloat(*v, "gamma", 1), .1f, 10.f);
                     settings.distance = std::clamp(ReadFloat(*v, "distance", settings.distance), .001f, 1000.f);
                     settings.samples = std::clamp(ReadInt(*v, "samples", settings.samples), geometry::kMinOcclusionSamples, geometry::kMaxOcclusionSamples);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::MaskCombine) {
+                geometry::MaskCombineSettings settings;
+                if (const json* v = FindMember(item, "maskCombine"); v && v->is_object()) {
+                    const std::string operation = ReadString(*v, "operation");
+                    settings.operation = operation == "maximum" ? geometry::MaskCombineOperation::Maximum
+                                       : operation == "minimum" ? geometry::MaskCombineOperation::Minimum
+                                       : operation == "subtract" ? geometry::MaskCombineOperation::Subtract
+                                       : operation == "mix"      ? geometry::MaskCombineOperation::Mix
+                                                                 : geometry::MaskCombineOperation::Multiply;
+                    settings.mix = std::clamp(ReadFloat(*v, "mix", settings.mix), 0.f, 1.f);
+                    settings.low = std::clamp(ReadFloat(*v, "low", settings.low), 0.f, .999f);
+                    settings.high = std::clamp(ReadFloat(*v, "high", settings.high), settings.low + .001f, 1.f);
+                    settings.gamma = std::clamp(ReadFloat(*v, "gamma", 1), .1f, 10.f);
+                    settings.invert = ReadBool(*v, "invert", false);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::MaterialBake) {

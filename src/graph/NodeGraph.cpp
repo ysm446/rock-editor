@@ -75,10 +75,14 @@ constexpr std::array<PinDefinition, 2> kShapeMaskPins = {{{PinKind::Input, Value
 constexpr std::array<PinDefinition, 3> kSubdividePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Mask, "Mask"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 28> kNodeDefinitions = {{
+// 2つのマスクの合成。A が基準（出力の形とメッシュは A 側）。
+constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, ValueType::Mask, "A"},
+    {PinKind::Input, ValueType::Mask, "B"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
+constexpr std::array<NodeDefinition, 29> kNodeDefinitions = {{
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
+    {NodeKind::MaskCombine, "maskCombine", "Mask Combine", kMaskCombinePins},
     {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
     {NodeKind::VoronoiFracture, "voronoiFracture", "Voronoi Fracture", kVoronoiPins},
     {NodeKind::PieceSelect, "pieceSelect", "Piece Select", kSelectPins},
@@ -147,7 +151,17 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
            // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
-           kind == NodeKind::ShapeMask;
+           IsImageMaskNodeKind(kind);
+}
+
+bool IsImageMaskNodeKind(NodeKind kind) {
+    return kind == NodeKind::ShapeMask || kind == NodeKind::MaskCombine;
+}
+
+bool ImageMaskInvert(const Node& node) {
+    // Mask Combine は反転を画像に焼き込むので、使う側で掛けるのは Shape Mask だけ。
+    if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) return shape->invert;
+    return false;
 }
 
 bool IsPreviewableNodeKind(NodeKind kind) {
@@ -461,6 +475,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = ApplyMaterialSettings{};
     } else if (kind == NodeKind::ShapeMask) {
         node.settings = geometry::ShapeMaskSettings{};
+    } else if (kind == NodeKind::MaskCombine) {
+        node.settings = geometry::MaskCombineSettings{};
     } else if (kind == NodeKind::MaterialBake) {
         node.settings = MaterialBakeSettings{};
     } else if (kind == NodeKind::VolumeToMesh) {

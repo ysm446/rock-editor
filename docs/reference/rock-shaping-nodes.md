@@ -1,7 +1,7 @@
 # 岩らしい形と色のためのノード設計メモ
 
 作成日時: 2026-09-22 00:30
-更新日時: 2026-09-22 06:30
+更新日時: 2026-09-22 18:30
 
 ## 目的
 
@@ -77,6 +77,8 @@ Material Mask は定数と画像だけを持つ。形状由来のソースは Sh
 
 Apply Material は最大8段の合成を持つので、これらがマスク入力へつながれば色の層は組める。
 
+マスクどうしの合成: **実装済み**（2026-09-22、[Mask Combine](mask-combine.md)）。乗算 / 最大 / 最小 / 差 / 混合で、「溝のうち上面を除く」のような条件を1つのマスクにする。対象は UV 空間の画像（Shape Mask / Mask Combine）に限る。
+
 ### 7. ディテールの焼き込み（High → Low）
 
 状態: 未着手。
@@ -106,7 +108,8 @@ Base Shape → To Volume ───┘
    → Volume to Mesh（Dual Contouring。稜線が残る）
    → Decimate（UV 展開を速くし、ゲーム用の面数へ減らす）
    → UV Unwrap ─→ Shape Mask ×n（オクルージョン / 上向き度 / …。UV付きの Mesh が入力）
-   → Apply Material ×3〜4（Shape Mask を Mask へ）
+                 → Mask Combine（差・乗算などで種類を組み合わせる）
+   → Apply Material ×3〜4（Shape Mask / Mask Combine を Mask へ）
    → Material Bake
 ```
 

@@ -227,3 +227,180 @@ void RunShapeMaskTests() {
     g.Replace(redone.graphNodes, redone.graphLinks);
     Check(maskSettings().type == geometry::ShapeMaskType::Direction, "settings redo");
 }
+
+void RunMaskCombineTests() {
+    using tests::Check;
+    tests::Section("Mask Combine");
+    std::string error;
+    // --- 画像の合成 ---
+    const auto ramp = [](uint32_t size, bool vertical) {
+        geometry::MaskImage m; m.width = m.height = size; m.pixels.resize(size_t(size) * size);
+        for (uint32_t y = 0; y < size; ++y)
+            for (uint32_t x = 0; x < size; ++x) m.pixels[size_t(y) * size + x] = uint8_t((vertical ? y : x) * 255 / (size - 1));
+        return m;
+    };
+    const auto a = ramp(64, false), b = ramp(64, true);
+    const auto at = [](const geometry::MaskImage& m, uint32_t x, uint32_t y) { return m.pixels[size_t(y) * m.width + x] / 255.f; };
+    geometry::MaskCombineSettings settings;
+    const auto multiplied = geometry::CombineMasks(a, false, b, false, settings, error);
+    Check(error.empty() && multiplied.width == 64 && multiplied.height == 64 && multiplied.pixels.size() == 64 * 64 &&
+              std::abs(at(multiplied, 63, 63) - 1) < 1e-6f && at(multiplied, 0, 63) == 0 && at(multiplied, 63, 0) == 0 &&
+              std::abs(at(multiplied, 32, 32) - at(a, 32, 32) * at(b, 32, 32)) < 1.5f / 255,
+          "multiply: white only where both are white");
+    settings.operation = geometry::MaskCombineOperation::Maximum;
+    const auto maximum = geometry::CombineMasks(a, false, b, false, settings, error);
+    Check(error.empty() && at(maximum, 0, 63) == 1 && at(maximum, 63, 0) == 1 && at(maximum, 0, 0) == 0 &&
+              std::abs(at(maximum, 10, 40) - std::max(at(a, 10, 40), at(b, 10, 40))) < 1.5f / 255,
+          "maximum: white where either is white");
+    settings.operation = geometry::MaskCombineOperation::Minimum;
+    const auto minimum = geometry::CombineMasks(a, false, b, false, settings, error);
+    Check(error.empty() && at(minimum, 0, 63) == 0 && at(minimum, 63, 63) == 1 &&
+              std::abs(at(minimum, 10, 40) - std::min(at(a, 10, 40), at(b, 10, 40))) < 1.5f / 255,
+          "minimum: white only where both are white, without darkening greys");
+    settings.operation = geometry::MaskCombineOperation::Subtract;
+    const auto subtracted = geometry::CombineMasks(a, false, b, false, settings, error);
+    Check(error.empty() && at(subtracted, 63, 0) == 1 && at(subtracted, 63, 63) == 0 && at(subtracted, 0, 63) == 0 &&
+              std::abs(at(subtracted, 40, 10) - (at(a, 40, 10) - at(b, 40, 10))) < 1.5f / 255,
+          "subtract: A minus B, clamped at black");
+    settings.operation = geometry::MaskCombineOperation::Mix; settings.mix = .25f;
+    const auto mixed = geometry::CombineMasks(a, false, b, false, settings, error);
+    Check(error.empty() && std::abs(at(mixed, 63, 0) - .75f) < 1.5f / 255 && std::abs(at(mixed, 0, 63) - .25f) < 1.5f / 255,
+          "mix: interpolates A toward B by the mix amount");
+    settings = {};
+    settings.operation = geometry::MaskCombineOperation::Maximum;
+    const auto invertedInput = geometry::CombineMasks(a, true, b, false, settings, error);
+    Check(error.empty() && at(invertedInput, 0, 0) == 1 && at(invertedInput, 63, 0) == 0,
+          "input invert flags are applied before combining");
+    settings.invert = true;
+    const auto invertedOutput = geometry::CombineMasks(a, false, b, false, settings, error);
+    Check(error.empty() && at(invertedOutput, 63, 63) == 0 && at(invertedOutput, 0, 0) == 1, "invert is baked into the output");
+    settings = {};
+    settings.operation = geometry::MaskCombineOperation::Maximum; settings.low = .5f; settings.high = 1; settings.gamma = 2;
+    const auto leveled = geometry::CombineMasks(a, false, b, false, settings, error);
+    Check(error.empty() && at(leveled, 0, 20) == 0 && at(leveled, 63, 0) == 1 &&
+              std::abs(at(leveled, 48, 0) - std::pow((at(a, 48, 0) - .5f) / .5f, 2.f)) < 1.5f / 255,
+          "low / high / gamma shape the combined value");
+    settings = {};
+    const auto small = ramp(32, true);
+    const auto upscaled = geometry::CombineMasks(a, false, small, false, settings, error);
+    Check(error.empty() && upscaled.width == 64 && upscaled.height == 64 && upscaled.pixels.size() == 64 * 64 &&
+              at(upscaled, 63, 63) == 1 && at(upscaled, 63, 0) == 0 && std::abs(at(upscaled, 63, 32) - .5f) < .04f,
+          "different resolutions: output uses the larger and samples the smaller");
+    Check(geometry::CombineMasks(small, false, a, false, settings, error).width == 64, "larger B also sets the output size");
+    for (auto bad : {[](auto s) { s.mix = 2; return s; }(settings), [](auto s) { s.low = .5f; s.high = .5f; return s; }(settings),
+                     [](auto s) { s.gamma = 0; return s; }(settings), [](auto s) { s.operation = geometry::MaskCombineOperation(9); return s; }(settings)})
+        Check(geometry::CombineMasks(a, false, b, false, bad, error).pixels.empty() && !error.empty(), "invalid setting rejected");
+    Check(geometry::CombineMasks({}, false, b, false, settings, error).pixels.empty() && !error.empty(), "empty input rejected");
+
+    // --- グラフ ---
+    graph::NodeGraph g;
+    const auto base = g.CreateNode(graph::NodeKind::BaseRock), uv = g.CreateNode(graph::NodeKind::UvUnwrap),
+               apply = g.CreateNode(graph::NodeKind::ApplyMaterial), surface = g.CreateNode(graph::NodeKind::Surface),
+               up = g.CreateNode(graph::NodeKind::ShapeMask), high = g.CreateNode(graph::NodeKind::ShapeMask),
+               combine = g.CreateNode(graph::NodeKind::MaskCombine), constant = g.CreateNode(graph::NodeKind::MaterialMask);
+    const auto link = [&](int from, int to, int pin = 0) {
+        return g.CreateLink(g.FindNode(from)->outputs[0].id, g.FindNode(to)->inputs[pin].id);
+    };
+    const auto shape = [&](int id) -> geometry::ShapeMaskSettings& { return std::get<geometry::ShapeMaskSettings>(g.FindMutableNode(id)->settings); };
+    const auto combineSettings = [&]() -> geometry::MaskCombineSettings& { return std::get<geometry::MaskCombineSettings>(g.FindMutableNode(combine)->settings); };
+    std::get<geometry::UvUnwrapSettings>(g.FindMutableNode(uv)->settings).resolution = 128;
+    std::get<graph::BaseRockNodeSettings>(g.FindMutableNode(base)->settings).size = {1, 3, 1};
+    shape(up).type = geometry::ShapeMaskType::Direction; shape(up).resolution = 128; shape(up).low = 0; shape(up).high = 1;
+    shape(high).type = geometry::ShapeMaskType::Height; shape(high).resolution = 128; shape(high).low = 0; shape(high).high = 1;
+    const auto* definition = graph::FindNodeDefinitionByName("maskCombine");
+    Check(definition && definition->kind == graph::NodeKind::MaskCombine && g.FindNode(combine)->inputs.size() == 2 &&
+              g.FindNode(combine)->inputs[0].valueType == graph::ValueType::Mask && g.FindNode(combine)->inputs[1].valueType == graph::ValueType::Mask &&
+              g.FindNode(combine)->outputs.size() == 1 && g.FindNode(combine)->outputs[0].valueType == graph::ValueType::Mask &&
+              combineSettings().operation == geometry::MaskCombineOperation::Multiply && graph::IsPreviewableNodeKind(graph::NodeKind::MaskCombine) &&
+              graph::IsImageMaskNodeKind(graph::NodeKind::MaskCombine) && !graph::ImageMaskInvert(*g.FindNode(combine)),
+          "node has two Mask inputs and a Mask output, defaults to multiply, and can be previewed");
+    Check(!g.CanCreateLink(g.FindNode(combine)->outputs[0].id, g.FindNode(apply)->inputs[0].id) &&
+              !g.CanCreateLink(g.FindNode(uv)->outputs[0].id, g.FindNode(combine)->inputs[0].id),
+          "Mask pins only connect to Mask pins");
+    Check(link(base, uv) && link(uv, up) && link(uv, high) && link(uv, apply) && link(surface, apply, 1) && link(combine, apply, 2),
+          "chain connects");
+    graph::RockEvaluationCache cache;
+    auto r = graph::EvaluateRocks(g, apply, &cache);
+    Check(!r.error.empty() && r.error.find("Mask Combine") != std::string::npos, "unconnected inputs are diagnosed");
+    Check(link(constant, combine) && link(high, combine, 1), "Material Mask connects by type");
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(!r.error.empty() && r.error.find("Material Mask") != std::string::npos, "Material Mask input is diagnosed");
+    for (const auto& l : g.Links()) if (l.endPin == g.FindNode(combine)->inputs[0].id) { g.DeleteLink(l.id); break; }
+    Check(link(up, combine), "Shape Mask connects to A");
+
+    r = graph::EvaluateRocks(g, combine, &cache);
+    Check(r.error.empty() && r.rocks.size() == 1 && r.rocks[0].previewMask && r.rocks[0].previewMask->width == 128 &&
+              !r.rocks[0].previewMaskInvert && geometry::HasValidUvs(r.rocks[0].mesh) && r.rocks[0].materials.empty(),
+          "previewing the combine node yields the A mesh with the combined image");
+    const auto preview = r.rocks[0].previewMask;
+    // 乗算：上向き × 高さ。画素ごとに入力の積になる。
+    const auto upImage = graph::EvaluateRocks(g, up, &cache).rocks[0].previewMask;
+    const auto highImage = graph::EvaluateRocks(g, high, &cache).rocks[0].previewMask;
+    bool productOk = upImage && highImage && upImage->pixels.size() == preview->pixels.size();
+    int white = 0;
+    for (size_t i = 0; productOk && i < preview->pixels.size(); ++i) {
+        const float expect = upImage->pixels[i] / 255.f * (highImage->pixels[i] / 255.f);
+        productOk &= std::abs(preview->pixels[i] / 255.f - expect) < 1.5f / 255;
+        white += preview->pixels[i] == 255;
+    }
+    Check(productOk && white > 0, "combined image is the pixel-wise product of its inputs");
+    const auto computed = cache.computations[combine];
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && r.rocks.size() == 1 && r.rocks[0].maskImages.contains(combine) && r.rocks[0].maskImages.at(combine) == preview &&
+              !r.rocks[0].maskImages.contains(up) && !r.rocks[0].previewMask && cache.computations[combine] == computed,
+          "Apply Material carries the combined image under the combine node and reuses it");
+    combineSettings().operation = geometry::MaskCombineOperation::Maximum;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && cache.computations[combine] == computed + 1 && r.rocks[0].maskImages.at(combine) != preview, "operation change recomputes");
+    const auto maxImage = r.rocks[0].maskImages.at(combine);
+    combineSettings().invert = true;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && cache.computations[combine] == computed + 2 && r.rocks[0].maskImages.at(combine)->pixels != maxImage->pixels,
+          "invert is baked into the image and part of the cache key");
+    combineSettings().invert = false;
+    const auto shapeComputed = cache.computations[up];
+    shape(up).invert = true;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && cache.computations[up] == shapeComputed, "input invert does not recompute the Shape Mask");
+    Check(r.error.empty() && cache.computations[combine] == computed + 3, "input invert recomputes the combine");
+    Check(r.error.empty() && r.rocks[0].maskImages.at(combine)->pixels != maxImage->pixels, "input invert changes the combined image");
+    shape(up).invert = false;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && r.rocks[0].maskImages.at(combine)->pixels == maxImage->pixels, "restoring the input gives the same image");
+    shape(high).low = .3f;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && cache.computations[combine] == computed + 5, "input Shape Mask setting change recomputes the combine");
+
+    // 直列：合成の結果をさらに合成する。
+    const auto second = g.CreateNode(graph::NodeKind::MaskCombine), coarse = g.CreateNode(graph::NodeKind::ShapeMask);
+    shape(coarse).type = geometry::ShapeMaskType::Height; shape(coarse).resolution = 256;
+    Check(link(uv, coarse) && link(combine, second) && link(coarse, second, 1), "combine output connects to another combine");
+    std::get<geometry::MaskCombineSettings>(g.FindMutableNode(second)->settings).operation = geometry::MaskCombineOperation::Subtract;
+    r = graph::EvaluateRocks(g, second, &cache);
+    Check(r.error.empty() && r.rocks[0].previewMask && r.rocks[0].previewMask->width == 256, "chained combine follows the larger input resolution");
+    const auto chained = g.CreateNode(graph::NodeKind::ApplyMaterial);
+    link(apply, chained); link(surface, chained, 1); link(second, chained, 2);
+    r = graph::EvaluateRocks(g, chained, &cache);
+    Check(r.error.empty() && r.rocks[0].maskImages.contains(combine) && r.rocks[0].maskImages.contains(second) && r.rocks[0].materials.size() == 2,
+          "two masked materials carry both images");
+
+    // 下流の Subdivide も合成マスクで面を選べる。
+    const auto subdivide = g.CreateNode(graph::NodeKind::Subdivide);
+    Check(link(apply, subdivide) && link(combine, subdivide, 1), "combine connects to Subdivide's Mask");
+    r = graph::EvaluateRocks(g, subdivide, &cache);
+    Check(r.error.empty() && !r.rocks.empty(), "Subdivide accepts the combined mask");
+
+    // 別のメッシュから作ったマスクとは合成できない。
+    const auto other = g.CreateNode(graph::NodeKind::BaseRock), otherUv = g.CreateNode(graph::NodeKind::UvUnwrap), otherMask = g.CreateNode(graph::NodeKind::ShapeMask),
+               mismatch = g.CreateNode(graph::NodeKind::MaskCombine);
+    std::get<geometry::UvUnwrapSettings>(g.FindMutableNode(otherUv)->settings).resolution = 256;
+    shape(otherMask).type = geometry::ShapeMaskType::Height; shape(otherMask).resolution = 128;
+    link(other, otherUv); link(otherUv, otherMask); link(up, mismatch); link(otherMask, mismatch, 1);
+    r = graph::EvaluateRocks(g, mismatch, &cache);
+    Check(!r.error.empty() && r.error.find("UV") != std::string::npos, "masks from different UV atlases are diagnosed");
+
+    combineSettings().mix = 3;
+    combineSettings().operation = geometry::MaskCombineOperation::Mix;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(!r.error.empty() && r.error.find("Mask Combine") != std::string::npos, "invalid settings are diagnosed on the combine node");
+}

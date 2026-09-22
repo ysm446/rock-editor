@@ -98,6 +98,9 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
         // 反転は画像を変えない（使う側で掛ける）ので含めない。
         add(occlusion->type); add(occlusion->distance); add(occlusion->samples); add(occlusion->resolution); add(occlusion->low); add(occlusion->high); add(occlusion->gamma);
+    } else if (const auto* combine = std::get_if<geometry::MaskCombineSettings>(&node->settings)) {
+        // 反転も画像に焼き込むので含める。入力（A / B）は下の Mask のピンの処理で辿る。
+        add(combine->operation); add(combine->mix); add(combine->low); add(combine->high); add(combine->gamma); add(combine->invert);
     } else if (const auto* apply = std::get_if<ApplyMaterialSettings>(&node->settings)) {
         add(apply->heightBlend); add(apply->heightBlendRange);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
@@ -114,8 +117,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
                 if (const auto* surface = graph.FindUpstreamNodeForPin(pin.id))
                     if (const auto* layer = std::get_if<LayerNodeSettings>(&surface->settings)) add(layer->layer.enabled);
             // 形状マスクの画像は下流の結果（rock.maskImages）に残る。マスクのノードの設定と、その入力メッシュで決まる。
-            if (const auto* shape = graph.FindUpstreamNodeForPin(pin.id); shape && shape->kind == NodeKind::ShapeMask) {
-                if (usesHeight || node->kind == NodeKind::Subdivide) add(std::get<geometry::ShapeMaskSettings>(shape->settings).invert);
+            // Mask Combine の入力（A / B）もここを通り、入力のマスクのキーをつなぐ。
+            if (const auto* shape = graph.FindUpstreamNodeForPin(pin.id); shape && IsImageMaskNodeKind(shape->kind)) {
+                // Mask Combine は入力の反転を画像に焼き込むので、常に含める。
+                if (usesHeight || node->kind == NodeKind::Subdivide || node->kind == NodeKind::MaskCombine) add(ImageMaskInvert(*shape));
                 const auto maskKey = VolumeKey(graph, shape->id, heightKeys, depth + 1, false);
                 if (!maskKey) return std::nullopt;
                 add(maskKey->size()); key += *maskKey;
@@ -180,7 +185,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate ||
                                  node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace ||
-                                 node->kind == NodeKind::ShapeMask;
+                                 node->kind == NodeKind::ShapeMask || node->kind == NodeKind::MaskCombine;
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id, heightKeys) : std::nullopt;
         if (persistentKey) {
             const auto found = persistent->entries.find(id);
@@ -227,6 +232,32 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (!error.empty()) return finish(Failure(id, "Shape Mask", error));
             result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
             result.rocks[0].previewMaskInvert = settings->invert;
+        } else if (node->kind == NodeKind::MaskCombine) {
+            const auto* settings = std::get_if<geometry::MaskCombineSettings>(&node->settings);
+            const auto* a = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[0].id) : nullptr;
+            const auto* b = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
+            if (!settings || !a || !b) return finish(Failure(id, "Mask Combine", "AとBにShape MaskかMask Combineを接続してください"));
+            // Material Mask は面の中心で読む定数か画像で、UV空間の画像を持たない。
+            if (!IsImageMaskNodeKind(a->kind) || !IsImageMaskNodeKind(b->kind))
+                return finish(Failure(id, "Mask Combine", "Material Maskは合成できません。Shape MaskかMask Combineを接続してください"));
+            result = evaluate(a->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            const auto second = evaluate(b->id, depth + 1);
+            report(id, 0, 0);
+            if (!second.error.empty()) return finish(second);
+            if (result.rocks.size() != 1 || !result.rocks[0].previewMask || second.rocks.size() != 1 || !second.rocks[0].previewMask)
+                return finish(Failure(id, "Mask Combine", "AとBのマスクがありません"));
+            // 合成した画像は A のメッシュのUVで貼る。B は同じアトラスのUVを持つ必要がある。
+            if (result.rocks[0].mesh.uvWidth != second.rocks[0].mesh.uvWidth || result.rocks[0].mesh.uvHeight != second.rocks[0].mesh.uvHeight ||
+                result.rocks[0].mesh.triangles.size() != second.rocks[0].mesh.triangles.size())
+                return finish(Failure(id, "Mask Combine", "AとBには同じUVのMeshから作ったマスクを接続してください（同じUV Unwrapの出力から分ける）"));
+            // 入力の反転は、キャッシュに残った評価結果ではなく、いまのノードの設定から読む（Shape Mask のキーに反転は入っていない）。
+            std::string error;
+            auto image = geometry::CombineMasks(*result.rocks[0].previewMask, ImageMaskInvert(*a),
+                                                *second.rocks[0].previewMask, ImageMaskInvert(*b), *settings, error);
+            if (!error.empty()) return finish(Failure(id, "Mask Combine", error));
+            result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
+            result.rocks[0].previewMaskInvert = false;
         } else if (node->kind == NodeKind::ApplyMaterial) {
             const auto* upstream = graph.FindUpstreamNodeForPin(node->inputs[0].id);
             const auto* material = graph.FindUpstreamNodeForPin(node->inputs[1].id);
@@ -240,7 +271,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (const auto* layer = std::get_if<LayerNodeSettings>(&material->settings); layer && !layer->layer.enabled)
                 return finish(result);
             std::shared_ptr<const geometry::MaskImage> shapeMask;
-            if (mask && mask->kind == NodeKind::ShapeMask) {
+            if (mask && IsImageMaskNodeKind(mask->kind)) {
                 const auto masked = evaluate(mask->id, depth + 1);
                 if (!masked.error.empty()) return finish(masked);
                 shapeMask = masked.rocks[0].previewMask;
@@ -304,7 +335,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                             const auto& u = rock.mesh.cornerUvs[f];
                             return geometry::Mesh::Uv{(u[0].u + u[1].u + u[2].u) / 3, (u[0].v + u[1].v + u[2].v) / 3};
                         };
-                        if (maskNode->kind == NodeKind::ShapeMask) {
+                        if (IsImageMaskNodeKind(maskNode->kind)) {
                             const auto masked = evaluate(maskNode->id, depth + 1);
                             report(id, 0, 0);
                             if (!masked.error.empty()) return finish(masked);
@@ -312,7 +343,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                             if (!geometry::HasValidUvs(rock.mesh) || rock.mesh.uvWidth != masked.rocks[0].mesh.uvWidth ||
                                 rock.mesh.uvHeight != masked.rocks[0].mesh.uvHeight)
                                 return finish(Failure(id, name, "Shape MaskのMeshと同じUVのMeshを接続してください"));
-                            const bool invert = std::get<geometry::ShapeMaskSettings>(maskNode->settings).invert;
+                            const bool invert = ImageMaskInvert(*maskNode);
                             for (size_t f = 0; f < faceMask.size(); ++f) {
                                 const auto uv = centroidUv(f);
                                 const float v = image->Sample(uv.u, uv.v);
@@ -378,7 +409,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                             compositor::MaterialMask shape;
                             if (const auto image = rock.maskImages.find(binding.mask); image != rock.maskImages.end()) {
                                 shape.value = image->second->Sample(uv.u, uv.v);
-                                shape.invert = std::get<geometry::ShapeMaskSettings>(maskNode->settings).invert;
+                                shape.invert = ImageMaskInvert(*maskNode);
                                 mask = &shape;
                             }
                             h = heights->Sample(binding.surface, mask, binding.mask, p, n, uv, h, wrap,

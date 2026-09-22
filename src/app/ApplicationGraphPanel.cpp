@@ -310,15 +310,15 @@ void Application::DrawBakedTextureTiles(const graph::MaterialBakeSettings& bake)
 void Application::SyncMeshGraph() {
     if (m_uvLastSelectedNode != m_selectedGraphNode) {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
-            previous && (previous->kind == graph::NodeKind::UvUnwrap || previous->kind == graph::NodeKind::ShapeMask) &&
+            previous && (previous->kind == graph::NodeKind::UvUnwrap || graph::IsImageMaskNodeKind(previous->kind)) &&
             m_previewGraphNode == previous->id)
             SetPreviewGraphNode(m_uvPreviousPreviewNode, m_uvPreviousPreviewPin);
         m_pieceSelectionEditing = false;
         m_pieceGizmoId = -1;
         m_uvLastSelectedNode = m_selectedGraphNode;
-        // UV Unwrap は選ぶとUVチェッカー、Shape Mask は選ぶとマスクを貼った入力メッシュを出す。選択を外すと元のプレビューへ戻す。
+        // UV Unwrap は選ぶとUVチェッカー、Shape Mask / Mask Combine は選ぶとマスクを貼った入力メッシュを出す。選択を外すと元のプレビューへ戻す。
         if (const auto* node = m_graph.FindNode(m_selectedGraphNode);
-            node && (node->kind == graph::NodeKind::UvUnwrap || node->kind == graph::NodeKind::ShapeMask)) {
+            node && (node->kind == graph::NodeKind::UvUnwrap || graph::IsImageMaskNodeKind(node->kind))) {
             m_uvPreviousPreviewNode = m_previewGraphNode;
             m_uvPreviousPreviewPin = m_previewGraphPin;
             SetPreviewGraphNode(node->id);
@@ -337,7 +337,7 @@ void Application::SyncMeshGraph() {
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
                n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate ||
                n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace ||
-               n.kind == graph::NodeKind::ShapeMask;
+               graph::IsImageMaskNodeKind(n.kind);
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
     const std::string geometryKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
@@ -1016,6 +1016,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::ApplyMaterial, "Apply Material — マスクで素材を適用");
         addNodeMenuItem(graph::NodeKind::MaterialMask, "Material Mask — 定数・画像マスク");
         addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（オクルージョン / 上向き度 / 高さ）");
+        addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
         addNodeMenuItem(graph::NodeKind::MaterialBake, "Material Bake — UVへ材質を焼き付ける");
         ImGui::EndPopup();
     }
@@ -1612,6 +1613,48 @@ void Application::DrawGraphPanel() {
             edited.high = std::clamp(edited.high, edited.low + .001f, 1.0f);
             edited.gamma = std::clamp(edited.gamma, .1f, 10.0f);
             *shape = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* combine = std::get_if<geometry::MaskCombineSettings>(&selected->settings)) {
+        auto edited = *combine;
+        bool changed = false;
+        if (ui::BeginPropertyTable("maskCombineRows")) {
+            const char* operations[] = {"乗算（A × B）", "最大（和）", "最小（積）", "差（A − B）", "混合"};
+            int operation = std::clamp(static_cast<int>(edited.operation), 0, 4);
+            if (ui::PropertyCombo("演算", &operation, operations, 5, 0)) {
+                edited.operation = static_cast<geometry::MaskCombineOperation>(operation);
+                changed = true;
+            }
+            if (edited.operation == geometry::MaskCombineOperation::Mix)
+                changed |= ui::PropertyFloat("混合", &edited.mix, 0, 1, .5f, "0 で A、1 で B。");
+            changed |= ui::PropertyFloat("下限", &edited.low, 0, 1, 0, "合成した値がこれ以下の所を黒（0）にします。");
+            changed |= ui::PropertyFloat("上限", &edited.high, 0, 1, 1, "合成した値がこれ以上の所を白（1）にします。");
+            changed |= ui::PropertyFloat("カーブ（ガンマ）", &edited.gamma, .1f, 10, 1,
+                                         "中間の階調を寄せます。1 で直線、大きいほど白い範囲が細く、小さいほど白い範囲が太くなります（値 ^ ガンマ）。", "%.2f", ImGuiSliderFlags_Logarithmic);
+            changed |= ui::PropertyBool("反転", &edited.invert, false);
+            ui::EndPropertyTable();
+        }
+        if (EvaluatingNode() == selected->id) {
+            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
+            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
+                               EvaluationProgressText().c_str());
+        }
+        ui::HintText("AとBにShape Mask（またはMask Combine）を接続し、MaskをApply Materialへつなぎます。2つは同じUV Unwrapの出力から作ったマスクにします。"
+                     "出力の解像度は大きいほうに合わせます。選択中は、合成したマスクを白黒で貼って表示します。");
+        switch (edited.operation) {
+        case geometry::MaskCombineOperation::Maximum: ui::HintText("最大：どちらかが白ければ白。溝と上面の両方に同じ素材を載せる、といった「または」に使います。"); break;
+        case geometry::MaskCombineOperation::Minimum: ui::HintText("最小：両方が白い所だけ白。乗算より縁が硬く、灰色の重なりで暗くなりません。"); break;
+        case geometry::MaskCombineOperation::Subtract: ui::HintText("差：AからBを除きます。溝のうち上面を除く、といった「ただし〜以外」に使います。"); break;
+        case geometry::MaskCombineOperation::Mix: ui::HintText("混合：AとBを割合で補間します。"); break;
+        default: ui::HintText("乗算：両方が白い所だけ白。灰色どうしはさらに暗くなります。「かつ」に使います。"); break;
+        }
+        if (changed) {
+            edited.mix = std::clamp(edited.mix, 0.0f, 1.0f);
+            edited.low = std::clamp(edited.low, 0.0f, .999f);
+            edited.high = std::clamp(edited.high, edited.low + .001f, 1.0f);
+            edited.gamma = std::clamp(edited.gamma, .1f, 10.0f);
+            *combine = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

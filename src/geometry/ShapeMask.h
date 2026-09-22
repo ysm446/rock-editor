@@ -42,4 +42,25 @@ inline constexpr int kMinShapeMaskResolution = 128, kMaxShapeMaskResolution = 40
 // 失敗・取消では空の画像を返し、error に理由を入れる。
 MaskImage ShapeMask(const Mesh& mesh, const ShapeMaskSettings& settings, std::string& error,
                     std::stop_token stop = {}, const std::function<void(int)>& progress = {});
+
+// 2つのマスク画像の合成（Mask Combine）。保存は名前で行う（ProjectIo）。
+enum class MaskCombineOperation : uint32_t {
+    Multiply = 0,  // A × B。両方が白い所だけ白
+    Maximum = 1,   // max(A, B)。どちらかが白ければ白（和）
+    Minimum = 2,   // min(A, B)。両方が白い所だけ白（積。乗算より縁が硬い）
+    Subtract = 3,  // A − B。A から B を除く（0 で止める）
+    Mix = 4,       // A と B を「混合」の割合で補間
+};
+struct MaskCombineSettings {
+    MaskCombineOperation operation = MaskCombineOperation::Multiply;
+    float mix = .5f;              // 混合だけが使う。0 で A、1 で B
+    float low = 0, high = 1;      // 合成した値の low を 0、high を 1 へ伸ばす
+    float gamma = 1;              // 伸ばした値 ^ gamma。0.1〜10
+    bool invert = false;          // 合成は安価なので、Shape Mask と違って画像に焼き込む
+    bool operator==(const MaskCombineSettings&) const = default;
+};
+// A と B を画素ごとに合成する。invertA / invertB は入力の Shape Mask の「反転」（画像には掛かっていない）。
+// 出力の一辺は大きいほうの入力に合わせ、もう一方は線形補間で読む。失敗では空の画像を返し、error に理由を入れる。
+MaskImage CombineMasks(const MaskImage& a, bool invertA, const MaskImage& b, bool invertB,
+                       const MaskCombineSettings& settings, std::string& error);
 }  // namespace rock::geometry
