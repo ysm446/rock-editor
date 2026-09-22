@@ -1,13 +1,13 @@
 #include "renderer/RockMesh.h"
 #include "geometry/UvUnwrap.h"
+#include <algorithm>
 #include <cmath>
 #include <vector>
 namespace rock::renderer {
 namespace {
 // 折れ角のしきい値。これより鋭い辺は法線を分け、岩の割れ面の角を残す。
-constexpr float kCreaseDegrees = 40.0f;
 }  // namespace
-MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
+MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth, float creaseDegrees) {
     MeshData result;
     geometry::MeshInfo info;
     if (!geometry::InspectMesh(mesh, info)) return result;
@@ -38,7 +38,7 @@ MeshData MakeRockMeshData(const geometry::Mesh& mesh, bool smooth) {
         for (size_t f = 0; f < mesh.triangles.size(); ++f)
             for (const uint32_t index : mesh.triangles[f]) adjacencyFaces[cursor[index]++] = static_cast<uint32_t>(f);
     }
-    const float creaseCosine = std::cos(kCreaseDegrees * 3.14159265358979323846f / 180.0f);
+    const float creaseCosine = std::cos(std::clamp(creaseDegrees, 0.0f, 180.0f) * 3.14159265358979323846f / 180.0f);
     for (size_t f = 0; f < mesh.triangles.size(); ++f) {
         const auto& face = mesh.triangles[f];
         const auto n = faceNormals[f];

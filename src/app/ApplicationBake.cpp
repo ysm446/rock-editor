@@ -246,7 +246,7 @@ void Application::ProcessPendingBake() {
         const auto result = graph::EvaluateRocks(m_graph, job.id, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod, {}, nullptr, m_materialHeights.get());
         if (!result.error.empty() || result.rocks.size() != 1) { discard("入力が変更されたためベイクを中止しました"); return; }
         renderer::SceneMesh mesh;
-        mesh.geometry = renderer::MakeRockMeshData(result.rocks[0].mesh, m_settings.Display().smoothShading);
+        mesh.geometry = renderer::MakeRockMeshData(result.rocks[0].mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
         ApplyRockMaterial(mesh, result.rocks[0], false);
         if (BakeFingerprint(mesh, result.rocks[0].mesh, job.id) != job.fingerprint) {
             discard("材質または設定が変更されたためベイクを中止しました"); return;
@@ -279,7 +279,7 @@ void Application::ProcessPendingBake() {
     }
     const auto &rock = result.rocks[0];
     renderer::SceneMesh mesh;
-    mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading);
+    mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
     ApplyRockMaterial(mesh, rock, false);
     if (!mesh.materialStack || m_workspace.Root().empty()) {
         fail("ルートフォルダとSurface材質を指定してください");

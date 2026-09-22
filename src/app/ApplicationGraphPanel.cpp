@@ -344,9 +344,11 @@ void Application::SyncMeshGraph() {
     const std::string taskKey = geometryKey + ":" + std::to_string(m_selectedGraphNode);
     if ((!hasPieces || m_pieceCompletedKey == taskKey) && m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
+        m_meshGraphSmoothShadingAngle == m_settings.Display().smoothShadingAngle &&
         m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod)
         return;
     m_meshGraphSmoothShading = m_settings.Display().smoothShading;
+    m_meshGraphSmoothShadingAngle = m_settings.Display().smoothShadingAngle;
     m_meshGraphSdfPreviewMethod = m_settings.Display().sdfPreviewMethod;
     graph::RockEvaluation evaluated;
     if (hasPieces) {
@@ -418,7 +420,7 @@ void Application::SyncMeshGraph() {
     for (const auto& rock : evaluated.rocks) {
         if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
         renderer::SceneMesh mesh;
-        mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading);
+        mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
         mesh.material.baseColor = DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
         if (rock.pieceId >= 0) {
             float r,g,b;

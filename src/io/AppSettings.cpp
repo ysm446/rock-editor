@@ -113,6 +113,10 @@ void AppSettings::Load() {
             const auto it = display->find(setting.first);
             if (it != display->end() && it->is_boolean()) *setting.second = it->get<bool>();
         }
+        if (const auto angle = display->find("smoothShadingAngle");
+            angle != display->end() && angle->is_number()) {
+            m_display.smoothShadingAngle = std::clamp(angle->get<float>(), 0.0f, 180.0f);
+        }
         if (const auto grid = display->find("showReferenceGrid");
             grid != display->end() && grid->is_boolean()) {
             m_display.showReferenceGrid = grid->get<bool>();
@@ -165,6 +169,7 @@ bool AppSettings::Save() const {
     display["showUvChecker"] = m_display.showUvChecker;
     display["showWireframeOverlay"] = m_display.showWireframeOverlay;
     display["smoothShading"] = m_display.smoothShading;
+    display["smoothShadingAngle"] = m_display.smoothShadingAngle;
     display["sdfPreviewMethod"] = m_display.sdfPreviewMethod == geometry::VolumeMeshingMethod::DualContouring
         ? "dualContouring" : "marchingTetrahedra";
     display["showAssetBand"] = m_display.showAssetBand;

@@ -230,7 +230,14 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
         changed |= ImGui::MenuItem("UVチェッカー", nullptr, &settings.showUvChecker);
         changed |= ImGui::MenuItem("ワイヤーフレームを重ねる", nullptr, &settings.showWireframeOverlay);
         // 法線は頂点に焼くので、切り替えると SyncMeshGraph がメッシュを作り直す。
-        changed |= ImGui::MenuItem("スムーズシェーディング（折れ角 40 度）", nullptr, &settings.smoothShading);
+        changed |= ImGui::MenuItem("スムーズシェーディング", nullptr, &settings.smoothShading);
+        // 折れ角。隣の面との角度がこれ以上の辺は法線を分けて折れ目を残す。スライダーを離した時点で保存する。
+        ImGui::SetNextItemWidth(ui::Scaled(160.0f));
+        ImGui::SliderFloat("折れ角（度）", &settings.smoothShadingAngle, 0.0f, 180.0f, "%.0f");
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("隣の面との角度がこれ以上の辺は折れ目を残します。小さいほど稜線が残り、大きいほど全体が丸く見えます。");
+        settings.smoothShadingAngle = std::clamp(settings.smoothShadingAngle, 0.0f, 180.0f);
+        changed |= ImGui::IsItemDeactivatedAfterEdit();
         if (changed) {
             m_settings.Save();
         }
