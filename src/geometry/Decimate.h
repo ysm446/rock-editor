@@ -8,8 +8,8 @@ namespace rock::geometry {
 // Decimate。形をできるだけ保ったまま三角形を減らす（QEM による辺の縮約）。
 inline constexpr int MinDecimateTriangles = 64;
 inline constexpr int MaxDecimateTriangles = 500000;
-// 入力の上限。Subdivide / Remesh の出力上限（300万面）と揃える。
-inline constexpr size_t MaxDecimateInputTriangles = 3000000;
+// 入力の上限。Subdivide / Remesh の出力上限（400万面）と揃える。
+inline constexpr size_t MaxDecimateInputTriangles = 4000000;
 struct DecimateSettings {
     // 目標の三角形数。入力がこれ以下なら何もしない。64～500000。
     int targetTriangles = 10000;

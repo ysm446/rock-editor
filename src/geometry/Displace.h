@@ -5,7 +5,7 @@
 #include <string>
 
 namespace rock::geometry {
-inline constexpr size_t kMaxDetailTriangles = 3000000;
+inline constexpr size_t kMaxDetailTriangles = 4000000;
 struct SubdivideSettings {
     int levels = 1;
     // マスクで割る面を選ぶときのしきい値。面の中心のマスク値がこれ以上なら割る。

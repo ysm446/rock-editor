@@ -174,7 +174,7 @@ void RunRemeshTests() {
         const auto result = geometry::RemeshMesh(sphere, bad, error);
         Check(!error.empty() && result.triangles.empty(), name);
     };
-    rejects("小さすぎる辺の長さを拒否する", [](auto& r) { r.edgeLength = .001f; });
+    rejects("小さすぎる辺の長さを拒否する", [](auto& r) { r.edgeLength = .0005f; });
     rejects("大きすぎる辺の長さを拒否する", [](auto& r) { r.edgeLength = .5f; });
     rejects("繰り返し 0 を拒否する", [](auto& r) { r.iterations = 0; });
     rejects("範囲外の特徴辺の角度を拒否する", [](auto& r) { r.featureAngle = 200; });
@@ -244,9 +244,9 @@ void RunRemeshTests() {
     open.triangles.pop_back();
     Check(geometry::RemeshMesh(open, s, error).triangles.empty() && !error.empty(), "閉じていない入力を診断する");
     auto huge = s;
-    huge.edgeLength = .002f;
-    Check(geometry::RemeshMesh(geometry::MakeBox({100, 100, 100}), huge, error).triangles.empty() && error.find("300万") != std::string::npos,
-          "300万面を超える設定を診断する");
+    huge.edgeLength = .001f;  // 直方体は 表面積 ÷ 辺² が最大で、0.001 なら約1,400万面
+    Check(geometry::RemeshMesh(geometry::MakeBox({100, 100, 100}), huge, error).triangles.empty() && error.find("400万") != std::string::npos,
+          "400万面を超える設定を診断する");
     std::stop_source stop;
     stop.request_stop();
     Check(geometry::RemeshMesh(sphere, s, error, stop.get_token()).triangles.empty() && !error.empty(), "取消で空を返す");

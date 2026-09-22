@@ -25,7 +25,7 @@ Mesh SubdivideMesh(const Mesh& input,const SubdivideSettings& settings,std::stri
     if(settings.levels<0 || settings.levels>6 || predicted>kMaxDetailTriangles || !std::isfinite(settings.threshold) ||
        (!faceMask.empty() && faceMask.size()!=input.triangles.size())) { error="細分化の設定または面数が上限を超えています"; return {}; }
     for(int i=0;i<settings.levels;++i) {
-        if(predicted>kMaxDetailTriangles/4) { error="細分化後の三角形数が300万面を超えます。段階数を下げてください"; return {}; }
+        if(predicted>kMaxDetailTriangles/4) { error="細分化後の三角形数が400万面を超えます。段階数を下げてください"; return {}; }
         predicted*=4;
     }
     MeshInfo info;
@@ -94,7 +94,7 @@ Mesh SubdivideMesh(const Mesh& input,const SubdivideSettings& settings,std::stri
             else { emit({t[a],t[b],mc},{u[a],u[b],uc},f,0); emit({t[b],mb,mc},{u[b],ub,uc},f,0); }
         }
         mesh=std::move(next); selected=std::move(nextSelected);
-        if(mesh.triangles.size()>kMaxDetailTriangles) { error="細分化後の三角形数が300万面を超えます。段階数を下げてください"; return {}; }
+        if(mesh.triangles.size()>kMaxDetailTriangles) { error="細分化後の三角形数が400万面を超えます。段階数を下げてください"; return {}; }
         if(progress) progress((level+1)*100/std::max(settings.levels,1));
     }
     if(settings.levels>0 && !InspectMesh(mesh,info)) { error="細分化で面が潰れました。段階数を下げてください"; return {}; }
@@ -105,7 +105,7 @@ Mesh DisplaceMesh(const Mesh& input,const DisplaceSettings& settings,const Heigh
     if(Cancel(stop,error)) return {};
     if(!std::isfinite(settings.amount) || std::abs(settings.amount)>10 || !std::isfinite(settings.midpoint) ||
        settings.midpoint<0 || settings.midpoint>1 || !sample || input.triangles.size()>kMaxDetailTriangles) {
-        error="変位の設定または面数が不正です（最大300万面）"; return {};
+        error="変位の設定または面数が不正です（最大400万面）"; return {};
     }
     MeshInfo info;
     if(!InspectMesh(input,info)) { error="変位するメッシュが不正です"; return {}; }

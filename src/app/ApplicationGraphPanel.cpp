@@ -1565,7 +1565,7 @@ void Application::DrawGraphPanel() {
             ui::EndPropertyTable();
         }
         uint64_t factor = 1; for (int i=0;i<std::clamp(subdivide->levels,0,6);++i) factor*=4;
-        ui::HintText("三角形数は最大で入力の%llu倍。出力上限は300万面です。", static_cast<unsigned long long>(factor));
+        ui::HintText("三角形数は最大で入力の%llu倍。出力上限は400万面です。", static_cast<unsigned long long>(factor));
         ui::HintText("Maskをつなぐと、白い面だけを割ります（Shape Maskや画像マスクを使用。見える場所だけ細かくするなど）。"
                      "隣の面は共有辺に合わせて2〜4分割し、閉じたまま保ちます。");
         if (const auto counts=m_rockEvaluationCache.detailCounts.find(selected->id); counts!=m_rockEvaluationCache.detailCounts.end())

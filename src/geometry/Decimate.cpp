@@ -263,7 +263,7 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
         return {};
     }
     if (input.triangles.size() > MaxDecimateInputTriangles) {
-        error = "Decimate の入力は300万三角形までです。上流の解像度を下げてください";
+        error = "Decimate の入力は400万三角形までです。上流の解像度を下げてください";
         return {};
     }
     MeshInfo info;

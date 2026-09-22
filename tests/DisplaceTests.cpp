@@ -47,7 +47,7 @@ void RunDisplaceTests() {
     }
     const auto same=geometry::SubdivideMesh(box,{0},error);
     Check(same.positions==box.positions && same.triangles==box.triangles,"zero subdivision is identity");
-    auto oversized=split; oversized.triangles.resize(750001,split.triangles.front());  // 4倍で300万面を超える
+    auto oversized=split; oversized.triangles.resize(1000001,split.triangles.front());  // 4倍で400万面を超える
     Check(geometry::SubdivideMesh(oversized,{1},error).positions.empty() && !error.empty(),"subdivision rejects predicted count before allocation");
     geometry::UvUnwrapSettings uv; uv.resolution=128;
     auto unwrapped=geometry::UnwrapMesh(box,uv,error);

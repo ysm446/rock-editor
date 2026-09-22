@@ -349,7 +349,7 @@ struct Remesher {
             if (EdgeLength(a, b) <= limit) continue;
             Split(a, b, f0, f1);
             if (aliveFaces > kMaxRemeshTriangles) {
-                error = "出力が300万面を超えます。辺の長さを大きくしてください";
+                error = "出力が400万面を超えます。辺の長さを大きくしてください";
                 return false;
             }
         }
@@ -617,7 +617,7 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
                 const RemeshProgress& progress) {
     error.clear();
     if (!std::isfinite(s.edgeLength) || s.edgeLength < kMinRemeshEdge || s.edgeLength > kMaxRemeshEdge) {
-        error = "辺の長さは 0.002～0.2 にしてください";
+        error = "辺の長さは 0.001～0.2 にしてください";
         return {};
     }
     if (s.iterations < 1 || s.iterations > kMaxRemeshIterations) {
@@ -653,7 +653,7 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
         area += .5 * Length(Cross(Sub(b, a), Sub(c, a)));
     }
     if (area / (std::sqrt(3.0) / 4 * target * target) > double(kMaxRemeshTriangles)) {
-        error = "出力が300万面を超えます。辺の長さを大きくしてください";
+        error = "出力が400万面を超えます。辺の長さを大きくしてください";
         return {};
     }
     // 前処理。目標より大きく長い辺を持つ面を、1→4 分割（隣は共有辺に合わせて 2～4 分割）で先に細かくする。
@@ -679,7 +679,7 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
         coarse = SubdivideMesh(coarse, split, error, stop, {}, longFaces);
         if (!error.empty()) return {};
         if (coarse.triangles.size() > kMaxRemeshTriangles) {
-            error = "出力が300万面を超えます。辺の長さを大きくしてください";
+            error = "出力が400万面を超えます。辺の長さを大きくしてください";
             return {};
         }
     }
