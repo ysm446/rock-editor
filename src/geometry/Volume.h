@@ -155,11 +155,26 @@ struct VolumeTerraceSettings {
     std::array<float, 3> rotationDegrees{0, 0, 0};
     int seed = 1;
 };
-// Volume Close。幅より狭い隙間（割れ目の奥、細い切れ込み）を埋める。モルフォロジーのクロージング。
-// 外形と、元から内部だった所は変えない。V 字の割れ目は、幅がこの値を下回る深さから下だけが埋まり、入口は残る。
+// Volume Close。外から見えない隙間（割れ目の奥、細い切れ込み、狭い入口の奥）を埋める。
+// 外形と、元から内部だった所は変えない。
+//   幅  : モルフォロジーのクロージング。幅より狭い隙間を埋める。浅い切れ込みや表面の細かいくぼみも幅が狭ければ埋まる。
+//   遮蔽: 表面近くの外部の点から全方向へレイを飛ばし、距離以内に形へ当たった割合（遮蔽率）がしきい値以上の点を埋める。
+//         平らな面の近くは半分しか遮られないので残り、割れ目の奥や壁の陰だけが埋まる。幅にも深さにも直接は依らない。
+enum class VolumeCloseMode { Width, Occlusion };
+const char* VolumeCloseModeName(VolumeCloseMode mode);
+// 不明な名前は Occlusion として読む。
+VolumeCloseMode ParseVolumeCloseMode(std::string_view name);
+inline constexpr int kMinCloseSamples = 8, kMaxCloseSamples = 128;
 struct VolumeCloseSettings {
-    // 埋める隙間の幅の上限。形の最長辺に対する比。0.005～0.3。
+    VolumeCloseMode mode = VolumeCloseMode::Occlusion;
+    // 幅モード。埋める隙間の幅の上限。形の最長辺に対する比。0.005～0.3。
     float width = .05f;
+    // 遮蔽モード。レイを追う距離（最長辺に対する比。0.01～1）、埋めるしきい値（遮蔽率。0.5～1）、
+    // 点ごとのレイの数（8～128）、しきい値のまわりの移り変わり（遮蔽率の幅。0.02～0.5。小さいほど境が鋭い）。
+    float distance = .2f;
+    float threshold = .75f;
+    int samples = 32;
+    float softness = .1f;
 };
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
@@ -199,7 +214,7 @@ VolumeGrid SmoothVolume(const VolumeGrid& grid, const VolumeSmoothSettings& sett
 // 格子（範囲・セル間隔）は入力のまま。層の位相は内部の外接箱の中心を基準にする。
 // 加工でできた浮いた小片と閉じた空洞は除く。
 VolumeGrid TerraceVolume(const VolumeGrid& grid, const VolumeTerraceSettings& settings, std::string& error);
-// 格子（範囲・セル間隔）は入力のまま。内部を減らすことはない。埋めた所の距離は格子の精度になる。
+// 格子（範囲・セル間隔）は入力のまま。内部を減らすことはない。埋めた所の距離は近似になる。
 // 埋めた結果として閉じ込められた空洞も埋める。
 VolumeGrid CloseVolume(const VolumeGrid& grid, const VolumeCloseSettings& settings, std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。

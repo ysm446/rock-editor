@@ -520,7 +520,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                     {"amount", smooth->amount},
                                     {"upwardFocus", smooth->upwardFocus}};
         } else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node.settings)) {
-            item["volumeClose"] = {{"width", close->width}};
+            item["volumeClose"] = {{"mode", geometry::VolumeCloseModeName(close->mode)}, {"width", close->width},
+                                   {"distance", close->distance}, {"threshold", close->threshold},
+                                   {"samples", close->samples}, {"softness", close->softness}};
         } else if (const auto* terrace = std::get_if<geometry::VolumeTerraceSettings>(&node.settings)) {
             item["volumeTerrace"] = {{"step", terrace->step},
                                      {"depth", terrace->depth},
@@ -839,8 +841,14 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeClose) {
                 geometry::VolumeCloseSettings settings;
-                if (const json* v = FindMember(item, "volumeClose"); v && v->is_object())
+                if (const json* v = FindMember(item, "volumeClose"); v && v->is_object()) {
+                    settings.mode = geometry::ParseVolumeCloseMode(ReadString(*v, "mode", "occlusion"));
                     settings.width = ReadFloat(*v, "width", settings.width);
+                    settings.distance = ReadFloat(*v, "distance", settings.distance);
+                    settings.threshold = ReadFloat(*v, "threshold", settings.threshold);
+                    settings.samples = ReadInt(*v, "samples", settings.samples);
+                    settings.softness = ReadFloat(*v, "softness", settings.softness);
+                }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeTerrace) {
                 geometry::VolumeTerraceSettings settings;

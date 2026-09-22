@@ -1323,19 +1323,113 @@ DistanceField DistanceToSet(const VolumeGrid& g, const std::vector<uint8_t>& set
     return {std::move(a), std::move(sourceA)};
 }
 }  // namespace
+const char* VolumeCloseModeName(VolumeCloseMode mode) {
+    return mode == VolumeCloseMode::Width ? "width" : "occlusion";
+}
+VolumeCloseMode ParseVolumeCloseMode(std::string_view name) {
+    return name == "width" ? VolumeCloseMode::Width : VolumeCloseMode::Occlusion;
+}
+namespace {
+// 埋めた結果として外周から届かなくなった外部（入口が狭く奥が広い穴）も埋める。
+void FillEnclosedVoids(VolumeGrid& out) {
+    const size_t nx = out.dimensions[0], ny = out.dimensions[1], nz = out.dimensions[2];
+    std::vector<uint8_t> reached(out.values.size(), 0);
+    std::vector<size_t> stack;
+    const auto visit = [&](size_t next) {
+        if (out.values[next] < 0 || reached[next]) return;
+        reached[next] = 1;
+        stack.push_back(next);
+    };
+    for (size_t z = 0; z < nz; ++z)
+        for (size_t y = 0; y < ny; ++y)
+            for (size_t x = 0; x < nx; ++x)
+                if (x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz) visit((z * ny + y) * nx + x);
+    while (!stack.empty()) {
+        const size_t index = stack.back();
+        stack.pop_back();
+        const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
+        if (x > 0) visit(index - 1);
+        if (x + 1 < nx) visit(index + 1);
+        if (y > 0) visit(index - nx);
+        if (y + 1 < ny) visit(index + nx);
+        if (z > 0) visit(index - nx * ny);
+        if (z + 1 < nz) visit(index + nx * ny);
+    }
+    for (size_t i = 0; i < out.values.size(); ++i)
+        if (out.values[i] >= 0 && !reached[i]) out.values[i] = -std::max(out.values[i], out.spacing);
+}
+// 遮蔽で埋める。表面から距離以内にある外部の点ごとに、全方向へレイを飛ばして形に当たった割合を求める。
+VolumeGrid CloseVolumeByOcclusion(const VolumeGrid& g, const VolumeCloseSettings& s, float longest, std::string& error) {
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (!range(s.distance, .01f, 1)) {
+        error = "距離は 0.01～1 にしてください";
+        return {};
+    }
+    if (!range(s.threshold, .5f, 1) || !range(s.softness, .02f, .5f)) {
+        error = "しきい値は 0.5～1、なだらかさは 0.02～0.5 にしてください";
+        return {};
+    }
+    if (s.samples < kMinCloseSamples || s.samples > kMaxCloseSamples) {
+        error = "サンプル数は 8～128 にしてください";
+        return {};
+    }
+    const float reach = s.distance * longest;
+    // 球面に均等に散らした向き（フィボナッチ格子）。同じ設定から同じ結果を得る。
+    std::vector<Vec3> directions(size_t(s.samples));
+    for (int i = 0; i < s.samples; ++i) {
+        const float y = 1 - 2 * (i + .5f) / s.samples, r = std::sqrt(std::max(0.f, 1 - y * y));
+        const float phi = float(i) * 2.399963229728653f;
+        directions[size_t(i)] = {r * std::cos(phi), y, r * std::sin(phi)};
+    }
+    VolumeGrid out = g;
+    const float threshold = g.spacing * 1e-4f;
+    const float minimumStep = g.spacing * .5f;
+    FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const size_t index = g.Index(x, y, z);
+        const float value = g.values[index];
+        // 内部は入力のまま。距離以上離れた外部は、レイが届く範囲に形が無いので遮られない。
+        if (value < 0 || value >= reach) return value < 0;
+        const auto p = g.Position(x, y, z);
+        int hits = 0;
+        for (const auto& direction : directions) {
+            // スフィアトレーシング。値のぶんだけ進め、負になったら当たり。距離を超えたら抜けた。
+            float t = std::max(value, minimumStep);
+            while (t < reach) {
+                const float d = SampleVolume(g, {p.x + direction.x * t, p.y + direction.y * t, p.z + direction.z * t});
+                if (d < 0) { ++hits; break; }
+                t += std::max(d, minimumStep);
+            }
+        }
+        const float occlusion = float(hits) / float(s.samples);
+        // しきい値のまわりを、なだらかさ（遮蔽率の幅）あたり1セルの傾きで符号付き距離にする。
+        // 平らな面の近く（遮蔽率 0.5 前後）では入力の値より大きくなるので、表面は動かない。
+        float closed = (s.threshold - occlusion) / s.softness * g.spacing;
+        closed = std::min(value, closed);
+        out.values[index] = std::abs(closed) < threshold ? (closed < 0 ? -threshold : threshold) : closed;
+        return closed < 0;
+    });
+    FillEnclosedVoids(out);
+    return out;
+}
+}  // namespace
 VolumeGrid CloseVolume(const VolumeGrid& g, const VolumeCloseSettings& s, std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {
         error = "ボリュームの格子が不正です";
         return {};
     }
-    if (!std::isfinite(s.width) || s.width < .005f || s.width > .3f) {
-        error = "幅は 0.005～0.3 にしてください";
+    if (s.mode != VolumeCloseMode::Width && s.mode != VolumeCloseMode::Occlusion) {
+        error = "不明なモードです";
         return {};
     }
     const float longest = InteriorLongestSide(g);
     if (longest <= 0) {
         error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    if (s.mode == VolumeCloseMode::Occlusion) return CloseVolumeByOcclusion(g, s, longest, error);
+    if (!std::isfinite(s.width) || s.width < .005f || s.width > .3f) {
+        error = "幅は 0.005～0.3 にしてください";
         return {};
     }
     // 半径（セル単位）。1セル未満では何も埋まらないので、そのまま返す。
@@ -1381,32 +1475,7 @@ VolumeGrid CloseVolume(const VolumeGrid& g, const VolumeCloseSettings& s, std::s
         out.values[i] = std::abs(closed) < threshold ? (closed < 0 ? -threshold : threshold) : closed;
     }
     // 3. 埋めた結果として外周から届かなくなった外部（入口が狭く奥が広い穴）も埋める。
-    {
-        std::vector<uint8_t> reached(out.values.size(), 0);
-        std::vector<size_t> stack;
-        const auto visit = [&](size_t next) {
-            if (out.values[next] < 0 || reached[next]) return;
-            reached[next] = 1;
-            stack.push_back(next);
-        };
-        for (size_t z = 0; z < nz; ++z)
-            for (size_t y = 0; y < ny; ++y)
-                for (size_t x = 0; x < nx; ++x)
-                    if (x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz) visit((z * ny + y) * nx + x);
-        while (!stack.empty()) {
-            const size_t index = stack.back();
-            stack.pop_back();
-            const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
-            if (x > 0) visit(index - 1);
-            if (x + 1 < nx) visit(index + 1);
-            if (y > 0) visit(index - nx);
-            if (y + 1 < ny) visit(index + nx);
-            if (z > 0) visit(index - nx * ny);
-            if (z + 1 < nz) visit(index + nx * ny);
-        }
-        for (size_t i = 0; i < out.values.size(); ++i)
-            if (out.values[i] >= 0 && !reached[i]) out.values[i] = -std::max(out.values[i], g.spacing);
-    }
+    FillEnclosedVoids(out);
     return out;
 }
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {

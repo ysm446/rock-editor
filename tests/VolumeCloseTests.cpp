@@ -41,7 +41,7 @@ geometry::VolumeGrid GroovedBox(std::string& error) {
 }  // namespace
 
 void RunVolumeCloseTests() {
-    Section("Volume Close");
+    Section("Volume Close（幅）");
     std::string error;
     const auto grooved = GroovedBox(error);
     Check(error.empty(), "溝のある立方体のボリューム");
@@ -52,6 +52,7 @@ void RunVolumeCloseTests() {
 
     // 幅 0.05 × 2 m = 0.1 m。溝の幅が 0.1 m を下回るのは y < 0.2 + 0.8 × (0.1 / 0.3) ≈ 0.47 より下。
     geometry::VolumeCloseSettings settings;
+    settings.mode = geometry::VolumeCloseMode::Width;
     settings.width = .05f;
     const auto closed = geometry::CloseVolume(grooved, settings, error);
     geometry::MeshInfo info, dual;
@@ -89,6 +90,7 @@ void RunVolumeCloseTests() {
 
     // 幅を溝の入口より広くすると溝は全て埋まり、立方体に戻る（表面の半セルぶんだけは埋まらない）。
     geometry::VolumeCloseSettings wide;
+    wide.mode = geometry::VolumeCloseMode::Width;
     wide.width = .2f;
     const auto restored = geometry::CloseVolume(grooved, wide, error);
     geometry::MeshInfo restoredInfo;
@@ -103,6 +105,7 @@ void RunVolumeCloseTests() {
     Check(unchanged, "凸な形は内外が変わらない");
     // 1セル未満の半径では何も起きない。
     geometry::VolumeCloseSettings tiny;
+    tiny.mode = geometry::VolumeCloseMode::Width;
     tiny.width = .005f;
     Check(geometry::CloseVolume(grooved, tiny, error).values == grooved.values, "半径が1セル未満なら入力のまま");
 
@@ -126,6 +129,7 @@ void RunVolumeCloseTests() {
 
     const auto rejects = [&](const char* name, auto change) {
         geometry::VolumeCloseSettings bad;
+        bad.mode = geometry::VolumeCloseMode::Width;
         change(bad);
         const auto result = geometry::CloseVolume(grooved, bad, error);
         Check(!error.empty() && result.values.empty(), name);
@@ -135,6 +139,92 @@ void RunVolumeCloseTests() {
     rejects("非有限の幅を拒否する", [](auto& s) { s.width = std::numeric_limits<float>::quiet_NaN(); });
     geometry::CloseVolume({}, {}, error);
     Check(!error.empty(), "空のボリュームを拒否する");
+
+    Section("Volume Close（遮蔽）");
+    // 既定は遮蔽モード。距離 0.3 × 2 m = 0.6 m、しきい値 0.75。
+    geometry::VolumeCloseSettings occlusion;
+    occlusion.distance = .3f;
+    Check(geometry::VolumeCloseSettings{}.mode == geometry::VolumeCloseMode::Occlusion, "既定は遮蔽モード");
+    const auto shaded = geometry::CloseVolume(grooved, occlusion, error);
+    geometry::MeshInfo shadedInfo, shadedDual;
+    Check(error.empty() && Measure(shaded, shadedInfo) && shadedInfo.components == 1, "遮蔽：閉じた1つの塊になる");
+    Check(Measure(shaded, shadedDual, geometry::VolumeMeshingMethod::DualContouring), "遮蔽：Dual Contouring でも閉じた表面にできる");
+    Check(shaded.dimensions == grooved.dimensions && shaded.spacing == grooved.spacing, "遮蔽：格子は入力のまま");
+    Check(At(shaded, 0, .25f, 0) < 0 && At(shaded, 0, .4f, 0) < 0, "遮蔽：溝の奥は埋まる");
+    Check(At(shaded, 0, .95f, 0) > 0 && At(shaded, 0, .85f, 0) > 0, "遮蔽：溝の入口は残る");
+    bool occlusionKeepsInside = true, occlusionKeepsFace = true;
+    for (size_t i = 0; i < grooved.values.size(); ++i)
+        if (grooved.values[i] < 0) occlusionKeepsInside &= shaded.values[i] == grooved.values[i];
+    for (float y = -.9f; y < .9f && occlusionKeepsFace; y += .1f)
+        for (float z = -.9f; z < .9f; z += .1f)
+            occlusionKeepsFace &= std::abs(At(shaded, -1.02f, y, z) - At(grooved, -1.02f, y, z)) < 1e-5f &&
+                                  std::abs(At(shaded, -.98f, y, z) - At(grooved, -.98f, y, z)) < 1e-5f &&
+                                  std::abs(At(shaded, -1.05f, y, z) - At(grooved, -1.05f, y, z)) < 1e-5f;
+    Check(occlusionKeepsInside, "遮蔽：元から内部だった点の値は入力のまま");
+    Check(occlusionKeepsFace, "遮蔽：平らな面の近くの値は変わらない（遮蔽率 0.5 は埋めない）");
+    Check(shadedInfo.volume > groovedInfo.volume + .01 && shadedInfo.volume < groovedInfo.volume + .3 &&
+              std::abs(shadedInfo.maximum.x - groovedInfo.maximum.x) < 1e-4f && std::abs(shadedInfo.maximum.y - groovedInfo.maximum.y) < 1e-4f,
+          "遮蔽：埋めたぶんだけ体積が増え、外接箱は変わらない");
+    Check(geometry::CloseVolume(grooved, occlusion, error).values == shaded.values, "遮蔽：同じ入力から同じ結果を得る");
+    auto strict = occlusion;
+    strict.threshold = .95f;
+    const auto strictGrid = geometry::CloseVolume(grooved, strict, error);
+    auto loose = occlusion;
+    loose.threshold = .55f;
+    const auto looseGrid = geometry::CloseVolume(grooved, loose, error);
+    const auto filledHeight = [&](const geometry::VolumeGrid& g) {
+        float top = .2f;
+        for (float y = .2f; y < 1; y += g.spacing)
+            if (At(g, 0, y, 0) < 0) top = y;
+        return top;
+    };
+    Check(error.empty() && filledHeight(strictGrid) < filledHeight(shaded) && filledHeight(shaded) < filledHeight(looseGrid),
+          "遮蔽：しきい値が低いほど溝の浅い所まで埋まる");
+    auto few = occlusion;
+    few.samples = 8;
+    Check(geometry::CloseVolume(grooved, few, error).values != shaded.values && error.empty(), "遮蔽：サンプル数で結果が変わる");
+    // 浅く広いくぼみ（幅 0.16 m、深さ 0.05 m）は、幅モード（幅 0.2 m）では埋まり、遮蔽モードでは残る（底でも 3 割は空に開いている）。
+    auto pit = geometry::MeshToVolume(geometry::MakeBox({2, 2, 2}), {64}, error);
+    for (uint32_t z = 0; z < pit.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < pit.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < pit.dimensions[0]; ++x) {
+                const auto p = pit.Position(x, y, z);
+                if (p.y < .95f || p.y > 1.f) continue;
+                auto& value = pit.values[pit.Index(x, y, z)];
+                value = std::max(value, .08f - std::abs(p.x));
+            }
+    Check(At(pit, 0, .96f, 0) > 0, "浅いくぼみの中は外部");
+    geometry::VolumeCloseSettings broad;
+    broad.mode = geometry::VolumeCloseMode::Width;
+    broad.width = .1f;
+    const auto pitByWidth = geometry::CloseVolume(pit, broad, error);
+    const auto pitByOcclusion = geometry::CloseVolume(pit, occlusion, error);
+    Check(error.empty() && At(pitByWidth, 0, .96f, 0) < 0, "幅モードは幅より狭ければ浅いくぼみも埋める");
+    Check(At(pitByOcclusion, 0, .96f, 0) > 0, "遮蔽モードは浅いくぼみを残す");
+    // 狭い入口の奥の空洞は、遮蔽でも埋まる（レイが全て当たる）。
+    const auto sealedByOcclusion = geometry::CloseVolume(pocket, occlusion, error);
+    geometry::MeshInfo sealedOcclusionInfo;
+    Check(error.empty() && At(sealedByOcclusion, 0, 0, 0) < 0 && At(sealedByOcclusion, 0, .7f, 0) < 0 && Measure(sealedByOcclusion, sealedOcclusionInfo) &&
+              sealedOcclusionInfo.components == 1 && std::abs(sealedOcclusionInfo.volume - 8) < .15,
+          "遮蔽：狭い入口とその奥の空洞も埋まる");
+    const auto convex = geometry::CloseVolume(box, occlusion, error);
+    bool convexUnchanged = error.empty();
+    for (size_t i = 0; i < box.values.size() && convexUnchanged; ++i) convexUnchanged &= (convex.values[i] < 0) == (box.values[i] < 0);
+    Check(convexUnchanged, "遮蔽：凸な形は内外が変わらない");
+    const auto rejectsOcclusion = [&](const char* name, auto change) {
+        geometry::VolumeCloseSettings bad;
+        change(bad);
+        const auto result = geometry::CloseVolume(grooved, bad, error);
+        Check(!error.empty() && result.values.empty(), name);
+    };
+    rejectsOcclusion("遮蔽：範囲外の距離を拒否する", [](auto& s) { s.distance = 2; });
+    rejectsOcclusion("遮蔽：範囲外のしきい値を拒否する", [](auto& s) { s.threshold = .2f; });
+    rejectsOcclusion("遮蔽：範囲外のサンプル数を拒否する", [](auto& s) { s.samples = 4; });
+    rejectsOcclusion("遮蔽：範囲外のなだらかさを拒否する", [](auto& s) { s.softness = 1; });
+    rejectsOcclusion("不明なモードを拒否する", [](auto& s) { s.mode = static_cast<geometry::VolumeCloseMode>(9); });
+    Check(geometry::ParseVolumeCloseMode(geometry::VolumeCloseModeName(geometry::VolumeCloseMode::Width)) == geometry::VolumeCloseMode::Width &&
+              geometry::ParseVolumeCloseMode("?") == geometry::VolumeCloseMode::Occlusion,
+          "モードの保存名を往復でき、不明な名前は遮蔽として読む");
 
     Section("Volume Close のグラフ");
     graph::NodeGraph g;
@@ -158,9 +248,10 @@ void RunVolumeCloseTests() {
           "グラフの評価で閉じたメッシュを得る");
     const auto first = graph::EvaluateRocks(g, node, &cache);
     Check(first.error.empty() && graph::EvaluateRocks(g, node, &cache).rocks[0].volume == first.rocks[0].volume, "変更がなければボリュームを再利用する");
-    std::get<geometry::VolumeCloseSettings>(g.FindMutableNode(node)->settings).width = .1f;
+    std::get<geometry::VolumeCloseSettings>(g.FindMutableNode(node)->settings).threshold = .6f;
     const auto changed = graph::EvaluateRocks(g, node, &cache);
     Check(changed.error.empty() && changed.rocks[0].volume != first.rocks[0].volume, "設定の変更で作り直す");
+    std::get<geometry::VolumeCloseSettings>(g.FindMutableNode(node)->settings).mode = geometry::VolumeCloseMode::Width;
     std::get<geometry::VolumeCloseSettings>(g.FindMutableNode(node)->settings).width = 5;
     Check(!graph::EvaluateRocks(g, node, &cache).error.empty(), "不正な設定はノードで診断する");
 }

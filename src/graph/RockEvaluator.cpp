@@ -63,7 +63,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (node->kind == NodeKind::VolumeClose) {
         const auto* s = std::get_if<geometry::VolumeCloseSettings>(&node->settings);
         if (!s) return std::nullopt;
-        add(s->width);
+        add(s->mode); add(s->width); add(s->distance); add(s->threshold); add(s->samples); add(s->softness);
     } else if (node->kind == NodeKind::VolumeTerrace) {
         const auto* s = std::get_if<geometry::VolumeTerraceSettings>(&node->settings);
         if (!s) return std::nullopt;

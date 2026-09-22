@@ -1004,7 +1004,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeNoise, "Volume Noise — 表面をノイズで削り、直線的な面を崩す");
         addNodeMenuItem(graph::NodeKind::VolumeSmooth, "Volume Smooth — 表面をなまらせる / 角を立てる（上面だけ、など）");
         addNodeMenuItem(graph::NodeKind::VolumeTerrace, "Volume Terrace — 層状の段（棚）を刻む");
-        addNodeMenuItem(graph::NodeKind::VolumeClose, "Volume Close — 幅より狭い隙間（割れ目の奥）を埋める");
+        addNodeMenuItem(graph::NodeKind::VolumeClose, "Volume Close — 外から見えない隙間（割れ目の奥）を埋める");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1271,15 +1271,42 @@ void Application::DrawGraphPanel() {
     } else if (auto* close = std::get_if<geometry::VolumeCloseSettings>(&selected->settings)) {
         auto edited = *close;
         bool changed = false;
+        const bool occlusion = edited.mode == geometry::VolumeCloseMode::Occlusion;
         if (ui::BeginPropertyTable("volumeCloseRows")) {
-            changed |= ui::PropertyFloat("幅", &edited.width, .005f, .3f, .05f,
-                                         "これより狭い隙間を埋めます。形の最長辺に対する比です。V 字の割れ目は、幅がこの値を下回る深さから下だけが埋まります。");
+            const char* modes[] = {"幅", "遮蔽"};
+            int mode = std::clamp(static_cast<int>(edited.mode), 0, 1);
+            if (ui::PropertyCombo("モード", &mode, modes, 2, 1)) {
+                edited.mode = static_cast<geometry::VolumeCloseMode>(mode);
+                changed = true;
+            }
+            if (occlusion) {
+                changed |= ui::PropertyFloat("距離", &edited.distance, .01f, 1, .2f,
+                                             "レイを追う長さ。形の最長辺に対する比です。この距離までにある形を遮蔽として数えます。");
+                changed |= ui::PropertyFloat("しきい値", &edited.threshold, .5f, 1, .75f,
+                                             "遮蔽率がこれ以上の点を埋めます。平らな面の近くは 0.5、割れ目の奥は 1 に近づきます。");
+                changed |= ui::PropertyInt("サンプル数", &edited.samples, geometry::kMinCloseSamples, geometry::kMaxCloseSamples, 32,
+                                           "点ごとに飛ばすレイの数。多いほど境がなめらかになり、時間がかかります。");
+                changed |= ui::PropertyFloat("なだらかさ", &edited.softness, .02f, .5f, .1f,
+                                             "しきい値のまわりの移り変わり（遮蔽率の幅）。小さいほど境が鋭くなります。");
+            } else {
+                changed |= ui::PropertyFloat("幅", &edited.width, .005f, .3f, .05f,
+                                             "これより狭い隙間を埋めます。形の最長辺に対する比です。V 字の割れ目は、幅がこの値を下回る深さから下だけが埋まります。");
+            }
             ui::EndPropertyTable();
         }
-        ui::HintText("割れ目の奥や細い切れ込みを埋めて、見えない所にメッシュが作られないようにします。外形と、元から内部だった所は変わりません。"
-                     "幅がセル間隔の2倍未満だと何も埋まりません。埋めた所の距離は格子の精度になります。");
+        ui::HintText("割れ目の奥や狭い入口の奥を埋めて、見えない所にメッシュが作られないようにします。外形と、元から内部だった所は変わりません。");
+        if (occlusion)
+            ui::HintText("遮蔽：表面近くの外部の点から全方向へレイを飛ばし、形に当たった割合がしきい値以上の点を埋めます。"
+                         "浅いくぼみや切れ込みは半分以上が開いているので残り、割れ目の奥や壁の陰だけが埋まります。");
+        else
+            ui::HintText("幅：これより狭い隙間を埋めます（クロージング）。浅い切れ込みや表面の細かいくぼみも、狭ければ埋まります。"
+                         "幅がセル間隔の2倍未満だと何も埋まりません。");
         if (changed) {
             edited.width = std::clamp(edited.width, .005f, .3f);
+            edited.distance = std::clamp(edited.distance, .01f, 1.0f);
+            edited.threshold = std::clamp(edited.threshold, .5f, 1.0f);
+            edited.samples = std::clamp(edited.samples, geometry::kMinCloseSamples, geometry::kMaxCloseSamples);
+            edited.softness = std::clamp(edited.softness, .02f, .5f);
             *close = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

@@ -240,7 +240,12 @@
           0
         ],
         "volumeClose": {
-          "width": 0.015
+          "mode": "occlusion",
+          "width": 0.015,
+          "distance": 0.2,
+          "threshold": 0.75,
+          "samples": 32,
+          "softness": 0.1
         }
       }
     ],
