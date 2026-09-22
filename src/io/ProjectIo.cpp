@@ -480,6 +480,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["subdivide"] = {{"levels",subdivide->levels},{"threshold",subdivide->threshold}};
         } else if (const auto* displace = std::get_if<geometry::DisplaceSettings>(&node.settings)) {
             item["displace"] = {{"amount",displace->amount},{"midpoint",displace->midpoint}};
+        } else if (const auto* remesh = std::get_if<geometry::RemeshSettings>(&node.settings)) {
+            item["remesh"] = {{"edgeLength", remesh->edgeLength}, {"iterations", remesh->iterations}, {"featureAngle", remesh->featureAngle}};
         } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node.settings)) {
             item["decimate"] = {{"targetTriangles", decimate->targetTriangles},
                                 {"maxError", decimate->maxError},
@@ -725,6 +727,14 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.targetTriangles = ReadInt(*v, "targetTriangles", settings.targetTriangles);
                     settings.maxError = ReadFloat(*v, "maxError", settings.maxError);
                     settings.creaseWeight = ReadFloat(*v, "creaseWeight", settings.creaseWeight);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::Remesh) {
+                geometry::RemeshSettings settings;
+                if (const json* v = FindMember(item, "remesh"); v && v->is_object()) {
+                    settings.edgeLength = std::clamp(ReadFloat(*v, "edgeLength", settings.edgeLength), geometry::kMinRemeshEdge, geometry::kMaxRemeshEdge);
+                    settings.iterations = std::clamp(ReadInt(*v, "iterations", settings.iterations), 1, geometry::kMaxRemeshIterations);
+                    settings.featureAngle = std::clamp(ReadFloat(*v, "featureAngle", settings.featureAngle), 0.f, 180.f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::UvUnwrap) {

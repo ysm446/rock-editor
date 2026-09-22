@@ -2,6 +2,7 @@
 #include "geometry/Displace.h"
 #include "geometry/ShapeMask.h"
 #include "geometry/Decimate.h"
+#include "geometry/Remesh.h"
 #include "geometry/UvUnwrap.h"
 #include "geometry/Pieces.h"
 
@@ -84,6 +85,8 @@ enum class NodeKind : uint32_t {
     VolumeTerrace = 62,
     // Volume の幅より狭い隙間（割れ目の奥）を埋める。
     VolumeClose = 63,
+    // Mesh の三角形を一様な大きさに作り直す（等方リメッシュ）。UV Unwrap の前に置く。
+    Remesh = 64,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -192,7 +195,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings, geometry::VolumeCloseSettings,
-                                  geometry::DecimateSettings,
+                                  geometry::DecimateSettings, geometry::RemeshSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ShapeMaskSettings, geometry::MaskCombineSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,

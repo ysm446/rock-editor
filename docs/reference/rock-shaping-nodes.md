@@ -1,7 +1,7 @@
 # 岩らしい形と色のためのノード設計メモ
 
 作成日時: 2026-09-22 00:30
-更新日時: 2026-09-22 20:20
+更新日時: 2026-09-22 22:15
 
 ## 目的
 
@@ -110,7 +110,7 @@ Base Shape → To Volume ───┘
    → Volume Terrace（層状の段。必要なら）
    → Volume Smooth（上向きの面だけ強く）
    → Volume to Mesh（Dual Contouring。稜線が残る）
-   → Decimate（UV 展開を速くし、ゲーム用の面数へ減らす）
+   → Remesh（三角形を一様に揃える。2026-09-22 追加）または Decimate（UV 展開を速くし、ゲーム用の面数へ減らす）
    → UV Unwrap ─→ Shape Mask ×n（オクルージョン / 上向き度 / …。UV付きの Mesh が入力）
                  → Mask Combine（差・乗算などで種類を組み合わせる）
    → Apply Material ×3〜4（Shape Mask / Mask Combine を Mask へ）

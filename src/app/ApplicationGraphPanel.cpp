@@ -335,7 +335,7 @@ void Application::SyncMeshGraph() {
         // UV Unwrap は大きなメッシュで数秒〜数十秒かかる。UI スレッドで走らせるとアプリが固まり、
         // 計算中であることも表示できない。
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
-               n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate ||
+               n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate || n.kind == graph::NodeKind::Remesh ||
                n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace ||
                graph::IsImageMaskNodeKind(n.kind);
     });
@@ -985,6 +985,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Subdivide, "Subdivide — 形を保ったまま細分化");
         addNodeMenuItem(graph::NodeKind::Displace, "Displace — 素材ハイトで頂点を変位");
         addNodeMenuItem(graph::NodeKind::Decimate, "Decimate — 形を保ったまま三角形を減らす");
+        addNodeMenuItem(graph::NodeKind::Remesh, "Remesh — 三角形を一様な大きさに作り直す（UV Unwrap の前）");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
         ImGui::TextDisabled("分割・ピース操作");
@@ -1581,6 +1582,45 @@ void Application::DrawGraphPanel() {
         ui::HintText("Apply Materialの合成ハイトを読み、(ハイト－基準値)×変位量だけ頂点を動かします。細分化は上流のSubdivideで行います。");
         ui::HintText("UVなしではTriplanarを使用してください。UVの継ぎ目はハイトを平均し、共有頂点が割れるのを防ぎます。大きな変位では自己交差が生じる場合があります。");
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+    } else if (auto* remesh = std::get_if<geometry::RemeshSettings>(&selected->settings)) {
+        auto edited = *remesh;
+        bool changed = false;
+        if (ui::BeginPropertyTable("remeshRows")) {
+            changed |= ui::PropertyFloat("辺の長さ", &edited.edgeLength, geometry::kMinRemeshEdge, geometry::kMaxRemeshEdge, .02f,
+                                         "目標の辺の長さ。形の最長辺に対する比です。三角形数は概ね 表面積 ÷ (0.43 × 辺の長さ²) になります。",
+                                         "%.4f", ImGuiSliderFlags_Logarithmic);
+            changed |= ui::PropertyInt("繰り返し", &edited.iterations, 1, geometry::kMaxRemeshIterations, 5,
+                                       "分割 → 縮約 → 反転 → 平滑化を繰り返す回数。多いほど揃いますが時間がかかります。");
+            changed |= ui::PropertyFloat("特徴辺の角度", &edited.featureAngle, 0, 180, 40,
+                                         "これより大きく折れた辺を稜線として保ちます。180 で稜線を保たず、角も丸くなります。", "%.0f");
+            ui::EndPropertyTable();
+        }
+        if (EvaluatingNode() == selected->id) {
+            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
+            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
+                               EvaluationProgressText().c_str());
+        } else if (!m_pieceUpdating) {
+            size_t triangles = 0;
+            bool shown = false;
+            for (size_t i = 0; i < m_rockMeshReferences.size() && i < m_rockTriangleCounts.size(); ++i)
+                if (m_rockMeshReferences[i].source == selected->id) {
+                    triangles += m_rockTriangleCounts[i];
+                    shown = true;
+                }
+            if (shown) ui::HintText("現在の出力: %zu 三角形", triangles);
+        }
+        ui::HintText("三角形を一様な大きさの正三角形に近い形へ作り直します（等方リメッシュ）。Volume to Mesh の細長い面や大きさのばらつきを揃え、"
+                     "Displace の密度を均一にします。頂点は元の表面へ投影するので形は保たれます。");
+        ui::HintText("UV は引き継げないので、UV Unwrap の前に置きます。入力は閉じたメッシュです。細かく揃えるほど面数が増えるので、"
+                     "UV Unwrap が遅くなる場合は辺の長さを大きくするか、後ろに Decimate を置きます。");
+        if (changed) {
+            edited.edgeLength = std::clamp(edited.edgeLength, geometry::kMinRemeshEdge, geometry::kMaxRemeshEdge);
+            edited.iterations = std::clamp(edited.iterations, 1, geometry::kMaxRemeshIterations);
+            edited.featureAngle = std::clamp(edited.featureAngle, 0.0f, 180.0f);
+            *remesh = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
     } else if (auto* decimate = std::get_if<geometry::DecimateSettings>(&selected->settings)) {
         auto edited = *decimate;
         bool changed = false;

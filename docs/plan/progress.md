@@ -1,9 +1,17 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 20:20
+更新日時: 2026-09-22 22:15
 
 ## 現在地
+
+### 2026-09-22 Remesh（等方リメッシュ）
+
+- ユーザー依頼「Subdivide の替わりに Remesh のようなノード」への対応。UV Unwrap の前に置く等方リメッシュ（案1）で合意し、Subdivide は残した。仕様は [Remesh](../reference/remesh.md)。
+- 実装は Botsch & Kobbelt の増分リメッシュ（分割 → 縮約 → 反転 → 接線方向の平滑化 → 元の表面への投影）。投影は入力の三角形を一様格子に登録した最近点検索。縮約の安全判定（リンク条件・裏返り・形の良さ）は Decimate の考え方を流用。
+- 実装して分かったこと（3回直した）: (1) 辺を割るたびに中点から向かいの頂点へも辺を張る増分の分割だけでは、12 面の直方体が扇状の細長い面に割れて 100 万面を超えた。目標の 2 倍より長い辺を持つ面を Subdivide と同じ 1→4 分割で先に細かくする前処理を入れた。(2) 縮約で「形の悪い面を作らない」を絶対にすると、Marching Tetrahedra の細長い面から始まるメッシュで何も縮約できない。もとから悪い場所では悪化しない限り許す形にした（Decimate と同じ）。(3) 特徴辺を毎回の折れ角で判定すると、格子から作ったメッシュでは段差ごとに特徴になって頂点が動けず、形の悪い面が 4% 残った。特徴辺は最初に決め（折れ角 + 両側の面の形 + 鎖の長さ ≥ 目標 × 3）、分割・縮約で引き継ぐ静的な方式にして 0.4% になった。特徴なしなら 0.01%。
+- 単体テスト37項目（`tests/RemeshTests.cpp`。球の面数・体積・辺の長さの分布・次数、直方体の稜線と角の保持、Marching Tetrahedra の細長い面の解消、診断、取消、グラフ）。Release / Debug で全 2,991 項目が成功。
+- サンプルは `examples/remesh/`（Volume Noise のグラフの Volume to Mesh と Mesh Output の間に Remesh、辺の長さ 0.015）。Release 実アプリで Remesh を選んで撮影し、形が保たれたまま出力が 64,448 三角形になること、`--save-project` で `remesh` の3設定と2本の接続が残ることを確認（`data/test/claude-session-2026-09-22/remesh/`）。ワイヤーフレーム表示が無いので三角形の揃い方は画面では見ていない（単体テストの辺の長さの分布で確認）。実マウスでの操作、Undo/Redo の手動確認は未実施。
 
 ### 2026-09-22 Volume Close（割れ目の奥を埋める）
 
@@ -346,7 +354,7 @@
 | --- | --- |
 | アプリ基盤 | DX12 / ImGui、モデル表示、グラフ編集、素材・アセット・保存基盤あり |
 | 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
-| メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
+| メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能。Remesh で三角形を一様に作り直し、Decimate で減らせる |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
 | ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる。Volume Terrace で層状の段を刻み、Volume Smooth で面の向きに応じてなまらせる / 角を立てられる。Volume Close で割れ目の奥など外から見えない隙間を埋められる（遮蔽 / 幅） |
 | 材質 | Apply Material / Material Mask / Shape Mask（オクルージョン・上向き度・高さ）/ Mask Combine（マスクの合成）、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |

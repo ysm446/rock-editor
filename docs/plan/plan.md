@@ -1,7 +1,7 @@
 # plan — v2 仕様に基づく実装計画
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 21:05
+更新日時: 2026-09-22 22:15
 
 ## 方針
 
@@ -51,6 +51,7 @@ P 番号は本計画の作業単位。原仕様の Milestone 番号とは別。P
 - 追加済み: `Volume Noise`（なめらか / セル状 / 小面のノイズで表面を削る。歪みで平面と直線的な割れ目を崩す）。仕様は [Volume Noise](../reference/volume-noise.md)。
 - 追加済み: `Volume Smooth`（ガウスぼかしでなまらせる / 角を立てる。上向きの面に集中できる）と `Volume Terrace`（層状の段を刻む）。仕様は [Volume Smooth](../reference/volume-smooth.md)、[Volume Terrace](../reference/volume-terrace.md)。2026-09-22 のユーザー依頼で追加。設計メモの 5 と、4 の Terrace。面の向きによる量の変化は Field 型ではなく、ノード内で入力の勾配から求める形にした。
 - 追加済み: `Volume Close`（外から見えない隙間を埋める。遮蔽率で判定する「遮蔽」と、幅で判定するクロージングの「幅」。割れ目の奥の見えない壁にメッシュを作らないため）。仕様は [Volume Close](../reference/volume-close.md)。2026-09-22 のユーザー依頼で追加。
+- 追加済み: `Remesh`（等方リメッシュ。辺の長さを揃え、稜線を保つ。UV Unwrap の前に置き、Subdivide なしで均一な Displace ができる）。仕様は [Remesh](../reference/remesh.md)。2026-09-22 のユーザー依頼で追加。マスクで場所ごとに辺の長さを変える適応リメッシュは未着手。
 - 追加済み: `Decimate`（QEM による三角形の削減。UV Unwrap の前に置く）。仕様は [Decimate](../reference/decimate.md)。設計メモの 7（High → Low の法線ベイク）の前提になる。
 - 追加済み: `Shape Mask`（UV付きの Mesh から形状に応じた材質マスクを作る。種類はオクルージョン / 上向き度 / 高さ。選択時はマスクを貼ってプレビュー）。仕様は [Shape Mask](../reference/shape-mask.md)。設計メモの 6。ユーザー判断により、種類ごとの専用ノードではなく、1つのノードの中で種類を選ぶ形にし、Mesh（UV付き）を明示的な入力にした。マスクはUV空間の画像で、既存の画像マスクの経路に乗る。Field 型は入れていない。
 - 追加済み: `Mask Combine`（2つのマスクを画素ごとに合成。乗算 / 最大 / 最小 / 差 / 混合と、下限 / 上限 / ガンマ / 反転）。仕様は [Mask Combine](../reference/mask-combine.md)。2026-09-22 のユーザー判断で、Shape Mask の種類を組み合わせるための専用ノードとして追加した。対象は UV 空間の画像（Shape Mask / Mask Combine）に限り、Material Mask は初版では受けない。Field 型は入れていない。

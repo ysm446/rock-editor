@@ -78,7 +78,7 @@ constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType
 // 2つのマスクの合成。A が基準（出力の形とメッシュは A 側）。
 constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, ValueType::Mask, "A"},
     {PinKind::Input, ValueType::Mask, "B"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 32> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 33> kNodeDefinitions = {{
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
@@ -92,6 +92,7 @@ constexpr std::array<NodeDefinition, 32> kNodeDefinitions = {{
     {NodeKind::Subdivide, "subdivide", "Subdivide", kSubdividePins},
     {NodeKind::Displace, "displace", "Displace", kMeshFilterPins},
     {NodeKind::Decimate, "decimate", "Decimate", kMeshFilterPins},
+    {NodeKind::Remesh, "remesh", "Remesh", kMeshFilterPins},
     {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kMeshFilterPins},
     {NodeKind::MaterialBake, "materialBake", "Material Bake", kBakePins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
@@ -153,7 +154,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::VolumeClose ||
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
-           kind == NodeKind::Decimate || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
+           kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
            // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
            IsImageMaskNodeKind(kind);
 }
@@ -479,6 +480,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::DisplaceSettings{};
     } else if (kind == NodeKind::Decimate) {
         node.settings = geometry::DecimateSettings{};
+    } else if (kind == NodeKind::Remesh) {
+        node.settings = geometry::RemeshSettings{};
     } else if (kind == NodeKind::MaterialMask) {
         node.settings = MaterialMaskSettings{};
     } else if (kind == NodeKind::ApplyMaterial) {

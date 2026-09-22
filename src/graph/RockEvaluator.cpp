@@ -106,6 +106,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(subdivide->levels); add(subdivide->threshold);
     } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node->settings)) {
         add(decimate->targetTriangles); add(decimate->maxError); add(decimate->creaseWeight);
+    } else if (const auto* remesh = std::get_if<geometry::RemeshSettings>(&node->settings)) {
+        add(remesh->edgeLength); add(remesh->iterations); add(remesh->featureAngle);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
         add(uv->resolution); add(uv->padding); add(uv->quality);
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
@@ -196,7 +198,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         const bool volumeCache = node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
-                                 node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate ||
+                                 node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate || node->kind == NodeKind::Remesh ||
                                  node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace ||
                                  node->kind == NodeKind::VolumeClose ||
                                  node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace ||
@@ -556,6 +558,34 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             rock.source = id;
             rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(moved));
             result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::Remesh) {
+            const auto* settings = std::get_if<geometry::RemeshSettings>(&node->settings);
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream) return finish(Failure(id, "Remesh", "Mesh出力を接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty())
+                return finish(Failure(id, "Remesh", "生成メッシュが必要です。Modelは直接変換できません"));
+            size_t total = 0;
+            for (const auto& rock : result.rocks) {
+                if (rock.volume) return finish(Failure(id, "Remesh", "Mesh入力が必要です"));
+                total += rock.mesh.triangles.size();
+            }
+            size_t done = 0;
+            for (auto& rock : result.rocks) {
+                std::string error;
+                const size_t before = rock.mesh.triangles.size();
+                auto remeshed = geometry::RemeshMesh(rock.mesh, *settings, error, stop, [&](int percent) {
+                    report(id, 0, int((double(done) + double(before) * percent / 100.0) * 100.0 / double(std::max<size_t>(total, 1))));
+                });
+                if (!error.empty()) return finish(Failure(id, "Remesh", error));
+                rock.mesh = std::move(remeshed);
+                rock.boxes.reset();
+                rock.meshHistory.push_back(rock.source);
+                rock.source = id;
+                rock.bakeSource = 0;
+                done += before;
+            }
         } else if (node->kind == NodeKind::Decimate) {
             const auto* settings = std::get_if<geometry::DecimateSettings>(&node->settings);
             const auto* upstream =
