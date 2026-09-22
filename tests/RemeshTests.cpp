@@ -188,8 +188,8 @@ void RunRemeshTests() {
     Check(geometry::RemeshMesh(open, s, error).triangles.empty() && !error.empty(), "閉じていない入力を診断する");
     auto huge = s;
     huge.edgeLength = .002f;
-    Check(geometry::RemeshMesh(geometry::MakeBox({100, 100, 100}), huge, error).triangles.empty() && error.find("100万") != std::string::npos,
-          "100万面を超える設定を診断する");
+    Check(geometry::RemeshMesh(geometry::MakeBox({100, 100, 100}), huge, error).triangles.empty() && error.find("300万") != std::string::npos,
+          "300万面を超える設定を診断する");
     std::stop_source stop;
     stop.request_stop();
     Check(geometry::RemeshMesh(sphere, s, error, stop.get_token()).triangles.empty() && !error.empty(), "取消で空を返す");

@@ -12,7 +12,7 @@ namespace rock::geometry {
 // 揃える。UV Unwrap の前に置く。UV は引き継がない（UV付きの入力は診断する）。
 inline constexpr float kMinRemeshEdge = .002f, kMaxRemeshEdge = .2f;
 inline constexpr int kMaxRemeshIterations = 20;
-inline constexpr size_t kMaxRemeshTriangles = 1000000;
+inline constexpr size_t kMaxRemeshTriangles = 3000000;
 struct RemeshSettings {
     // 目標の辺の長さ。形の最長辺に対する比。0.002～0.2。
     float edgeLength = .02f;
@@ -26,7 +26,7 @@ struct RemeshSettings {
 // 0～100 の進み具合。ワーカースレッドから呼ばれる。
 using RemeshProgress = std::function<void(int percent)>;
 // 入力は閉じた向き付きの多様体メッシュ。出力も同じ性質を保ち、連結成分の数は変わらない。
-// 出力の三角形数は概ね 表面積 ÷ (√3/4 × 辺の長さ²)。100万面を超える設定は診断する。
+// 出力の三角形数は概ね 表面積 ÷ (√3/4 × 辺の長さ²)。300万面を超える設定は診断する。
 Mesh RemeshMesh(const Mesh& input, const RemeshSettings& settings, std::string& error,
                 std::stop_token stop = {}, const RemeshProgress& progress = {});
 }  // namespace rock::geometry

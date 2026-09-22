@@ -333,11 +333,11 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (const auto* settings = std::get_if<geometry::SubdivideSettings>(&node->settings)) {
                 if (settings->levels < 0 || settings->levels > 6) return finish(Failure(id, name, "細分化の段階数は0〜6です"));
                 for (int level=0;level<settings->levels;++level) {
-                    if (predicted > geometry::kMaxDetailTriangles/4) return finish(Failure(id, name, "出力合計が100万面を超えます"));
+                    if (predicted > geometry::kMaxDetailTriangles/4) return finish(Failure(id, name, "出力合計が300万面を超えます"));
                     predicted *= 4;
                 }
             }
-            if (predicted > geometry::kMaxDetailTriangles) return finish(Failure(id, name, "出力合計が100万面を超えます"));
+            if (predicted > geometry::kMaxDetailTriangles) return finish(Failure(id, name, "出力合計が300万面を超えます"));
             if (persistent) persistent->detailCounts[id] = {inputCount,predicted};
             size_t total = 0;
             for (auto& rock : result.rocks) {
@@ -439,7 +439,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 }
                 if (!error.empty()) return finish(Failure(id, name, error));
                 total += rock.mesh.triangles.size();
-                if (total > geometry::kMaxDetailTriangles) return finish(Failure(id, name, "出力合計が100万面を超えます"));
+                if (total > geometry::kMaxDetailTriangles) return finish(Failure(id, name, "出力合計が300万面を超えます"));
                 rock.meshHistory.push_back(rock.source);
                 rock.source = id; rock.boxes.reset(); rock.bakeSource = 0;
             }

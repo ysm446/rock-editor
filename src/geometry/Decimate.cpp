@@ -262,8 +262,8 @@ Mesh DecimateMesh(const Mesh& input, const DecimateSettings& s, std::string& err
         error = "稜線の保護は 0～10 にしてください";
         return {};
     }
-    if (input.triangles.size() > size_t(MaxDecimateTriangles) * 2) {
-        error = "Decimate の入力は100万三角形までです。上流の解像度を下げてください";
+    if (input.triangles.size() > MaxDecimateInputTriangles) {
+        error = "Decimate の入力は300万三角形までです。上流の解像度を下げてください";
         return {};
     }
     MeshInfo info;
