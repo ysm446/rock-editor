@@ -28,6 +28,15 @@ void Application::DrawPieceSettings(graph::Node &node) {
         }
         ui::HintText("Yの伸長を4にすると縦に長い分割片になります。倍率の最大/"
                      "最小比は16以下。最初はノイズ0のBoxを使用してください。");
+        ui::SectionHeader("表示");
+        if (ui::BeginPropertyTable("voronoiView", 150.0f)) {
+            ui::PropertyBool("ワイヤーフレーム", &m_voronoiShowWireframe, false,
+                             "このノードを選んでいる間、岩の面を隠して分割片の稜線を表示します。ノードの設定には保存しません。");
+            ui::PropertyBool("ポイント", &m_voronoiShowPoints, false,
+                             "このノードを選んでいる間、岩の面を隠して Points 入力の点（各分割片の母点）を表示します。"
+                             "ノードの設定には保存しません。");
+            ui::EndPropertyTable();
+        }
     } else if (auto *selection = std::get_if<geometry::PieceSelectSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("pieceSelect")) {
             const char *modes[] = {"Manual — 手動ID", "Outer — 外面に接する片", "Region — 重心の範囲",
@@ -144,6 +153,13 @@ void Application::DrawPieceSettings(graph::Node &node) {
     } else if (auto *filter = std::get_if<geometry::PieceFilterSettings>(&node.settings)) {
         changed |= ImGui::Checkbox("Keep（選択した片だけ残す）", &filter->keep);
         ui::HintText("オフはDelete（選択した片を削除）。PiecesとSelectionは同じ枝から接続してください。");
+        ui::SectionHeader("表示");
+        if (ui::BeginPropertyTable("pieceFilterView", 150.0f)) {
+            ui::PropertyBool("除外した片", &m_pieceFilterShowRemoved, false,
+                             "このノードを選んでいる間、このノードで除外した分割片をワイヤーフレームで表示します。"
+                             "残った片はそのまま面で表示します。ノードの設定には保存しません。");
+            ui::EndPropertyTable();
+        }
     } else if (auto *transform = std::get_if<geometry::PieceTransformSettings>(&node.settings)) {
         const auto pose = [&](geometry::PiecePose &p, const char *table) {
             bool edited = false;

@@ -89,6 +89,15 @@ void RunPieceTests() {
                                    (piece.id == 0 ? normal.x > .999f : normal.x < -.999f);
                 }
             Check(sharedPlane && std::abs(area - 4) < 1e-6, "opposite caps coincide / area and orientation");
+            // 半分の箱（1 x 2 x 2）の稜線は12本で長さの合計 4 x (1 + 2 + 2)。切断面の対角線を含まない。
+            double length = 0;
+            bool axisAligned = true;
+            for (const auto &edge : PieceEdges(piece)) {
+                const double dx = edge[1].x - edge[0].x, dy = edge[1].y - edge[0].y, dz = edge[1].z - edge[0].z;
+                length += std::sqrt(dx * dx + dy * dy + dz * dz);
+                axisAligned &= int(std::abs(dx) > 1e-6) + int(std::abs(dy) > 1e-6) + int(std::abs(dz) > 1e-6) == 1;
+            }
+            Check(axisAligned && std::abs(length - 20) < 1e-5, "wireframe edges outline the half box without diagonals");
         }
     points.positions = {{-.5f, -.5f, 0}, {.5f, -.5f, 0}, {-.5f, .5f, 0}, {.5f, .5f, 0}};
     auto quadrants = FractureVoronoi(box, points, {}, 1, error);
@@ -205,6 +214,15 @@ void RunPieceTests() {
     --std::get<ScatterSettings>(graph.FindMutableNode(scatter)->settings).seed;
     auto undone = EvaluateRocks(graph, filter, &cache);
     Check(undone.error.empty(), "restored settings recover selection");
+    // 表示用に、ピース系ノードの直近の出力が残る（選択中の Piece Filter の稜線を描くのに使う）。
+    Check(cache.pieceOutputs.contains(filter) && cache.pieceOutputs.contains(fracture) &&
+              cache.pieceOutputs[filter]->pieces.size() == 22 && cache.pieceOutputs[fracture]->pieces.size() == 24,
+          "evaluation keeps the latest piece outputs for display");
+    ++std::get<ScatterSettings>(graph.FindMutableNode(scatter)->settings).seed;
+    Check(!EvaluateRocks(graph, filter, &cache).error.empty() && !cache.pieceOutputs.contains(filter),
+          "a failed piece node drops its displayed output");
+    --std::get<ScatterSettings>(graph.FindMutableNode(scatter)->settings).seed;
+    EvaluateRocks(graph, filter, &cache);
     selection.ids.clear();
     std::get<PieceFilterSettings>(graph.FindMutableNode(filter)->settings).keep = true;
     auto empty = EvaluateRocks(graph, filter, &cache);

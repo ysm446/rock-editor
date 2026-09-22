@@ -1137,6 +1137,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     // outlineMesh が 0 以上なら、そのメッシュの外周だけを LINELIST で描く（ホバー / 選択の枠）。
     const auto drawMeshes = [&](const MeshConstants& passConstants, uint32_t passMask, bool tessellate,
                                 int outlineMesh = -1) {
+        if (m_meshSceneHidden) return;
         for (size_t i = 0; i < m_sceneMeshes.size(); ++i) {
             if (outlineMesh >= 0 && i != static_cast<size_t>(outlineMesh)) continue;
             if (m_meshScene.meshes[i].materialOnly) continue;

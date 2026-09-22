@@ -289,6 +289,8 @@ public:
     void SetExtraSceneRadius(float radius) { m_extraSceneRadius = radius; }
     // 重ねる線。**毎フレーム渡す**（渡さなければ前のフレームのまま）。
     void SetOverlayLines(std::vector<OverlayLineSet> lines) { m_overlayLines = std::move(lines); }
+    // メッシュの描画（影を含む）を止め、オーバーレイの線や点だけを見せる。シーンは保持する。
+    void SetMeshSceneHidden(bool hidden) { m_meshSceneHidden = hidden; }
     TonemapMode& Tonemap() { return m_tonemap; }
     DebugView& Debug() { return m_debugView; }
     DebugView Debug() const { return m_debugView; }
@@ -377,6 +379,7 @@ private:
     float m_meshSceneRadius = 0.1f;
     float m_extraSceneRadius = 0.0f;
     std::vector<OverlayLineSet> m_overlayLines;
+    bool m_meshSceneHidden = false;
 
     rhi::GpuTexture m_sceneColor;  // 線形 HDR
     // 被写界深度を掛けた結果。**トーンマップはこちらを読む。**

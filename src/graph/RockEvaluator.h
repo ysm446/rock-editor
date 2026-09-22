@@ -49,6 +49,8 @@ struct RockEvaluationCache {
     // キャッシュ対象ノードの実計算回数。再利用時は増加しない。
     std::map<GraphId, uint64_t> computations;
     std::map<GraphId, Entry> pieceEntries;
+    // ピース系ノードの直近の出力（表示用。共有参照なので複製しない）。選択中のノードの稜線を描くのに使う。
+    std::map<GraphId, std::shared_ptr<const geometry::PieceCollection>> pieceOutputs;
     struct Surface {
         std::shared_ptr<const geometry::VolumeGrid> volume;
         geometry::Mesh mesh;

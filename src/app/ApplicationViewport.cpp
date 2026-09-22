@@ -408,7 +408,10 @@ void Application::HandleCameraInput(renderer::PreviewRenderer& preview, bool ite
 // Scatter Points の点。形の内側にある点も見えるよう、奥行きで隠さず画面に重ねる。
 // 大きさは距離によらず一定。色はギズモと同じく固定する。
 void Application::DrawPointPreview(const ImVec2& viewportMin, const ImVec2& viewportMax) {
-    if (!m_pointPreview || m_pointPreview->positions.empty()) return;
+    // Scatter Points のプレビューの点。無ければ、選んだ Voronoi Fracture の母点を出す。
+    auto points = m_pointPreview;
+    if (!points || points->positions.empty()) points = SelectedVoronoiPoints();
+    if (!points || points->positions.empty()) return;
     using namespace DirectX;
     const ImVec2 size(viewportMax.x - viewportMin.x, viewportMax.y - viewportMin.y);
     if (size.x <= 0.0f || size.y <= 0.0f) return;
@@ -417,7 +420,7 @@ void Application::DrawPointPreview(const ImVec2& viewportMin, const ImVec2& view
     const float radius = ui::Scaled(3.0f);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     drawList->PushClipRect(viewportMin, viewportMax, true);
-    for (const auto& p : m_pointPreview->positions) {
+    for (const auto& p : points->positions) {
         const ProjectedPoint point = ProjectToViewport(viewProjection, XMFLOAT3{p.x, p.y, p.z}, viewportMin, size);
         if (!point.visible) continue;
         drawList->AddCircleFilled(point.screen, radius + ui::Scaled(1.0f), IM_COL32(20, 20, 20, 220));

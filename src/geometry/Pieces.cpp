@@ -655,6 +655,39 @@ Mesh PieceMesh(const Piece &p) {
         v = F(Apply(p.transform, V(v)));
     return mesh;
 }
+std::vector<std::array<Vec3, 2>> PieceEdges(const Piece &p) {
+    std::vector<std::array<Vec3, 2>> edges;
+    if (!p.mesh)
+        return edges;
+    const Mesh mesh = PieceMesh(p);
+    const auto *origins = p.faceOrigins && p.faceOrigins->size() == mesh.triangles.size() ? p.faceOrigins.get() : nullptr;
+    // 辺（小さい頂点番号, 大きい頂点番号）ごとに、接する面を集める。
+    std::map<std::pair<uint32_t, uint32_t>, std::vector<uint32_t>> faces;
+    for (uint32_t f = 0; f < mesh.triangles.size(); ++f)
+        for (int k = 0; k < 3; ++k) {
+            const uint32_t a = mesh.triangles[f][k], b = mesh.triangles[f][(k + 1) % 3];
+            faces[{std::min(a, b), std::max(a, b)}].push_back(f);
+        }
+    for (const auto &[edge, adjacent] : faces) {
+        bool draw = adjacent.size() != 2;
+        if (!draw) {
+            const uint32_t f0 = adjacent[0], f1 = adjacent[1];
+            const bool cut0 = !origins || (*origins)[f0] == 0, cut1 = !origins || (*origins)[f1] == 0;
+            const Vec3 n0 = FaceNormal(mesh, mesh.triangles[f0]), n1 = FaceNormal(mesh, mesh.triangles[f1]);
+            const float cosine = n0.x * n1.x + n0.y * n1.y + n0.z * n1.z;
+            if (!cut0 && !cut1)
+                // 元の外面どうしは、はっきり折れた辺（20度より大きい。箱の角など）だけ出す。
+                // 丸い形の細かい三角形の辺は出さない。
+                draw = cosine < .94f;
+            else
+                // 同じ平面の三角形の間（切断面の分割の対角線）は出さない。
+                draw = cut0 != cut1 || cosine < .9999f;
+        }
+        if (draw)
+            edges.push_back({mesh.positions[edge.first], mesh.positions[edge.second]});
+    }
+    return edges;
+}
 Mesh PiecesMesh(const PieceCollection &c) {
     Mesh out;
     for (const auto &p : c.pieces) {

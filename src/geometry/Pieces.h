@@ -85,6 +85,10 @@ PieceCollection FilterPieces(const PieceCollection &, const PieceSelection &, bo
 PieceCollection TransformPieces(const PieceCollection &, const PieceSelection *,
                                 const PieceTransformSettings &, std::string &);
 Mesh PieceMesh(const Piece &);
+// 表示用の稜線（変換を適用した位置）。切断面を囲む辺と、元の外面のはっきり折れた辺（20度より大きい）を返す。
+// 切断面の三角形分割の対角線と、元の外面のなめらかな部分の辺は含まない。
+// faceOrigins が無ければ、すべて切断面として扱う。
+std::vector<std::array<Vec3, 2>> PieceEdges(const Piece &);
 Mesh PiecesMesh(const PieceCollection &);
 Vec3 PieceCenter(const Piece &);
 void RefreshPieceFingerprint(PieceCollection &);

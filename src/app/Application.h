@@ -468,6 +468,24 @@ private:
     CutFaceOverlay m_cutFaceOverlay;
     // 選んだ Plane Cuts の平面の枠（深度付きの線）と断面の色分け（半透明の面）を lines へ加える。
     void AppendPlaneCutOverlay(std::vector<renderer::OverlayLineSet>& lines);
+    // Voronoi Fracture を選んでいる間の表示。どちらかがオンなら岩の面を隠す。
+    // ノードの設定ではない（評価・Undo・保存に関わらない）。
+    bool m_voronoiShowWireframe = false;
+    bool m_voronoiShowPoints = false;
+    // Piece Filter を選んでいる間の表示。オンなら、除外した分割片を稜線で見せる（残った片は面のまま）。
+    bool m_pieceFilterShowRemoved = false;
+    // 分割片の稜線。分割の結果が変わったときだけ作り直す。
+    // 分割片の稜線。描く片の集合（pieces）と除く片の集合（excluded）が変わったときだけ作り直す。
+    struct PieceWireframe {
+        std::shared_ptr<const geometry::PieceCollection> pieces, excluded;
+        std::vector<renderer::OverlayLineSet> sets;
+    };
+    PieceWireframe m_pieceWireframe;
+    // 選んだ Voronoi Fracture の分割片、または Piece Filter で除外した片の稜線を lines へ加え、
+    // 岩の面を隠すかどうかを描画器へ伝える。
+    void AppendPieceOverlay(std::vector<renderer::OverlayLineSet>& lines);
+    // 選んだ Voronoi Fracture の Points 入力の点。表示しないときや未評価なら空。
+    std::shared_ptr<const geometry::PointSet> SelectedVoronoiPoints() const;
     // カーソル直下のメッシュを CPU のレイ交差で探し、クリックか矩形で選ぶ。
     void HandleMeshHover(bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax);
     bool HandleLightDrag(renderer::LightSettings& light, LightInteraction& interaction, bool itemActive);

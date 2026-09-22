@@ -153,6 +153,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
     if (persistent) {
         std::erase_if(persistent->computations, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->pieceEntries, [&](const auto& item) { return !graph.FindNode(item.first); });
+        std::erase_if(persistent->pieceOutputs, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->detailCounts, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->uvs, [&](const auto& item) { return !graph.FindNode(item.first); });
         std::erase_if(persistent->entries, [&](const auto& item) {
@@ -206,7 +207,12 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             return value;
         };
         if (IsPieceNodeKind(node->kind)) {
-            return finish(EvaluatePieceNode(graph, *node, persistent, [&](GraphId upstream) { return evaluate(upstream, depth+1); }, stop));
+            auto pieces = EvaluatePieceNode(graph, *node, persistent, [&](GraphId upstream) { return evaluate(upstream, depth+1); }, stop);
+            if (persistent) {
+                if (pieces.error.empty() && pieces.pieces) persistent->pieceOutputs[id] = pieces.pieces;
+                else persistent->pieceOutputs.erase(id);
+            }
+            return finish(std::move(pieces));
         } else if (node->kind == NodeKind::ShapeMask) {
             const auto* settings = std::get_if<geometry::ShapeMaskSettings>(&node->settings);
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);

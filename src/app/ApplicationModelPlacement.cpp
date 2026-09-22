@@ -980,6 +980,58 @@ void Application::AppendPlaneCutOverlay(std::vector<renderer::OverlayLineSet>& l
     }
 }
 
+void Application::AppendPieceOverlay(std::vector<renderer::OverlayLineSet>& lines) {
+    const graph::Node* node = m_graph.FindNode(m_selectedGraphNode);
+    const bool voronoi = node && node->kind == graph::NodeKind::VoronoiFracture;
+    const bool filter = node && node->kind == graph::NodeKind::PieceFilter && !node->inputs.empty();
+    // Voronoi はオンにしたら岩の面を隠し、ワイヤーフレームと点だけを見せる。Piece Filter は面を残す。
+    m_renderer.SetMeshSceneHidden(voronoi && (m_voronoiShowWireframe || m_voronoiShowPoints));
+    if (!(voronoi && m_voronoiShowWireframe) && !(filter && m_pieceFilterShowRemoved)) return;
+    // 評価のキャッシュに残る、各ノードの直近の出力から読む。評価中は前回の結果を出し続ける。
+    const auto output = [&](const graph::Node* source) -> std::shared_ptr<const geometry::PieceCollection> {
+        if (!source) return nullptr;
+        const auto found = m_rockEvaluationCache.pieceOutputs.find(source->id);
+        return found == m_rockEvaluationCache.pieceOutputs.end() ? nullptr : found->second;
+    };
+    // Voronoi は自身の出力すべて。Piece Filter は入力のうち、出力に残らなかった片。
+    std::shared_ptr<const geometry::PieceCollection> pieces, excluded;
+    if (voronoi) {
+        pieces = output(node);
+    } else {
+        pieces = output(m_graph.FindUpstreamNodeForPin(node->inputs[0].id));
+        excluded = output(node);
+        if (!excluded) return;
+    }
+    if (!pieces) return;
+    if (m_pieceWireframe.pieces != pieces || m_pieceWireframe.excluded != excluded) {
+        m_pieceWireframe = {pieces, excluded, {}};
+        std::vector<uint32_t> kept;
+        if (excluded)
+            for (const auto& piece : excluded->pieces) kept.push_back(piece.id);
+        std::sort(kept.begin(), kept.end());
+        // 深度付きで描く。Voronoi は面を隠しているので内部のセルの辺もすべて見え、
+        // Piece Filter では残った片の向こう側の辺が隠れる。
+        renderer::OverlayLineSet set{XMFLOAT4{.85f, .9f, 1.f, 1.f}, {}};
+        for (const auto& piece : pieces->pieces) {
+            if (std::binary_search(kept.begin(), kept.end(), piece.id)) continue;
+            for (const auto& edge : geometry::PieceEdges(piece))
+                for (const auto& p : edge) set.points.push_back({p.x, p.y, p.z});
+        }
+        m_pieceWireframe.sets.push_back(std::move(set));
+    }
+    lines.insert(lines.end(), m_pieceWireframe.sets.begin(), m_pieceWireframe.sets.end());
+}
+
+std::shared_ptr<const geometry::PointSet> Application::SelectedVoronoiPoints() const {
+    if (!m_voronoiShowPoints) return nullptr;
+    const graph::Node* node = m_graph.FindNode(m_selectedGraphNode);
+    if (!node || node->kind != graph::NodeKind::VoronoiFracture || node->inputs.size() < 2) return nullptr;
+    const graph::Node* source = m_graph.FindUpstreamNodeForPin(node->inputs[1].id);
+    if (!source) return nullptr;
+    const auto found = m_rockEvaluationCache.pieceEntries.find(source->id);
+    return found == m_rockEvaluationCache.pieceEntries.end() ? nullptr : found->second.result.points;
+}
+
 void Application::DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVec2& viewportMax) {
     // --- 範囲の枠（レンダラが深度付きで描く） ------------------------------------------
     // 選んだ Model ノードはそのモデル、Transform はその枝のモデルすべて。ホバーは薄く。
@@ -1050,6 +1102,7 @@ void Application::DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVe
     if (!hovered.points.empty()) lines.push_back(std::move(hovered));
     if (!selectedSet.points.empty()) lines.push_back(std::move(selectedSet));
     AppendPlaneCutOverlay(lines);
+    AppendPieceOverlay(lines);
     m_renderer.SetOverlayLines(std::move(lines));
 
     // --- ギズモ（ImGui。深度は見ず常に手前） ---------------------------------------
