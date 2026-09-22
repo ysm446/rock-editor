@@ -549,9 +549,17 @@ bool ProjectWorkspace::Expand(json& document) {
             slot = id.is_number_integer() && id.get<int>() > 0 ? id : json();
         }
     }
-    for (auto& entry : materials) {
-        if (!read(entry, "material-asset")) return false;
-        MapTextures(entry, textureId);
+    // 消えた .rockmat でシーン全体を開けなくしない。その表の項目を外し、参照していたレイヤーやモデルの
+    // スロットは読み込み器で「なし」へ落ちる（旧版が Bakes/ へ自動保存した Baked 材質を消した後など）。
+    for (auto it = materials.begin(); it != materials.end();) {
+        if (!read(*it, "material-asset")) {
+            ROCK_LOG_WARN("マテリアルが見つからないので外します: %s",
+                          String(it->value("asset", json::object()), "path").c_str());
+            it = materials.erase(it);
+            continue;
+        }
+        MapTextures(*it, textureId);
+        ++it;
     }
     for (auto& entry : textures) {
         const auto& ref = entry["source"];
