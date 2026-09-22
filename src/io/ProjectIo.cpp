@@ -514,6 +514,21 @@ json WriteGraph(const graph::NodeGraph& graphData,
         } else if (const auto* meshing = std::get_if<geometry::VolumeToMeshSettings>(&node.settings)) {
             item["volumeToMesh"] = {{"method", meshing->method == geometry::VolumeMeshingMethod::DualContouring
                 ? "dualContouring" : "marchingTetrahedra"}};
+        } else if (const auto* smooth = std::get_if<geometry::VolumeSmoothSettings>(&node.settings)) {
+            item["volumeSmooth"] = {{"mode", geometry::VolumeSmoothModeName(smooth->mode)},
+                                    {"radius", smooth->radius},
+                                    {"amount", smooth->amount},
+                                    {"upwardFocus", smooth->upwardFocus}};
+        } else if (const auto* terrace = std::get_if<geometry::VolumeTerraceSettings>(&node.settings)) {
+            item["volumeTerrace"] = {{"step", terrace->step},
+                                     {"depth", terrace->depth},
+                                     {"ratio", terrace->ratio},
+                                     {"softness", terrace->softness},
+                                     {"variation", terrace->variation},
+                                     {"noise", terrace->noise},
+                                     {"noiseScale", terrace->noiseScale},
+                                     {"rotation", terrace->rotationDegrees},
+                                     {"seed", terrace->seed}};
         } else if (const auto* noise = std::get_if<geometry::VolumeNoiseSettings>(&node.settings)) {
             item["volumeNoise"] = {{"type", geometry::VolumeNoiseTypeName(noise->type)},
                                    {"amount", noise->amount},
@@ -809,6 +824,30 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.position = {position.x, position.y, position.z};
                     settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
                     settings.scale = ReadFloat(*v, "scale", settings.scale);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeSmooth) {
+                geometry::VolumeSmoothSettings settings;
+                if (const json* v = FindMember(item, "volumeSmooth"); v && v->is_object()) {
+                    settings.mode = geometry::ParseVolumeSmoothMode(ReadString(*v, "mode", "smooth"));
+                    settings.radius = ReadFloat(*v, "radius", settings.radius);
+                    settings.amount = ReadFloat(*v, "amount", settings.amount);
+                    settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeTerrace) {
+                geometry::VolumeTerraceSettings settings;
+                if (const json* v = FindMember(item, "volumeTerrace"); v && v->is_object()) {
+                    settings.step = ReadFloat(*v, "step", settings.step);
+                    settings.depth = ReadFloat(*v, "depth", settings.depth);
+                    settings.ratio = ReadFloat(*v, "ratio", settings.ratio);
+                    settings.softness = ReadFloat(*v, "softness", settings.softness);
+                    settings.variation = ReadFloat(*v, "variation", settings.variation);
+                    settings.noise = ReadFloat(*v, "noise", settings.noise);
+                    settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
+                    const auto rotation = ReadFloat3(*v, "rotation", {});
+                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeNoise) {

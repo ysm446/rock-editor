@@ -120,6 +120,41 @@ struct VolumeNoiseSettings {
     float warpScale = 2;
     int seed = 1;
 };
+// Volume Smooth。ガウスぼかしで表面をなまらせる（なめらか）か、ぼかしとの差を足して角を立てる（シャープ）。
+// 面の向き（入力の勾配）で量を変えられる。上面は風化で丸く、側面の割れ口は鋭いまま、という差を作る。
+enum class VolumeSmoothMode { Smooth, Sharpen };
+const char* VolumeSmoothModeName(VolumeSmoothMode mode);
+// 不明な名前は Smooth として読む。
+VolumeSmoothMode ParseVolumeSmoothMode(std::string_view name);
+struct VolumeSmoothSettings {
+    VolumeSmoothMode mode = VolumeSmoothMode::Smooth;
+    // ぼかしの半径（ガウスの σ）。形の最長辺に対する比。0.005～0.2。
+    float radius = .03f;
+    // 効かせる量。なめらかは入力とぼかしの混合比（0～1）、シャープは差を足す倍率（0～1 を 0～2 倍に使う）。
+    float amount = 1;
+    // 上向きの面への集中。0 で全面に同じ量、1 で上（+Y）を向いた面だけに効き、垂直な面と下面には効かない。0～1。
+    float upwardFocus = 0;
+};
+// Volume Terrace。ある方向に層をなす段（棚）を作る。層状の剥離。
+// 方向に沿った位置を段の間隔で割った端数で、へこませる層と残す層を交互に作る。削る方向にだけ効き、形は広がらない。
+struct VolumeTerraceSettings {
+    // 段の間隔（1層の厚さ）。形の最長辺に対する比。0.02～1。
+    float step = .15f;
+    // へこませる深さ。最長辺に対する比。0～0.2。
+    float depth = .03f;
+    // 1層のうち、へこませる部分の割合。0.05～0.95。
+    float ratio = .5f;
+    // 段の縁のなだらかさ。間隔に対する比。0 で直角、大きいほど斜面になる。0～0.5。
+    float softness = .05f;
+    // 層ごとの深さのばらつき。0 で全て同じ深さ、1 で 0～深さの範囲。0～1。
+    float variation = .3f;
+    // 層の境のゆらぎ。境をずらす量の最大（間隔に対する比、0～1）と、その細かさ（最長辺あたりの山の数、0.5～16）。
+    float noise = .2f;
+    float noiseScale = 2;
+    // 層の重なる方向。回した座標系の +Y が層の法線。右手系 Z → X → Y、度。
+    std::array<float, 3> rotationDegrees{0, 0, 0};
+    int seed = 1;
+};
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
 // 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。
@@ -152,6 +187,12 @@ VolumeGrid CrackVolume(const VolumeGrid& grid, const std::vector<Vec3>& points,
 // 歪みが 0 なら格子は入力のまま。歪みがあると、表面が動く量だけ外側へ広げる。
 // 加工でできた浮いた小片と閉じた空洞は除く。
 VolumeGrid NoiseVolume(const VolumeGrid& grid, const VolumeNoiseSettings& settings, std::string& error);
+// 格子（範囲・セル間隔）は入力のまま。外周の1点は入力の値を保つ。
+// なめらかにすると凸な角は削れ、凹な隅は埋まる（体積はほぼ保たれる）。加工でできた浮いた小片と閉じた空洞は除く。
+VolumeGrid SmoothVolume(const VolumeGrid& grid, const VolumeSmoothSettings& settings, std::string& error);
+// 格子（範囲・セル間隔）は入力のまま。層の位相は内部の外接箱の中心を基準にする。
+// 加工でできた浮いた小片と閉じた空洞は除く。
+VolumeGrid TerraceVolume(const VolumeGrid& grid, const VolumeTerraceSettings& settings, std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
 Mesh VolumeSurface(const VolumeGrid& grid, std::string& error,
                    VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra);

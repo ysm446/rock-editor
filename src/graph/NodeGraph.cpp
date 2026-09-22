@@ -78,7 +78,7 @@ constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType
 // 2つのマスクの合成。A が基準（出力の形とメッシュは A 側）。
 constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, ValueType::Mask, "A"},
     {PinKind::Input, ValueType::Mask, "B"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 29> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 31> kNodeDefinitions = {{
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
@@ -101,6 +101,8 @@ constexpr std::array<NodeDefinition, 29> kNodeDefinitions = {{
     {NodeKind::PlaneCuts, "planeCuts", "Plane Cuts", kVolumeTransformPins},
     {NodeKind::VolumeCrack, "volumeCrack", "Volume Crack", kVolumeCrackPins},
     {NodeKind::VolumeNoise, "volumeNoise", "Volume Noise", kVolumeTransformPins},
+    {NodeKind::VolumeSmooth, "volumeSmooth", "Volume Smooth", kVolumeTransformPins},
+    {NodeKind::VolumeTerrace, "volumeTerrace", "Volume Terrace", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::BaseRock, "baseRock", "Base Shape", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
@@ -146,7 +148,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::RandomBoxes || kind == NodeKind::ToVolume ||
            kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeBoolean ||
            kind == NodeKind::PlaneCuts || kind == NodeKind::VolumeCrack ||
-           kind == NodeKind::VolumeNoise ||
+           kind == NodeKind::VolumeNoise || kind == NodeKind::VolumeSmooth || kind == NodeKind::VolumeTerrace ||
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
@@ -451,6 +453,10 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeCrackSettings{};
     } else if (kind == NodeKind::VolumeNoise) {
         node.settings = geometry::VolumeNoiseSettings{};
+    } else if (kind == NodeKind::VolumeSmooth) {
+        node.settings = geometry::VolumeSmoothSettings{};
+    } else if (kind == NodeKind::VolumeTerrace) {
+        node.settings = geometry::VolumeTerraceSettings{};
     } else if (kind == NodeKind::ScatterPoints) {
         node.settings = geometry::ScatterSettings{};
     } else if (kind == NodeKind::VoronoiFracture) {

@@ -78,6 +78,10 @@ enum class NodeKind : uint32_t {
     ShapeMask = 59,
     // 2つのマスク（Shape Mask / Mask Combine）を画素ごとに合成する。出力は Mask。
     MaskCombine = 60,
+    // Volume の表面をなまらせる / 角を立てる。面の向きで量を変えられる。
+    VolumeSmooth = 61,
+    // Volume にある方向の層状の段（棚）を作る。
+    VolumeTerrace = 62,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -185,6 +189,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
+                                  geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings,
                                   geometry::DecimateSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ShapeMaskSettings, geometry::MaskCombineSettings, ApplyMaterialSettings,

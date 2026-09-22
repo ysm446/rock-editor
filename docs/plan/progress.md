@@ -1,9 +1,18 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-22 18:30
+更新日時: 2026-09-22 19:10
 
 ## 現在地
+
+### 2026-09-22 Volume Smooth と Volume Terrace
+
+- ユーザー依頼「Volume Smooth / Sharpen と Terrace も作成してほしい」への対応。設計メモの 5（Smooth / Sharpen）と、4 に含めていなかった Terrace（段化）を、それぞれ独立したボリュームノードにした。仕様は [Volume Smooth](../reference/volume-smooth.md)、[Volume Terrace](../reference/volume-terrace.md)。
+- **Volume Smooth**: 3軸の分離ガウスぼかし（σ = 半径 × 最長辺、±3σ）。なめらかは入力とぼかしの混合、シャープはアンシャープマスク。「上向きに集中」は入力の勾配から求めた法線の +Y 成分で重みを変える。実装して分かったこと: ぼかしで格子の端の値をそのまま延長すると、外側の余白が2セルしかないため外側の距離が頭打ちになり、**面が外へ押し出されて体積が増えた**（8.0 → 8.26 m³）。端の外は距離を足して外挿する（`SampleVolume` と同じ規約）ように直し、体積が減る側（約 7.6 m³）になった。
+- **Volume Terrace**: 層の法線に射影した位置を間隔で割り、端数でへこむ層と残す層を交互に作る。層番号のハッシュで深さをばらつかせ、値ノイズで境をずらす。位相は内部の外接箱の中心が基準。削る方向にだけ足すので格子は入力のまま。
+- どちらも評価・キャッシュ・保存/読込・設定欄・右クリックメニューは Volume Noise と同じ形。評価器では2ノードを1つの分岐にまとめた。
+- 単体テスト: Volume Smooth 36項目（`tests/VolumeSmoothTests.cpp`）、Volume Terrace 41項目（`tests/VolumeTerraceTests.cpp`）。Release で全 2,902 項目が成功。ゆらぎのテストは、最初は面の中央 1/3 だけを見ていて境の移動が範囲に入らず落ちた。面の内側全体（1/8〜7/8）を見るよう直した。
+- Release 実アプリで `examples/volume-smooth-terrace`（Volume Noise の後ろに Terrace → Smooth）の各段を `--preview-node` で撮影し、傾いた層状の棚が出ること、Smooth（上向きに集中 1）で棚の上面だけが丸くなり側面が鋭いまま残ることを確認（`data/test/claude-session-2026-09-22/smooth-terrace/`）。設定欄のラベル「上向きの面に集中」が列幅で切れたので「上向きに集中」に短くした。`--save-project` で `volumeTerrace` / `volumeSmooth` の全設定と3本の接続が残ることを確認。Debug でも全 2,902 項目が成功。実マウスでの操作、Undo/Redo の手動確認は未実施。
 
 ### 2026-09-22 Mask Combine（マスクの合成）
 
@@ -329,9 +338,9 @@
 | 岩生成 | Base Shape（Box / RoundedBox / Sphere / Ellipsoid、丸み、分割数、弱いノイズ、Seed）、Random Boxes、Scatter Points / Voronoi Fracture とピースの選別・個別変換に対応。Joint Set / Crack / Fracture は2026-09-21に削除済み |
 | メッシュ接続 | RockEvaluator → RockMesh → SyncMeshGraph で表示。Merge と途中プレビューに対応。Volume to Mesh は Marching Tetrahedra / Dual Contouring を選択可能 |
 | 評価・保存 | Revision ごとの再評価、寸法と seed の保存/復元、Undo/Redo に対応。ボリューム系の枝キャッシュに対応。他の枝のキャッシュは P6 |
-| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる |
+| ボリューム | 密な配列の SDF。Volume Transform で移動・回転・拡大。格子の再サンプルで実装。ビューポートのギズモで操作できる。Volume Boolean で2つのボリュームの和・交差・差を取れる。Plane Cuts で平面の群による面取りと欠けを作れる。Volume Crack で点の群の境界に沿う割れ目を彫れる。Volume Noise で表面を削り、歪みで直線的な面を崩せる。Volume Terrace で層状の段を刻み、Volume Smooth で面の向きに応じてなまらせる / 角を立てられる |
 | 材質 | Apply Material / Material Mask / Shape Mask（オクルージョン・上向き度・高さ）/ Mask Combine（マスクの合成）、Triplanar、UV Unwrap、Material Bake（GPU形状AO）に対応 |
-| 次の作業 | 形を作る4ノード、Shape Mask、Mask Combine が入った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、Shape Mask の種類の追加（曲率 / 切断面）、Volume Smooth、ディテールの焼き込みが候補 |
+| 次の作業 | 形を作る4ノード、Volume Terrace、Volume Smooth、Shape Mask、Mask Combine が入った。[設計メモ](../reference/rock-shaping-nodes.md) の順では、Shape Mask の種類の追加（曲率 / 切断面）とディテールの焼き込みが候補 |
 
 ## 完了
 

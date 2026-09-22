@@ -1002,6 +1002,8 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
         addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 点の群の境界に沿って割れ目を彫る");
         addNodeMenuItem(graph::NodeKind::VolumeNoise, "Volume Noise — 表面をノイズで削り、直線的な面を崩す");
+        addNodeMenuItem(graph::NodeKind::VolumeSmooth, "Volume Smooth — 表面をなまらせる / 角を立てる（上面だけ、など）");
+        addNodeMenuItem(graph::NodeKind::VolumeTerrace, "Volume Terrace — 層状の段（棚）を刻む");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
@@ -1234,6 +1236,71 @@ void Application::DrawGraphPanel() {
             edited.warp = std::clamp(edited.warp, 0.0f, 0.2f);
             edited.warpScale = std::clamp(edited.warpScale, 0.5f, 16.0f);
             *noise = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* smooth = std::get_if<geometry::VolumeSmoothSettings>(&selected->settings)) {
+        auto edited = *smooth;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeSmoothRows")) {
+            const char* modes[] = {"なめらか", "シャープ"};
+            int mode = std::clamp(static_cast<int>(edited.mode), 0, 1);
+            if (ui::PropertyCombo("モード", &mode, modes, 2, 0)) {
+                edited.mode = static_cast<geometry::VolumeSmoothMode>(mode);
+                changed = true;
+            }
+            changed |= ui::PropertyFloat("半径", &edited.radius, .005f, .2f, .03f,
+                                         "ぼかしの半径。形の最長辺に対する比です。これより小さい凹凸が消えます（なめらか）／立ちます（シャープ）。");
+            changed |= ui::PropertyFloat("量", &edited.amount, 0, 1, 1,
+                                         "なめらか：入力とぼかしの混合比。シャープ：ぼかしとの差を足す強さ。");
+            changed |= ui::PropertyFloat("上向きに集中", &edited.upwardFocus, 0, 1, 0,
+                                         "0 で全面に同じ量。1 で上を向いた面だけに効き、垂直な面と下面には効きません。");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("なめらか：ガウスぼかしで凸な角を削り、凹な隅を埋めます。シャープ：ぼかしとの差を足して稜線と割れ目を立てます。"
+                     "「上向きの面に集中」で、上面は風化で丸く、側面の割れ口は鋭いまま、という差を作れます。");
+        if (changed) {
+            edited.radius = std::clamp(edited.radius, .005f, .2f);
+            edited.amount = std::clamp(edited.amount, 0.0f, 1.0f);
+            edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
+            *smooth = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* terrace = std::get_if<geometry::VolumeTerraceSettings>(&selected->settings)) {
+        auto edited = *terrace;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeTerraceRows")) {
+            const float zero[3] = {0, 0, 0};
+            changed |= ui::PropertyFloat("段の間隔", &edited.step, .02f, 1, .15f,
+                                         "1層の厚さ。形の最長辺に対する比です。");
+            changed |= ui::PropertyFloat("深さ", &edited.depth, 0, .2f, .03f,
+                                         "へこませる深さ。形の最長辺に対する比です。削る方向にだけ効き、形は広がりません。");
+            changed |= ui::PropertyFloat("へこむ割合", &edited.ratio, .05f, .95f, .5f,
+                                         "1層のうち、へこませる部分の割合。");
+            changed |= ui::PropertyFloat("なだらかさ", &edited.softness, 0, .5f, .05f,
+                                         "段の縁のなだらかさ（間隔に対する比）。0 で直角の棚、大きいほど斜面になります。");
+            changed |= ui::PropertyFloat("ばらつき", &edited.variation, 0, 1, .3f,
+                                         "層ごとの深さの差。0 で全て同じ深さ。");
+            changed |= ui::PropertyFloat("ゆらぎ", &edited.noise, 0, 1, .2f,
+                                         "層の境をノイズでずらす量の最大（間隔に対する比）。0 で平らな層。");
+            changed |= ui::PropertyFloat("ゆらぎの細かさ", &edited.noiseScale, .5f, 16, 2);
+            changed |= ui::PropertyFloat3Input("向き (度)", edited.rotationDegrees.data(), zero,
+                                               "層の重なる方向。回した座標系の +Y が層の法線です。0 で水平な層。") != 0;
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("ある方向に層をなす段（棚）を刻みます。層状の剥離。段の間隔がセル間隔に近いと格子で潰れます。"
+                     "後ろに Volume Noise の歪みや Volume Smooth を置くと、機械的な段が崩れます。浮いた小片と閉じた空洞は自動で除きます。");
+        if (changed) {
+            edited.step = std::clamp(edited.step, .02f, 1.0f);
+            edited.depth = std::clamp(edited.depth, 0.0f, .2f);
+            edited.ratio = std::clamp(edited.ratio, .05f, .95f);
+            edited.softness = std::clamp(edited.softness, 0.0f, .5f);
+            edited.variation = std::clamp(edited.variation, 0.0f, 1.0f);
+            edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
+            edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
+            *terrace = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

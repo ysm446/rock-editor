@@ -1037,6 +1037,209 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
     FillNewVoids(out, before);
     return out;
 }
+const char* VolumeSmoothModeName(VolumeSmoothMode mode) {
+    return mode == VolumeSmoothMode::Sharpen ? "sharpen" : "smooth";
+}
+VolumeSmoothMode ParseVolumeSmoothMode(std::string_view name) {
+    return name == "sharpen" ? VolumeSmoothMode::Sharpen : VolumeSmoothMode::Smooth;
+}
+namespace {
+// 1軸のガウスぼかし。格子の外は、端の値に外へ出た距離を足して外挿する（SampleVolume と同じ規約）。
+// 端の値で延長すると外側の距離が頭打ちになり、ぼかしが面を外へ押し出してしまう（余白は2セルしかない）。
+// 出力は入力と同じ格子。Zスライスごとに並列。
+void BlurAxis(const VolumeGrid& g, const std::vector<float>& in, std::vector<float>& out, int axis,
+              const std::vector<float>& kernel) {
+    const int nx = int(g.dimensions[0]), ny = int(g.dimensions[1]), nz = int(g.dimensions[2]);
+    const int half = int(kernel.size() / 2);
+    const int n[3] = {nx, ny, nz};
+    const size_t stride[3] = {1, size_t(nx), size_t(nx) * ny};
+    std::vector<uint32_t> slices(nz);
+    std::iota(slices.begin(), slices.end(), 0u);
+    std::for_each(std::execution::par, slices.begin(), slices.end(), [&](uint32_t z) {
+        for (int y = 0; y < ny; ++y)
+            for (int x = 0; x < nx; ++x) {
+                const int c[3] = {x, y, int(z)};
+                const size_t base = (size_t(z) * ny + y) * nx + x;
+                double sum = 0;
+                for (int k = -half; k <= half; ++k) {
+                    const int i = std::clamp(c[axis] + k, 0, n[axis] - 1);
+                    const float beyond = float(std::abs(c[axis] + k - i)) * g.spacing;
+                    sum += kernel[size_t(k + half)] * (in[base + (i - c[axis]) * stride[axis]] + beyond);
+                }
+                out[base] = float(sum);
+            }
+    });
+}
+// 入力の勾配から面の外向きの法線を求め、その上向き成分（0～1）を返す。勾配が無い所は 0。
+float Upwardness(const VolumeGrid& g, uint32_t x, uint32_t y, uint32_t z) {
+    const auto at = [&](int ix, int iy, int iz) {
+        return g.values[g.Index(uint32_t(std::clamp(ix, 0, int(g.dimensions[0]) - 1)),
+                                uint32_t(std::clamp(iy, 0, int(g.dimensions[1]) - 1)),
+                                uint32_t(std::clamp(iz, 0, int(g.dimensions[2]) - 1)))];
+    };
+    const int ix = int(x), iy = int(y), iz = int(z);
+    const float gx = at(ix + 1, iy, iz) - at(ix - 1, iy, iz), gy = at(ix, iy + 1, iz) - at(ix, iy - 1, iz),
+                gz = at(ix, iy, iz + 1) - at(ix, iy, iz - 1);
+    const float length = std::sqrt(gx * gx + gy * gy + gz * gz);
+    return length > 0 ? std::clamp(gy / length, 0.f, 1.f) : 0.f;
+}
+}  // namespace
+VolumeGrid SmoothVolume(const VolumeGrid& g, const VolumeSmoothSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (s.mode != VolumeSmoothMode::Smooth && s.mode != VolumeSmoothMode::Sharpen) {
+        error = "不明なモードです";
+        return {};
+    }
+    if (!range(s.radius, .005f, .2f)) {
+        error = "半径は 0.005～0.2 にしてください";
+        return {};
+    }
+    if (!range(s.amount, 0, 1) || !range(s.upwardFocus, 0, 1)) {
+        error = "量と上向きの集中は 0～1 にしてください";
+        return {};
+    }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    VolumeGrid out = g;
+    if (s.amount <= 0) return out;
+    // σ をセル単位で持ち、±3σ で打ち切る。σ がセルの 0.3 未満ならぼかしは実質無い。
+    const float sigma = s.radius * longest / g.spacing;
+    const int half = std::max(1, int(std::ceil(sigma * 3)));
+    std::vector<float> kernel(size_t(half) * 2 + 1);
+    double total = 0;
+    for (int k = -half; k <= half; ++k) {
+        const double w = std::exp(-double(k) * k / (2.0 * sigma * sigma));
+        kernel[size_t(k + half)] = float(w);
+        total += w;
+    }
+    for (auto& w : kernel) w = float(w / total);
+    std::vector<float> a = g.values, b(g.values.size());
+    BlurAxis(g, a, b, 0, kernel);
+    BlurAxis(g, b, a, 1, kernel);
+    BlurAxis(g, a, b, 2, kernel);
+    const std::vector<float>& blurred = b;
+    const float threshold = g.spacing * 1e-4f;
+    const bool sharpen = s.mode == VolumeSmoothMode::Sharpen;
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const size_t index = out.Index(x, y, z);
+        const float value = g.values[index];
+        // 外周の1点は入力のまま。外周が空である保証を保つ。
+        if (x == 0 || y == 0 || z == 0 || x + 1 == g.dimensions[0] || y + 1 == g.dimensions[1] || z + 1 == g.dimensions[2])
+            return value < 0;
+        float weight = s.amount;
+        if (s.upwardFocus > 0) weight *= 1 - s.upwardFocus * (1 - Upwardness(g, x, y, z));
+        float result = sharpen ? value + 2 * weight * (value - blurred[index]) : value + weight * (blurred[index] - value);
+        if (std::abs(result) < threshold) result = threshold;
+        out.values[index] = result;
+        return result < 0;
+    });
+    if (!inside) {
+        error = "処理した結果に内部が残りません。半径か量を減らしてください";
+        return {};
+    }
+    KeepLargestComponent(out);
+    FillNewVoids(out, g.values);
+    return out;
+}
+VolumeGrid TerraceVolume(const VolumeGrid& g, const VolumeTerraceSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (!range(s.step, .02f, 1)) {
+        error = "段の間隔は 0.02～1 にしてください";
+        return {};
+    }
+    if (!range(s.depth, 0, .2f)) {
+        error = "深さは 0～0.2 にしてください";
+        return {};
+    }
+    if (!range(s.ratio, .05f, .95f) || !range(s.softness, 0, .5f) || !range(s.variation, 0, 1) || !range(s.noise, 0, 1)) {
+        error = "割合は 0.05～0.95、なだらかさは 0～0.5、ばらつきとゆらぎは 0～1 にしてください";
+        return {};
+    }
+    if (!range(s.noiseScale, .5f, 16)) {
+        error = "ゆらぎの細かさは 0.5～16 にしてください";
+        return {};
+    }
+    for (const float degrees : s.rotationDegrees)
+        if (!std::isfinite(degrees)) {
+            error = "回転が非有限です";
+            return {};
+        }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    VolumeGrid out = g;
+    if (s.depth <= 0) return out;
+    // 層の位相は内部の外接箱の中心を基準にする。格子の余白に左右されない。
+    uint32_t lowest[3] = {g.dimensions[0], g.dimensions[1], g.dimensions[2]}, highest[3] = {0, 0, 0};
+    for (uint32_t z = 0; z < g.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < g.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < g.dimensions[0]; ++x) {
+                if (g.values[g.Index(x, y, z)] >= 0) continue;
+                const uint32_t cell[3] = {x, y, z};
+                for (int i = 0; i < 3; ++i) {
+                    lowest[i] = std::min(lowest[i], cell[i]);
+                    highest[i] = std::max(highest[i], cell[i]);
+                }
+            }
+    const Vec3 center{g.origin.x + (lowest[0] + highest[0]) * .5f * g.spacing,
+                      g.origin.y + (lowest[1] + highest[1]) * .5f * g.spacing,
+                      g.origin.z + (lowest[2] + highest[2]) * .5f * g.spacing};
+    const Vec3 axis = Rotate({0, 1, 0}, s.rotationDegrees);
+    const float pitch = s.step * longest, depth = s.depth * longest;
+    const float frequency = s.noiseScale / longest;
+    const uint64_t seed = uint64_t(uint32_t(s.seed)) << 40;
+    const float threshold = g.spacing * 1e-4f;
+    const float band = depth + 2 * g.spacing;
+    const auto smoothstep = [](float edge0, float edge1, float v) {
+        if (edge1 <= edge0) return v < edge0 ? 0.f : 1.f;
+        const float t = std::clamp((v - edge0) / (edge1 - edge0), 0.f, 1.f);
+        return t * t * (3 - 2 * t);
+    };
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const size_t index = out.Index(x, y, z);
+        float value = g.values[index];
+        if (std::abs(value) < band) {
+            const auto p = g.Position(x, y, z);
+            const Vec3 d{p.x - center.x, p.y - center.y, p.z - center.z};
+            float t = Dot(d, axis) / pitch;
+            if (s.noise > 0)
+                t += (ValueNoise(p.x * frequency, p.y * frequency, p.z * frequency, seed ^ 0x77ull) - .5f) * 2 * s.noise;
+            const float layer = std::floor(t), u = t - layer;
+            // へこませる層を [0, ratio) に置き、その中心からの距離で縁をなだらかにする。
+            const float halfWidth = s.ratio * .5f;
+            float distance = std::abs(u - halfWidth);
+            distance = std::min({distance, std::abs(u - halfWidth - 1), std::abs(u - halfWidth + 1)});
+            const float profile = 1 - smoothstep(halfWidth - s.softness, halfWidth + s.softness, distance);
+            const float layerDepth = depth * (1 - s.variation * float(HashUnit(seed ^ (uint64_t(int64_t(layer)) * 0x9E37ull))));
+            // 削る方向にだけ効かせる。形は広がらない。
+            value += layerDepth * profile;
+        }
+        out.values[index] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
+    if (!inside) {
+        error = "段を刻んだ結果に内部が残りません。深さを減らしてください";
+        return {};
+    }
+    KeepLargestComponent(out);
+    FillNewVoids(out, g.values);
+    return out;
+}
 Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod method) {
     error.clear();
     const auto nx = g.dimensions[0], ny = g.dimensions[1], nz = g.dimensions[2];
