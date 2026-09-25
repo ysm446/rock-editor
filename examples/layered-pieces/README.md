@@ -5,6 +5,7 @@
 | シーン | 比較する内容 |
 | --- | --- |
 | `single-plate.rockscene` | 1枚の薄いBoxを既存のメッシュ入力で分割し、側面に接する片を削除 |
+| `progressive-peel.rockscene` | 隣接する面積から支持を求め、外周から内側へ段階的に欠く |
 | `outer-layer-chipping.rockscene` | 両側から2層を対象とし、内側の層ほど欠けを弱くする |
 | `layered-2d.rockscene` | 5枚の板を面内の点で個別に分割し、各板の元の側縁を削除 |
 | `layered-3d.rockscene` | 同じ5枚の板で点を厚さ方向にも配置する比較 |
@@ -19,3 +20,5 @@
 Rim は元の板の側縁を選びます。削除後の輪郭から連続的に削っていく機能は含みません。詳しくは [設計メモ](../../docs/reference/layered-pieces.md) を参照してください。
 
 `outer-layer-chipping.rockscene` では Piece Select を選ぶと、外側の層ほどオレンジの選択が多くなる様子を確認できます。「削除後」で比較し、「板を離して表示」で隠れた層も確認してください。層ごとの内訳は設定欄を下へスクロールすると表示されます。これらの表示操作は出力形状を変更しません。
+
+`progressive-peel.rockscene` の Piece Select / Peel は、削除量を増やすと同じ板の外周から内側へ進みます。オレンジの線は欠ける片、黄色は削除後に露出している次の候補です。中心保護は各連結部分の奥の1片を残します。詳しくは [隣接面積による侵食](../../docs/reference/piece-erosion.md) を参照してください。

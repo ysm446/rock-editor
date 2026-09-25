@@ -67,8 +67,9 @@ void Application::DrawPieceSettings(graph::Node &node) {
         }
         if (viewChanged) { ++m_pieceEpoch; SetPreviewGraphNode(node.id); }
         if (m_pieceSelectView == 0) {
-            ImGui::TextColored(ImVec4(1,.4f,.15f,1), "■ 選択された片（Deleteの対象）");
-            ImGui::TextColored(ImVec4(1,.85f,.2f,1), "■ 候補のうち今回は選ばれなかった片");
+            ImGui::TextColored(ImVec4(1,.4f,.15f,1), "□ オレンジの線：欠ける片（Deleteの対象）");
+            ImGui::TextColored(ImVec4(1,.85f,.2f,1), selection->mode == geometry::PieceSelectMode::Peel
+                ? "■ 外周に露出した次の候補" : "■ 候補のうち今回は選ばれなかった片");
             ImGui::TextColored(ImVec4(.7f,.72f,.75f,1), "■ 対象外の片");
         } else ui::HintText("選択した片を隠した比較表示です。実際の削除には Piece Filter を使います。");
         if (ImGui::Button("外側の板の縁から欠く")) {
@@ -77,16 +78,23 @@ void Application::DrawPieceSettings(graph::Node &node) {
             selection->rimFalloff = 0; selection->fraction = .75f; selection->invert = false;
             m_pieceSelectionEditing = false; changed = true;
         }
+        if (ImGui::Button("外周から内側へ侵食")) {
+            selection->mode = geometry::PieceSelectMode::Peel;
+            selection->layer = -1; selection->rimLayers = 0; selection->rimSide = 0;
+            selection->rimFalloff = .6f; selection->fraction = .3f; selection->invert = false;
+            selection->peelNoise = .15f; selection->protectCore = true;
+            m_pieceSelectionEditing = false; changed = true;
+        }
         if (ui::BeginPropertyTable("pieceSelect")) {
             const char *modes[] = {"Manual — 手動ID", "Outer — 外面に接する片", "Region — 重心の範囲",
-                                   "Volume — 体積", "Random — ランダム", "Rim — 元の板の側縁"};
+                                   "Volume — 体積", "Random — ランダム", "Rim — 元の板の側縁", "Peel — 外周から侵食"};
             int mode = int(selection->mode);
-            if (ui::PropertyCombo("選別方法", &mode, modes, 6, 1)) {
+            if (ui::PropertyCombo("選別方法", &mode, modes, 7, 1)) {
                 selection->mode = geometry::PieceSelectMode(mode);
                 changed = true;
                 m_pieceSelectionEditing = false;
             }
-            if (selection->mode == geometry::PieceSelectMode::Rim) {
+            if (selection->mode == geometry::PieceSelectMode::Rim || selection->mode == geometry::PieceSelectMode::Peel) {
                 const char* sides[] = {"両側から", "上側から", "下側から"};
                 changed |= ui::PropertyCombo("積層の外側", &selection->rimSide, sides, 3, 0);
                 changed |= ui::PropertyInt("外側から何層", &selection->rimLayers, 0, 32, 0,
@@ -104,8 +112,16 @@ void Application::DrawPieceSettings(graph::Node &node) {
             }
             changed |= ui::PropertyInt("対象の層",&selection->layer,-1,31,-1,
                                        "-1は全層。Layered Boxesの層番号を指定できます。反転も指定層の中だけに効きます。");
-            if (selection->mode == geometry::PieceSelectMode::Random || selection->mode == geometry::PieceSelectMode::Rim) {
-                changed |= ui::PropertyFloat("選択率", &selection->fraction, 0, 1, .5f);
+            if (selection->mode == geometry::PieceSelectMode::Peel) {
+                changed |= ui::PropertyFloat("欠けのばらつき", &selection->peelNoise, 0, 1, .15f);
+                changed |= ui::PropertyBool("中心の片を保護", &selection->protectCore, true,
+                    "各連結部分で、露出面から最も遠い片を1つ残します。選択反転時は保護対象も選ばれます。");
+            }
+            if (selection->mode == geometry::PieceSelectMode::Random || selection->mode == geometry::PieceSelectMode::Rim ||
+                selection->mode == geometry::PieceSelectMode::Peel) {
+                changed |= ui::PropertyFloat(selection->mode == geometry::PieceSelectMode::Peel ? "削除量" : "選択率",
+                                             &selection->fraction, 0, 1, .5f,
+                                             "Peelでは各層のピース数に対する削除割合です。体積の割合ではありません。");
                 int seed = int(selection->seed);
                 if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
                     selection->seed = uint32_t(seed);
@@ -116,6 +132,8 @@ void Application::DrawPieceSettings(graph::Node &node) {
         }
         if (selection->mode == geometry::PieceSelectMode::Rim)
             ui::HintText("元の板の側縁に接する片から選択率で選びます。上下面だけに触れる片は選びません。削除後に露出した新しい外周の判定は行いません。");
+        if (selection->mode == geometry::PieceSelectMode::Peel)
+            ui::HintText("露出した外周から、残る接触面積の割合が小さい片を順に選びます。隣を除くと次の候補が露出します。板同士の支持はまだ計算しません。");
         if (selection->mode == geometry::PieceSelectMode::Outer) {
             const char *labels[] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
             for (int i = 0; i < 6; ++i) {
@@ -134,8 +152,8 @@ void Application::DrawPieceSettings(graph::Node &node) {
         if (selection->mode == geometry::PieceSelectMode::Manual) {
             ImGui::BeginDisabled(!ready);
             if (ImGui::Checkbox("ビューポートで選択編集", &m_pieceSelectionEditing)) {
-                if (m_pieceSelectionEditing)
-                    { m_pieceSelectView = 0; ++m_pieceEpoch; SetPreviewGraphNode(node.id); }
+                ++m_pieceEpoch;
+                if (m_pieceSelectionEditing) { m_pieceSelectView = 0; SetPreviewGraphNode(node.id); }
             }
             if (ImGui::Button("手動選択をリセット")) {
                 selection->ids.clear();
@@ -165,6 +183,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 ImGui::TreePop();
             }
             ImGui::EndDisabled();
+            if (m_pieceSelectionEditing) ui::HintText("手動編集中は、選択を解除できるように選択片の面も表示します。");
             ui::HintText("クリックで選択、Shiftで追加・解除、空白で解除。入力の分割を変更した後はリセットが必"
                          "要です。");
         }
@@ -176,7 +195,20 @@ void Application::DrawPieceSettings(graph::Node &node) {
                             m_pieceInput->pieces.size()-evaluated.ids.size());
                 auto candidateSettings = *selection;
                 candidateSettings.fraction = 1; candidateSettings.rimFalloff = 0; candidateSettings.invert = false;
-                const auto candidates = geometry::SelectPieces(*m_pieceInput, candidateSettings, error);
+                auto candidates = geometry::PieceSelection{};
+                if (selection->mode == geometry::PieceSelectMode::Peel) candidates.ids = evaluated.frontier;
+                else candidates = geometry::SelectPieces(*m_pieceInput, candidateSettings, error);
+                if (selection->mode == geometry::PieceSelectMode::Peel) {
+                    size_t contacts = 0; double area = 0;
+                    for (const auto& p:m_pieceInput->pieces) if (p.neighborhood)
+                        for (const auto& edge:p.neighborhood->contacts)
+                            if (p.id < edge.neighbor && std::any_of(m_pieceInput->pieces.begin(),m_pieceInput->pieces.end(),
+                                [&](const auto& other){return other.id==edge.neighbor;})) {
+                                ++contacts; area += geometry::PieceFaceArea(p,edge.areaVector);
+                            }
+                    ImGui::Text("隣接 %zu 組 / 共有面積 %.3f m²",contacts,area);
+                    ImGui::Text("次の候補 %zu 片",evaluated.frontier.size());
+                }
                 // 上から下への積層図。層の厚さではなく、各層のピース数の内訳を示す。
                 bool hasLayers = false;
                 for (const auto& p : m_pieceInput->pieces) hasLayers |= p.layer >= 0;

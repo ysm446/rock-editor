@@ -437,13 +437,16 @@ void Application::SyncMeshGraph() {
     const auto* previewNode = m_graph.FindNode(previewMeshNode);
     const bool selectionView = previewNode && previewNode->kind == graph::NodeKind::PieceSelect && evaluated.pieces;
     m_pieceSelectEdges = {DirectX::XMFLOAT4{.12f,.14f,.17f,1}, {}};
+    m_pieceSelectRemovedEdges = {DirectX::XMFLOAT4{1.f,.4f,.08f,1}, {}};
     geometry::PieceSelection candidates;
     int minLayer = 32, maxLayer = -1;
     if (selectionView) {
         auto settings = std::get<geometry::PieceSelectSettings>(previewNode->settings);
         settings.fraction = 1; settings.rimFalloff = 0; settings.invert = false;
         std::string error;
-        candidates = geometry::SelectPieces(*evaluated.pieces, settings, error);
+        if (settings.mode == geometry::PieceSelectMode::Peel && evaluated.selection)
+            candidates.ids = evaluated.selection->frontier;
+        else candidates = geometry::SelectPieces(*evaluated.pieces, settings, error);
         for (const auto& p : evaluated.pieces->pieces) if (p.layer >= 0) {
             minLayer = std::min(minLayer,p.layer); maxLayer = std::max(maxLayer,p.layer);
         }
@@ -466,8 +469,11 @@ void Application::SyncMeshGraph() {
         if (selectionView && m_pieceSelectView == 0) {
             geometry::Piece displayPiece;
             displayPiece.mesh = std::make_shared<const geometry::Mesh>(rock.mesh);
+            auto& edges = rock.pieceSelected ? m_pieceSelectRemovedEdges : m_pieceSelectEdges;
             for (const auto& edge : geometry::PieceEdges(displayPiece))
-                for (const auto& v : edge) m_pieceSelectEdges.points.push_back({v.x,v.y,v.z});
+                for (const auto& v : edge) edges.points.push_back({v.x,v.y,v.z});
+            // 手動編集時だけ面を残し、選択済みの片もクリックで解除できるようにする。
+            if (rock.pieceSelected && !m_pieceSelectionEditing) continue;
         }
         if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
         renderer::SceneMesh mesh;

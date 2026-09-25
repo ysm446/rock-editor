@@ -1015,8 +1015,10 @@ void Application::AppendPieceOverlay(std::vector<renderer::OverlayLineSet>& line
     // Voronoi はオンにしたら岩の面を隠し、ワイヤーフレームと点だけを見せる。Piece Filter は面を残す。
     m_renderer.SetMeshSceneHidden(voronoi && (m_voronoiShowWireframe || m_voronoiShowPoints));
     if (node && node->kind == graph::NodeKind::PieceSelect && m_previewGraphNode == node->id &&
-        m_pieceSelectView == 0 && !m_pieceSelectEdges.points.empty())
-        lines.push_back(m_pieceSelectEdges);
+        m_pieceSelectView == 0) {
+        if (!m_pieceSelectEdges.points.empty()) lines.push_back(m_pieceSelectEdges);
+        if (!m_pieceSelectRemovedEdges.points.empty()) lines.push_back(m_pieceSelectRemovedEdges);
+    }
     if (!(voronoi && m_voronoiShowWireframe) && !(filter && m_pieceFilterShowRemoved)) return;
     // 評価のキャッシュに残る、各ノードの直近の出力から読む。評価中は前回の結果を出し続ける。
     const auto output = [&](const graph::Node* source) -> std::shared_ptr<const geometry::PieceCollection> {

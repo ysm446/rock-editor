@@ -30,6 +30,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
                 {"invert", s->invert},
                 {"layer",s->layer},
                 {"rimLayers",s->rimLayers}, {"rimSide",s->rimSide}, {"rimFalloff",s->rimFalloff},
+                {"peelNoise",s->peelNoise}, {"protectCore",s->protectCore},
                 {"producer", s->producer},
                 {"generation", std::to_string(s->generation)},
                 {"ids", s->ids}};
@@ -112,7 +113,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
     if (auto *s = std::get_if<PieceSelectSettings>(&node.settings)) {
         int mode = int(s->mode);
         read(value, "mode", mode);
-        if (mode >= 0 && mode <= 5)
+        if (mode >= 0 && mode <= 6)
             s->mode = PieceSelectMode(mode);
         read(value, "outerFaces", s->outerFaces);
         read(value, "seed", s->seed);
@@ -126,6 +127,8 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "rimLayers",s->rimLayers);
         read(value, "rimSide",s->rimSide);
         read(value, "rimFalloff",s->rimFalloff);
+        read(value, "peelNoise",s->peelNoise);
+        read(value, "protectCore",s->protectCore);
         read(value, "producer", s->producer);
         generation(s->generation);
         read(value, "ids", s->ids);

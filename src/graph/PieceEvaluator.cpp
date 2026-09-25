@@ -90,7 +90,7 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
         if (node.kind == NodeKind::PieceSelect) {
             out.pieces = first.pieces;
             out.selection = std::make_shared<const geometry::PieceSelection>(geometry::SelectPieces(
-                *first.pieces, std::get<geometry::PieceSelectSettings>(node.settings), error));
+                *first.pieces, std::get<geometry::PieceSelectSettings>(node.settings), error, stop));
         } else if (node.kind == NodeKind::PiecesToMesh) {
             if (first.pieces->pieces.empty())
                 return out;

@@ -35,8 +35,18 @@ struct LayeredBoxesSettings {
     float gap = .005f, thicknessVariation = .3f, sizeVariation = .1f, offset = .12f;
     uint32_t seed = 1;
 };
+// 面積ベクトルはローカル座標の「単位法線 × 面積」。変換後の面積も求められる。
+struct PieceContact {
+    uint32_t neighbor = 0;
+    std::array<double,3> areaVector{};
+};
+struct PieceNeighborhood {
+    std::vector<PieceContact> contacts;
+    std::vector<std::array<double,3>> boundary; // 層付きなら元の側縁だけ（上下面を除く）。
+};
 struct Piece {
     uint32_t id = 0;
+    std::shared_ptr<const PieceNeighborhood> neighborhood;
     std::shared_ptr<const Mesh> mesh;
     // 行優先の3x4アフィン変換。メッシュを複製せず配置を変更する。
     std::array<double, 12> transform{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0};
@@ -55,6 +65,7 @@ struct PieceCollection {
     int producer = 0;
     uint64_t generation = 0, fingerprint = 0;
     std::vector<Piece> pieces;
+    bool adjacencyComplete = false;
 };
 enum class PieceSelectMode {
     Manual,
@@ -62,7 +73,8 @@ enum class PieceSelectMode {
     Region,
     Volume,
     Random,
-    Rim
+    Rim,
+    Peel
 };
 struct PieceSelectSettings {
     PieceSelectMode mode = PieceSelectMode::Outer;
@@ -73,6 +85,8 @@ struct PieceSelectSettings {
     int layer = -1; // -1は全層。指定時は反転もこの層の中だけで行う。
     int rimLayers = 0, rimSide = 0; // 0層は全層。側: 0両側、1上側、2下側。
     float rimFalloff = 0; // 内側の選択率を下げる強さ。
+    float peelNoise = .15f;
+    bool protectCore = true;
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;
@@ -81,6 +95,7 @@ struct PieceSelection {
     int producer = 0;
     uint64_t generation = 0, input = 0;
     std::vector<uint32_t> ids;
+    std::vector<uint32_t> frontier; // Peel削除後の次の候補。表示用。
 };
 struct PieceFilterSettings {
     bool keep = false;
@@ -107,7 +122,10 @@ PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSet
                                 std::string &, std::stop_token = {});
 PieceCollection FracturePieces(const PieceCollection&, const PointSet&, const VoronoiSettings&, int producer,
                               std::string&, std::stop_token = {});
-PieceSelection SelectPieces(const PieceCollection &, const PieceSelectSettings &, std::string &);
+PieceSelection SelectPieces(const PieceCollection &, const PieceSelectSettings &, std::string &, std::stop_token = {});
+double PieceFaceArea(const Piece&, const std::array<double,3>& areaVector);
+PieceSelection PeelPieces(const PieceCollection&, const PieceSelectSettings&, const std::vector<float>& layerWeights,
+                          std::string&, std::stop_token = {});
 PieceCollection FilterPieces(const PieceCollection &, const PieceSelection &, bool keep, std::string &);
 PieceCollection TransformPieces(const PieceCollection &, const PieceSelection *,
                                 const PieceTransformSettings &, std::string &);

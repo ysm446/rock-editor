@@ -8,6 +8,7 @@
 #include <limits>
 #include "app/UndoHistory.h"
 static void RunLayeredPieceTests();
+void RunPieceErosionTests();
 void RunPieceTests() {
     using namespace rock::geometry;
     using rock::tests::Check;
@@ -259,6 +260,7 @@ void RunPieceTests() {
     }
     Check(farAccepted, "scattered points stay inside for Voronoi far from the origin");
     RunLayeredPieceTests();
+    RunPieceErosionTests();
 }
 
 static void RunLayeredPieceTests() {

@@ -68,6 +68,7 @@ struct Face {
     std::vector<uint32_t> ids;
     uint32_t outer = 0;
     bool original = true;
+    int neighbor = -1;
 };
 struct Poly {
     std::vector<D> vertices;
@@ -121,7 +122,7 @@ struct Built {
     PieceError error = PieceOk;
 };
 // 同じ辺の交点を一度だけ生成し、切断面は境界辺の逆向きの閉路から作る。
-bool Clip(Poly &poly, Plane plane) {
+bool Clip(Poly &poly, Plane plane, int neighbor) {
     // 片ごとに点数−1回呼ばれる。距離の配列は使い回し、呼び出しごとの確保を避ける。
     thread_local std::vector<double> distances;
     distances.clear();
@@ -161,7 +162,7 @@ bool Clip(Poly &poly, Plane plane) {
     };
     std::vector<Face> faces;
     for (const auto &face : poly.faces) {
-        Face out{{}, face.outer, face.original};
+        Face out{{}, face.outer, face.original, face.neighbor};
         for (size_t i = 0; i < face.ids.size(); ++i) {
             auto a = face.ids[i], b = face.ids[(i + 1) % face.ids.size()];
             if (distances[a] <= 0)
@@ -188,7 +189,7 @@ bool Clip(Poly &poly, Plane plane) {
             return false;
     if (next.size() < 3)
         return false;
-    Face cap{{}, 0, false};
+    Face cap{{}, 0, false, neighbor};
     auto start = next.begin()->first, current = start;
     do {
         cap.ids.push_back(current);
@@ -500,12 +501,13 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
             return fail(PieceCancelled);
         auto poly = initial;
         for (size_t j = 0; j < sites.size(); ++j)
-            if (i != j && !Clip(poly, cuts[i][j]))
+            if (i != j && !Clip(poly, cuts[i][j],int(j)))
                 return fail(PieceOpenCut);
         Mesh result;
         std::map<uint32_t, uint32_t> remap;
         std::vector<uint8_t> origins;
         uint32_t outer = 0;
+        auto neighborhood = std::make_shared<PieceNeighborhood>();
         const auto vertex = [&](uint32_t id) {
             auto [it, added] = remap.emplace(id, uint32_t(result.positions.size()));
             if (added)
@@ -524,6 +526,15 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
                 result.triangles.push_back({c, a, b});
                 origins.push_back(face.original ? 1 : 0);
             }
+            D area{};
+            for (size_t k=0;k<face.ids.size();++k)
+                area = area + Cross(poly.vertices[face.ids[k]]-center,
+                                    poly.vertices[face.ids[(k+1)%face.ids.size()]]-center)*(.5*scale*scale);
+            if (Length(area) > scale*scale*1e-12) {
+                const std::array<double,3> vector{area.x,area.y,area.z};
+                if (face.neighbor >= 0) neighborhood->contacts.push_back({uint32_t(face.neighbor),vector});
+                else neighborhood->boundary.push_back(vector);
+            }
             outer |= face.outer;
         }
         MeshInfo info;
@@ -541,6 +552,7 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         }
         auto &piece = built[i].piece;
         piece.id = uint32_t(i);
+        piece.neighborhood = std::move(neighborhood);
         piece.centroid = F(base + center * (1 / volume));
         piece.volume = info.volume;
         piece.outerFaces = outer;
@@ -577,6 +589,26 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         error = "分割前後の体積が一致しません";
         return {};
     }
+    // 両側の切断計算に由来する微小な差を揃え、面積ゼロの接触を除く。
+    std::vector<std::shared_ptr<PieceNeighborhood>> neighborhoods;
+    for (const auto& p : out.pieces) neighborhoods.push_back(std::make_shared<PieceNeighborhood>(*p.neighborhood));
+    for (size_t i=0;i<neighborhoods.size();++i) {
+        auto& contacts=neighborhoods[i]->contacts;
+        std::erase_if(contacts,[&](const auto& contact) {
+            const auto& other=neighborhoods[contact.neighbor]->contacts;
+            return std::none_of(other.begin(),other.end(),[&](const auto& back){return back.neighbor==i;});
+        });
+        for (auto& contact : contacts) if (contact.neighbor>i) {
+            auto& other=neighborhoods[contact.neighbor]->contacts;
+            auto back=std::find_if(other.begin(),other.end(),[&](const auto& v){return v.neighbor==i;});
+            for (int k=0;k<3;++k) {
+                const double area=(contact.areaVector[k]-back->areaVector[k])*.5;
+                contact.areaVector[k]=area; back->areaVector[k]=-area;
+            }
+        }
+    }
+    for (size_t i=0;i<out.pieces.size();++i) out.pieces[i].neighborhood=neighborhoods[i];
+    out.adjacencyComplete=true;
     RefreshPieceFingerprint(out);
     return out;
 }
@@ -588,6 +620,9 @@ PieceCollection FracturePieces(const PieceCollection& input, const PointSet& poi
         error="同じPiecesから生成したScatter Pointsを接続してください（合計512点まで）";return {};
     }
     PieceCollection out; out.producer=producer;
+    // 再分割では親をまたぐ面の重なりをまだ再構築しない。誤った接続で侵食しない。
+    out.adjacencyComplete=std::none_of(input.pieces.begin(),input.pieces.end(),
+                                      [](const auto& p){return bool(p.neighborhood);});
     Hash generation; generation.Add(input.fingerprint); generation.Add(points.fingerprint);
     std::set<uint32_t> ids;
     size_t triangles=0;
@@ -606,6 +641,13 @@ PieceCollection FracturePieces(const PieceCollection& input, const PointSet& poi
             if (!ids.insert(p.id).second) {error="ピースIDが重複しています";return {};}
             p.parentId=parent.id; p.parentProducer=input.producer; p.layer=parent.layer; p.layerSize=parent.layerSize;
             p.transform=parent.transform;
+            auto neighborhood=std::make_shared<PieceNeighborhood>(*p.neighborhood);
+            for (auto& contact:neighborhood->contacts) contact.neighbor+=(parent.id+1)*MaxScatterPoints;
+            if (p.layer>=0) std::erase_if(neighborhood->boundary,[](const auto& area) {
+                const double length=std::sqrt(area[0]*area[0]+area[1]*area[1]+area[2]*area[2]);
+                return std::abs(area[1])>length*(1-1e-7); // 板の上下面から侵食を開始しない。
+            });
+            p.neighborhood=std::move(neighborhood);
             if (p.layer>=0) {
                 // 元の板の側面に面積を持って接する片だけ。上下面は対象外。
                 const float tolerance=std::max(p.layerSize[0],p.layerSize[2])*1e-6f;
@@ -642,15 +684,28 @@ void RefreshPieceFingerprint(PieceCollection &c) {
         for (auto v : p.transform)
             h.Add(std::bit_cast<uint64_t>(v));
     }
+    if (c.adjacencyComplete) {
+        h.Add(0x5045454c); // メッシュ生成の世代は変更せず、隣接データをキャッシュキーへ含める。
+        for (const auto& p:c.pieces) if (p.neighborhood) {
+            h.Add(p.neighborhood->contacts.size());
+            for (const auto& contact:p.neighborhood->contacts) {
+                h.Add(contact.neighbor);
+                for (auto v:contact.areaVector) h.Add(std::bit_cast<uint64_t>(v));
+            }
+            h.Add(p.neighborhood->boundary.size());
+            for (const auto& area:p.neighborhood->boundary)
+                for (auto v:area) h.Add(std::bit_cast<uint64_t>(v));
+        }
+    }
     c.fingerprint = h.value;
 }
 Vec3 PieceCenter(const Piece &p) {
     return F(Apply(p.transform, V(p.centroid)));
 }
-PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings &s, std::string &error) {
+PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings &s, std::string &error, std::stop_token stop) {
     error.clear();
     PieceSelection out{c.producer, c.generation, c.fingerprint, {}};
-    if (int(s.mode) < 0 || int(s.mode) > 5 || s.layer < -1) {
+    if (int(s.mode) < 0 || int(s.mode) > 6 || s.layer < -1) {
         error = "選別方法が不正です";
         return {};
     }
@@ -665,7 +720,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         error = "体積範囲が不正です";
         return {};
     }
-    if ((s.mode == PieceSelectMode::Random || s.mode == PieceSelectMode::Rim) &&
+    if ((s.mode == PieceSelectMode::Random || s.mode == PieceSelectMode::Rim || s.mode == PieceSelectMode::Peel) &&
         (!std::isfinite(s.fraction) || s.fraction < 0 || s.fraction > 1)) {
         error = "選択率は0〜1にしてください";
         return {};
@@ -676,7 +731,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         return {};
     }
     std::vector<int> layers;
-    if (s.mode == PieceSelectMode::Rim) {
+    if (s.mode == PieceSelectMode::Rim || s.mode == PieceSelectMode::Peel) {
         if (s.rimLayers < 0 || s.rimLayers > 32 || s.rimSide < 0 || s.rimSide > 2 ||
             !std::isfinite(s.rimFalloff) || s.rimFalloff < 0 || s.rimFalloff > 1) {
             error = "外側の層の設定が不正です";
@@ -686,19 +741,28 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         std::sort(layers.begin(), layers.end());
         layers.erase(std::unique(layers.begin(), layers.end()), layers.end());
     }
-    for (const auto &p : c.pieces) {
-        if (s.layer>=0 && p.layer!=s.layer) continue;
-        float rimWeight = 1;
-        if (s.mode == PieceSelectMode::Rim && !layers.empty()) {
-            if (p.layer < 0) continue;
+    const auto layerWeight = [&](const Piece& p) -> float {
+        if (s.layer>=0 && p.layer!=s.layer) return -1;
+        if ((s.mode == PieceSelectMode::Rim || s.mode == PieceSelectMode::Peel) && !layers.empty()) {
+            if (p.layer < 0) return -1;
             const int bottom = int(std::lower_bound(layers.begin(), layers.end(), p.layer)-layers.begin());
             const int top = int(layers.size())-1-bottom;
             const int depth = s.rimSide == 1 ? top : s.rimSide == 2 ? bottom : std::min(top,bottom);
             const int available = s.rimSide ? int(layers.size()) : (int(layers.size())+1)/2;
             const int count = s.rimLayers ? std::min(s.rimLayers,available) : available;
-            if (depth >= count) continue; // 反転でも対象外の層は選ばない。
-            rimWeight = 1-s.rimFalloff*float(depth)/float(std::max(1,count-1));
+            if (depth >= count) return -1;
+            return 1-s.rimFalloff*float(depth)/float(std::max(1,count-1));
         }
+        return 1;
+    };
+    if (s.mode == PieceSelectMode::Peel) {
+        std::vector<float> weights;
+        for (const auto& p:c.pieces) weights.push_back(layerWeight(p));
+        return PeelPieces(c,s,weights,error,stop);
+    }
+    for (const auto &p : c.pieces) {
+        const float rimWeight=layerWeight(p);
+        if (rimWeight<0) continue;
         bool selected = false;
         auto center = PieceCenter(p);
         double volume = p.volume * Determinant(p.transform);
@@ -726,6 +790,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
             selected = Uniform(state) < s.fraction;
             break;
         }
+        case PieceSelectMode::Peel: break; // 上で隣接グラフを評価済み。
         case PieceSelectMode::Rim: {
             // 通常MeshはローカルXZの外周。層情報がある場合は元の板の側面を使う。
             Hash h; h.Add(c.producer); h.Add(p.id); h.Add(s.seed);

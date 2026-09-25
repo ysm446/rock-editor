@@ -152,7 +152,7 @@ private:
     bool m_pieceSelectionEditing = false;
     int m_pieceSelectView = 0; // 0選択、1削除後。表示専用。
     float m_pieceSelectSpread = 0;
-    renderer::OverlayLineSet m_pieceSelectEdges;
+    renderer::OverlayLineSet m_pieceSelectEdges, m_pieceSelectRemovedEdges;
     bool m_pieceUpdating = false;
     uint64_t m_pieceEpoch = 1;
     std::string m_pieceTaskKey, m_pieceTaskGeometryKey, m_pieceCompletedKey;
