@@ -790,15 +790,100 @@ std::vector<int> CutFaceAssignments(const Mesh& mesh, const PlaneCutsGuide& guid
     }
     return assigned;
 }
-VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, const VolumeCrackSettings& s,
-                       std::string& error) {
+StructurePlanes MakeParallelPlanes(const ParallelPlanesSettings& s, std::string& error) {
+    error.clear();
+    if (!std::isfinite(s.spacing) || s.spacing < .001f || s.spacing > 1000 ||
+        !std::isfinite(s.offset) || std::abs(s.offset) > 100000 ||
+        !std::isfinite(s.variation) || s.variation < 0 || s.variation > 1 ||
+        std::any_of(s.rotationDegrees.begin(), s.rotationDegrees.end(),
+                    [](float v) { return !std::isfinite(v); })) {
+        error = "平行面の間隔は0.001〜1000 m、位置は±100000 m、ばらつきは0〜1、向きは有限値にしてください";
+        return {};
+    }
+    auto angles = s.rotationDegrees;
+    for (auto& angle : angles) angle = std::fmod(angle, 360.f);
+    return {Rotate({0, 1, 0}, angles), s.spacing, s.offset, s.variation, s.seed};
+}
+
+std::vector<StructurePlane> ExpandParallelPlanes(const StructurePlanes& s, Vec3 minimum, Vec3 maximum,
+                                                std::string& error) {
+    error.clear();
+    const float lengthSquared = Dot(s.normal, s.normal);
+    if (!std::isfinite(lengthSquared) || std::abs(lengthSquared - 1) > 1e-4f ||
+        !std::isfinite(s.spacing) || s.spacing < .001f || s.spacing > 1000 ||
+        !std::isfinite(s.offset) || std::abs(s.offset) > 100000 ||
+        !std::isfinite(s.variation) || s.variation < 0 || s.variation > 1 ||
+        !std::isfinite(minimum.x) || !std::isfinite(minimum.y) || !std::isfinite(minimum.z) ||
+        !std::isfinite(maximum.x) || !std::isfinite(maximum.y) || !std::isfinite(maximum.z) ||
+        minimum.x > maximum.x || minimum.y > maximum.y || minimum.z > maximum.z) {
+        error = "構造面または評価範囲が不正です";
+        return {};
+    }
+    double low = std::numeric_limits<double>::max(), high = -low;
+    for (int i = 0; i < 8; ++i) {
+        const double t = double(s.normal.x) * ((i & 1) ? maximum.x : minimum.x) +
+                         double(s.normal.y) * ((i & 2) ? maximum.y : minimum.y) +
+                         double(s.normal.z) * ((i & 4) ? maximum.z : minimum.z);
+        low = std::min(low, t); high = std::max(high, t);
+    }
+    // 番号ごとの変位は間隔の±45%以内。隣り合う面が逆転せず、範囲変更でも配置が変わらない。
+    const double first = std::ceil((low - s.offset) / s.spacing - .45 * s.variation);
+    const double last = std::floor((high - s.offset) / s.spacing + .45 * s.variation);
+    if (!std::isfinite(first) || !std::isfinite(last) || std::abs(first) > 1e12 || std::abs(last) > 1e12 ||
+        last - first + 1 > MaxStructurePlanes) {
+        error = "評価範囲の構造面は512枚までです。平行面の間隔を広げてください";
+        return {};
+    }
+    std::vector<StructurePlane> planes;
+    for (int64_t i = int64_t(first); i <= int64_t(last); ++i) {
+        const double jitter = (2 * HashUnit(uint64_t(i) ^ (uint64_t(uint32_t(s.seed)) << 32)) - 1) * .45 * s.variation;
+        const double offset = s.offset + (double(i) + jitter) * s.spacing;
+        if (offset >= low && offset <= high) planes.push_back({float(offset), i});
+    }
+    return planes;
+}
+
+std::vector<CutFaceFrame> ParallelPlaneFrames(const StructurePlanes& s, Vec3 minimum, Vec3 maximum,
+                                             std::string& error) {
+    const auto planes = ExpandParallelPlanes(s, minimum, maximum, error);
+    if (!error.empty()) return {};
+    const auto cross = [](Vec3 a, Vec3 b) -> Vec3 {
+        return {a.y*b.z-a.z*b.y, a.z*b.x-a.x*b.z, a.x*b.y-a.y*b.x};
+    };
+    Vec3 u = cross(s.normal, std::abs(s.normal.y) < .9f ? Vec3{0,1,0} : Vec3{1,0,0});
+    const float length = std::sqrt(Dot(u,u));
+    u = {u.x/length, u.y/length, u.z/length};
+    const Vec3 v = cross(s.normal, u);
+    float uMin = std::numeric_limits<float>::max(), vMin = uMin, uMax = -uMin, vMax = -uMin;
+    for (int i = 0; i < 8; ++i) {
+        const Vec3 p{(i&1) ? maximum.x : minimum.x, (i&2) ? maximum.y : minimum.y, (i&4) ? maximum.z : minimum.z};
+        uMin = std::min(uMin, Dot(u,p)); uMax = std::max(uMax, Dot(u,p));
+        vMin = std::min(vMin, Dot(v,p)); vMax = std::max(vMax, Dot(v,p));
+    }
+    std::vector<CutFaceFrame> frames;
+    for (const auto& plane : planes) {
+        CutFaceFrame frame;
+        frame.plane = uint32_t(plane.index);
+        const float us[] = {uMin, uMax, uMax, uMin}, vs[] = {vMin, vMin, vMax, vMax};
+        for (int i = 0; i < 4; ++i)
+            frame.corners[i] = {s.normal.x*plane.offset + u.x*us[i] + v.x*vs[i],
+                                s.normal.y*plane.offset + u.y*us[i] + v.y*vs[i],
+                                s.normal.z*plane.offset + u.z*us[i] + v.z*vs[i]};
+        frames.push_back(frame);
+    }
+    return frames;
+}
+
+static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& points,
+                                  const StructurePlanes* planes, const VolumeCrackSettings& s,
+                                  std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {
         error = "ボリュームの格子が不正です";
         return {};
     }
     const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
-    if (points.size() < 2 || points.size() > size_t(MaxCrackPoints)) {
+    if (!planes && (points.size() < 2 || points.size() > size_t(MaxCrackPoints))) {
         error = "割れ目には2～512個の点が必要です";
         return {};
     }
@@ -853,6 +938,18 @@ VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, con
     const float threshold = out.spacing * 1e-4f;
     const float halfWidth = s.width * longest * .5f, depth = s.depth * longest;
     const float frequency = s.noiseScale / longest;
+    std::vector<StructurePlane> expanded;
+    std::vector<float> planeFactors;
+    if (planes) {
+        const auto last = g.Position(g.dimensions[0]-1, g.dimensions[1]-1, g.dimensions[2]-1);
+        expanded = ExpandParallelPlanes(*planes,
+            {g.origin.x-halfWidth, g.origin.y-halfWidth, g.origin.z-halfWidth},
+            {last.x+halfWidth, last.y+halfWidth, last.z+halfWidth}, error);
+        if (!error.empty()) return {};
+        for (const auto& plane : expanded)
+            planeFactors.push_back(std::clamp(1 - s.variation * 2 *
+                float(HashUnit(seed ^ uint64_t(plane.index))), 0.f, 1.f));
+    }
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
         const size_t index = out.Index(x, y, z);
         float value = g.values[index];
@@ -867,27 +964,37 @@ VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, con
                 // ゆらぎ 1 なら、ノイズの低いところで割れ目が途切れる。
                 reach *= std::clamp(1 - s.noise * 2 * (1 - n), 0.f, 1.f);
             }
-            size_t nearest = 0;
-            float nearestSquared = std::numeric_limits<float>::max();
-            thread_local std::vector<float> squared;
-            squared.resize(count);
-            for (size_t i = 0; i < count; ++i) {
-                const Vec3 d{p.x - points[i].x, p.y - points[i].y, p.z - points[i].z};
-                squared[i] = Dot(d, d);
-                if (squared[i] < nearestSquared) {
-                    nearestSquared = squared[i];
-                    nearest = i;
+            if (planes) {
+                const float projected = Dot(planes->normal, p);
+                for (size_t i = 0; i < expanded.size(); ++i) {
+                    const float width = reach * planeFactors[i];
+                    // 閉じた面は彫らない。幅0の面をゼロ距離で評価すると、格子上に偽の隙間ができる。
+                    if (width > 0)
+                        value = std::max(value, width - std::abs(projected - expanded[i].offset));
                 }
+            } else {
+                size_t nearest = 0;
+                float nearestSquared = std::numeric_limits<float>::max();
+                thread_local std::vector<float> squared;
+                squared.resize(count);
+                for (size_t i = 0; i < count; ++i) {
+                    const Vec3 d{p.x - points[i].x, p.y - points[i].y, p.z - points[i].z};
+                    squared[i] = Dot(d, d);
+                    if (squared[i] < nearestSquared) {
+                        nearestSquared = squared[i];
+                        nearest = i;
+                    }
+                }
+                // Voronoi のセルは凸なので、各垂直二等分面までの距離の最小が境界面までの厳密な距離になる。
+                // 割れ目ごとに幅が違うため、最小ではなく「幅 − 距離」の最大を取る。
+                float carve = -std::numeric_limits<float>::max();
+                for (size_t j = 0; j < count; ++j) {
+                    if (j == nearest) continue;
+                    const float boundary = (squared[j] - nearestSquared) / (2 * separation[nearest * count + j]);
+                    carve = std::max(carve, reach * factor[nearest * count + j] - boundary);
+                }
+                value = std::max(value, carve);
             }
-            // Voronoi のセルは凸なので、各垂直二等分面までの距離の最小が境界面までの厳密な距離になる。
-            // 割れ目ごとに幅が違うため、最小ではなく「幅 − 距離」の最大を取る。
-            float carve = -std::numeric_limits<float>::max();
-            for (size_t j = 0; j < count; ++j) {
-                if (j == nearest) continue;
-                const float boundary = (squared[j] - nearestSquared) / (2 * separation[nearest * count + j]);
-                carve = std::max(carve, reach * factor[nearest * count + j] - boundary);
-            }
-            value = std::max(value, carve);
         }
         // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
         out.values[index] = std::abs(value) < threshold ? threshold : value;
@@ -901,6 +1008,14 @@ VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points, con
     // 同じ幅で彫られ、外へつながらない空洞になる。
     FillNewVoids(out, g.values);
     return out;
+}
+VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points,
+                       const VolumeCrackSettings& s, std::string& error) {
+    return CrackVolumeImpl(g, points, nullptr, s, error);
+}
+VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& g, const StructurePlanes& planes,
+                       const VolumeCrackSettings& s, std::string& error) {
+    return CrackVolumeImpl(g, {}, &planes, s, error);
 }
 const char* VolumeNoiseTypeName(VolumeNoiseType type) {
     switch (type) {

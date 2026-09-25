@@ -90,8 +90,30 @@ struct PlaneCutsGuide {
     std::vector<CutFaceFrame> frames;
     float spacing = 0;  // 切り落とした格子のセル間隔。断面の判定の許容幅に使う。
 };
-// Volume Crack。点の群が作る Voronoi の境界面に沿って、表面から割れ目を彫る。
+// 平行な構造面。位置は原点から法線方向の距離 (m)、間隔も m。
+// 母岩と独立して定義し、必要な範囲にある面だけを評価時に展開する。
+struct ParallelPlanesSettings {
+    std::array<float, 3> rotationDegrees{0, 0, 0};
+    float spacing = .4f, offset = 0, variation = 0;
+    int seed = 1;
+};
+struct StructurePlanes {
+    Vec3 normal{0, 1, 0};
+    float spacing = .4f, offset = 0, variation = 0;
+    int seed = 1;
+};
+struct StructurePlane {
+    float offset = 0;
+    int64_t index = 0;  // 範囲が変わっても幅の乱数が変わらない面番号。
+};
+inline constexpr int MaxStructurePlanes = 512;
+StructurePlanes MakeParallelPlanes(const ParallelPlanesSettings&, std::string& error);
+std::vector<StructurePlane> ExpandParallelPlanes(const StructurePlanes&, Vec3 minimum, Vec3 maximum,
+                                                std::string& error);
+std::vector<CutFaceFrame> ParallelPlaneFrames(const StructurePlanes&, Vec3 minimum, Vec3 maximum,
+                                             std::string& error);
 inline constexpr int MaxCrackPoints = 512;
+// Volume Crack。構造面または Voronoi 境界に沿って、表面から割れ目を彫る。
 struct VolumeCrackSettings {
     // 表面での割れ目の幅と、届く深さ。どちらも形の最長辺に対する比。
     // 断面は V 字で、深さに達すると幅が 0 になる。深さ 1 なら形を貫く。
@@ -218,6 +240,8 @@ std::vector<CutFaceFrame> CutFaceFrames(const VolumeGrid& cut, const std::vector
 std::vector<int> CutFaceAssignments(const Mesh& mesh, const PlaneCutsGuide& guide);
 // 点は2～512個。形の外にあってもよい。格子（範囲・セル間隔）は入力のまま。
 VolumeGrid CrackVolume(const VolumeGrid& grid, const std::vector<Vec3>& points,
+                       const VolumeCrackSettings& settings, std::string& error);
+VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& grid, const StructurePlanes& planes,
                        const VolumeCrackSettings& settings, std::string& error);
 // 歪みが 0 なら格子は入力のまま。歪みがあると、表面が動く量だけ外側へ広げる。
 // 加工でできた浮いた小片と閉じた空洞は除く。

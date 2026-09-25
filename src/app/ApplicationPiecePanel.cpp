@@ -9,9 +9,26 @@ void Application::DrawPieceSettings(graph::Node &node) {
     const bool ready = !m_pieceUpdating && m_pieceInputNode == node.id && m_pieceInput;
     if (m_pieceUpdating)
         ui::HintText("更新中…表示は前回の結果です。選択・ベイクは完了後に操作できます。");
-    if (auto *scatter = std::get_if<geometry::ScatterSettings>(&node.settings)) {
+    if (auto *layers = std::get_if<geometry::LayeredBoxesSettings>(&node.settings)) {
+        if (ui::BeginPropertyTable("layeredBoxes")) {
+            const float size[3]={3,.12f,2.4f};
+            changed |= ui::PropertyInt("枚数",&layers->count,1,32,5);
+            changed |= ui::PropertyFloat3Input("寸法 (m)",layers->size.data(),size,"X/Zが板の幅と奥行き、Yが厚さです。")!=0;
+            changed |= ui::PropertyFloat("隙間 (m)",&layers->gap,0,1,.005f);
+            changed |= ui::PropertyFloat("厚さのばらつき",&layers->thicknessVariation,0,.8f,.3f);
+            changed |= ui::PropertyFloat("広さのばらつき",&layers->sizeVariation,0,.8f,.1f);
+            changed |= ui::PropertyFloat("面内のずれ (m)",&layers->offset,0,1,.12f);
+            changed |= ui::PropertyFloat3Input("向き (度)",layers->rotation.data(),zero)!=0;
+            int seed=int(layers->seed);
+            if (ui::PropertyInt("Seed",&seed,0,1000000,1)) {layers->seed=uint32_t(seed);changed=true;}
+            ui::EndPropertyTable();
+        }
+        ui::HintText("板は平行を保ち、下から層0、1…と番号を持ちます。Pieces出力を Scatter Points と Voronoi Fracture の両方へ接続します。");
+    } else if (auto *scatter = std::get_if<geometry::ScatterSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("scatter")) {
             changed |= ui::PropertyInt("点数", &scatter->count, 2, geometry::MaxScatterPoints, 24);
+            changed |= ui::PropertyBool("面内配置 (XZ)",&scatter->planar,false,
+                                       "ローカルYを中央に固定します。Voronoiの方向0・伸長1なら板の厚さを通して分割できます。");
             int seed = int(scatter->seed);
             if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
                 scatter->seed = uint32_t(seed);
@@ -19,7 +36,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
             }
             ui::EndPropertyTable();
         }
-        ui::HintText("閉じた凸形状の内部に点を配置します。同じMeshをVoronoi Fractureにも接続してください。");
+        ui::HintText("閉じた凸形状の内部に点を配置します。同じMesh / PiecesをVoronoi Fractureにも接続してください。Pieces入力では点数は1枚あたり、合計512点までです。");
     } else if (auto *voronoi = std::get_if<geometry::VoronoiSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("voronoi")) {
             changed |= ui::PropertyFloat3Input("方向 (度)", voronoi->rotation.data(), zero) != 0;
@@ -40,9 +57,9 @@ void Application::DrawPieceSettings(graph::Node &node) {
     } else if (auto *selection = std::get_if<geometry::PieceSelectSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("pieceSelect")) {
             const char *modes[] = {"Manual — 手動ID", "Outer — 外面に接する片", "Region — 重心の範囲",
-                                   "Volume — 体積", "Random — ランダム"};
+                                   "Volume — 体積", "Random — ランダム", "Rim — 元の板の側縁"};
             int mode = int(selection->mode);
-            if (ui::PropertyCombo("選別方法", &mode, modes, 5, 1)) {
+            if (ui::PropertyCombo("選別方法", &mode, modes, 6, 1)) {
                 selection->mode = geometry::PieceSelectMode(mode);
                 changed = true;
                 m_pieceSelectionEditing = false;
@@ -55,7 +72,9 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 changed |= ui::PropertyFloat("最小体積 (m³)", &selection->minVolume, 0, 1000000, 0);
                 changed |= ui::PropertyFloat("最大体積 (m³)", &selection->maxVolume, 0, 1000000, 1000000);
             }
-            if (selection->mode == geometry::PieceSelectMode::Random) {
+            changed |= ui::PropertyInt("対象の層",&selection->layer,-1,31,-1,
+                                       "-1は全層。Layered Boxesの層番号を指定できます。反転も指定層の中だけに効きます。");
+            if (selection->mode == geometry::PieceSelectMode::Random || selection->mode == geometry::PieceSelectMode::Rim) {
                 changed |= ui::PropertyFloat("選択率", &selection->fraction, 0, 1, .5f);
                 int seed = int(selection->seed);
                 if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
@@ -65,6 +84,8 @@ void Application::DrawPieceSettings(graph::Node &node) {
             }
             ui::EndPropertyTable();
         }
+        if (selection->mode == geometry::PieceSelectMode::Rim)
+            ui::HintText("元の板の側縁に接する片から選択率で選びます。上下面だけに触れる片は選びません。削除後に露出した新しい外周の判定は行いません。");
         if (selection->mode == geometry::PieceSelectMode::Outer) {
             const char *labels[] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
             for (int i = 0; i < 6; ++i) {
@@ -97,6 +118,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
                     bool on =
                         std::find(selection->ids.begin(), selection->ids.end(), p.id) != selection->ids.end();
                     auto label = "ID " + std::to_string(p.id);
+                    if (p.layer>=0) label += " / 層 " + std::to_string(p.layer);
                     if (ImGui::Checkbox(label.c_str(), &on)) {
                         if (selection->producer != m_pieceInput->producer ||
                             selection->generation != m_pieceInput->generation)

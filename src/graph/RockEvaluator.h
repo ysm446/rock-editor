@@ -35,6 +35,7 @@ struct GeneratedRock {
     bool pieceSelected = false;
 };
 struct RockEvaluation {
+    std::shared_ptr<const geometry::StructurePlanes> planes;
     std::shared_ptr<const geometry::PointSet> points;
     std::shared_ptr<const geometry::PieceCollection> pieces;
     std::shared_ptr<const geometry::PieceSelection> selection;

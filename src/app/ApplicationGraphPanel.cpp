@@ -52,6 +52,8 @@ ImVec4 PinTypeColor(graph::ValueType valueType) {
         // メッシュは緑。
         case graph::ValueType::Mask: return ImVec4(.65f,.65f,.65f,1);
         case graph::ValueType::Points: return ImVec4(.8f,.65f,.35f,1);
+        case graph::ValueType::Planes: return ImVec4(.35f,.85f,.75f,1);
+        case graph::ValueType::MeshOrPieces: return ImVec4(.7f,.55f,.9f,1);
         case graph::ValueType::Pieces: return ImVec4(.75f,.5f,.32f,1);
         case graph::ValueType::Selection: return ImVec4(.85f,.75f,.25f,1);
         case graph::ValueType::Mesh:
@@ -1012,7 +1014,8 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
         ImGui::Separator();
         ImGui::TextDisabled("分割・ピース操作");
-        addNodeMenuItem(graph::NodeKind::ScatterPoints, "Scatter Points — 内部に点を配置");
+        addNodeMenuItem(graph::NodeKind::LayeredBoxes, "Layered Boxes — 平行な板をPiecesとして積む");
+        addNodeMenuItem(graph::NodeKind::ScatterPoints, "Scatter Points — メッシュや各ピースの内部に点を配置");
         addNodeMenuItem(graph::NodeKind::VoronoiFracture, "Voronoi Fracture — 凸形状を立体分割");
         addNodeMenuItem(graph::NodeKind::PieceSelect, "Piece Select — ピースを選別");
         addNodeMenuItem(graph::NodeKind::PieceFilter, "Piece Filter — 選択を削除・抽出");
@@ -1024,7 +1027,8 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeTransform, "Volume Transform — ボリュームを移動・回転・拡大");
         addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
-        addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 点の群の境界に沿って割れ目を彫る");
+        addNodeMenuItem(graph::NodeKind::ParallelPlanes, "Parallel Planes — 向きと間隔から平行な構造面を定義");
+        addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 構造面や点群の境界に沿って割れ目を彫る");
         addNodeMenuItem(graph::NodeKind::VolumeNoise, "Volume Noise — 表面をノイズで削り、直線的な面を崩す");
         addNodeMenuItem(graph::NodeKind::VolumeSmooth, "Volume Smooth — 表面をなまらせる / 角を立てる（上面だけ、など）");
         addNodeMenuItem(graph::NodeKind::VolumeTerrace, "Volume Terrace — 層状の段（棚）を刻む");
@@ -1402,6 +1406,32 @@ void Application::DrawGraphPanel() {
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }
+    } else if (auto* planes = std::get_if<geometry::ParallelPlanesSettings>(&selected->settings)) {
+        auto edited = *planes;
+        bool changed = false;
+        if (ui::BeginPropertyTable("parallelPlanesRows")) {
+            const float zero[3] = {};
+            changed |= ui::PropertyFloat3Input("向き (度)", edited.rotationDegrees.data(), zero) != 0;
+            changed |= ui::PropertyFloat("間隔 (m)", &edited.spacing, .001f, 1000, .4f,
+                                         "平行面の基準間隔。岩の寸法を変えても間隔は変わりません。", "%.3f", ImGuiSliderFlags_Logarithmic);
+            changed |= ui::PropertyFloat("位置 (m)", &edited.offset, -100000, 100000, 0,
+                                         "原点から面の法線方向へずらす距離です。", "%.3f", ImGuiSliderFlags_Logarithmic);
+            changed |= ui::PropertyFloat("間隔のばらつき", &edited.variation, 0, 1, 0,
+                                         "各面を基準間隔の±45%以内でずらします。面の順序は保たれます。");
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
+            ui::PropertyBool("平面を表示", &m_parallelPlanesShowFrames, true);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("Planes を Volume Crack の Planes 入力につなぎます。向き0は水平面です。"
+                     "別方向の平行面と Volume Crack を追加すると複数系統で割れます。枠の大きさは表示範囲で、面自体は無限です。");
+        if (changed) {
+            edited.spacing = std::clamp(edited.spacing, .001f, 1000.f);
+            edited.offset = std::clamp(edited.offset, -100000.f, 100000.f);
+            edited.variation = std::clamp(edited.variation, 0.f, 1.f);
+            *planes = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
     } else if (auto* crack = std::get_if<geometry::VolumeCrackSettings>(&selected->settings)) {
         auto edited = *crack;
         bool changed = false;
@@ -1418,9 +1448,9 @@ void Application::DrawGraphPanel() {
             changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
             ui::EndPropertyTable();
         }
-        ui::HintText("Points の点が作る Voronoi の境界面に沿って、Volume の表面から割れ目を彫ります。格子は変わりません。"
-                     "Points には Scatter Points をつなぎます。点を増やすと割れ目が細かくなります。");
-        ui::HintText("割れ目の配置は Scatter Points の点数と Seed、幅の散らばり方はこのノードの Seed で変わります。"
+        ui::HintText("Planes に Parallel Planes、または Points に Scatter Points をつなぎます。両方の同時接続はできません。"
+                     "構造面や Voronoi 境界に沿って表面から割れ目を彫ります。格子は変わりません。");
+        ui::HintText("割れ目の配置は入力ノード、幅の散らばり方はこのノードの Seed で変わります。"
                      "細い割れ目を出すには、上流の To Volume の解像度を上げます。");
         if (changed) {
             edited.width = std::clamp(edited.width, 0.0f, 0.2f);

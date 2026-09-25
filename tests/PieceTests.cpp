@@ -4,6 +4,10 @@
 #include "io/PieceSettings.h"
 #include "geometry/UvUnwrap.h"
 #include <cmath>
+#include <set>
+#include <limits>
+#include "app/UndoHistory.h"
+static void RunLayeredPieceTests();
 void RunPieceTests() {
     using namespace rock::geometry;
     using rock::tests::Check;
@@ -254,4 +258,139 @@ void RunPieceTests() {
         farAccepted &= farError.find("外") == std::string::npos;
     }
     Check(farAccepted, "scattered points stay inside for Voronoi far from the origin");
+    RunLayeredPieceTests();
+}
+
+static void RunLayeredPieceTests() {
+    using namespace rock;
+    using namespace rock::geometry;
+    using namespace rock::graph;
+    using namespace rock::tests;
+    Section("Layered Boxes / 板ごとの分割と側縁の選別");
+    std::string error;
+    LayeredBoxesSettings settings; settings.count=3;
+    auto layers=MakeLayeredBoxes(settings,10,error);
+    Check(error.empty() && layers.pieces.size()==3,"3枚の板をPiecesとして作る");
+    if (layers.pieces.size()!=3) return;
+    bool closed=true, spaced=true;
+    double total=0;
+    for (size_t i=0;i<layers.pieces.size();++i) {
+        const auto& p=layers.pieces[i]; MeshInfo info;
+        closed &= InspectMesh(PieceMesh(p),info) && info.closed && info.components==1 && p.layer==int(i);
+        if (i>0) {
+            const auto& previous=layers.pieces[i-1];
+            const double gap=p.transform[7]-p.layerSize[1]*.5-previous.transform[7]-previous.layerSize[1]*.5;
+            spaced &= std::abs(gap-settings.gap)<1e-6;
+        }
+        total+=p.volume;
+    }
+    Check(closed && spaced,"板は閉じ、厚さが変わっても指定の隙間で積まれる");
+    Check(MakeLayeredBoxes(settings,10,error).fingerprint==layers.fingerprint,"同じ設定は板の配置を再現する");
+    auto rotatedSettings=settings;rotatedSettings.rotation={27,13,19};
+    const auto rotated=MakeLayeredBoxes(rotatedSettings,10,error);
+    Check(error.empty() && rotated.pieces[0].transform!=layers.pieces[0].transform,"向きを変えると平行を保って回転する");
+    ScatterSettings scatter; scatter.count=32;scatter.planar=true;
+    auto points=ScatterPiecePoints(layers,scatter,error);
+    Check(error.empty() && points.grouped && points.groups.size()==3 && points.positions.size()==96,
+          "各板に32点ずつ配置し、表示用の全点を返す");
+    auto pieces=FracturePieces(layers,points,{},20,error);
+    Check(error.empty() && pieces.pieces.size()==96,"板をそれぞれ32個に分割する");
+    if (!error.empty() || pieces.pieces.size()!=96) {std::printf("%s\n",error.c_str());return;}
+    std::set<uint32_t> ids;
+    double sum=0; bool flat=true, provenance=true;
+    for (const auto& p:pieces.pieces) {
+        MeshInfo info;
+        flat &= InspectMesh(*p.mesh,info) && info.closed && info.components==1 &&
+                std::abs(info.minimum.y+p.layerSize[1]*.5f)<1e-5 && std::abs(info.maximum.y-p.layerSize[1]*.5f)<1e-5;
+        sum+=p.volume;ids.insert(p.id);
+        provenance &= p.layer==int(p.parentId) && p.parentProducer==10 && p.transform==layers.pieces[p.parentId].transform;
+    }
+    Check(flat && provenance && ids.size()==96 && std::abs(sum-total)<total*2e-5,
+          "面内分割は厚み・閉包・体積・親と層の情報を保ち、IDが重複しない");
+    const auto rotatedPoints=ScatterPiecePoints(rotated,scatter,error);
+    Check(error.empty() && rotatedPoints.groups[0].positions==points.groups[0].positions &&
+          rotatedPoints.positions!=points.positions,"配置を変えてもローカルの点は不変、表示用の点は移動する");
+    auto movedPieces=FracturePieces(rotated,rotatedPoints,{},20,error);
+    Check(error.empty() && movedPieces.pieces.size()==96 && movedPieces.pieces[0].transform==rotated.pieces[0].transform,
+          "回転した板の分割も元の配置を引き継ぐ");
+    PieceSelectSettings rim; rim.mode=PieceSelectMode::Rim;rim.fraction=1;
+    const auto edge=SelectPieces(pieces,rim,error);
+    auto kept=FilterPieces(pieces,edge,false,error);
+    Check(error.empty() && !edge.ids.empty() && !kept.pieces.empty() && kept.pieces.size()<pieces.pieces.size(),
+          "側縁だけを除き、上下面に触れる内部の片は残る");
+    Check(std::all_of(kept.pieces.begin(),kept.pieces.end(),[](const auto& p){return !p.layerRim;}),
+          "残った片は元の板の側縁に触れない");
+    rim.layer=1;rim.invert=true;
+    const auto middle=SelectPieces(pieces,rim,error);
+    bool middleOnly=!middle.ids.empty();
+    for (const auto& p:pieces.pieces)
+        if (std::find(middle.ids.begin(),middle.ids.end(),p.id)!=middle.ids.end()) middleOnly &= p.layer==1 && !p.layerRim;
+    Check(middleOnly,"層指定と反転は指定した層の中だけに効く");
+    rim.layer=-1;rim.invert=false;rim.fraction=0;
+    Check(SelectPieces(pieces,rim,error).ids.empty(),"側縁の選択率0なら削らない");
+    rim.fraction=.5f;
+    const auto randomEdges=SelectPieces(pieces,rim,error);
+    Check(randomEdges.ids==SelectPieces(pieces,rim,error).ids && randomEdges.ids.size()<edge.ids.size(),
+          "側縁の確率選択は再現可能");
+    // 先頭の板を除いても、残った親のローカル点と子IDは変わらない。
+    auto filteredLayers=layers;filteredLayers.pieces.erase(filteredLayers.pieces.begin());RefreshPieceFingerprint(filteredLayers);
+    const auto filteredPoints=ScatterPiecePoints(filteredLayers,scatter,error);
+    const auto refractured=FracturePieces(filteredLayers,filteredPoints,{},20,error);
+    Check(error.empty() && filteredPoints.groups[0].positions==points.groups[1].positions &&
+          refractured.pieces[0].id==pieces.pieces[32].id,"他の板を除いても親ごとの乱数とIDを保つ");
+    FracturePieces(filteredLayers,points,{},20,error);
+    Check(!error.empty(),"違うPiecesの点群を拒否する");
+    scatter.planar=false;
+    const auto volumetric=FracturePieces(layers,ScatterPiecePoints(layers,scatter,error),{},20,error);
+    Check(error.empty() && volumetric.pieces.size()==96,"3Dの点配置でも板ごとに分割できる");
+    scatter.planar=true;scatter.count=200;
+    ScatterPiecePoints(layers,scatter,error);Check(!error.empty(),"合計512点を超える設定を拒否する");
+    auto invalid=settings;invalid.count=0;MakeLayeredBoxes(invalid,1,error);Check(!error.empty(),"板0枚を拒否する");
+    invalid=settings;invalid.size[1]=-1;MakeLayeredBoxes(invalid,1,error);Check(!error.empty(),"負の厚さを拒否する");
+    invalid=settings;invalid.rotation[0]=std::numeric_limits<float>::infinity();MakeLayeredBoxes(invalid,1,error);
+    Check(!error.empty(),"非有限の向きを拒否する");
+    std::stop_source cancel;cancel.request_stop();MakeLayeredBoxes(settings,1,error,cancel.get_token());
+    Check(!error.empty(),"板の生成をキャンセルできる");
+    FracturePieces(layers,points,{},20,error,cancel.get_token());Check(!error.empty(),"複数板の分割をキャンセルできる");
+
+    NodeGraph graph;
+    auto source=graph.CreateNode(NodeKind::LayeredBoxes), sites=graph.CreateNode(NodeKind::ScatterPoints),
+         fracture=graph.CreateNode(NodeKind::VoronoiFracture), select=graph.CreateNode(NodeKind::PieceSelect),
+         filter=graph.CreateNode(NodeKind::PieceFilter), mesh=graph.CreateNode(NodeKind::PiecesToMesh),
+         output=graph.CreateNode(NodeKind::MeshOutput), volume=graph.CreateNode(NodeKind::ToVolume);
+    std::get<LayeredBoxesSettings>(graph.FindMutableNode(source)->settings)=settings;
+    scatter.count=24;std::get<ScatterSettings>(graph.FindMutableNode(sites)->settings)=scatter;
+    rim.fraction=1;std::get<PieceSelectSettings>(graph.FindMutableNode(select)->settings)=rim;
+    const auto link=[&](int a,int b,size_t pin=0){return graph.CreateLink(graph.FindNode(a)->outputs[0].id,graph.FindNode(b)->inputs[pin].id);};
+    Check(link(source,sites) && link(source,fracture) && link(sites,fracture,1) && link(fracture,select) &&
+          link(fracture,filter) && link(select,filter,1) && link(filter,mesh) && link(mesh,output) && link(mesh,volume),
+          "Piecesの点配置・分割・選別・メッシュ化・任意のボリューム化を接続できる");
+    Check(!graph.CanCreateLink(graph.FindNode(volume)->outputs[0].id,graph.FindNode(sites)->inputs[0].id),
+          "Geometry入力はVolumeを暗黙変換しない");
+    RockEvaluationCache cache;
+    const auto result=EvaluateRocks(graph,0,&cache);
+    Check(result.error.empty() && result.rocks.size()==1 && !result.rocks[0].mesh.positions.empty(),
+          "板の側縁を欠いた形をボリューム化せず表示できる");
+    if (!result.error.empty()) {std::printf("%s\n",result.error.c_str());return;}
+    const auto first=EvaluateRocks(graph,fracture,&cache).pieces;
+    std::get<PieceSelectSettings>(graph.FindMutableNode(select)->settings).fraction=.5f;
+    EvaluateRocks(graph,0,&cache);
+    Check(EvaluateRocks(graph,fracture,&cache).pieces==first,"選別の変更で重い分割を作り直さない");
+    DocumentSnapshot before;before.graphNodes=graph.Nodes();before.graphLinks=graph.Links();
+    auto& edit=std::get<LayeredBoxesSettings>(graph.FindMutableNode(source)->settings);edit.offset=.22f;
+    const auto moved=EvaluateRocks(graph,fracture,&cache).pieces;
+    Check(moved && moved!=first,"板の変更で点配置と分割を更新する");
+    DocumentSnapshot after;after.graphNodes=graph.Nodes();after.graphLinks=graph.Links();
+    UndoHistory history;history.Push(before,0);const auto undo=history.Undo(after);graph.Replace(undo.graphNodes,undo.graphLinks);
+    Check(EvaluateRocks(graph,fracture,&cache).pieces->fingerprint==first->fingerprint,"Undoで板と分割が再現する");
+    const auto redo=history.Redo(undo);graph.Replace(redo.graphNodes,redo.graphLinks);
+    Check(EvaluateRocks(graph,fracture,&cache).pieces->fingerprint==moved->fingerprint,"Redoで変更後の板と分割が再現する");
+    for (auto id:{source,sites,select}) {
+        auto original=io::WritePieceSettings(*graph.FindNode(id));Node restored;restored.kind=graph.FindNode(id)->kind;
+        io::ReadPieceSettings(restored,original);
+        Check(io::WritePieceSettings(restored)==original,"板・面内配置・側縁と層指定を設定JSONで往復する");
+    }
+    std::get<VolumeSettings>(graph.FindMutableNode(volume)->settings).resolution=32;
+    const auto voxel=EvaluateRocks(graph,volume,&cache);
+    Check(voxel.error.empty() && voxel.rocks.size()==1 && voxel.rocks[0].volume,"欠けた板の集合を後段でボリューム化できる");
 }

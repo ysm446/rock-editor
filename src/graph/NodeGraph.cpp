@@ -54,14 +54,17 @@ constexpr std::array<PinDefinition, 2> kVolumeTransformPins = {
     {{PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 3> kVolumeBooleanPins = {{{PinKind::Input, ValueType::Volume, "A"},
     {PinKind::Input, ValueType::Volume, "B"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
-constexpr std::array<PinDefinition, 3> kVolumeCrackPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
-    {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
+constexpr std::array<PinDefinition, 1> kParallelPlanesPins = {{{PinKind::Output, ValueType::Planes, "Planes"}}};
+constexpr std::array<PinDefinition, 4> kVolumeCrackPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
+    {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Input, ValueType::Planes, "Planes"},
+    {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 3> kBakePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<PinDefinition, 2> kScatterPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"}, {PinKind::Output, ValueType::Points, "Points"}}};
-constexpr std::array<PinDefinition, 3> kVoronoiPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"}, {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
+constexpr std::array<PinDefinition, 1> kLayeredBoxesPins = {{{PinKind::Output, ValueType::Pieces, "Pieces"}}};
+constexpr std::array<PinDefinition, 2> kScatterPins = {{{PinKind::Input, ValueType::MeshOrPieces, "Geometry"}, {PinKind::Output, ValueType::Points, "Points"}}};
+constexpr std::array<PinDefinition, 3> kVoronoiPins = {{{PinKind::Input, ValueType::MeshOrPieces, "Geometry"}, {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
 constexpr std::array<PinDefinition, 2> kSelectPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Selection, "Selection"}}};
 constexpr std::array<PinDefinition, 3> kPieceFilterPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Input, ValueType::Selection, "Selection"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
 constexpr std::array<PinDefinition, 2> kPiecesMeshPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
@@ -78,7 +81,9 @@ constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType
 // 2つのマスクの合成。A が基準（出力の形とメッシュは A 側）。
 constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, ValueType::Mask, "A"},
     {PinKind::Input, ValueType::Mask, "B"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 34> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 36> kNodeDefinitions = {{
+    {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
+    {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
@@ -144,7 +149,7 @@ bool IsLayerNodeKind(NodeKind kind) {
 }
 
 bool IsPieceNodeKind(NodeKind kind) {
-    return kind >= NodeKind::ScatterPoints && kind <= NodeKind::PiecesToMesh;
+    return (kind >= NodeKind::ScatterPoints && kind <= NodeKind::PiecesToMesh) || kind == NodeKind::LayeredBoxes;
 }
 bool IsMeshNodeKind(NodeKind kind) {
     return IsPieceNodeKind(kind) || kind == NodeKind::Merge || kind == NodeKind::BaseRock ||
@@ -300,6 +305,8 @@ bool NodeGraph::CanCreateLink(GraphId startPin, GraphId endPin) const {
 }
 
 bool NodeGraph::TypesCompatible(ValueType output, ValueType input) {
+    if (input == ValueType::MeshOrPieces)
+        return output == ValueType::Mesh || output == ValueType::Pieces || output == ValueType::Any;
     const auto scene = [](ValueType type) {
         return type == ValueType::Mesh || type == ValueType::Model || type == ValueType::Any;
     };
@@ -453,6 +460,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeBooleanSettings{};
     } else if (kind == NodeKind::PlaneCuts) {
         node.settings = geometry::PlaneCutsSettings{};
+    } else if (kind == NodeKind::ParallelPlanes) {
+        node.settings = geometry::ParallelPlanesSettings{};
     } else if (kind == NodeKind::VolumeCrack) {
         node.settings = geometry::VolumeCrackSettings{};
     } else if (kind == NodeKind::VolumeNoise) {
@@ -465,6 +474,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeCloseSettings{};
     } else if (kind == NodeKind::VolumeEdgeWear) {
         node.settings = geometry::VolumeEdgeWearSettings{};
+    } else if (kind == NodeKind::LayeredBoxes) {
+        node.settings = geometry::LayeredBoxesSettings{};
     } else if (kind == NodeKind::ScatterPoints) {
         node.settings = geometry::ScatterSettings{};
     } else if (kind == NodeKind::VoronoiFracture) {

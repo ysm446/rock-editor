@@ -1,6 +1,7 @@
 #include "TestSupport.h"
 #include "geometry/Volume.h"
 #include "graph/RockEvaluator.h"
+#include "app/UndoHistory.h"
 
 #include <cmath>
 #include <limits>
@@ -9,6 +10,7 @@ using namespace rock::tests;
 using namespace rock;
 
 namespace {
+void TestParallelPlanes();
 bool Measure(const geometry::VolumeGrid& grid, geometry::MeshInfo& info,
              geometry::VolumeMeshingMethod method = geometry::VolumeMeshingMethod::MarchingTetrahedra) {
     std::string error;
@@ -182,9 +184,9 @@ void RunVolumeCrackTests() {
     const auto link = [&](graph::GraphId from, graph::GraphId to, size_t pin) {
         return g.CreateLink(g.FindNode(from)->outputs[0].id, g.FindNode(to)->inputs[pin].id);
     };
-    Check(g.FindNode(crack)->inputs.size() == 2 && g.FindNode(crack)->outputs.size() == 1 &&
+    Check(g.FindNode(crack)->inputs.size() == 3 && g.FindNode(crack)->outputs.size() == 1 &&
               std::holds_alternative<geometry::VolumeCrackSettings>(g.FindNode(crack)->settings),
-          "ノードは Volume / Points の入力と Volume 出力、既定の設定を持つ");
+          "ノードは Volume / Points / Planes の入力と Volume 出力、既定の設定を持つ");
     Check(!g.CanCreateLink(g.FindNode(shape)->outputs[0].id, g.FindNode(crack)->inputs[0].id) &&
               !g.CanCreateLink(g.FindNode(volume)->outputs[0].id, g.FindNode(crack)->inputs[1].id),
           "Mesh は Volume 入力へ、Volume は Points 入力へつなげない");
@@ -216,4 +218,124 @@ void RunVolumeCrackTests() {
     std::get<geometry::VolumeCrackSettings>(g.FindMutableNode(crack)->settings).depth = .3f;
     const auto deeper = graph::EvaluateRocks(g, crack, &cache);
     Check(deeper.error.empty() && deeper.rocks[0].volume != rescattered.rocks[0].volume, "設定の変更で作り直す");
+    TestParallelPlanes();
+}
+
+namespace {
+void TestParallelPlanes() {
+    using namespace geometry;
+    Section("Parallel Planes と構造面による割れ目");
+    std::string error;
+    ParallelPlanesSettings s;
+    auto planes = MakeParallelPlanes(s, error);
+    auto expanded = ExpandParallelPlanes(planes, {-1,-1,-1}, {1,1,1}, error);
+    Check(error.empty() && expanded.size() == 5 && std::abs(expanded[0].offset + .8f) < 1e-5f,
+          "0.4m間隔の水平面を原点基準で生成する");
+    s.variation = 1;
+    planes = MakeParallelPlanes(s, error);
+    const auto varied = ExpandParallelPlanes(planes, {-1,-1,-1}, {1,1,1}, error);
+    const auto wide = ExpandParallelPlanes(planes, {-2,-2,-2}, {2,2,2}, error);
+    bool stable = true, ordered = true;
+    for (const auto& p : varied) {
+        auto found = std::find_if(wide.begin(),wide.end(),[&](auto q){return q.index == p.index;});
+        stable &= found != wide.end() && found->offset == p.offset;
+    }
+    for (size_t i=1; i<wide.size(); ++i) ordered &= wide[i].offset > wide[i-1].offset;
+    Check(stable && ordered, "範囲を広げても既存面の配置が変わらず、ばらつきで面が逆転しない");
+    ++s.seed;
+    const auto reseeded = ExpandParallelPlanes(MakeParallelPlanes(s,error), {-2,-2,-2}, {2,2,2}, error);
+    Check(!reseeded.empty() && reseeded[0].offset != wide[0].offset, "Seedで面の配置が変わる");
+    s = {}; s.rotationDegrees = {23,17,31}; s.offset = .13f;
+    planes = MakeParallelPlanes(s,error);
+    const auto frames = ParallelPlaneFrames(planes, {-1,-1,-1}, {1,1,1}, error);
+    expanded = ExpandParallelPlanes(planes, {-1,-1,-1}, {1,1,1}, error);
+    bool coplanar = frames.size() == expanded.size() && !frames.empty();
+    for (size_t i=0; i<frames.size(); ++i)
+        for (const auto& p : frames[i].corners)
+            coplanar &= std::abs(p.x*planes.normal.x+p.y*planes.normal.y+p.z*planes.normal.z-expanded[i].offset)<1e-5f;
+    Check(coplanar, "ガイドの4隅は実際に彫る回転・位置付き構造面と一致する");
+    const auto rejects = [&](auto change) {
+        ParallelPlanesSettings bad; change(bad); MakeParallelPlanes(bad,error); return !error.empty();
+    };
+    Check(rejects([](auto& p){p.spacing=0;}), "間隔0を拒否する");
+    Check(rejects([](auto& p){p.variation=1.1f;}), "範囲外のばらつきを拒否する");
+    Check(rejects([](auto& p){p.offset=std::numeric_limits<float>::infinity();}), "非有限位置を拒否する");
+    Check(rejects([](auto& p){p.rotationDegrees[1]=std::numeric_limits<float>::quiet_NaN();}), "非有限回転を拒否する");
+    s={}; s.rotationDegrees[0]=std::numeric_limits<float>::max();
+    planes=MakeParallelPlanes(s,error);
+    Check(error.empty() && std::isfinite(planes.normal.y), "大きな有限角度も周回を除いて安全に回転する");
+    s={}; s.spacing=.001f;
+    ExpandParallelPlanes(MakeParallelPlanes(s,error), {-1,-1,-1}, {1,1,1}, error);
+    Check(!error.empty(), "512枚を超える範囲では間隔を広げる診断を出す");
+
+    const auto box = MeshToVolume(MakeBox({2,2,2}), {64}, error);
+    s={}; s.spacing=.4f;
+    planes=MakeParallelPlanes(s,error);
+    VolumeCrackSettings crack; crack.width=.10f; crack.depth=1; crack.noise=0; crack.variation=0;
+    const auto split=CrackVolumeWithPlanes(box,planes,crack,error);
+    MeshInfo info;
+    Check(error.empty() && Measure(split,info) && info.components==6, "一方向の平行面で閉じた6枚の板へ分かれる");
+    Check(Measure(split,info,VolumeMeshingMethod::DualContouring) && info.components==6,
+          "Dual Contouringでも6枚の板を保持する");
+    Check(split.spacing==box.spacing && split.origin==box.origin && split.dimensions==box.dimensions,
+          "構造面で割っても格子を変えない");
+    s.rotationDegrees={0,0,90};
+    const auto cross=CrackVolumeWithPlanes(split,MakeParallelPlanes(s,error),crack,error);
+    Check(error.empty() && Measure(cross,info) && info.components==36, "二方向の面群を重ねると閉じた36個のブロックへ分かれる");
+    s={}; s.spacing=.8f;
+    const auto coarse=CrackVolumeWithPlanes(box,MakeParallelPlanes(s,error),crack,error);
+    Check(error.empty() && Measure(coarse,info) && info.components==4, "間隔を広げると板が厚くなり枚数が減る");
+    // 最外側の面から上下面まで0.2m。深さはそれより小さくして板の奥を残す。
+    crack.depth=.06f;
+    const auto shallow=CrackVolumeWithPlanes(box,planes,crack,error);
+    Check(error.empty() && Measure(shallow,info) && info.components==1, "浅い割れ目では母岩のつながりが残る");
+    crack.width=0;
+    const auto unchanged=CrackVolumeWithPlanes(box,planes,crack,error);
+    Check(error.empty() && unchanged.values==box.values, "幅0では母岩を変更しない");
+    s.spacing=10; s.offset=5; crack.width=.1f;
+    const auto missed=CrackVolumeWithPlanes(box,MakeParallelPlanes(s,error),crack,error);
+    Check(error.empty() && missed.values==box.values, "構造面が母岩に届かなければ形を変えない");
+    s.offset=0; crack.variation=1; crack.seed=0;
+    const auto closed=CrackVolumeWithPlanes(box,MakeParallelPlanes(s,error),crack,error);
+    Check(error.empty() && closed.values==box.values, "幅のばらつきで閉じた面は格子上にも偽の隙間を作らない");
+    crack.variation=0; crack.seed=1;
+    s={}; s.rotationDegrees={13,0,21}; s.variation=.3f;
+    const auto oblique=CrackVolumeWithPlanes(box,MakeParallelPlanes(s,error),crack,error);
+    Check(error.empty() && Measure(oblique,info) && At(oblique,{0,0,0})<0,
+          "斜めの浅い面群は角の小片が分離しても閉包と中心のつながりを保つ");
+
+    graph::NodeGraph g;
+    const auto base=g.CreateNode(graph::NodeKind::BaseRock), volume=g.CreateNode(graph::NodeKind::ToVolume),
+        source=g.CreateNode(graph::NodeKind::ParallelPlanes), cut=g.CreateNode(graph::NodeKind::VolumeCrack),
+        scatter=g.CreateNode(graph::NodeKind::ScatterPoints);
+    const auto link=[&](auto a,auto b,int pin){return g.CreateLink(g.FindNode(a)->outputs[0].id,g.FindNode(b)->inputs[pin].id);};
+    Check(g.FindNode(source)->inputs.empty() && g.FindNode(source)->outputs[0].valueType==graph::ValueType::Planes,
+          "平行面は母岩に依存せず専用Planes型を出力する");
+    Check(!g.CanCreateLink(g.FindNode(source)->outputs[0].id,g.FindNode(cut)->inputs[1].id), "PlanesはPoints入力には接続できない");
+    Check(link(base,volume,0) && link(volume,cut,0) && link(source,cut,2), "平行面を割れ目ノードへ接続できる");
+    std::get<VolumeSettings>(g.FindMutableNode(volume)->settings).resolution=32;
+    graph::RockEvaluationCache cache;
+    const auto first=graph::EvaluateRocks(g,cut,&cache);
+    const auto mother=cache.entries.at(volume).result.rocks[0].volume;
+    const auto repeat=graph::EvaluateRocks(g,cut,&cache);
+    Check(first.error.empty() && repeat.error.empty() && first.rocks[0].volume==repeat.rocks[0].volume,
+          "平行面のグラフを評価し、同じ結果を再利用する");
+    DocumentSnapshot before; before.graphNodes=g.Nodes(); before.graphLinks=g.Links();
+    std::get<ParallelPlanesSettings>(g.FindMutableNode(source)->settings).offset=.12f;
+    const auto moved=graph::EvaluateRocks(g,cut,&cache);
+    Check(moved.error.empty() && moved.rocks[0].volume!=first.rocks[0].volume &&
+          cache.entries.at(volume).result.rocks[0].volume==mother, "面の移動では割れ目だけ再計算し母岩を再利用する");
+    DocumentSnapshot after; after.graphNodes=g.Nodes(); after.graphLinks=g.Links();
+    UndoHistory history; history.Push(before,0);
+    const auto undone=history.Undo(after); g.Replace(undone.graphNodes,undone.graphLinks);
+    const auto restored=graph::EvaluateRocks(g,cut,&cache);
+    Check(restored.error.empty() && restored.rocks[0].volume->values==first.rocks[0].volume->values,
+          "Undoで面の設定・接続・形状が戻る");
+    const auto redone=history.Redo(undone); g.Replace(redone.graphNodes,redone.graphLinks);
+    const auto reapplied=graph::EvaluateRocks(g,cut,&cache);
+    Check(reapplied.error.empty() && reapplied.rocks[0].volume->values==moved.rocks[0].volume->values,
+          "Redoで面の変更結果が再現する");
+    link(base,scatter,0); link(scatter,cut,1);
+    Check(!graph::EvaluateRocks(g,cut,&cache).error.empty(), "PointsとPlanesの同時接続を診断する");
+}
 }

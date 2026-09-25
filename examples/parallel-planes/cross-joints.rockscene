@@ -1,0 +1,236 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "baseRock": {
+          "size": [
+            2.4,
+            1.6,
+            2
+          ],
+          "seed": 1,
+          "shape": "box",
+          "subdivisions": 8,
+          "noiseStrength": 0
+        }
+      },
+      {
+        "id": 3,
+        "kind": "toVolume",
+        "inputs": [
+          4
+        ],
+        "outputs": [
+          5
+        ],
+        "position": [
+          240,
+          0
+        ],
+        "toVolume": {
+          "resolution": 96
+        }
+      },
+      {
+        "id": 10,
+        "kind": "parallelPlanes",
+        "inputs": [],
+        "outputs": [
+          11
+        ],
+        "position": [
+          240,
+          240
+        ],
+        "parallelPlanes": {
+          "rotation": [
+            0,
+            0,
+            12
+          ],
+          "spacing": 0.35,
+          "offset": 0.08,
+          "variation": 0.25,
+          "seed": 7
+        }
+      },
+      {
+        "id": 20,
+        "kind": "volumeCrack",
+        "inputs": [
+          21,
+          22,
+          23
+        ],
+        "outputs": [
+          24
+        ],
+        "position": [
+          500,
+          0
+        ],
+        "volumeCrack": {
+          "width": 0.055,
+          "depth": 1,
+          "variation": 0,
+          "noise": 0,
+          "noiseScale": 3,
+          "seed": 1
+        }
+      },
+      {
+        "id": 30,
+        "kind": "parallelPlanes",
+        "inputs": [],
+        "outputs": [
+          31
+        ],
+        "position": [
+          520,
+          240
+        ],
+        "parallelPlanes": {
+          "rotation": [
+            8,
+            0,
+            100
+          ],
+          "spacing": 0.7,
+          "offset": 0.17,
+          "variation": 0.3,
+          "seed": 13
+        }
+      },
+      {
+        "id": 40,
+        "kind": "volumeCrack",
+        "inputs": [
+          41,
+          42,
+          43
+        ],
+        "outputs": [
+          44
+        ],
+        "position": [
+          780,
+          0
+        ],
+        "volumeCrack": {
+          "width": 0.045,
+          "depth": 1,
+          "variation": 0,
+          "noise": 0,
+          "noiseScale": 3,
+          "seed": 2
+        }
+      },
+      {
+        "id": 50,
+        "kind": "volumeToMesh",
+        "inputs": [
+          51
+        ],
+        "outputs": [
+          52
+        ],
+        "position": [
+          1040,
+          0
+        ],
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 60,
+        "kind": "meshOutput",
+        "inputs": [
+          61,
+          62
+        ],
+        "outputs": [],
+        "position": [
+          1300,
+          0
+        ]
+      }
+    ],
+    "links": [
+      {
+        "id": 100,
+        "start": 2,
+        "end": 4
+      },
+      {
+        "id": 101,
+        "start": 5,
+        "end": 21
+      },
+      {
+        "id": 102,
+        "start": 11,
+        "end": 23
+      },
+      {
+        "id": 103,
+        "start": 24,
+        "end": 41
+      },
+      {
+        "id": 104,
+        "start": 31,
+        "end": 43
+      },
+      {
+        "id": 105,
+        "start": 44,
+        "end": 51
+      },
+      {
+        "id": 106,
+        "start": 52,
+        "end": 61
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 5.8,
+      "fovY": 0.785398,
+      "pitch": 0.35,
+      "yaw": 0.7
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0
+}

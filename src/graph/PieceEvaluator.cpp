@@ -16,25 +16,43 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
             index < node.inputs.size() ? graph.FindUpstreamNodeForPin(node.inputs[index].id) : nullptr;
         return source ? evaluate(source->id) : fail("必要な入力を接続してください");
     };
+    if (node.kind == NodeKind::LayeredBoxes) {
+        const auto& s = std::get<geometry::LayeredBoxesSettings>(node.settings);
+        std::string key;
+        const auto add=[&](const auto& v){key.append(reinterpret_cast<const char*>(&v),sizeof(v));};
+        add(node.kind); add(node.id); add(s.count); add(s.size); add(s.rotation); add(s.gap);
+        add(s.thicknessVariation); add(s.sizeVariation); add(s.offset); add(s.seed);
+        if (cache)
+            if (auto it=cache->pieceEntries.find(node.id);it!=cache->pieceEntries.end() && it->second.key==key)
+                return it->second.result;
+        std::string error;
+        auto pieces=geometry::MakeLayeredBoxes(s,node.id,error,stop);
+        if (!error.empty()) return fail(error);
+        out.pieces=std::make_shared<const geometry::PieceCollection>(std::move(pieces));
+        if (cache) cache->pieceEntries[node.id]={key,out};
+        return out;
+    }
     auto first = input(0);
     if (!first.error.empty())
         return first;
     std::string error;
     if (node.kind == NodeKind::ScatterPoints || node.kind == NodeKind::VoronoiFracture) {
-        if (first.hasModels || first.rocks.size() != 1 || first.rocks[0].volume)
-            return fail("単一の凸Meshを接続してください");
-        const auto &mesh = first.rocks[0].mesh;
+        if (first.hasModels || (!first.pieces && (first.rocks.size() != 1 || first.rocks[0].volume)))
+            return fail("単一の凸Mesh、または凸なメッシュのPiecesを接続してください");
+        const auto* mesh = first.pieces ? nullptr : &first.rocks[0].mesh;
         std::string key;
         const auto add = [&](const auto &v) { key.append(reinterpret_cast<const char *>(&v), sizeof(v)); };
         add(node.id);
         add(node.kind);
-        add(geometry::MeshFingerprint(mesh));
+        add(bool(first.pieces));
+        add(first.pieces ? first.pieces->fingerprint : geometry::MeshFingerprint(*mesh));
         RockEvaluation points;
         if (node.kind == NodeKind::ScatterPoints) {
             const auto &s = std::get<geometry::ScatterSettings>(node.settings);
             add(s.count);
             add(s.seed);
             add(s.version);
+            add(s.planar);
         } else {
             points = input(1);
             if (!points.error.empty())
@@ -51,13 +69,17 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
             if (auto it = cache->pieceEntries.find(node.id);
                 it != cache->pieceEntries.end() && it->second.key == key)
                 return it->second.result;
-        if (node.kind == NodeKind::ScatterPoints)
-            out.points = std::make_shared<const geometry::PointSet>(geometry::ScatterPoints(
-                mesh, std::get<geometry::ScatterSettings>(node.settings), error, stop));
-        else
-            out.pieces = std::make_shared<const geometry::PieceCollection>(geometry::FractureVoronoi(
-                mesh, *points.points, std::get<geometry::VoronoiSettings>(node.settings), node.id, error,
-                stop));
+        if (node.kind == NodeKind::ScatterPoints) {
+            const auto& s=std::get<geometry::ScatterSettings>(node.settings);
+            out.points = std::make_shared<const geometry::PointSet>(first.pieces
+                ? geometry::ScatterPiecePoints(*first.pieces,s,error,stop)
+                : geometry::ScatterPoints(*mesh,s,error,stop));
+        } else {
+            const auto& s=std::get<geometry::VoronoiSettings>(node.settings);
+            out.pieces = std::make_shared<const geometry::PieceCollection>(first.pieces
+                ? geometry::FracturePieces(*first.pieces,*points.points,s,node.id,error,stop)
+                : geometry::FractureVoronoi(*mesh,*points.points,s,node.id,error,stop));
+        }
         if (!error.empty())
             return fail(error);
         if (cache)

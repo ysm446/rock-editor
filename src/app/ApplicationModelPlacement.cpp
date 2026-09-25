@@ -924,8 +924,36 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
 }
 
 void Application::AppendPlaneCutOverlay(std::vector<renderer::OverlayLineSet>& lines) {
-    if (!m_planeCutsShowFrames && !m_planeCutsColorFaces) return;
     const graph::Node* node = m_graph.FindNode(m_selectedGraphNode);
+    if (node && node->kind == graph::NodeKind::ParallelPlanes) {
+        if (!m_parallelPlanesShowFrames) return;
+        const auto* settings = std::get_if<geometry::ParallelPlanesSettings>(&node->settings);
+        if (!settings) return;
+        std::string error;
+        const auto planes = geometry::MakeParallelPlanes(*settings, error);
+        if (!error.empty()) return;
+        geometry::Vec3 minimum{FLT_MAX, FLT_MAX, FLT_MAX}, maximum{-FLT_MAX, -FLT_MAX, -FLT_MAX};
+        for (const auto& mesh : m_rockPreviewSurfaces)
+            for (const auto& p : mesh.positions) {
+                minimum.x = std::min(minimum.x,p.x); maximum.x = std::max(maximum.x,p.x);
+                minimum.y = std::min(minimum.y,p.y); maximum.y = std::max(maximum.y,p.y);
+                minimum.z = std::min(minimum.z,p.z); maximum.z = std::max(maximum.z,p.z);
+            }
+        if (minimum.x == FLT_MAX) { minimum = {-1,-1,-1}; maximum = {1,1,1}; }
+        const float margin = .05f * std::max({maximum.x-minimum.x, maximum.y-minimum.y, maximum.z-minimum.z});
+        minimum = {minimum.x-margin, minimum.y-margin, minimum.z-margin};
+        maximum = {maximum.x+margin, maximum.y+margin, maximum.z+margin};
+        for (const auto& frame : geometry::ParallelPlaneFrames(planes, minimum, maximum, error)) {
+            renderer::OverlayLineSet set{{.3f, .95f, .8f, 1}, {}};
+            for (size_t i = 0; i < 4; ++i) {
+                const auto& a = frame.corners[i]; const auto& b = frame.corners[(i+1)%4];
+                set.points.push_back({a.x,a.y,a.z}); set.points.push_back({b.x,b.y,b.z});
+            }
+            lines.push_back(std::move(set));
+        }
+        return;
+    }
+    if (!m_planeCutsShowFrames && !m_planeCutsColorFaces) return;
     if (!node || node->kind != graph::NodeKind::PlaneCuts) return;
     // 評価のキャッシュに残る、このノードの結果から読む。評価中は前回の結果を出し続ける。
     const auto found = m_rockEvaluationCache.entries.find(node->id);

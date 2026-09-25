@@ -8,8 +8,12 @@ inline nlohmann::json WritePiecePose(const geometry::PiecePose &s) {
 }
 inline nlohmann::json WritePieceSettings(const graph::Node &node) {
     using namespace geometry;
+    if (auto *s = std::get_if<LayeredBoxesSettings>(&node.settings))
+        return {{"count",s->count},{"size",s->size},{"rotation",s->rotation},{"gap",s->gap},
+                {"thicknessVariation",s->thicknessVariation},{"sizeVariation",s->sizeVariation},
+                {"offset",s->offset},{"seed",s->seed}};
     if (auto *s = std::get_if<ScatterSettings>(&node.settings))
-        return {{"count", s->count}, {"seed", s->seed}, {"version", s->version}};
+        return {{"count", s->count}, {"seed", s->seed}, {"version", s->version}, {"planar",s->planar}};
     if (auto *s = std::get_if<VoronoiSettings>(&node.settings))
         return {{"rotation", s->rotation}, {"stretch", s->stretch}, {"version", s->version}};
     if (auto *s = std::get_if<PieceFilterSettings>(&node.settings))
@@ -24,6 +28,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
                 {"maxVolume", s->maxVolume},
                 {"fraction", s->fraction},
                 {"invert", s->invert},
+                {"layer",s->layer},
                 {"producer", s->producer},
                 {"generation", std::to_string(s->generation)},
                 {"ids", s->ids}};
@@ -42,6 +47,9 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
 inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
     using namespace geometry;
     switch (node.kind) {
+    case graph::NodeKind::LayeredBoxes:
+        node.settings = LayeredBoxesSettings{};
+        break;
     case graph::NodeKind::ScatterPoints:
         node.settings = ScatterSettings{};
         break;
@@ -82,10 +90,16 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(json, "rotation", p.rotation);
         read(json, "scale", p.scale);
     };
+    if (auto *s = std::get_if<LayeredBoxesSettings>(&node.settings)) {
+        read(value,"count",s->count); read(value,"size",s->size); read(value,"rotation",s->rotation);
+        read(value,"gap",s->gap); read(value,"thicknessVariation",s->thicknessVariation);
+        read(value,"sizeVariation",s->sizeVariation); read(value,"offset",s->offset); read(value,"seed",s->seed);
+    }
     if (auto *s = std::get_if<ScatterSettings>(&node.settings)) {
         read(value, "count", s->count);
         read(value, "seed", s->seed);
         read(value, "version", s->version);
+        read(value, "planar", s->planar);
     }
     if (auto *s = std::get_if<VoronoiSettings>(&node.settings)) {
         read(value, "rotation", s->rotation);
@@ -97,7 +111,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
     if (auto *s = std::get_if<PieceSelectSettings>(&node.settings)) {
         int mode = int(s->mode);
         read(value, "mode", mode);
-        if (mode >= 0 && mode <= 4)
+        if (mode >= 0 && mode <= 5)
             s->mode = PieceSelectMode(mode);
         read(value, "outerFaces", s->outerFaces);
         read(value, "seed", s->seed);
@@ -107,6 +121,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "maxVolume", s->maxVolume);
         read(value, "fraction", s->fraction);
         read(value, "invert", s->invert);
+        read(value, "layer",s->layer);
         read(value, "producer", s->producer);
         generation(s->generation);
         read(value, "ids", s->ids);

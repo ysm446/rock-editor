@@ -5,6 +5,7 @@
 #include <cmath>
 #include <execution>
 #include <map>
+#include <limits>
 #include <numeric>
 #include <set>
 
@@ -252,6 +253,54 @@ uint64_t MeshFingerprint(const Mesh &m) {
             h.Add(i);
     return h.value;
 }
+PieceCollection MakeLayeredBoxes(const LayeredBoxesSettings& s, int producer, std::string& error, std::stop_token stop) {
+    error.clear();
+    const auto range=[](float v,float lo,float hi){return std::isfinite(v) && v>=lo && v<=hi;};
+    if (s.count<1 || s.count>32 || !range(s.gap,0,10) || !range(s.thicknessVariation,0,.8f) ||
+        !range(s.sizeVariation,0,.8f) || !range(s.offset,0,1000) ||
+        std::any_of(s.size.begin(),s.size.end(),[&](float v){return !range(v,.001f,1000);}) ||
+        std::any_of(s.rotation.begin(),s.rotation.end(),[](float v){return !std::isfinite(v);})) {
+        error="板は1〜32枚、寸法0.001〜1000m、隙間0〜10m、ばらつき0〜0.8、ずれ0〜1000mにしてください";
+        return {};
+    }
+    auto rotation=s.rotation;
+    for (auto& r:rotation) r=std::fmod(r,360.f);
+    const D axes[]={Rotate({1,0,0},rotation),Rotate({0,1,0},rotation),Rotate({0,0,1},rotation)};
+    PieceCollection out; out.producer=producer;
+    Hash hash; hash.Add(s.count); hash.Add(s.seed);
+    for (auto v:s.size) hash.Float(v);
+    for (auto v:s.rotation) hash.Float(v);
+    hash.Float(s.gap); hash.Float(s.thicknessVariation); hash.Float(s.sizeVariation); hash.Float(s.offset);
+    out.generation=hash.value;
+    std::vector<D> centers;
+    double height=0;
+    for (int i=0;i<s.count;++i) {
+        if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}
+        uint64_t state=uint64_t(s.seed) ^ (uint64_t(i)<<32);
+        const auto vary=[&](float v,float amount){return float(v*(1+amount*(2*Uniform(state)-1)));};
+        const std::array<float,3> size{vary(s.size[0],s.sizeVariation),vary(s.size[1],s.thicknessVariation),vary(s.size[2],s.sizeVariation)};
+        if (*std::min_element(size.begin(),size.end())<.001f || *std::max_element(size.begin(),size.end())>1000) {
+            error="ばらつき後の板の寸法が0.001〜1000mを外れます。寸法かばらつきを調整してください";return {};
+        }
+        Piece p; p.id=uint32_t(i); p.layer=i; p.layerSize=size; p.layerRim=true; p.outerFaces=63;
+        p.mesh=std::make_shared<const Mesh>(MakeBox(size));
+        p.faceOrigins=std::make_shared<const std::vector<uint8_t>>(p.mesh->triangles.size(),1);
+        p.volume=double(size[0])*size[1]*size[2];
+        centers.push_back({s.offset*(2*Uniform(state)-1),height+size[1]*.5,s.offset*(2*Uniform(state)-1)});
+        height+=size[1]+(i+1<s.count?s.gap:0);
+        out.pieces.push_back(std::move(p));
+    }
+    for (size_t i=0;i<out.pieces.size();++i) {
+        centers[i].y-=height*.5;
+        const auto position=Rotate(centers[i],rotation);
+        out.pieces[i].transform={axes[0].x,axes[1].x,axes[2].x,position.x,
+                                 axes[0].y,axes[1].y,axes[2].y,position.y,
+                                 axes[0].z,axes[1].z,axes[2].z,position.z};
+    }
+    RefreshPieceFingerprint(out);
+    return out;
+}
+
 PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &error, std::stop_token stop) {
     error.clear();
     PointSet out;
@@ -279,6 +328,7 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
         }
         D p{lo.x + (hi.x - lo.x) * Uniform(state), lo.y + (hi.y - lo.y) * Uniform(state),
             lo.z + (hi.z - lo.z) * Uniform(state)};
+        if (s.planar) p.y=(lo.y+hi.y)*.5;
         bool valid = true;
         for (auto plane : planes)
             if (Dot(plane.n, p) > plane.d - 1e-8) {
@@ -316,13 +366,45 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
     h.Add(s.seed);
     h.Add(s.count);
     h.Add(s.version);
+    if (s.planar) h.Add(0x504c414e4152ull);
     out.fingerprint = h.value;
+    return out;
+}
+PointSet ScatterPiecePoints(const PieceCollection& pieces, const ScatterSettings& s,
+                            std::string& error, std::stop_token stop) {
+    error.clear();
+    if (s.version!=1 || s.count<2 || s.count>MaxScatterPoints || pieces.pieces.size()>size_t(MaxScatterPoints/s.count)) {
+        error="各ピースの点数は2〜512、全体の合計は512点までです"; return {};
+    }
+    PointSet out; out.grouped=true; out.source=pieces.fingerprint;
+    Hash hash; hash.Add(out.source); hash.Add(s.count); hash.Add(s.seed); hash.Add(s.planar);
+    std::set<uint32_t> seen;
+    for (const auto& p:pieces.pieces) {
+        if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}
+        if (!p.mesh || !seen.insert(p.id).second) {error="ピースのメッシュまたはIDが不正です";return {};}
+        auto local=s;
+        // 他の板の追加・削除や配置変更で、この板の点配置を変えない。
+        uint64_t state=uint64_t(s.seed) ^ (uint64_t(p.id)<<32);
+        local.seed=uint32_t(Random(state));
+        auto points=ScatterPoints(*p.mesh,local,error,stop);
+        if (!error.empty()) {error="ピース "+std::to_string(p.id)+": "+error;return {};}
+        for (auto v:points.positions) {
+            const auto world=F(Apply(p.transform,V(v)));
+            if (!std::isfinite(world.x)||!std::isfinite(world.y)||!std::isfinite(world.z)) {
+                error="ピースの変換が不正です";return {};
+            }
+            out.positions.push_back(world);
+        }
+        hash.Add(p.id); hash.Add(points.fingerprint);
+        out.groups.push_back({p.id,points.source,points.fingerprint,std::move(points.positions)});
+    }
+    out.fingerprint=hash.value;
     return out;
 }
 PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const VoronoiSettings &s,
                                 int producer, std::string &error, std::stop_token stop) {
     error.clear();
-    if (points.source != MeshFingerprint(mesh) || points.positions.size() < 2 ||
+    if (points.grouped || points.source != MeshFingerprint(mesh) || points.positions.size() < 2 ||
         points.positions.size() > MaxScatterPoints || s.version != 1) {
         error = "同じMeshから生成した2〜" + std::to_string(MaxScatterPoints) + "点のScatter Pointsが必要です";
         return {};
@@ -498,6 +580,54 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
     RefreshPieceFingerprint(out);
     return out;
 }
+PieceCollection FracturePieces(const PieceCollection& input, const PointSet& points, const VoronoiSettings& s,
+                               int producer, std::string& error, std::stop_token stop) {
+    error.clear();
+    if (!points.grouped || points.source!=input.fingerprint || points.groups.size()!=input.pieces.size() ||
+        input.pieces.size()>MaxScatterPoints || points.positions.size()>MaxScatterPoints) {
+        error="同じPiecesから生成したScatter Pointsを接続してください（合計512点まで）";return {};
+    }
+    PieceCollection out; out.producer=producer;
+    Hash generation; generation.Add(input.fingerprint); generation.Add(points.fingerprint);
+    std::set<uint32_t> ids;
+    size_t triangles=0;
+    for (size_t i=0;i<input.pieces.size();++i) {
+        if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}
+        const auto& parent=input.pieces[i]; const auto& group=points.groups[i];
+        if (!parent.mesh || group.pieceId!=parent.id || parent.id>uint32_t(std::numeric_limits<int>::max()/MaxScatterPoints-1)) {
+            error="親ピースのIDが不正、または再分割のID上限に達しました";return {};
+        }
+        PointSet local; local.source=group.source; local.fingerprint=group.fingerprint; local.positions=group.positions;
+        auto children=FractureVoronoi(*parent.mesh,local,s,producer,error,stop);
+        if (!error.empty()) {error="ピース "+std::to_string(parent.id)+": "+error;return {};}
+        generation.Add(parent.id); generation.Add(children.generation);
+        for (auto& p:children.pieces) {
+            p.id=(parent.id+1)*MaxScatterPoints+p.id;
+            if (!ids.insert(p.id).second) {error="ピースIDが重複しています";return {};}
+            p.parentId=parent.id; p.parentProducer=input.producer; p.layer=parent.layer; p.layerSize=parent.layerSize;
+            p.transform=parent.transform;
+            if (p.layer>=0) {
+                // 元の板の側面に面積を持って接する片だけ。上下面は対象外。
+                const float tolerance=std::max(p.layerSize[0],p.layerSize[2])*1e-6f;
+                for (const auto& face:p.mesh->triangles)
+                    for (int axis:{0,2}) for (int sign:{-1,1}) {
+                        bool on=true;
+                        for (auto index:face) {
+                            const auto& v=p.mesh->positions[index];
+                            on &= std::abs((axis==0?v.x:v.z)-sign*p.layerSize[axis]*.5f)<=tolerance;
+                        }
+                        p.layerRim |= on;
+                    }
+            }
+            triangles+=p.mesh->triangles.size();
+            out.pieces.push_back(std::move(p));
+            if (out.pieces.size()>MaxScatterPoints || triangles>250000) {
+                error="分割結果は合計512ピース・25万三角形までです";return {};
+            }
+        }
+    }
+    out.generation=generation.value; RefreshPieceFingerprint(out); return out;
+}
 void RefreshPieceFingerprint(PieceCollection &c) {
     Hash h;
     h.Add(c.producer);
@@ -505,6 +635,10 @@ void RefreshPieceFingerprint(PieceCollection &c) {
     h.Add(c.pieces.size());
     for (const auto &p : c.pieces) {
         h.Add(p.id);
+        if (p.layer>=0) {
+            h.Add(uint64_t(p.layer)); h.Add(p.parentProducer); h.Add(p.parentId); h.Add(p.layerRim);
+            for (auto v:p.layerSize) h.Float(v);
+        }
         for (auto v : p.transform)
             h.Add(std::bit_cast<uint64_t>(v));
     }
@@ -516,7 +650,7 @@ Vec3 PieceCenter(const Piece &p) {
 PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings &s, std::string &error) {
     error.clear();
     PieceSelection out{c.producer, c.generation, c.fingerprint, {}};
-    if (int(s.mode) < 0 || int(s.mode) > 4) {
+    if (int(s.mode) < 0 || int(s.mode) > 5 || s.layer < -1) {
         error = "選別方法が不正です";
         return {};
     }
@@ -531,7 +665,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         error = "体積範囲が不正です";
         return {};
     }
-    if (s.mode == PieceSelectMode::Random &&
+    if ((s.mode == PieceSelectMode::Random || s.mode == PieceSelectMode::Rim) &&
         (!std::isfinite(s.fraction) || s.fraction < 0 || s.fraction > 1)) {
         error = "選択率は0〜1にしてください";
         return {};
@@ -542,6 +676,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         return {};
     }
     for (const auto &p : c.pieces) {
+        if (s.layer>=0 && p.layer!=s.layer) continue;
         bool selected = false;
         auto center = PieceCenter(p);
         double volume = p.volume * Determinant(p.transform);
@@ -567,6 +702,13 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
             h.Add(s.seed);
             auto state = h.value;
             selected = Uniform(state) < s.fraction;
+            break;
+        }
+        case PieceSelectMode::Rim: {
+            // 通常MeshはローカルXZの外周。層情報がある場合は元の板の側面を使う。
+            Hash h; h.Add(c.producer); h.Add(p.id); h.Add(s.seed);
+            auto state=h.value;
+            selected=(p.layer>=0?p.layerRim:(p.outerFaces&51u)!=0) && Uniform(state)<s.fraction;
             break;
         }
         }

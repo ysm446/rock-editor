@@ -10,6 +10,7 @@ struct ScatterSettings {
     int count = 24;
     uint32_t seed = 1;
     int version = 1;
+    bool planar = false; // ローカルXZ面内に配置。Yは形の中央に固定する。
     bool operator==(const ScatterSettings &) const = default;
 };
 struct VoronoiSettings {
@@ -20,6 +21,19 @@ struct VoronoiSettings {
 struct PointSet {
     uint64_t source = 0, fingerprint = 0;
     std::vector<Vec3> positions;
+    struct Group {
+        uint32_t pieceId = 0;
+        uint64_t source = 0, fingerprint = 0;
+        std::vector<Vec3> positions; // 親ピースのローカル座標。
+    };
+    bool grouped = false;
+    std::vector<Group> groups;
+};
+struct LayeredBoxesSettings {
+    int count = 5;
+    std::array<float, 3> size{3, .12f, 2.4f}, rotation{0, 0, 0};
+    float gap = .005f, thicknessVariation = .3f, sizeVariation = .1f, offset = .12f;
+    uint32_t seed = 1;
 };
 struct Piece {
     uint32_t id = 0;
@@ -29,6 +43,11 @@ struct Piece {
     Vec3 centroid;
     double volume = 0;
     uint32_t outerFaces = 0;
+    int layer = -1, parentProducer = 0;
+    uint32_t parentId = 0;
+    // 元の板のローカル寸法。再分割しても側縁と上下面を区別する。
+    std::array<float, 3> layerSize{};
+    bool layerRim = false;
     // 0:切断面、1:元の外面。三角形ごとに保持する。
     std::shared_ptr<const std::vector<uint8_t>> faceOrigins;
 };
@@ -42,7 +61,8 @@ enum class PieceSelectMode {
     Outer,
     Region,
     Volume,
-    Random
+    Random,
+    Rim
 };
 struct PieceSelectSettings {
     PieceSelectMode mode = PieceSelectMode::Outer;
@@ -50,6 +70,7 @@ struct PieceSelectSettings {
     std::array<float, 3> minimum{-1, -1, -1}, maximum{1, 1, 1};
     float minVolume = 0, maxVolume = 1000000, fraction = .5f;
     bool invert = false;
+    int layer = -1; // -1は全層。指定時は反転もこの層の中だけで行う。
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;
@@ -77,9 +98,13 @@ struct PieceTransformSettings {
     std::vector<PieceOverride> overrides;
 };
 uint64_t MeshFingerprint(const Mesh &mesh);
+PieceCollection MakeLayeredBoxes(const LayeredBoxesSettings&, int producer, std::string&, std::stop_token = {});
 PointSet ScatterPoints(const Mesh &, const ScatterSettings &, std::string &, std::stop_token = {});
+PointSet ScatterPiecePoints(const PieceCollection&, const ScatterSettings&, std::string&, std::stop_token = {});
 PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSettings &, int producer,
                                 std::string &, std::stop_token = {});
+PieceCollection FracturePieces(const PieceCollection&, const PointSet&, const VoronoiSettings&, int producer,
+                              std::string&, std::stop_token = {});
 PieceSelection SelectPieces(const PieceCollection &, const PieceSelectSettings &, std::string &);
 PieceCollection FilterPieces(const PieceCollection &, const PieceSelection &, bool keep, std::string &);
 PieceCollection TransformPieces(const PieceCollection &, const PieceSelection *,

@@ -40,6 +40,8 @@ enum class PinKind : uint32_t {
 
 // ピンを流れる値の型。同じ型どうしだけ接続できる。
 enum class ValueType : uint32_t {
+    MeshOrPieces = 15, // Scatter Points / Voronoi Fracture の入力用。
+    Planes = 14,
     Mask = 13,
     Points = 10, Pieces = 11, Selection = 12,
     Material = 0,
@@ -57,6 +59,8 @@ enum class ValueType : uint32_t {
 // 数値は保存名ではなくファイルには書かない（定義テーブルの name を書く）が、
 // 撤去した種類の値は再利用しない。
 enum class NodeKind : uint32_t {
+    LayeredBoxes = 67,
+    ParallelPlanes = 66,
     ApplyMaterial = 50, MaterialMask = 51,
     BaseRock = 34,
     // 35～37 は撤去した Crack / Fracture / Joint Set。
@@ -68,7 +72,7 @@ enum class NodeKind : uint32_t {
     VolumeBoolean = 52,
     // 平面の群で Volume を切り落とし、角張った面を作る。
     PlaneCuts = 53,
-    // 点の群が作る Voronoi の境界面に沿って、Volume の表面から割れ目を彫る。
+    // 構造面、または点の群が作る Voronoi 境界に沿って、Volume の表面から割れ目を彫る。
     VolumeCrack = 54,
     // Volume の表面をノイズで削り、サンプル位置をずらして直線的な面を崩す。
     VolumeNoise = 55,
@@ -195,7 +199,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::BoxClusterSettings, geometry::VolumeSettings,
                                   geometry::VolumeTransformSettings, geometry::VolumeToMeshSettings,
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
-                                  geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
+                                  geometry::LayeredBoxesSettings, geometry::ParallelPlanesSettings, geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings, geometry::VolumeCloseSettings,
                                   geometry::VolumeEdgeWearSettings,
                                   geometry::DecimateSettings, geometry::RemeshSettings,

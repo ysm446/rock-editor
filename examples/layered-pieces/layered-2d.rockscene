@@ -1,0 +1,220 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "layeredBoxes",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "pieces": {
+          "count": 5,
+          "size": [
+            3,
+            0.09,
+            2.4
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "gap": 0.002,
+          "thicknessVariation": 0.45,
+          "sizeVariation": 0.12,
+          "offset": 0.12,
+          "seed": 8
+        }
+      },
+      {
+        "id": 10,
+        "kind": "scatterPoints",
+        "inputs": [
+          11
+        ],
+        "outputs": [
+          12
+        ],
+        "position": [
+          0,
+          160
+        ],
+        "pieces": {
+          "count": 64,
+          "seed": 11,
+          "version": 1,
+          "planar": true
+        }
+      },
+      {
+        "id": 20,
+        "kind": "voronoiFracture",
+        "inputs": [
+          21,
+          22
+        ],
+        "outputs": [
+          23
+        ],
+        "position": [
+          250,
+          0
+        ],
+        "pieces": {
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "stretch": [
+            1,
+            1,
+            1
+          ],
+          "version": 1
+        }
+      },
+      {
+        "id": 30,
+        "kind": "pieceSelect",
+        "inputs": [
+          31
+        ],
+        "outputs": [
+          32
+        ],
+        "position": [
+          500,
+          140
+        ],
+        "pieces": {
+          "mode": 5,
+          "fraction": 1,
+          "layer": -1,
+          "seed": 5
+        }
+      },
+      {
+        "id": 40,
+        "kind": "pieceFilter",
+        "inputs": [
+          41,
+          42
+        ],
+        "outputs": [
+          43
+        ],
+        "position": [
+          750,
+          0
+        ],
+        "pieces": {
+          "keep": false
+        }
+      },
+      {
+        "id": 80,
+        "kind": "piecesToMesh",
+        "inputs": [
+          81
+        ],
+        "outputs": [
+          82
+        ],
+        "position": [
+          1000,
+          0
+        ]
+      },
+      {
+        "id": 120,
+        "kind": "meshOutput",
+        "inputs": [
+          121,
+          122
+        ],
+        "outputs": [],
+        "position": [
+          1250,
+          0
+        ]
+      }
+    ],
+    "links": [
+      {
+        "id": 1000,
+        "start": 2,
+        "end": 11
+      },
+      {
+        "id": 1001,
+        "start": 2,
+        "end": 21
+      },
+      {
+        "id": 1002,
+        "start": 12,
+        "end": 22
+      },
+      {
+        "id": 1003,
+        "start": 23,
+        "end": 31
+      },
+      {
+        "id": 1004,
+        "start": 23,
+        "end": 41
+      },
+      {
+        "id": 1005,
+        "start": 32,
+        "end": 42
+      },
+      {
+        "id": 1006,
+        "start": 43,
+        "end": 81
+      },
+      {
+        "id": 1007,
+        "start": 82,
+        "end": 121
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 5.2,
+      "fovY": 0.785398,
+      "pitch": 0.65,
+      "yaw": 0.75
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0
+}

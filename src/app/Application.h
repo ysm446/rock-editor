@@ -461,6 +461,7 @@ private:
     MeshHighlightState m_meshHighlight;
     // Plane Cuts を選んでいる間の表示。ノードの設定ではない（評価・Undo・保存に関わらない）。
     bool m_planeCutsShowFrames = true;
+    bool m_parallelPlanesShowFrames = true;
     bool m_planeCutsColorFaces = false;
     // 表示中の岩メッシュ（位置と面だけ）。断面の色分けで、どの面がどの平面に乗るかを調べる。
     std::vector<geometry::Mesh> m_rockPreviewSurfaces;

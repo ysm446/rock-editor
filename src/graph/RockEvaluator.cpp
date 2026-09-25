@@ -73,6 +73,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         if (!s) return std::nullopt;
         add(s->step); add(s->depth); add(s->ratio); add(s->softness); add(s->variation); add(s->noise); add(s->noiseScale);
         add(s->rotationDegrees); add(s->seed);
+    } else if (node->kind == NodeKind::ParallelPlanes) {
+        const auto* s = std::get_if<geometry::ParallelPlanesSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(s->rotationDegrees); add(s->spacing); add(s->offset); add(s->variation); add(s->seed);
     } else if (node->kind == NodeKind::VolumeCrack) {
         const auto* s = std::get_if<geometry::VolumeCrackSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -91,13 +95,16 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         const auto* s = std::get_if<geometry::VolumeToMeshSettings>(&node->settings);
         const auto method = s ? s->method : geometry::VolumeMeshingMethod::MarchingTetrahedra;
         add(method);
+    } else if (const auto* layers = std::get_if<geometry::LayeredBoxesSettings>(&node->settings)) {
+        add(layers->count); add(layers->size); add(layers->rotation); add(layers->gap);
+        add(layers->thicknessVariation); add(layers->sizeVariation); add(layers->offset); add(layers->seed);
     } else if (const auto* scatter = std::get_if<geometry::ScatterSettings>(&node->settings)) {
-        add(scatter->count); add(scatter->seed); add(scatter->version);
+        add(scatter->count); add(scatter->seed); add(scatter->version); add(scatter->planar);
     } else if (const auto* voronoi = std::get_if<geometry::VoronoiSettings>(&node->settings)) {
         add(voronoi->rotation); add(voronoi->stretch); add(voronoi->version);
     } else if (const auto* selection = std::get_if<geometry::PieceSelectSettings>(&node->settings)) {
         add(selection->mode); add(selection->outerFaces); add(selection->seed); add(selection->minimum); add(selection->maximum);
-        add(selection->minVolume); add(selection->maxVolume); add(selection->fraction); add(selection->invert); add(selection->producer); add(selection->generation);
+        add(selection->minVolume); add(selection->maxVolume); add(selection->fraction); add(selection->invert); add(selection->producer); add(selection->generation); add(selection->layer);
         add(selection->ids.size()); for (auto value : selection->ids) add(value);
     } else if (const auto* filter = std::get_if<geometry::PieceFilterSettings>(&node->settings)) {
         add(filter->keep);
@@ -199,7 +206,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             return Failure(id, "Graph", "循環または評価深さの上限を検出しました");
         const auto* node = graph.FindNode(id);
         if (!node) return {};
-        const bool volumeCache = node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
+        const bool volumeCache = node->kind == NodeKind::ParallelPlanes || node->kind == NodeKind::RandomBoxes || node->kind == NodeKind::ToVolume ||
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate || node->kind == NodeKind::Remesh ||
@@ -232,7 +239,15 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 persistent->entries[id] = {*persistentKey, value};
             return value;
         };
-        if (IsPieceNodeKind(node->kind)) {
+        if (node->kind == NodeKind::ParallelPlanes) {
+            const auto* settings = std::get_if<geometry::ParallelPlanesSettings>(&node->settings);
+            if (!settings) return finish(Failure(id, "Parallel Planes", "設定がありません"));
+            std::string error;
+            auto planes = geometry::MakeParallelPlanes(*settings, error);
+            if (!error.empty()) return finish(Failure(id, "Parallel Planes", error));
+            result.planes = std::make_shared<const geometry::StructurePlanes>(planes);
+            return finish(std::move(result));
+        } else if (IsPieceNodeKind(node->kind)) {
             auto pieces = EvaluatePieceNode(graph, *node, persistent, [&](GraphId upstream) { return evaluate(upstream, depth+1); }, stop);
             if (persistent) {
                 if (pieces.error.empty() && pieces.pieces) persistent->pieceOutputs[id] = pieces.pieces;
@@ -673,19 +688,23 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             const bool wired = node->inputs.size() >= 2;
             const auto* upstream = wired ? graph.FindUpstreamNodeForPin(node->inputs[0].id) : nullptr;
             const auto* scatter = wired ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
-            if (!settings || !upstream || !scatter)
-                return finish(Failure(id, "Volume Crack", "Volume と Points の両方を接続してください"));
+            const auto* planes = node->inputs.size() > 2 ? graph.FindUpstreamNodeForPin(node->inputs[2].id) : nullptr;
+            if (!settings || !upstream || (!scatter && !planes))
+                return finish(Failure(id, "Volume Crack", "Volume と、Points または Planes の一方を接続してください"));
+            if (scatter && planes)
+                return finish(Failure(id, "Volume Crack", "Points と Planes は同時に接続できません。一方を外してください"));
             const auto input = evaluate(upstream->id, depth + 1);
             if (!input.error.empty()) return finish(input);
-            const auto scattered = evaluate(scatter->id, depth + 1);
+            const auto scattered = evaluate(planes ? planes->id : scatter->id, depth + 1);
             if (!scattered.error.empty()) return finish(scattered);
             if (input.rocks.size() != 1 || !input.rocks[0].volume)
                 return finish(Failure(id, "Volume Crack", "ボリュームが必要です"));
-            if (!scattered.points)
-                return finish(Failure(id, "Volume Crack", "Scatter Points の出力が必要です"));
+            if (planes ? !scattered.planes : !scattered.points)
+                return finish(Failure(id, "Volume Crack", "割れ目の源の出力が不正です"));
             std::string error;
-            auto cracked =
-                geometry::CrackVolume(*input.rocks[0].volume, scattered.points->positions, *settings, error);
+            auto cracked = planes
+                ? geometry::CrackVolumeWithPlanes(*input.rocks[0].volume, *scattered.planes, *settings, error)
+                : geometry::CrackVolume(*input.rocks[0].volume, scattered.points->positions, *settings, error);
             if (!error.empty()) return finish(Failure(id, "Volume Crack", error));
             GeneratedRock rock;
             rock.source = id;

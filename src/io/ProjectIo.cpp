@@ -546,6 +546,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                    {"warp", noise->warp},
                                    {"warpScale", noise->warpScale},
                                    {"seed", noise->seed}};
+        } else if (const auto* planes = std::get_if<geometry::ParallelPlanesSettings>(&node.settings)) {
+            item["parallelPlanes"] = {{"rotation", planes->rotationDegrees}, {"spacing", planes->spacing},
+                                       {"offset", planes->offset}, {"variation", planes->variation}, {"seed", planes->seed}};
         } else if (const auto* crack = std::get_if<geometry::VolumeCrackSettings>(&node.settings)) {
             item["volumeCrack"] = {{"width", crack->width},       {"depth", crack->depth},
                                    {"variation", crack->variation}, {"noise", crack->noise},
@@ -898,6 +901,17 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.octaves = ReadInt(*v, "octaves", settings.octaves);
                     settings.warp = ReadFloat(*v, "warp", settings.warp);
                     settings.warpScale = ReadFloat(*v, "warpScale", settings.warpScale);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::ParallelPlanes) {
+                geometry::ParallelPlanesSettings settings;
+                if (const json* v = FindMember(item, "parallelPlanes"); v && v->is_object()) {
+                    const auto rotation = ReadFloat3(*v, "rotation", {});
+                    settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
+                    settings.spacing = ReadFloat(*v, "spacing", settings.spacing);
+                    settings.offset = ReadFloat(*v, "offset", settings.offset);
+                    settings.variation = ReadFloat(*v, "variation", settings.variation);
                     settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
