@@ -48,6 +48,13 @@ bool MeshBounds(const renderer::MeshData& data, DirectX::BoundingBox& outBounds)
 void Application::HandleMeshHover(bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax) {
     using namespace DirectX;
     if (m_pieceUpdating) return;
+    if (const auto* node = m_graph.FindNode(m_previewGraphNode);
+        node && node->kind == graph::NodeKind::PieceSelect && (!m_pieceSelectionEditing || m_pieceSelectView != 0)) {
+        m_meshHighlight.hovered = -1;
+        m_meshHighlight.selected.clear();
+        m_meshHighlight.boxPending = m_meshHighlight.boxSelecting = false;
+        return;
+    }
     auto& state = m_meshHighlight;
     const auto& meshes = m_renderer.Scene().meshes;
     std::erase_if(state.selected, [&](int index) { return index < 0 || static_cast<size_t>(index) >= meshes.size(); });

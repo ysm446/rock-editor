@@ -71,6 +71,8 @@ struct PieceSelectSettings {
     float minVolume = 0, maxVolume = 1000000, fraction = .5f;
     bool invert = false;
     int layer = -1; // -1は全層。指定時は反転もこの層の中だけで行う。
+    int rimLayers = 0, rimSide = 0; // 0層は全層。側: 0両側、1上側、2下側。
+    float rimFalloff = 0; // 内側の選択率を下げる強さ。
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;

@@ -105,6 +105,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* selection = std::get_if<geometry::PieceSelectSettings>(&node->settings)) {
         add(selection->mode); add(selection->outerFaces); add(selection->seed); add(selection->minimum); add(selection->maximum);
         add(selection->minVolume); add(selection->maxVolume); add(selection->fraction); add(selection->invert); add(selection->producer); add(selection->generation); add(selection->layer);
+        add(selection->rimLayers); add(selection->rimSide); add(selection->rimFalloff);
         add(selection->ids.size()); for (auto value : selection->ids) add(value);
     } else if (const auto* filter = std::get_if<geometry::PieceFilterSettings>(&node->settings)) {
         add(filter->keep);

@@ -55,6 +55,28 @@ void Application::DrawPieceSettings(graph::Node &node) {
             ui::EndPropertyTable();
         }
     } else if (auto *selection = std::get_if<geometry::PieceSelectSettings>(&node.settings)) {
+        ui::SectionHeader("選択のプレビュー");
+        bool viewChanged = false;
+        viewChanged |= ImGui::RadioButton("選択状態", &m_pieceSelectView, 0);
+        ImGui::SameLine();
+        viewChanged |= ImGui::RadioButton("削除後", &m_pieceSelectView, 1);
+        if (ui::BeginPropertyTable("pieceSelectView")) {
+            viewChanged |= ui::PropertyFloat("板を離して表示 (m)", &m_pieceSelectSpread, 0, 1, 0,
+                                            "表示だけ板の間隔を広げます。出力する形状は変わりません。");
+            ui::EndPropertyTable();
+        }
+        if (viewChanged) { ++m_pieceEpoch; SetPreviewGraphNode(node.id); }
+        if (m_pieceSelectView == 0) {
+            ImGui::TextColored(ImVec4(1,.4f,.15f,1), "■ 選択された片（Deleteの対象）");
+            ImGui::TextColored(ImVec4(1,.85f,.2f,1), "■ 候補のうち今回は選ばれなかった片");
+            ImGui::TextColored(ImVec4(.7f,.72f,.75f,1), "■ 対象外の片");
+        } else ui::HintText("選択した片を隠した比較表示です。実際の削除には Piece Filter を使います。");
+        if (ImGui::Button("外側の板の縁から欠く")) {
+            selection->mode = geometry::PieceSelectMode::Rim;
+            selection->layer = -1; selection->rimLayers = 1; selection->rimSide = 0;
+            selection->rimFalloff = 0; selection->fraction = .75f; selection->invert = false;
+            m_pieceSelectionEditing = false; changed = true;
+        }
         if (ui::BeginPropertyTable("pieceSelect")) {
             const char *modes[] = {"Manual — 手動ID", "Outer — 外面に接する片", "Region — 重心の範囲",
                                    "Volume — 体積", "Random — ランダム", "Rim — 元の板の側縁"};
@@ -63,6 +85,14 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 selection->mode = geometry::PieceSelectMode(mode);
                 changed = true;
                 m_pieceSelectionEditing = false;
+            }
+            if (selection->mode == geometry::PieceSelectMode::Rim) {
+                const char* sides[] = {"両側から", "上側から", "下側から"};
+                changed |= ui::PropertyCombo("積層の外側", &selection->rimSide, sides, 3, 0);
+                changed |= ui::PropertyInt("外側から何層", &selection->rimLayers, 0, 32, 0,
+                                           "0は全層。両側・1層なら最上層と最下層が対象です。");
+                changed |= ui::PropertyFloat("内側ほど弱く", &selection->rimFalloff, 0, 1, 0,
+                                             "対象範囲の内側ほど選択率を下げます。1では最も内側の選択率が0になります。");
             }
             if (selection->mode == geometry::PieceSelectMode::Region) {
                 changed |= ui::PropertyFloat3Input("範囲 最小", selection->minimum.data(), zero) != 0;
@@ -105,7 +135,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
             ImGui::BeginDisabled(!ready);
             if (ImGui::Checkbox("ビューポートで選択編集", &m_pieceSelectionEditing)) {
                 if (m_pieceSelectionEditing)
-                    SetPreviewGraphNode(node.id);
+                    { m_pieceSelectView = 0; ++m_pieceEpoch; SetPreviewGraphNode(node.id); }
             }
             if (ImGui::Button("手動選択をリセット")) {
                 selection->ids.clear();
@@ -142,7 +172,38 @@ void Application::DrawPieceSettings(graph::Node &node) {
             std::string error;
             auto evaluated = geometry::SelectPieces(*m_pieceInput, *selection, error);
             if (error.empty()) {
-                ImGui::Text("選択 %zu / %zu", evaluated.ids.size(), m_pieceInput->pieces.size());
+                ImGui::Text("選択 %zu / 全体 %zu　残る片 %zu", evaluated.ids.size(), m_pieceInput->pieces.size(),
+                            m_pieceInput->pieces.size()-evaluated.ids.size());
+                auto candidateSettings = *selection;
+                candidateSettings.fraction = 1; candidateSettings.rimFalloff = 0; candidateSettings.invert = false;
+                const auto candidates = geometry::SelectPieces(*m_pieceInput, candidateSettings, error);
+                // 上から下への積層図。層の厚さではなく、各層のピース数の内訳を示す。
+                bool hasLayers = false;
+                for (const auto& p : m_pieceInput->pieces) hasLayers |= p.layer >= 0;
+                if (hasLayers && ImGui::TreeNodeEx("層ごとの選択（上 → 下）", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    for (int layer = 31; layer >= 0; --layer) {
+                        size_t total = 0, chosen = 0, possible = 0;
+                        for (const auto& p : m_pieceInput->pieces) if (p.layer == layer) {
+                            ++total;
+                            const bool selected = std::find(evaluated.ids.begin(),evaluated.ids.end(),p.id)!=evaluated.ids.end();
+                            if (selected) ++chosen;
+                            else if (std::find(candidates.ids.begin(),candidates.ids.end(),p.id)!=candidates.ids.end()) ++possible;
+                        }
+                        if (!total) continue;
+                        ImGui::Text("層 %d：%zu / %zu",layer,chosen,total);
+                        const ImVec2 origin = ImGui::GetCursorScreenPos();
+                        const float width = ImGui::GetContentRegionAvail().x;
+                        const float height = ImGui::GetTextLineHeight()*.55f;
+                        auto* draw = ImGui::GetWindowDrawList();
+                        draw->AddRectFilled(origin,ImVec2(origin.x+width,origin.y+height),IM_COL32(155,163,173,255));
+                        const float selectedWidth = width*float(chosen)/float(total);
+                        draw->AddRectFilled(origin,ImVec2(origin.x+selectedWidth,origin.y+height),IM_COL32(255,95,30,255));
+                        draw->AddRectFilled(ImVec2(origin.x+selectedWidth,origin.y),
+                            ImVec2(origin.x+selectedWidth+width*float(possible)/float(total),origin.y+height),IM_COL32(255,212,40,255));
+                        ImGui::Dummy(ImVec2(width,height));
+                    }
+                    ImGui::TreePop();
+                }
                 if (!m_pieceInput->pieces.empty() && evaluated.ids.size() == m_pieceInput->pieces.size())
                     ui::HintText("全片を選択しています。Deleteすると空になります。");
             } else
@@ -259,7 +320,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
     }
 }
 void Application::CommitPieceViewportSelection() {
-    if (!m_pieceSelectionEditing || m_pieceUpdating || !m_piecePreview ||
+    if (!m_pieceSelectionEditing || m_pieceSelectView != 0 || m_pieceUpdating || !m_piecePreview ||
         m_previewGraphNode != m_selectedGraphNode)
         return;
     auto *node = m_graph.FindMutableNode(m_selectedGraphNode);

@@ -29,6 +29,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
                 {"fraction", s->fraction},
                 {"invert", s->invert},
                 {"layer",s->layer},
+                {"rimLayers",s->rimLayers}, {"rimSide",s->rimSide}, {"rimFalloff",s->rimFalloff},
                 {"producer", s->producer},
                 {"generation", std::to_string(s->generation)},
                 {"ids", s->ids}};
@@ -122,6 +123,9 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "fraction", s->fraction);
         read(value, "invert", s->invert);
         read(value, "layer",s->layer);
+        read(value, "rimLayers",s->rimLayers);
+        read(value, "rimSide",s->rimSide);
+        read(value, "rimFalloff",s->rimFalloff);
         read(value, "producer", s->producer);
         generation(s->generation);
         read(value, "ids", s->ids);

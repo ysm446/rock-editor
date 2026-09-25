@@ -327,7 +327,7 @@ void Application::DrawBakedTextureTiles(const graph::MaterialBakeSettings& bake)
 void Application::SyncMeshGraph() {
     if (m_uvLastSelectedNode != m_selectedGraphNode) {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
-            previous && (previous->kind == graph::NodeKind::UvUnwrap || graph::IsImageMaskNodeKind(previous->kind)) &&
+            previous && (previous->kind == graph::NodeKind::UvUnwrap || previous->kind == graph::NodeKind::PieceSelect || graph::IsImageMaskNodeKind(previous->kind)) &&
             m_previewGraphNode == previous->id)
             SetPreviewGraphNode(m_uvPreviousPreviewNode, m_uvPreviousPreviewPin);
         m_pieceSelectionEditing = false;
@@ -335,7 +335,7 @@ void Application::SyncMeshGraph() {
         m_uvLastSelectedNode = m_selectedGraphNode;
         // UV Unwrap は選ぶとUVチェッカー、Shape Mask / Mask Combine は選ぶとマスクを貼った入力メッシュを出す。選択を外すと元のプレビューへ戻す。
         if (const auto* node = m_graph.FindNode(m_selectedGraphNode);
-            node && (node->kind == graph::NodeKind::UvUnwrap || graph::IsImageMaskNodeKind(node->kind))) {
+            node && (node->kind == graph::NodeKind::UvUnwrap || node->kind == graph::NodeKind::PieceSelect || graph::IsImageMaskNodeKind(node->kind))) {
             m_uvPreviousPreviewNode = m_previewGraphNode;
             m_uvPreviousPreviewPin = m_previewGraphPin;
             SetPreviewGraphNode(node->id);
@@ -434,7 +434,41 @@ void Application::SyncMeshGraph() {
     m_rockPreviewSurfaces.clear();
     ++m_rockPreviewStamp;
     std::vector<int> selectedPieces;
-    for (const auto& rock : evaluated.rocks) {
+    const auto* previewNode = m_graph.FindNode(previewMeshNode);
+    const bool selectionView = previewNode && previewNode->kind == graph::NodeKind::PieceSelect && evaluated.pieces;
+    m_pieceSelectEdges = {DirectX::XMFLOAT4{.12f,.14f,.17f,1}, {}};
+    geometry::PieceSelection candidates;
+    int minLayer = 32, maxLayer = -1;
+    if (selectionView) {
+        auto settings = std::get<geometry::PieceSelectSettings>(previewNode->settings);
+        settings.fraction = 1; settings.rimFalloff = 0; settings.invert = false;
+        std::string error;
+        candidates = geometry::SelectPieces(*evaluated.pieces, settings, error);
+        for (const auto& p : evaluated.pieces->pieces) if (p.layer >= 0) {
+            minLayer = std::min(minLayer,p.layer); maxLayer = std::max(maxLayer,p.layer);
+        }
+    }
+    for (auto& rock : evaluated.rocks) {
+        if (selectionView && m_pieceSelectView == 1 && rock.pieceSelected) continue;
+        if (selectionView && m_pieceSelectSpread > 0) {
+            const auto it = std::find_if(evaluated.pieces->pieces.begin(),evaluated.pieces->pieces.end(),
+                                        [&](const auto& p){return int(p.id)==rock.pieceId;});
+            if (it != evaluated.pieces->pieces.end() && it->layer >= 0) {
+                const double offset = (it->layer-(minLayer+maxLayer)*.5)*m_pieceSelectSpread;
+                // 板のローカルY方向へ表示だけをずらす。保存・出力の形状は変更しない。
+                const auto& t = it->transform;
+                const double length = std::sqrt(t[1]*t[1]+t[5]*t[5]+t[9]*t[9]);
+                if (length > 0) for (auto& v : rock.mesh.positions) {
+                    v.x += float(t[1]*offset/length); v.y += float(t[5]*offset/length); v.z += float(t[9]*offset/length);
+                }
+            }
+        }
+        if (selectionView && m_pieceSelectView == 0) {
+            geometry::Piece displayPiece;
+            displayPiece.mesh = std::make_shared<const geometry::Mesh>(rock.mesh);
+            for (const auto& edge : geometry::PieceEdges(displayPiece))
+                for (const auto& v : edge) m_pieceSelectEdges.points.push_back({v.x,v.y,v.z});
+        }
         if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
@@ -443,13 +477,19 @@ void Application::SyncMeshGraph() {
             float r,g,b;
             ImGui::ColorConvertHSVtoRGB(std::fmod(float(rock.pieceId)*.618034f,.999f),.5f,.75f,r,g,b);
             mesh.material.baseColor = {r,g,b};
-            if (rock.pieceSelected) selectedPieces.push_back(int(scene.meshes.size()));
+            if (selectionView) {
+                const bool candidate = std::find(candidates.ids.begin(),candidates.ids.end(),uint32_t(rock.pieceId))!=candidates.ids.end();
+                mesh.material.baseColor = m_pieceSelectView == 1 ? DirectX::XMFLOAT3{.65f,.67f,.7f} :
+                    rock.pieceSelected ? DirectX::XMFLOAT3{1.f,.24f,.035f} :
+                    candidate ? DirectX::XMFLOAT3{1.f,.8f,.12f} : DirectX::XMFLOAT3{.65f,.67f,.7f};
+            }
+            if (rock.pieceSelected && (!selectionView || m_pieceSelectionEditing)) selectedPieces.push_back(int(scene.meshes.size()));
         }
         m_rockMeshReferences.push_back({rock.source, rock.pieceId});
         m_rockTriangleCounts.push_back(rock.mesh.triangles.size());
         m_rockPreviewSurfaces.push_back({rock.mesh.positions, rock.mesh.triangles});
         mesh.material.roughness = 0.8f;
-        ApplyRockMaterial(mesh, rock, true);
+        if (!selectionView) ApplyRockMaterial(mesh, rock, true);
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;

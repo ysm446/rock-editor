@@ -675,8 +675,30 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         error = "上流の分割が変わりました。手動選択をリセットして再選択してください";
         return {};
     }
+    std::vector<int> layers;
+    if (s.mode == PieceSelectMode::Rim) {
+        if (s.rimLayers < 0 || s.rimLayers > 32 || s.rimSide < 0 || s.rimSide > 2 ||
+            !std::isfinite(s.rimFalloff) || s.rimFalloff < 0 || s.rimFalloff > 1) {
+            error = "外側の層の設定が不正です";
+            return {};
+        }
+        for (const auto& p : c.pieces) if (p.layer >= 0) layers.push_back(p.layer);
+        std::sort(layers.begin(), layers.end());
+        layers.erase(std::unique(layers.begin(), layers.end()), layers.end());
+    }
     for (const auto &p : c.pieces) {
         if (s.layer>=0 && p.layer!=s.layer) continue;
+        float rimWeight = 1;
+        if (s.mode == PieceSelectMode::Rim && !layers.empty()) {
+            if (p.layer < 0) continue;
+            const int bottom = int(std::lower_bound(layers.begin(), layers.end(), p.layer)-layers.begin());
+            const int top = int(layers.size())-1-bottom;
+            const int depth = s.rimSide == 1 ? top : s.rimSide == 2 ? bottom : std::min(top,bottom);
+            const int available = s.rimSide ? int(layers.size()) : (int(layers.size())+1)/2;
+            const int count = s.rimLayers ? std::min(s.rimLayers,available) : available;
+            if (depth >= count) continue; // 反転でも対象外の層は選ばない。
+            rimWeight = 1-s.rimFalloff*float(depth)/float(std::max(1,count-1));
+        }
         bool selected = false;
         auto center = PieceCenter(p);
         double volume = p.volume * Determinant(p.transform);
@@ -708,7 +730,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
             // 通常MeshはローカルXZの外周。層情報がある場合は元の板の側面を使う。
             Hash h; h.Add(c.producer); h.Add(p.id); h.Add(s.seed);
             auto state=h.value;
-            selected=(p.layer>=0?p.layerRim:(p.outerFaces&51u)!=0) && Uniform(state)<s.fraction;
+            selected=(p.layer>=0?p.layerRim:(p.outerFaces&51u)!=0) && Uniform(state)<s.fraction*rimWeight;
             break;
         }
         }

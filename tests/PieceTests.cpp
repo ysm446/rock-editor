@@ -332,6 +332,56 @@ static void RunLayeredPieceTests() {
     const auto randomEdges=SelectPieces(pieces,rim,error);
     Check(randomEdges.ids==SelectPieces(pieces,rim,error).ids && randomEdges.ids.size()<edge.ids.size(),
           "側縁の確率選択は再現可能");
+    auto outside = rim;
+    outside.fraction = 1; outside.rimLayers = 1;
+    const auto bothEdges = SelectPieces(pieces,outside,error);
+    bool onlyOutside = !bothEdges.ids.empty();
+    for (const auto& p : pieces.pieces) {
+        const bool selected = std::find(bothEdges.ids.begin(),bothEdges.ids.end(),p.id)!=bothEdges.ids.end();
+        onlyOutside &= selected == (p.layerRim && (p.layer==0 || p.layer==2));
+    }
+    Check(error.empty() && onlyOutside,"両側1層は最上層と最下層の側縁だけを選ぶ");
+    outside.rimSide = 1;
+    const auto topEdges = SelectPieces(pieces,outside,error);
+    bool topOnly = !topEdges.ids.empty();
+    for (const auto& p : pieces.pieces)
+        topOnly &= (std::find(topEdges.ids.begin(),topEdges.ids.end(),p.id)!=topEdges.ids.end()) == (p.layerRim && p.layer==2);
+    Check(topOnly,"上側指定では下側と中央を保護する");
+    outside.invert = true;
+    const auto topInside = SelectPieces(pieces,outside,error);
+    for (const auto& p : pieces.pieces)
+        Check((std::find(topInside.ids.begin(),topInside.ids.end(),p.id)!=topInside.ids.end()) == (!p.layerRim && p.layer==2),
+              "反転でも外側の対象層を越えない");
+    outside.invert=false; outside.layer=1;
+    Check(SelectPieces(pieces,outside,error).ids.empty(),"層指定と外側範囲は共通部分を選ぶ");
+    outside.layer=-1;outside.rimSide=2;
+    const auto bottomEdges=SelectPieces(pieces,outside,error);
+    bool bottomOnly=!bottomEdges.ids.empty();
+    for (const auto& p:pieces.pieces)
+        bottomOnly &= (std::find(bottomEdges.ids.begin(),bottomEdges.ids.end(),p.id)!=bottomEdges.ids.end()) == (p.layerRim && p.layer==0);
+    Check(bottomOnly,"下側指定では最下層の側縁を選ぶ");
+    outside.rimLayers=0;outside.rimSide=0;outside.rimFalloff=1;
+    Check(SelectPieces(pieces,outside,error).ids==bothEdges.ids,"内側への減衰1で中央を残し外側を維持する");
+    outside.rimLayers=32;
+    Check(SelectPieces(pieces,outside,error).ids==bothEdges.ids,"対象層数が実際より多くても減衰の内端を維持する");
+    outside.rimLayers=0;
+    outside.rimFalloff=0;outside.fraction=.25f;
+    const auto fewer=SelectPieces(pieces,outside,error);
+    outside.fraction=.75f;
+    const auto more=SelectPieces(pieces,outside,error);
+    Check(std::all_of(fewer.ids.begin(),fewer.ids.end(),[&](auto id){return std::find(more.ids.begin(),more.ids.end(),id)!=more.ids.end();}),
+          "選択率を増やすと既存の欠けを保って追加する");
+    outside.rimLayers=-1;SelectPieces(pieces,outside,error);Check(!error.empty(),"負の対象層数を拒否する");
+    outside.rimLayers=1;outside.rimFalloff=std::numeric_limits<float>::quiet_NaN();
+    SelectPieces(pieces,outside,error);Check(!error.empty(),"非有限の内側減衰を拒否する");
+    Node persisted;persisted.kind=NodeKind::PieceSelect;
+    outside.rimFalloff=.65f;outside.rimSide=2;outside.rimLayers=2;persisted.settings=outside;
+    Node restoredSelection;restoredSelection.kind=NodeKind::PieceSelect;
+    io::ReadPieceSettings(restoredSelection,io::WritePieceSettings(persisted));
+    Check(io::WritePieceSettings(restoredSelection)==io::WritePieceSettings(persisted),"外側選択の設定をJSONで保持する");
+    io::ReadPieceSettings(restoredSelection,nlohmann::json{{"mode",5}});
+    const auto& legacy=std::get<PieceSelectSettings>(restoredSelection.settings);
+    Check(legacy.rimLayers==0 && legacy.rimFalloff==0,"旧Rimは全層の選択を維持する");
     // 先頭の板を除いても、残った親のローカル点と子IDは変わらない。
     auto filteredLayers=layers;filteredLayers.pieces.erase(filteredLayers.pieces.begin());RefreshPieceFingerprint(filteredLayers);
     const auto filteredPoints=ScatterPiecePoints(filteredLayers,scatter,error);

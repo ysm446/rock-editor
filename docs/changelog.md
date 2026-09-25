@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-26 05:44
+更新日時: 2026-09-26 05:59
 
 ## 未リリース
+
+- Piece Select を選ぶと選択結果を自動表示し、選択片・未選択の候補・対象外を色分けするようにした。境界線、層別の選択数、削除後の比較、表示上だけ板を離す操作を追加。Rim で上側・下側・両側から対象層数を指定し、内側ほど欠けを弱くできる。サンプルは `examples/layered-pieces/outer-layer-chipping.rockscene`。
 
 - Layered Boxes を追加し、薄板を並べた Pieces から岩を作れるようにした。Scatter Points / Voronoi Fracture の複数ピース入力、面内の点配置、Piece Select の側縁（Rim）・層指定に対応。板ごとの輪郭を欠いて、ボリューム化せずに出力できる。サンプルは `examples/layered-pieces/`。
 
