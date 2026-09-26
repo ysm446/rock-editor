@@ -120,9 +120,9 @@ void RunMeshVolumeTests() {
             torus.positions.push_back({float((2 + .7 * std::cos(b)) * std::cos(a)), float(.7 * std::sin(b)),
                                        float((2 + .7 * std::cos(b)) * std::sin(a))});
             auto i = u * section + v, j = ((u + 1) % around) * section + v,
-                 k = ((u + 1) % around) * section + (v + 1) % section, l = u * section + (v + 1) % section;
+                 k = ((u + 1) % around) * section + (v + 1) % section, m = u * section + (v + 1) % section;
             torus.triangles.push_back({i, k, j});
-            torus.triangles.push_back({i, l, k});
+            torus.triangles.push_back({i, m, k});
         }
     auto ring = MeshToVolume(torus, {32}, error);
     Check(error.empty() && !ring.values.empty(), "closed mesh with a through hole converts");
@@ -137,9 +137,9 @@ void RunMeshVolumeTests() {
     Append(separated, box, {2, 0, 0});
     auto islands = MeshToVolume(separated, {32}, error);
     for (auto method : {VolumeMeshingMethod::MarchingTetrahedra, VolumeMeshingMethod::DualContouring}) {
-        auto surface = VolumeSurface(islands, error, method);
-        MeshInfo info;
-        Check(error.empty() && InspectMesh(surface, info) && info.closed && info.components == 2,
+        auto islandSurface = VolumeSurface(islands, error, method);
+        MeshInfo islandInfo;
+        Check(error.empty() && InspectMesh(islandSurface, islandInfo) && islandInfo.closed && islandInfo.components == 2,
               "both surface methods preserve separated mesh components");
     }
     auto open = box;
