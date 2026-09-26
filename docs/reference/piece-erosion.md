@@ -1,11 +1,11 @@
 # 隣接面積によるピースの侵食
 
 作成日時: 2026-09-26 06:25
-更新日時: 2026-09-26 17:21
+更新日時: 2026-09-26 17:29
 
 ## 使い方
 
-Voronoi Fracture の Pieces を Piece Select へ接続し、**Peel — 外周から侵食** にする。Selection を Piece Filter / Delete へ渡して取り除く。
+Voronoi Fracture の Pieces を Piece Select へ接続し、**外周から順に欠く**（Peel） にする。Selection を Piece Filter / Delete へ渡して取り除く。
 
 普段の操作は **欠けの進行（0〜100%）・ばらつき・別の欠け方を試す** の3つ。進行を右へ動かすと同じ削除順の続きを選び、左へ戻すと以前の形に戻る。ばらつき0では面積比を優先し、同点はID順。「別の欠け方を試す」はSeedを1つ進める。進行操作ではSeedを変えない。自動再生は含まない。
 

@@ -64,32 +64,14 @@ void Application::DrawPieceSettings(graph::Node &node) {
         // 行の数は選別方法だけで決まり、非同期評価の開始・終了ではスライダーの位置が動かない。
         ui::SectionHeader("選び方");
         if (ui::BeginPropertyTable("pieceSelectMode")) {
-            const char *modes[] = {"Manual — 手動ID", "Outer — 外面に接する片", "Region — 重心の範囲",
-                                   "Volume — 体積", "Random — ランダム", "Rim — 元の板の側縁", "Peel — 外周から侵食"};
+            const char *modes[] = {"手動で選ぶ", "外面に接する片を選ぶ", "重心の範囲で選ぶ",
+                                   "体積で選ぶ", "ランダムに選ぶ", "元の板の縁から選ぶ", "外周から順に欠く"};
             int mode = int(selection->mode);
             if (ui::PropertyCombo("選別方法", &mode, modes, 7, 1)) {
                 selection->mode = geometry::PieceSelectMode(mode);
                 changed = true;
                 m_pieceSelectionEditing = false;
             }
-            ui::PropertyLabel("プリセット", "選別方法と条件をまとめて設定します。");
-            if (ImGui::Button("縁の欠け")) {
-                selection->mode = geometry::PieceSelectMode::Rim;
-                selection->layer = -1; selection->rimLayers = 1; selection->rimSide = 0;
-                selection->rimFalloff = 0; selection->fraction = .75f; selection->invert = false;
-                m_pieceSelectionEditing = false; changed = true;
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Rim：外側の板の縁に接する片を選びます。");
-            ImGui::SameLine();
-            if (ImGui::Button("外周の侵食")) {
-                selection->mode = geometry::PieceSelectMode::Peel;
-                selection->layer = -1; selection->rimLayers = 0; selection->rimSide = 0;
-                selection->rimFalloff = 0; selection->fraction = .3f; selection->invert = false;
-                selection->peelNoise = .15f; selection->protectCore = true;
-                m_pieceSelectionEditing = false; changed = true;
-            }
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Peel：外周から内側へ順に欠けていきます。");
-            ui::PropertyEnd();
             ui::EndPropertyTable();
         }
 
