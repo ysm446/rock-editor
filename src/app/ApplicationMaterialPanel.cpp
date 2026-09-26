@@ -139,18 +139,31 @@ void Application::DrawMaterialContextMenu(compositor::MaterialAssetId target) {
         ImGui::Separator();
     }
 
-    if (ImGui::MenuItem("追加")) {
-        m_materialLibrary.Add("マテリアル " + std::to_string(assets.size() + 1));
+    // 作ったマテリアルは共有アセットなので、アセット欄の「マテリアルを作成」と同じく
+    // その場で置き場所を決めてファイルへ書く。**置き場所が無いままだとアセット欄に出ず、**
+    // 次の保存でルートの Materials/ へ回されるため、作れていないように見える。
+    const auto placeNewMaterial = [&](compositor::MaterialAssetId id, const std::filesystem::path& directory) {
+        compositor::MaterialAsset* created = m_materialLibrary.FindMutable(id);
+        if (created == nullptr) return;
+        if (created->layerMaterial) created->layerMaterial->name = created->name;
+        created->assetPath = m_workspace.UniquePath(directory, created->name,
+                                                    created->layerMaterial ? ".tglayer" : ".rockmat");
         m_selectedMaterial = static_cast<int>(assets.size()) - 1;
         m_scrollToSelectedMaterial = true;
+        m_pendingAssetsSave = true;
         MarkDocumentChanged();
+        // 追加で一覧の配列が確保し直されると、上で取った asset は無効になる。この後の項目のために取り直す。
+        asset = m_materialLibrary.Find(target);
+    };
+    if (ImGui::MenuItem("追加")) {
+        placeNewMaterial(m_materialLibrary.Add("マテリアル " + std::to_string(assets.size() + 1)), m_assetDirectory);
     }
     if (asset != nullptr) {
         if (ImGui::MenuItem("複製")) {
-            m_materialLibrary.Duplicate(*asset);
-            m_selectedMaterial = static_cast<int>(assets.size()) - 1;
-            m_scrollToSelectedMaterial = true;
-            MarkDocumentChanged();
+            // 元のファイルと同じフォルダへ置く。元がまだファイルを持たなければ、いま開いているフォルダ。
+            const std::filesystem::path directory =
+                asset->assetPath.empty() ? m_assetDirectory : asset->assetPath.parent_path();
+            placeNewMaterial(m_materialLibrary.Duplicate(*asset), directory);
         }
         if (ImGui::MenuItem("削除")) {
             // その場で消すと、この後の一覧描画が erase 済みの要素を読んでしまう。
@@ -327,6 +340,18 @@ void Application::DrawMaterialSphereWindow() {
     // スクロールするのは下（プロパティ）だけ。
     ImGui::SetNextWindowSize(ImVec2(ui::Scaled(420.0f), ui::Scaled(720.0f)),
                              ImGuiCond_FirstUseEver);
+    // レイヤーマテリアルは左右 2 区画で並べるので、縦長の 1 列ぶんの幅では両方が潰れる。
+    // 出している間だけ窓の幅の下限を上げる（普通のマテリアルに戻れば縮められる）。
+    {
+        const auto& entries = m_materialLibrary.Entries();
+        const bool layerShown =
+            !entries.empty() &&
+            entries[static_cast<size_t>(std::clamp(m_selectedMaterial, 0, static_cast<int>(entries.size()) - 1))]
+                .layerMaterial.has_value();
+        if (layerShown) {
+            ImGui::SetNextWindowSizeConstraints(ImVec2(ui::Scaled(760.0f), 0.0f), ImVec2(FLT_MAX, FLT_MAX));
+        }
+    }
     if (!ImGui::Begin("マテリアルプレビュー", &m_showMaterialSphere,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
         ImGui::End();
@@ -347,27 +372,19 @@ void Application::DrawMaterialSphereWindow() {
     compositor::MaterialAsset& asset =
         *m_materialLibrary.FindMutable(assets[static_cast<size_t>(index)].id);
 
-    // --- 上下 2 区画 ----------------------------------------------------------
-    // 上が球、下がプロパティ。**スクロールするのは下だけ。**
-    // 上は**幅に合わせた正方形**なので、窓を広げれば球も大きくなり、余白が残らない。
-    const float paneSize = asset.layerMaterial ? std::min(PreviewPaneSize(), ui::Scaled(240.0f)) : PreviewPaneSize();
-
-    // --- 球 ------------------------------------------------------------------
-    ImGui::BeginChild("materialSpherePane", ImVec2(0.0f, paneSize), ImGuiChildFlags_None,
-                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    {
-        // 横長の窓では幅より高さのほうが小さいので、そのときだけ横に余白が出る。
-        // 余った幅は左右へ分けて、球を中央に置く。
-        const float sphereSize =
-            std::max(std::min(ImGui::GetContentRegionAvail().x, paneSize), ui::Scaled(32.0f));
+    // --- プレビューの画像 ------------------------------------------------------
+    // size 四方の正方形に描き、ドラッグで回す・L + ドラッグで光源・ホイールで寄る。
+    // 置く区画はスクロールさせない（`NoScrollWithMouse`）ので、ホイールをズームへ回せる。
+    const auto drawPreviewImage = [&](float size) {
+        size = std::max(size, ui::Scaled(32.0f));
+        // 区画が正方形より広いときは、余った幅を左右へ分けて中央に置く。
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
-                             std::max(0.0f, (ImGui::GetContentRegionAvail().x - sphereSize) * 0.5f));
+                             std::max(0.0f, (ImGui::GetContentRegionAvail().x - size) * 0.5f));
         const ImVec2 min = ImGui::GetCursorScreenPos();
-        const ImVec2 max(min.x + sphereSize, min.y + sphereSize);
+        const ImVec2 max(min.x + size, min.y + size);
 
         // 画像より先に ID を持つアイテムを置く（サムネイルと同じ作法）。
-        ImGui::InvisibleButton("##materialSphere", ImVec2(sphereSize, sphereSize),
-                               ImGuiButtonFlags_MouseButtonLeft);
+        ImGui::InvisibleButton("##materialSphere", ImVec2(size, size), ImGuiButtonFlags_MouseButtonLeft);
         // L + 左ドラッグは光源の向き、それ以外の左ドラッグは視点を回す（ビューポートと同じ割り当て）。
         // 動かすのはプレビュー専用の向きで、シーンの太陽は変えない。
         renderer::LightSettings previewLight = MaterialPreviewLight();
@@ -380,9 +397,6 @@ void Application::DrawMaterialSphereWindow() {
             const ImVec2 delta = ImGui::GetIO().MouseDelta;
             m_materialSphere.Orbit(delta.x * 0.35f, delta.y * 0.35f);
         }
-        // **寄るのはホイール。** この区画はスクロールしない（`NoScrollWithMouse`）ので、
-        // ビューポートと同じようにホイールをズームへ回せる。
-        // スクロールするのは下のプロパティの区画だけ。
         if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
             m_materialSphere.Zoom(ImGui::GetIO().MouseWheel);
         }
@@ -396,51 +410,90 @@ void Application::DrawMaterialSphereWindow() {
                          DirectX::XMFLOAT3{0.0f, 0.0f, 0.0f}, m_materialSphere.GizmoRadius(), min, max);
         ImGui::GetWindowDrawList()->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border),
                                             ImGui::GetStyle().FrameRounding, 0, ui::Scaled(1.0f));
-    }
-    ImGui::EndChild();
+    };
 
-    ImGui::Separator();
-
-    // --- プロパティ（この区画だけスクロールする）------------------------------
-    ImGui::BeginChild("materialPropertyPane", ImVec2(0.0f, 0.0f));
-    ui::HintText("ドラッグで回す / ホイールで寄る / L + ドラッグで光源の向き（プレビューだけ）");
-
-    // 表示だけの設定。マテリアルの設定とは区切り線で分ける。
-    if (ui::BeginPropertyTable("materialSphereViewRows")) {
-        const char* shapes[] = {"球", "平面"};
-        if (ui::PropertyCombo("形", &m_materialSphere.Shape(), shapes, 2, 0, "プレビューの形。マテリアルには保存しない")) {
+    // --- 表示だけの設定 --------------------------------------------------------
+    // どれもマテリアルには保存しない。マテリアルの設定とは区画か区切り線で分ける。
+    const auto drawViewSettings = [&]() {
+        ui::HintText("ドラッグで回す / ホイールで寄る / L + ドラッグで光源の向き（プレビューだけ）");
+        if (ui::BeginPropertyTable("materialSphereViewRows")) {
+            const char* shapes[] = {"球", "平面"};
+            if (ui::PropertyCombo("形", &m_materialSphere.Shape(), shapes, 2, 0, "プレビューの形。マテリアルには保存しない")) {
+                m_materialSphere.ResetView();
+            }
+            ui::PropertyFloat("タイル", &m_materialSphere.UvScale(), 0.25f, 8.0f, 2.0f,
+                              "球は 1 周、平面は一辺に並べるマップの数。マテリアルには保存しない", "%.2f");
+            ui::PropertyFloat("大きさ (m)", &m_materialSphere.SizeMeters(), 0.1f, 10.0f, 1.0f,
+                              "球は直径、平面は一辺。変位の高さをこれと比べて描く。マテリアルには保存しない", "%.2f");
+            ui::PropertyFloat("変位 (m)", &m_materialSphere.DisplacementMeters(), 0.0f, 0.5f, 0.0f,
+                              "素材のハイト 0〜1 の差を、この高さの凹凸にして見せる。0 で変位しない。"
+                              "このプレビューだけの表示で、ノードの計算やビューポートの形は変わらない", "%.3f");
+            ui::EndPropertyTable();
+        }
+        if (ui::Button("視点を戻す", ui::kWideButtonWidth)) {
             m_materialSphere.ResetView();
         }
-        ui::PropertyFloat("タイル", &m_materialSphere.UvScale(), 0.25f, 8.0f, 2.0f,
-                          "球は 1 周、平面は一辺に並べるマップの数。マテリアルには保存しない", "%.2f");
-        ui::PropertyFloat("大きさ (m)", &m_materialSphere.SizeMeters(), 0.1f, 10.0f, 1.0f,
-                          "球は直径、平面は一辺。変位の高さをこれと比べて描く。マテリアルには保存しない", "%.2f");
-        ui::PropertyFloat("変位 (m)", &m_materialSphere.DisplacementMeters(), 0.0f, 0.5f, 0.0f,
-                          "素材のハイト 0〜1 の差を、この高さの凹凸にして見せる。0 で変位しない。"
-                          "このプレビューだけの表示で、ノードの計算やビューポートの形は変わらない", "%.3f");
-        ui::EndPropertyTable();
-    }
-    if (ui::Button("視点を戻す", ui::kWideButtonWidth)) {
-        m_materialSphere.ResetView();
-    }
-    ImGui::SameLine();
-    // 一度も動かしていないときはシーンの太陽のままなので、押しても変わらない。
-    ImGui::BeginDisabled(!m_materialPreviewLightCustom);
-    if (ui::Button("光源を戻す", ui::kWideButtonWidth)) {
-        m_materialPreviewLightCustom = false;
-    }
-    ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort)) {
-        ImGui::SetTooltip("プレビューの光源をシーンの太陽の向きへ戻す");
-    }
+        ImGui::SameLine();
+        // 一度も動かしていないときはシーンの太陽のままなので、押しても変わらない。
+        ImGui::BeginDisabled(!m_materialPreviewLightCustom);
+        if (ui::Button("光源を戻す", ui::kWideButtonWidth)) {
+            m_materialPreviewLightCustom = false;
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort)) {
+            ImGui::SetTooltip("プレビューの光源をシーンの太陽の向きへ戻す");
+        }
+    };
 
-    ImGui::Separator();
+    const auto drawProperties = [&]() {
+        if (DrawMaterialProperties(asset)) {
+            m_materialLibrary.MarkThumbnailDirty(asset.id);
+            MarkDocumentChanged();
+        }
+    };
 
-    if (DrawMaterialProperties(asset)) {
-        m_materialLibrary.MarkThumbnailDirty(asset.id);
-        MarkDocumentChanged();
+    if (asset.layerMaterial) {
+        // --- レイヤーマテリアル: 左右 2 区画 --------------------------------------
+        // 左にプレビューと表示の設定、右にレイヤー一覧と選んだ層の設定。
+        // 層の一覧と設定は縦に長いので、**スクロールするのは右だけ**にして、
+        // 設定を触りながらプレビューを見続けられるようにする。境界はドラッグで動かせる。
+        const ImVec2 available = ImGui::GetContentRegionAvail();
+        const float margin = ui::Scaled(ui::kSplitterMargin);
+        const float usable = std::max(2.0f, available.x - margin * 2.0f - ui::Scaled(ui::kSplitterGrabWidth));
+        const float minimum = std::min(ui::Scaled(160.0f), usable * 0.5f);
+        float previewWidth = std::clamp(ui::Scaled(m_layerPreviewPaneWidth), minimum, usable - minimum);
+        ImGui::BeginChild("layerPreviewPane", ImVec2(previewWidth, available.y), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoScrollWithMouse);
+        drawPreviewImage(ImGui::GetContentRegionAvail().x);
+        drawViewSettings();
+        ImGui::EndChild();
+        ImGui::SameLine(0.0f, margin);
+        ui::VerticalSplitter("layerPreviewSplitter", &previewWidth, minimum, usable - minimum, available.y);
+        m_layerPreviewPaneWidth = previewWidth / ui::Scaled(1.0f);
+        ImGui::SameLine(0.0f, margin);
+        ImGui::BeginChild("materialPropertyPane", ImVec2(0.0f, available.y));
+        drawProperties();
+        ImGui::EndChild();
+    } else {
+        // --- 上下 2 区画 ----------------------------------------------------------
+        // 上が球、下がプロパティ。**スクロールするのは下だけ。**
+        // 上は**幅に合わせた正方形**なので、窓を広げれば球も大きくなり、余白が残らない。
+        const float paneSize = PreviewPaneSize();
+        ImGui::BeginChild("materialSpherePane", ImVec2(0.0f, paneSize), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        // 横長の窓では幅より高さのほうが小さいので、そのときだけ横に余白が出る。
+        drawPreviewImage(std::min(ImGui::GetContentRegionAvail().x, paneSize));
+        ImGui::EndChild();
+
+        ImGui::Separator();
+
+        // --- プロパティ（この区画だけスクロールする）------------------------------
+        ImGui::BeginChild("materialPropertyPane", ImVec2(0.0f, 0.0f));
+        drawViewSettings();
+        ImGui::Separator();
+        drawProperties();
+        ImGui::EndChild();
     }
-    ImGui::EndChild();
 
     ImGui::End();
 }

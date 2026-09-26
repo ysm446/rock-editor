@@ -81,9 +81,6 @@ ConstantBuffer<SphereConstants> g_sphere : register(b1);
 // 明るさは天球を出しているときと同じくらいに見える程度で足りる。
 static const float3 kFallbackBackground = float3(0.02f, 0.022f, 0.026f);
 
-// 平面の変位で、下に付ける厚み（変位の幅に足す分）。平面を斜めから見たとき、
-// 凹凸の高さが側面の段として読めるようにする。
-static const float kPlaneBaseThickness = 0.04f;
 // 高さの面を探すレイの刻み数と、当たった区間を詰める回数。
 static const uint kMarchSteps = 128;
 static const uint kRefineSteps = 8;
@@ -187,10 +184,10 @@ float Inside(float3 p)
     {
         return length(p) - 1.0f - Displacement(ObjectUv(p));
     }
-    // 平面は一辺 2 の板。上面が変位した面、下面は変位の最も低い所よりさらに下。
-    const float bottom = 0.5f * g_sphere.displacement + kPlaneBaseThickness;
+    // 平面は一辺 2 の正方形の範囲だけにある高さの面。面より下を中とする。
+    // 側面と底面は描かない（MarchSurface は上から面へ入った所だけを当たりにする）。
     const float top = p.y - Displacement(ObjectUv(p));
-    return max(max(top, -p.y - bottom), max(abs(p.x), abs(p.z)) - 1.0f);
+    return max(top, max(abs(p.x), abs(p.z)) - 1.0f);
 }
 
 // 変位した形の法線。内外の値の勾配から求める。
@@ -234,8 +231,7 @@ bool Bounds(float3 origin, float3 direction, out float t0, out float t1)
         }
         return t1 > t0;
     }
-    const float bottom = 0.5f * g_sphere.displacement + kPlaneBaseThickness;
-    const float3 lo = float3(-1.0f, -bottom, -1.0f) - 1e-3f;
+    const float3 lo = float3(-1.0f, -0.5f * g_sphere.displacement, -1.0f) - 1e-3f;
     const float3 hi = float3(1.0f, 0.5f * g_sphere.displacement, 1.0f) + 1e-3f;
     // 軸と平行なレイで 0 除算にならないよう、極小値で置き換えてから逆数を取る。
     const float3 inv = 1.0f / select(abs(direction) > 1e-8f, direction, 1e-8f);
@@ -259,15 +255,20 @@ bool MarchSurface(float3 origin, float3 direction, out float tHit)
     }
     const float step = (t1 - t0) / float(kMarchSteps);
     float previous = t0;
-    if (Inside(origin + direction * t0) < 0.0f)
-    {
-        tHit = t0;  // 囲みに入った所がもう中（平面の側面など）。
-        return true;
-    }
+    // **外から中へ入った所だけを当たりにする。** 囲みに入った所がもう中なのは、
+    // 平面の縁から面の下を覗いたとき（側面にあたる所）なので、描かずに先へ進む。
+    bool wasInside = Inside(origin + direction * t0) < 0.0f;
     [loop] for (uint i = 1; i <= kMarchSteps; ++i)
     {
         const float t = t0 + step * float(i);
-        if (Inside(origin + direction * t) < 0.0f)
+        const bool inside = Inside(origin + direction * t) < 0.0f;
+        if (inside && wasInside)
+        {
+            previous = t;
+            continue;
+        }
+        wasInside = inside;
+        if (inside)
         {
             // 外だった previous と中だった t の間を二分で詰める。
             float lo = previous, hi = t;
@@ -276,6 +277,14 @@ bool MarchSurface(float3 origin, float3 direction, out float tHit)
                 const float mid = 0.5f * (lo + hi);
                 if (Inside(origin + direction * mid) < 0.0f) hi = mid;
                 else lo = mid;
+            }
+            // 平面では、正方形の外から面の下へ横に入った所（側面）も外から中への境目になる。
+            // 当たりは上の面の上にある所だけにする。
+            const float3 hitPoint = origin + direction * hi;
+            if (g_sphere.shape != 0 && hitPoint.y - Displacement(ObjectUv(hitPoint)) < -1e-3f)
+            {
+                previous = t;
+                continue;
             }
             tHit = hi;
             return true;
@@ -470,7 +479,7 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
     else if (abs(dot(normalGeometric, tangentGuide)) > 0.99f)
     {
-        tangentGuide = float3(0.0f, 0.0f, -1.0f);  // 平面の ±X 側面
+        tangentGuide = float3(0.0f, 0.0f, -1.0f);  // 平面の凹凸で ±X を向いた急な斜面
     }
     const float3 tangent = normalize(tangentGuide - normalGeometric * dot(normalGeometric, tangentGuide));
     // 赤道・経度 0 では T=(0,0,1)、N=(1,0,0)、B=N×T=(0,-1,0)（v が下へ増える向き）。

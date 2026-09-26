@@ -663,6 +663,8 @@ private:
     // マテリアルプレビューの L + ドラッグ。**シーンの太陽とは別に持つ。**
     // 一度も動かしていなければシーンの太陽の向きに合わせ、「光源を戻す」でそこへ戻る。
     LightInteraction m_materialPreviewLightInteraction;
+    // レイヤーマテリアルを出しているときの、プレビュー窓の左（プレビュー）の幅。96 DPI 基準。
+    float m_layerPreviewPaneWidth = 320.0f;
     bool m_materialPreviewLightCustom = false;
     float m_materialPreviewLightAzimuth = 0.0f;
     float m_materialPreviewLightElevation = 0.0f;
