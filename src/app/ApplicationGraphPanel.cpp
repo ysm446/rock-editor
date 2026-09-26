@@ -359,6 +359,11 @@ void Application::SyncMeshGraph() {
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
     const std::string geometryKey = std::to_string(m_graph.Revision()) + ":" + std::to_string(m_pieceEpoch) + ":" + std::to_string(previewMeshNode) + ":" + std::to_string(int(m_settings.Display().sdfPreviewMethod));
     const std::string taskKey = geometryKey + ":" + std::to_string(m_selectedGraphNode);
+    // 法線は頂点に焼くので、シェーディングの設定が変わったら評価し直した結果を受け取るまで待つ。
+    // キーは形状だけで決まるので、消しておかないと次のフレームで抜けて結果を取りこぼす。
+    if (m_meshGraphSmoothShading != m_settings.Display().smoothShading ||
+        m_meshGraphSmoothShadingAngle != m_settings.Display().smoothShadingAngle)
+        m_pieceCompletedKey.clear();
     if ((!hasPieces || m_pieceCompletedKey == taskKey) && m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
         m_meshGraphSmoothShadingAngle == m_settings.Display().smoothShadingAngle &&
