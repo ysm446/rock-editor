@@ -1069,6 +1069,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeTransform, "Volume Transform — ボリュームを移動・回転・拡大");
         addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
+        addNodeMenuItem(graph::NodeKind::VolumeClip, "Volume Clip — 水平な平面で切り、下（または上）を捨てる");
         addNodeMenuItem(graph::NodeKind::ParallelPlanes, "Parallel Planes — 向きと間隔から平行な構造面を定義");
         addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 構造面や点群の境界に沿って割れ目を彫る");
         addNodeMenuItem(graph::NodeKind::VolumeNoise, "Volume Noise — 表面をノイズで削り、直線的な面を崩す");
@@ -1367,6 +1368,24 @@ void Application::DrawGraphPanel() {
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *wear = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* clip = std::get_if<geometry::VolumeClipSettings>(&selected->settings)) {
+        auto edited = *clip;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeClipRows")) {
+            changed |= ui::PropertyFloat("高さ (m)", &edited.height, -10, 10, 0,
+                                         "切る水平な平面の高さ（ワールドの Y）です。");
+            changed |= ui::PropertyBool("反転", &edited.invert, false,
+                                        "オフで平面より下を、オンで平面より上を捨てます。");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("水平な平面で形を切り、片側を捨てます。切り口は平らな面になるので、地面に据える底面を作れます。"
+                     "切り離された塊もそのまま残します。");
+        if (changed) {
+            edited.height = std::clamp(edited.height, -100000.0f, 100000.0f);
+            *clip = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

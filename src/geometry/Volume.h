@@ -212,6 +212,11 @@ struct VolumeCloseSettings {
     int samples = 32;
     float softness = .1f;
 };
+// Volume Clip。水平な平面（高さ Y）で切り、片側を捨てる。既定は平面より下を捨てる。
+struct VolumeClipSettings {
+    float height = 0;     // 切る平面の高さ (m)。-100000～100000。
+    bool invert = false;  // 真なら平面より上を捨てる。
+};
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
 // 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。
@@ -258,6 +263,8 @@ VolumeGrid TerraceVolume(const VolumeGrid& grid, const VolumeTerraceSettings& se
 // 格子（範囲・セル間隔）は入力のまま。内部を減らすことはない。埋めた所の距離は近似になる。
 // 埋めた結果として閉じ込められた空洞も埋める。
 VolumeGrid CloseVolume(const VolumeGrid& grid, const VolumeCloseSettings& settings, std::string& error);
+// 格子（範囲・セル間隔）は入力のまま。切り口は平らな面になる。切り離された塊もそのまま残す。
+VolumeGrid ClipVolume(const VolumeGrid& grid, const VolumeClipSettings& settings, std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
 Mesh VolumeSurface(const VolumeGrid& grid, std::string& error,
                    VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra);

@@ -1373,6 +1373,33 @@ VolumeGrid EdgeWearVolume(const VolumeGrid& g, const VolumeEdgeWearSettings& s, 
     FillNewVoids(out, g.values);
     return out;
 }
+VolumeGrid ClipVolume(const VolumeGrid& g, const VolumeClipSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    if (!std::isfinite(s.height) || std::abs(s.height) > 100000) {
+        error = "高さは -100000～100000 m にしてください";
+        return {};
+    }
+    VolumeGrid out = g;
+    const float threshold = g.spacing * 1e-4f;
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const size_t index = out.Index(x, y, z);
+        // 捨てる側で正になる平面までの距離。半空間との交差なので最大値を取る。
+        const float above = g.Position(x, y, z).y - s.height;
+        const float value = std::max(g.values[index], s.invert ? above : -above);
+        // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
+        out.values[index] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
+    if (!inside) {
+        error = "切った結果に内部が残りません。高さか反転を見直してください";
+        return {};
+    }
+    return out;
+}
 VolumeGrid TerraceVolume(const VolumeGrid& g, const VolumeTerraceSettings& s, std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {

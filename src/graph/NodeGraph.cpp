@@ -84,7 +84,7 @@ constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, Val
 // 1つのマスクの加工。出力の形とメッシュは入力のマスクのもの。
 constexpr std::array<PinDefinition, 2> kMaskFilterPins = {{{PinKind::Input, ValueType::Mask, "Mask"},
     {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 39> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 40> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -117,6 +117,7 @@ constexpr std::array<NodeDefinition, 39> kNodeDefinitions = {{
     {NodeKind::VolumeTerrace, "volumeTerrace", "Volume Terrace", kVolumeTransformPins},
     {NodeKind::VolumeClose, "volumeClose", "Volume Close", kVolumeTransformPins},
     {NodeKind::VolumeEdgeWear, "volumeEdgeWear", "Volume Edge Wear", kVolumeTransformPins},
+    {NodeKind::VolumeClip, "volumeClip", "Volume Clip", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::BaseRock, "baseRock", "Base Shape", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
@@ -163,7 +164,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::VolumeTransform || kind == NodeKind::VolumeBoolean ||
            kind == NodeKind::PlaneCuts || kind == NodeKind::VolumeCrack ||
            kind == NodeKind::VolumeNoise || kind == NodeKind::VolumeSmooth || kind == NodeKind::VolumeTerrace ||
-           kind == NodeKind::VolumeClose || kind == NodeKind::VolumeEdgeWear ||
+           kind == NodeKind::VolumeClose || kind == NodeKind::VolumeEdgeWear || kind == NodeKind::VolumeClip ||
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
@@ -483,6 +484,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeCloseSettings{};
     } else if (kind == NodeKind::VolumeEdgeWear) {
         node.settings = geometry::VolumeEdgeWearSettings{};
+    } else if (kind == NodeKind::VolumeClip) {
+        node.settings = geometry::VolumeClipSettings{};
     } else if (kind == NodeKind::LayeredBoxes) {
         node.settings = geometry::LayeredBoxesSettings{};
     } else if (kind == NodeKind::ScatterPoints) {

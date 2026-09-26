@@ -97,6 +97,8 @@ enum class NodeKind : uint32_t {
     Remesh = 64,
     // Volume の凸な稜線と角だけを削る（角の摩耗）。
     VolumeEdgeWear = 65,
+    // Volume を水平な平面で切り、片側（既定は下）を捨てる。
+    VolumeClip = 71,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -205,7 +207,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::LayeredBoxesSettings, geometry::ParallelPlanesSettings, geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings, geometry::VolumeCloseSettings,
-                                  geometry::VolumeEdgeWearSettings,
+                                  geometry::VolumeEdgeWearSettings, geometry::VolumeClipSettings,
                                   geometry::DecimateSettings, geometry::RemeshSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,

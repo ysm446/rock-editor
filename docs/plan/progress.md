@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-26 19:39
+更新日時: 2026-09-26 23:53
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -83,6 +83,12 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 - 単体検証：1方向で6枚の板、2方向で36ブロック、間隔を広げて4枚、浅い割れ目のつながり、MT/DCの閉包、回転ガイド、再現性、境界条件、型、キャッシュ、Undo/Redo。Release / Debugのビルド・全CTest成功（Release約12秒、Debug約213秒）。
 - Release実アプリで `examples/parallel-planes/` の板状・交差節理・浅い割れ目を確認。検証画像は `build/parallel-planes-validation/`。設定・ピンID・接続の保存と再読み込み後の再保存が一致すること、旧Voronoiシーンの全リンクと既存ピンIDが保持されることを確認。実マウスでのプロパティ編集・チェックボックス・Undo/Redoは未確認。
 - 初版は構造と割れ方の確認用で、自然な岩の完成外観は未達。斜めの細い稜線には格子由来の段差がある。浅い割れ目でも外面に近い薄片が分離し得る。Volume Terraceは変更せず、局所剥離・面のうねり・構造に沿う風化と材質は次の段階とする。
+
+### 2026-09-26 Volume Clip（平面での切断）
+
+- `Volume Clip` を追加。仕様は [Volume Clip](../reference/volume-clip.md)。設定は高さ (m)・反転。保存名 `volumeClip`。名前はユーザーと相談して決めた。
+- 実装: `src/geometry/Volume.cpp` の `ClipVolume`。半空間との交差 `max(d, h − y)`。切り離された塊は残す。
+- 検証: `tests/VolumeClipTests.cpp`。Debug で全テスト成功。実アプリでの操作は未確認。
 
 ### 2026-09-22 Volume Edge Wear（角の摩耗）
 
