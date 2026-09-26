@@ -543,6 +543,12 @@ json WriteGraph(const graph::NodeGraph& graphData,
             const auto index = std::min<uint32_t>(static_cast<uint32_t>(combine->operation), 4);
             item["maskCombine"] = {{"operation", kOperations[index]}, {"mix", combine->mix}, {"low", combine->low},
                 {"high", combine->high}, {"gamma", combine->gamma}, {"invert", combine->invert}};
+        } else if (const auto* filter = std::get_if<geometry::MaskFilterSettings>(&node.settings)) {
+            static constexpr const char* kTypes[] = {"blur", "sharpen", "levels"};
+            const auto index = std::min<uint32_t>(static_cast<uint32_t>(filter->type), 2);
+            item["maskFilter"] = {{"type", kTypes[index]}, {"radius", filter->radius}, {"amount", filter->amount},
+                {"inputLow", filter->inputLow}, {"inputHigh", filter->inputHigh}, {"gamma", filter->gamma},
+                {"outputLow", filter->outputLow}, {"outputHigh", filter->outputHigh}, {"invert", filter->invert}};
         } else if (const auto* bake = std::get_if<graph::MaterialBakeSettings>(&node.settings)) {
             // ベイク結果は一時的なもので、保存しない。開き直したら未ベイクへ戻る。指紋だけ残すと、結果が無いのに
             // 「ベイク済み」と判定されるので、材質を書けないときは指紋も書かない。
@@ -865,6 +871,24 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.low = std::clamp(ReadFloat(*v, "low", settings.low), 0.f, .999f);
                     settings.high = std::clamp(ReadFloat(*v, "high", settings.high), settings.low + .001f, 1.f);
                     settings.gamma = std::clamp(ReadFloat(*v, "gamma", 1), .1f, 10.f);
+                    settings.invert = ReadBool(*v, "invert", false);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::MaskFilter) {
+                geometry::MaskFilterSettings settings;
+                if (const json* v = FindMember(item, "maskFilter"); v && v->is_object()) {
+                    const std::string type = ReadString(*v, "type");
+                    settings.type = type == "sharpen"  ? geometry::MaskFilterType::Sharpen
+                                  : type == "levels"   ? geometry::MaskFilterType::Levels
+                                                       : geometry::MaskFilterType::Blur;
+                    settings.radius = std::clamp(ReadFloat(*v, "radius", settings.radius), geometry::kMinMaskFilterRadius,
+                                                 geometry::kMaxMaskFilterRadius);
+                    settings.amount = std::clamp(ReadFloat(*v, "amount", settings.amount), 0.f, 4.f);
+                    settings.inputLow = std::clamp(ReadFloat(*v, "inputLow", settings.inputLow), 0.f, .999f);
+                    settings.inputHigh = std::clamp(ReadFloat(*v, "inputHigh", settings.inputHigh), settings.inputLow + .001f, 1.f);
+                    settings.gamma = std::clamp(ReadFloat(*v, "gamma", 1), .1f, 10.f);
+                    settings.outputLow = std::clamp(ReadFloat(*v, "outputLow", settings.outputLow), 0.f, 1.f);
+                    settings.outputHigh = std::clamp(ReadFloat(*v, "outputHigh", settings.outputHigh), 0.f, 1.f);
                     settings.invert = ReadBool(*v, "invert", false);
                 }
                 created.settings = settings;

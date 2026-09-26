@@ -134,6 +134,11 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* combine = std::get_if<geometry::MaskCombineSettings>(&node->settings)) {
         // 反転も画像に焼き込むので含める。入力（A / B）は下の Mask のピンの処理で辿る。
         add(combine->operation); add(combine->mix); add(combine->low); add(combine->high); add(combine->gamma); add(combine->invert);
+    } else if (const auto* maskFilter = std::get_if<geometry::MaskFilterSettings>(&node->settings)) {
+        // 反転も画像に焼き込むので含める。入力は下の Mask のピンの処理で辿る。
+        add(maskFilter->type); add(maskFilter->radius); add(maskFilter->amount); add(maskFilter->inputLow);
+        add(maskFilter->inputHigh); add(maskFilter->gamma); add(maskFilter->outputLow); add(maskFilter->outputHigh);
+        add(maskFilter->invert);
     } else if (const auto* apply = std::get_if<ApplyMaterialSettings>(&node->settings)) {
         add(apply->heightBlend); add(apply->heightBlendRange);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
@@ -152,8 +157,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
             // 形状マスクの画像は下流の結果（rock.maskImages）に残る。マスクのノードの設定と、その入力メッシュで決まる。
             // Mask Combine の入力（A / B）もここを通り、入力のマスクのキーをつなぐ。
             if (const auto* shape = graph.FindUpstreamNodeForPin(pin.id); shape && IsImageMaskNodeKind(shape->kind)) {
-                // Mask Combine は入力の反転を画像に焼き込むので、常に含める。
-                if (usesHeight || node->kind == NodeKind::Subdivide || node->kind == NodeKind::MaskCombine) add(ImageMaskInvert(*shape));
+                // Mask Combine / Mask Filter は入力の反転を画像に焼き込むので、常に含める。
+                if (usesHeight || node->kind == NodeKind::Subdivide || node->kind == NodeKind::MaskCombine ||
+                    node->kind == NodeKind::MaskFilter)
+                    add(ImageMaskInvert(*shape));
                 const auto maskKey = VolumeKey(graph, shape->id, heightKeys, depth + 1, false);
                 if (!maskKey) return std::nullopt;
                 add(maskKey->size()); key += *maskKey;
@@ -304,6 +311,26 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             auto image = geometry::CombineMasks(*result.rocks[0].previewMask, ImageMaskInvert(*a),
                                                 *second.rocks[0].previewMask, ImageMaskInvert(*b), *settings, error);
             if (!error.empty()) return finish(Failure(id, "Mask Combine", error));
+            result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
+            result.rocks[0].previewMaskInvert = false;
+        } else if (node->kind == NodeKind::MaskFilter) {
+            const auto* settings = std::get_if<geometry::MaskFilterSettings>(&node->settings);
+            const auto* source = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !source)
+                return finish(Failure(id, "Mask Filter", "MaskにShape Mask、Noise Mask、Deposition Mask、Mask CombineまたはMask Filterを接続してください"));
+            // Material Mask は面の中心で読む定数か画像で、UV空間の画像を持たない。
+            if (!IsImageMaskNodeKind(source->kind))
+                return finish(Failure(id, "Mask Filter", "Material Maskは加工できません。Shape Maskなど、UVの画像を作るマスクを接続してください"));
+            result = evaluate(source->id, depth + 1);
+            report(id, 0, 0);
+            if (!result.error.empty()) return finish(result);
+            if (result.rocks.size() != 1 || !result.rocks[0].previewMask)
+                return finish(Failure(id, "Mask Filter", "入力のマスクがありません"));
+            // 入力の反転は、キャッシュに残った評価結果ではなく、いまのノードの設定から読む（Shape Mask のキーに反転は入っていない）。
+            std::string error;
+            auto image = geometry::FilterMask(result.rocks[0].mesh, *result.rocks[0].previewMask, ImageMaskInvert(*source),
+                                              *settings, error, stop, [&](int p) { report(id, 0, p); });
+            if (!error.empty()) return finish(Failure(id, "Mask Filter", error));
             result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
             result.rocks[0].previewMaskInvert = false;
         } else if (node->kind == NodeKind::ApplyMaterial) {

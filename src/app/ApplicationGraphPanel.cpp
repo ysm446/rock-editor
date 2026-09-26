@@ -1088,6 +1088,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::NoiseMask, "Noise Mask — 3Dノイズでムラのマスクを作る");
         addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（遮蔽 / 上向き度 / 高さ / 曲率）");
         addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
+        addNodeMenuItem(graph::NodeKind::MaskFilter, "Mask Filter — マスクを加工（ぼかし / シャープ / レベル）");
         addNodeMenuItem(graph::NodeKind::MaterialBake, "Material Bake — UVへ材質を焼き付ける");
         ImGui::EndPopup();
     }
@@ -1972,6 +1973,58 @@ void Application::DrawGraphPanel() {
             edited.high = std::clamp(edited.high, edited.low + .001f, 1.0f);
             edited.gamma = std::clamp(edited.gamma, .1f, 10.0f);
             *combine = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* filter = std::get_if<geometry::MaskFilterSettings>(&selected->settings)) {
+        auto edited = *filter;
+        bool changed = false;
+        if (ui::BeginPropertyTable("maskFilterRows")) {
+            const char* types[] = {"ぼかし", "シャープ", "レベル"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 2);
+            if (ui::PropertyCombo("種類", &type, types, 3, 0)) {
+                edited.type = static_cast<geometry::MaskFilterType>(type);
+                changed = true;
+            }
+            if (edited.type == geometry::MaskFilterType::Levels) {
+                changed |= ui::PropertyFloat("入力の黒", &edited.inputLow, 0, 1, 0, "入力がこれ以下の所を出力の黒にします。");
+                changed |= ui::PropertyFloat("入力の白", &edited.inputHigh, 0, 1, 1, "入力がこれ以上の所を出力の白にします。");
+                changed |= ui::PropertyFloat("カーブ（ガンマ）", &edited.gamma, .1f, 10, 1,
+                                             "中間の階調を寄せます。1 で直線、大きいほど白い範囲が細く、小さいほど白い範囲が太くなります（値 ^ ガンマ）。",
+                                             "%.2f", ImGuiSliderFlags_Logarithmic);
+                changed |= ui::PropertyFloat("出力の黒", &edited.outputLow, 0, 1, 0, "黒をこの明るさで出します。");
+                changed |= ui::PropertyFloat("出力の白", &edited.outputHigh, 0, 1, 1, "白をこの明るさで出します。");
+            } else {
+                changed |= ui::PropertyFloat("半径 (m)", &edited.radius, geometry::kMinMaskFilterRadius, geometry::kMaxMaskFilterRadius, .03f,
+                                             "岩の表面での距離。UVの継ぎ目をまたいでつながります。", "%.3f", ImGuiSliderFlags_Logarithmic);
+                if (edited.type == geometry::MaskFilterType::Sharpen)
+                    changed |= ui::PropertyFloat("量", &edited.amount, 0, 4, 1, "ぼかした差を足し戻す強さ。0 で元のまま。");
+            }
+            changed |= ui::PropertyBool("反転", &edited.invert, false);
+            ui::EndPropertyTable();
+        }
+        switch (edited.type) {
+        case geometry::MaskFilterType::Sharpen:
+            ui::HintText("シャープ：半径の範囲の平均との差を強め、縁をくっきりさせます。量を上げすぎると縁に明暗の輪が出ます。");
+            break;
+        case geometry::MaskFilterType::Levels:
+            ui::HintText("レベル：入力の黒〜白を 0〜1 へ伸ばし、カーブを掛けてから、出力の黒〜白へ写します。ぼかしの後につなぐと、ぼけた縁を締められます。");
+            break;
+        default:
+            ui::HintText("ぼかし：岩の表面の上で、半径の範囲をなだらかに平均します。UVの継ぎ目をまたいでもつながります。");
+            break;
+        }
+        ui::HintText("MaskにShape Mask・Mask Combine・別のMask Filterなどを接続し、出力をApply Materialへつなぎます。"
+                     "選択中は、加工したマスクを白黒で貼って表示します。");
+        if (changed) {
+            edited.radius = std::clamp(edited.radius, geometry::kMinMaskFilterRadius, geometry::kMaxMaskFilterRadius);
+            edited.amount = std::clamp(edited.amount, 0.0f, 4.0f);
+            edited.inputLow = std::clamp(edited.inputLow, 0.0f, .999f);
+            edited.inputHigh = std::clamp(edited.inputHigh, edited.inputLow + .001f, 1.0f);
+            edited.gamma = std::clamp(edited.gamma, .1f, 10.0f);
+            edited.outputLow = std::clamp(edited.outputLow, 0.0f, 1.0f);
+            edited.outputHigh = std::clamp(edited.outputHigh, 0.0f, 1.0f);
+            *filter = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

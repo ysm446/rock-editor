@@ -88,4 +88,26 @@ struct MaskCombineSettings {
 // 出力の一辺は大きいほうの入力に合わせ、もう一方は線形補間で読む。失敗では空の画像を返し、error に理由を入れる。
 MaskImage CombineMasks(const MaskImage& a, bool invertA, const MaskImage& b, bool invertB,
                        const MaskCombineSettings& settings, std::string& error);
+
+// 1つのマスクの加工（Mask Filter）。保存は名前で行う（ProjectIo）。
+enum class MaskFilterType : uint32_t {
+    Blur = 0,     // 岩の表面の上でぼかす。UVの継ぎ目をまたいでつながる
+    Sharpen = 1,  // アンシャープマスク。元 + 量 × (元 − ぼかし)
+    Levels = 2,   // 入力の黒・白、カーブ、出力の黒・白
+};
+struct MaskFilterSettings {
+    MaskFilterType type = MaskFilterType::Blur;
+    float radius = .03f;  // ぼかし・シャープの半径（m、表面の3D距離）。ガウスの 2σ
+    float amount = 1;     // シャープの強さ。0〜4
+    // レベル。入力の low を 0、high を 1 へ伸ばし、^gamma を掛け、出力の low〜high へ写す。
+    float inputLow = 0, inputHigh = 1, gamma = 1, outputLow = 0, outputHigh = 1;
+    bool invert = false;  // Mask Combine と同じく画像に焼き込む
+    bool operator==(const MaskFilterSettings&) const = default;
+};
+inline constexpr float kMinMaskFilterRadius = .001f, kMaxMaskFilterRadius = 1.f;
+// mesh は input を作ったUV付きのメッシュ。ぼかし・シャープは各画素の表面の3D位置で近い画素を重み付き平均する。
+// invertInput は入力のマスクの「反転」（画像には掛かっていない分）。出力は input と同じ解像度で、
+// UVの島が無い画素は最も近い島の値で埋める。失敗・取消では空の画像を返し、error に理由を入れる。
+MaskImage FilterMask(const Mesh& mesh, const MaskImage& input, bool invertInput, const MaskFilterSettings& settings,
+                     std::string& error, std::stop_token stop = {}, const std::function<void(int)>& progress = {});
 }  // namespace rock::geometry

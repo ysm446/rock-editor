@@ -81,7 +81,10 @@ constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType
 // 2つのマスクの合成。A が基準（出力の形とメッシュは A 側）。
 constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, ValueType::Mask, "A"},
     {PinKind::Input, ValueType::Mask, "B"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 38> kNodeDefinitions = {{
+// 1つのマスクの加工。出力の形とメッシュは入力のマスクのもの。
+constexpr std::array<PinDefinition, 2> kMaskFilterPins = {{{PinKind::Input, ValueType::Mask, "Mask"},
+    {PinKind::Output, ValueType::Mask, "Mask"}}};
+constexpr std::array<NodeDefinition, 39> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -90,6 +93,7 @@ constexpr std::array<NodeDefinition, 38> kNodeDefinitions = {{
     {NodeKind::NoiseMask, "noiseMask", "Noise Mask", kShapeMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
     {NodeKind::MaskCombine, "maskCombine", "Mask Combine", kMaskCombinePins},
+    {NodeKind::MaskFilter, "maskFilter", "Mask Filter", kMaskFilterPins},
     {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
     {NodeKind::VoronoiFracture, "voronoiFracture", "Voronoi Fracture", kVoronoiPins},
     {NodeKind::PieceSelect, "pieceSelect", "Piece Select", kSelectPins},
@@ -168,7 +172,8 @@ bool IsMeshNodeKind(NodeKind kind) {
 }
 
 bool IsImageMaskNodeKind(NodeKind kind) {
-    return kind == NodeKind::ShapeMask || kind == NodeKind::NoiseMask || kind == NodeKind::DepositionMask || kind == NodeKind::MaskCombine;
+    return kind == NodeKind::ShapeMask || kind == NodeKind::NoiseMask || kind == NodeKind::DepositionMask || kind == NodeKind::MaskCombine ||
+           kind == NodeKind::MaskFilter;
 }
 
 bool ImageMaskInvert(const Node& node) {
@@ -512,6 +517,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::ShapeMaskSettings{};
     } else if (kind == NodeKind::MaskCombine) {
         node.settings = geometry::MaskCombineSettings{};
+    } else if (kind == NodeKind::MaskFilter) {
+        node.settings = geometry::MaskFilterSettings{};
     } else if (kind == NodeKind::MaterialBake) {
         node.settings = MaterialBakeSettings{};
     } else if (kind == NodeKind::VolumeToMesh) {

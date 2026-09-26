@@ -653,3 +653,136 @@ void RunCurvatureMaskTests() {
     auto next=graph::EvaluateRocks(graph,mask,&cache);
     Check(next.error.empty() && cache.computations[mask]==count+1,"山から谷への切替で画像を再評価");
 }
+
+void RunMaskFilterTests() {
+    using tests::Check;
+    tests::Section("Mask Filter");
+    std::string error;
+    const auto at = [](const geometry::MaskImage& m, uint32_t x, uint32_t y) { return m.pixels[size_t(y) * m.width + x] / 255.f; };
+
+    // --- レベル（画素ごと、メッシュは使わない） ---
+    geometry::MaskImage ramp; ramp.width = ramp.height = 64; ramp.pixels.resize(64 * 64);
+    for (uint32_t y = 0; y < 64; ++y)
+        for (uint32_t x = 0; x < 64; ++x) ramp.pixels[size_t(y) * 64 + x] = uint8_t(x * 255 / 63);
+    geometry::MaskFilterSettings levels; levels.type = geometry::MaskFilterType::Levels;
+    levels.inputLow = .25f; levels.inputHigh = .75f; levels.outputLow = .1f; levels.outputHigh = .9f;
+    auto leveled = geometry::FilterMask({}, ramp, false, levels, error);
+    Check(error.empty() && leveled.width == 64 && leveled.height == 64, "levels keeps the input size and needs no mesh");
+    if (leveled.pixels.size() == 64 * 64) {
+        Check(std::abs(at(leveled, 0, 0) - .1f) < .01f && std::abs(at(leveled, 63, 0) - .9f) < .01f,
+              "input black / white map to output black / white");
+        Check(std::abs(at(leveled, 32, 0) - (.1f + .8f * ((32 / 63.f - .25f) / .5f))) < .02f, "midtones stretch linearly with gamma 1");
+    }
+    auto inverted = levels; inverted.invert = true;
+    const auto invertedImage = geometry::FilterMask({}, ramp, false, inverted, error);
+    Check(invertedImage.pixels.size() == 64 * 64 && std::abs(at(invertedImage, 0, 0) - .9f) < .01f, "invert is baked into the image");
+    const auto invertedInput = geometry::FilterMask({}, ramp, true, levels, error);
+    Check(invertedInput.pixels.size() == 64 * 64 && std::abs(at(invertedInput, 0, 0) - .9f) < .01f, "input invert applies before levels");
+    auto curved = levels; curved.gamma = 2;
+    const auto curvedImage = geometry::FilterMask({}, ramp, false, curved, error);
+    Check(curvedImage.pixels.size() == 64 * 64 && at(curvedImage, 32, 0) < at(leveled, 32, 0), "gamma above 1 darkens midtones");
+
+    // --- ぼかし：UVの継ぎ目をまたぐ ---
+    // 床（UV左半分）と、床の x = 0 の端に立つ壁（UV右半分）。3Dでは角でつながり、UVでは離れている。
+    const auto scene = FloorAndWall();
+    geometry::MaskImage wallWhite; wallWhite.width = wallWhite.height = 128; wallWhite.pixels.assign(128 * 128, 0);
+    for (uint32_t y = 0; y < 128; ++y)
+        for (uint32_t x = 64; x < 128; ++x) wallWhite.pixels[size_t(y) * 128 + x] = 255;
+    geometry::MaskFilterSettings blur; blur.radius = .5f;
+    const auto blurred = geometry::FilterMask(scene, wallWhite, false, blur, error);
+    Check(error.empty() && blurred.width == 128 && blurred.height == 128, "blur keeps the input resolution");
+    if (blurred.pixels.size() == 128 * 128) {
+        // 床の画素 x は x_world = (x + .5) / 128 * 4。u ≈ 0 が壁の根元、u ≈ .5 は壁から 2 m 離れた床の端。
+        Check(at(blurred, 1, 64) > .05f, "floor next to the wall picks up the wall across the UV seam");
+        Check(at(blurred, 60, 64) < .02f, "floor far from the wall stays black even though it touches the wall in UV");
+        Check(at(blurred, 100, 64) > .9f, "wall far from the corner stays white");
+        Check(at(blurred, 64, 2) < at(blurred, 100, 64), "wall near the floor is softened");
+    }
+    geometry::MaskImage grey = wallWhite; std::fill(grey.pixels.begin(), grey.pixels.end(), uint8_t(128));
+    const auto flat = geometry::FilterMask(scene, grey, false, blur, error);
+    Check(flat.pixels.size() == grey.pixels.size() &&
+              std::all_of(flat.pixels.begin(), flat.pixels.end(), [](uint8_t v) { return std::abs(int(v) - 128) <= 1; }),
+          "blur keeps a constant mask constant");
+    auto small = blur; small.radius = .05f;
+    const auto sharpEdge = geometry::FilterMask(scene, wallWhite, false, small, error);
+    Check(sharpEdge.pixels.size() == 128 * 128 && at(sharpEdge, 1, 64) < at(blurred, 1, 64), "smaller radius spreads less");
+    Check(geometry::FilterMask(scene, wallWhite, false, blur, error).pixels == blurred.pixels, "parallel blur is reproducible");
+
+    // --- シャープ ---
+    geometry::MaskImage twoTone = wallWhite;
+    for (uint32_t y = 0; y < 128; ++y)
+        for (uint32_t x = 0; x < 128; ++x) twoTone.pixels[size_t(y) * 128 + x] = x < 64 ? 77 : 179;  // 0.3 / 0.7
+    geometry::MaskFilterSettings sharpen; sharpen.type = geometry::MaskFilterType::Sharpen; sharpen.radius = .5f;
+    sharpen.amount = 0;
+    const auto unchanged = geometry::FilterMask(scene, twoTone, false, sharpen, error);
+    Check(unchanged.pixels == twoTone.pixels, "sharpen amount 0 returns the input");
+    sharpen.amount = 1;
+    const auto sharpened = geometry::FilterMask(scene, twoTone, false, sharpen, error);
+    if (sharpened.pixels.size() == 128 * 128) {
+        Check(at(sharpened, 1, 64) < .29f && at(sharpened, 64, 2) > .71f, "sharpen pushes both sides of the corner apart");
+        Check(std::abs(at(sharpened, 60, 64) - .3f) < .02f, "sharpen leaves areas far from the edge unchanged");
+    }
+
+    // --- 診断 ---
+    for (auto bad : {[](auto s) { s.radius = 0; return s; }(blur), [](auto s) { s.radius = 2; return s; }(blur),
+                     [](auto s) { s.amount = 5; return s; }(sharpen), [](auto s) { s.gamma = 0; return s; }(levels),
+                     [](auto s) { s.inputHigh = s.inputLow; return s; }(levels),
+                     [](auto s) { s.type = geometry::MaskFilterType(9); return s; }(blur)})
+        Check(geometry::FilterMask(scene, wallWhite, false, bad, error).pixels.empty() && !error.empty(), "invalid setting rejected");
+    Check(geometry::FilterMask(scene, {}, false, blur, error).pixels.empty() && !error.empty(), "empty input rejected");
+    Check(geometry::FilterMask(geometry::MakeBox({1, 1, 1}), wallWhite, false, blur, error).pixels.empty() && !error.empty(),
+          "blur needs the UV mesh");
+    std::stop_source stop; stop.request_stop();
+    Check(geometry::FilterMask(scene, wallWhite, false, blur, error, stop.get_token()).pixels.empty() && !error.empty(), "blur can be cancelled");
+
+    // --- グラフ ---
+    graph::NodeGraph g;
+    const auto base = g.CreateNode(graph::NodeKind::BaseRock), uv = g.CreateNode(graph::NodeKind::UvUnwrap),
+               apply = g.CreateNode(graph::NodeKind::ApplyMaterial), surface = g.CreateNode(graph::NodeKind::Surface),
+               height = g.CreateNode(graph::NodeKind::ShapeMask), filter = g.CreateNode(graph::NodeKind::MaskFilter),
+               second = g.CreateNode(graph::NodeKind::MaskFilter), constant = g.CreateNode(graph::NodeKind::MaterialMask);
+    const auto link = [&](int from, int to, int pin = 0) {
+        return g.CreateLink(g.FindNode(from)->outputs[0].id, g.FindNode(to)->inputs[pin].id);
+    };
+    const auto filterSettings = [&](int id) -> geometry::MaskFilterSettings& {
+        return std::get<geometry::MaskFilterSettings>(g.FindMutableNode(id)->settings);
+    };
+    std::get<geometry::UvUnwrapSettings>(g.FindMutableNode(uv)->settings).resolution = 128;
+    auto& heightSettings = std::get<geometry::ShapeMaskSettings>(g.FindMutableNode(height)->settings);
+    heightSettings.type = geometry::ShapeMaskType::Height; heightSettings.resolution = 128; heightSettings.low = 0; heightSettings.high = 1;
+    const auto* definition = graph::FindNodeDefinitionByName("maskFilter");
+    Check(definition && definition->kind == graph::NodeKind::MaskFilter && g.FindNode(filter)->inputs.size() == 1 &&
+              g.FindNode(filter)->inputs[0].valueType == graph::ValueType::Mask && g.FindNode(filter)->outputs.size() == 1 &&
+              g.FindNode(filter)->outputs[0].valueType == graph::ValueType::Mask && filterSettings(filter).type == geometry::MaskFilterType::Blur &&
+              graph::IsPreviewableNodeKind(graph::NodeKind::MaskFilter) && graph::IsImageMaskNodeKind(graph::NodeKind::MaskFilter) &&
+              !graph::ImageMaskInvert(*g.FindNode(filter)),
+          "node has one Mask input and a Mask output, defaults to blur, and can be previewed");
+    Check(link(base, uv) && link(uv, height) && link(uv, apply) && link(surface, apply, 1) && link(filter, apply, 2), "chain connects");
+    graph::RockEvaluationCache cache;
+    auto r = graph::EvaluateRocks(g, apply, &cache);
+    Check(!r.error.empty() && r.error.find("Mask Filter") != std::string::npos, "unconnected input is diagnosed");
+    Check(link(constant, filter), "Material Mask connects by type");
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(!r.error.empty() && r.error.find("Material Mask") != std::string::npos, "Material Mask input is diagnosed");
+    for (const auto& l : g.Links()) if (l.endPin == g.FindNode(filter)->inputs[0].id) { g.DeleteLink(l.id); break; }
+    Check(link(height, filter), "Shape Mask connects");
+    r = graph::EvaluateRocks(g, filter, &cache);
+    Check(r.error.empty() && r.rocks.size() == 1 && r.rocks[0].previewMask && r.rocks[0].previewMask->width == 128 &&
+              !r.rocks[0].previewMaskInvert,
+          "filter previews the processed mask on the UV mesh");
+    // 直列：ぼかし → レベル。
+    for (const auto& l : g.Links()) if (l.endPin == g.FindNode(apply)->inputs[2].id) { g.DeleteLink(l.id); break; }
+    filterSettings(second).type = geometry::MaskFilterType::Levels;
+    filterSettings(second).inputLow = .4f; filterSettings(second).inputHigh = .6f;
+    Check(link(filter, second) && link(second, apply, 2), "filters chain");
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && !r.rocks.empty() && !r.rocks[0].maskImages.empty(), "chained filters reach Apply Material");
+    // 入力の反転を切り替えると作り直す（反転を画像に焼き込むため）。
+    const auto before = cache.computations[filter];
+    heightSettings.invert = true;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(r.error.empty() && cache.computations[filter] == before + 1, "input invert change re-filters");
+    filterSettings(filter).radius = 0;
+    r = graph::EvaluateRocks(g, apply, &cache);
+    Check(!r.error.empty() && r.error.find("Mask Filter") != std::string::npos, "invalid settings are diagnosed on the filter node");
+}

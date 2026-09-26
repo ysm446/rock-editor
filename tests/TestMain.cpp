@@ -39,6 +39,7 @@ void RunCurvatureMaskTests();
 void RunNoiseMaskTests();
 void RunDepositionMaskTests();
 void RunMaskCombineTests();
+void RunMaskFilterTests();
 int main(int argc, char** argv) {
     RunDisplaceTests();
     if (argc == 2 && std::strcmp(argv[1], "--displace-only") == 0)
@@ -50,6 +51,7 @@ int main(int argc, char** argv) {
     RunNoiseMaskTests();
     RunDepositionMaskTests();
     RunMaskCombineTests();
+    RunMaskFilterTests();
     RunPieceTests();
     RunMeshVolumeTests();
     RunRockTests();
