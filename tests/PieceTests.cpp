@@ -395,8 +395,18 @@ static void RunLayeredPieceTests() {
     scatter.planar=false;
     const auto volumetric=FracturePieces(layers,ScatterPiecePoints(layers,scatter,error),{},20,error);
     Check(error.empty() && volumetric.pieces.size()==96,"3Dの点配置でも板ごとに分割できる");
-    scatter.planar=true;scatter.count=200;
-    ScatterPiecePoints(layers,scatter,error);Check(!error.empty(),"合計512点を超える設定を拒否する");
+    scatter.planar=true;scatter.count=400;
+    ScatterPiecePoints(layers,scatter,error);Check(!error.empty(),"合計1024点を超える設定を拒否する");
+    {
+        // 1枚あたりは子IDの間隔（512）まで。合計が上限内でも超えれば拒否する。
+        auto single=settings;single.count=1;
+        const auto plate=MakeLayeredBoxes(single,1,error);
+        auto perPiece=scatter;perPiece.count=PieceIdStride+1;
+        ScatterPiecePoints(plate,perPiece,error);Check(!error.empty(),"1枚あたり512点を超える設定を拒否する");
+        perPiece.count=PieceIdStride;
+        const auto most=ScatterPiecePoints(plate,perPiece,error);
+        Check(error.empty() && most.positions.size()==size_t(PieceIdStride),"1枚あたり512点までは配置できる");
+    }
     auto invalid=settings;invalid.count=0;MakeLayeredBoxes(invalid,1,error);Check(!error.empty(),"板0枚を拒否する");
     invalid=settings;invalid.size[1]=-1;MakeLayeredBoxes(invalid,1,error);Check(!error.empty(),"負の厚さを拒否する");
     invalid=settings;invalid.rotation[0]=std::numeric_limits<float>::infinity();MakeLayeredBoxes(invalid,1,error);

@@ -5,7 +5,12 @@
 #include <stop_token>
 
 namespace rock::geometry {
-inline constexpr int MaxScatterPoints = 512;
+// 1回の分割の点数と、分割結果の片数の上限。
+inline constexpr int MaxScatterPoints = 1024;
+// Pieces を再分割したときの子のIDの間隔（子ID = (親ID + 1) × 間隔 + 子の番号）。
+// 保存済みの手動選択と個別変換がIDで片を指すので、**この値は変えない。**
+// 1片あたりの点数もこの値までに制限する（超えると隣の親のIDと重なる）。
+inline constexpr int PieceIdStride = 512;
 struct ScatterSettings {
     int count = 24;
     uint32_t seed = 1;

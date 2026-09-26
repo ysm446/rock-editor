@@ -206,6 +206,21 @@ bool Clip(Poly &poly, Plane plane, int neighbor) {
     poly.faces = std::move(faces);
     return true;
 }
+// 面から参照されなくなった頂点を詰める。Clip は毎回全頂点を調べるので、
+// 切り落とした側の頂点（入力の形の頂点を含む）を持ち越さない。
+void Compact(Poly &poly) {
+    std::vector<uint32_t> remap(poly.vertices.size(), std::numeric_limits<uint32_t>::max());
+    std::vector<D> kept;
+    for (auto &face : poly.faces)
+        for (auto &id : face.ids) {
+            if (remap[id] == std::numeric_limits<uint32_t>::max()) {
+                remap[id] = uint32_t(kept.size());
+                kept.push_back(poly.vertices[id]);
+            }
+            id = remap[id];
+        }
+    poly.vertices = std::move(kept);
+}
 D Rotate(D p, const std::array<float, 3> &degrees, bool inverse = false) {
     // Z→X→Y。逆変換は逆順・逆角度。
     const int order[3] = {2, 0, 1};
@@ -374,8 +389,9 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
 PointSet ScatterPiecePoints(const PieceCollection& pieces, const ScatterSettings& s,
                             std::string& error, std::stop_token stop) {
     error.clear();
-    if (s.version!=1 || s.count<2 || s.count>MaxScatterPoints || pieces.pieces.size()>size_t(MaxScatterPoints/s.count)) {
-        error="各ピースの点数は2〜512、全体の合計は512点までです"; return {};
+    if (s.version!=1 || s.count<2 || s.count>PieceIdStride || pieces.pieces.size()>size_t(MaxScatterPoints/s.count)) {
+        error="各ピースの点数は2〜"+std::to_string(PieceIdStride)+"、全体の合計は"+std::to_string(MaxScatterPoints)+"点までです";
+        return {};
     }
     PointSet out; out.grouped=true; out.source=pieces.fingerprint;
     Hash hash; hash.Add(out.source); hash.Add(s.count); hash.Add(s.seed); hash.Add(s.planar);
@@ -453,18 +469,20 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
             }
         sites.push_back(q);
     }
-    std::vector<std::vector<Plane>> cuts(sites.size(), std::vector<Plane>(sites.size()));
-    for (size_t i = 0; i < sites.size(); ++i)
-        for (size_t j = i + 1; j < sites.size(); ++j) {
-            auto n = (sites[j] - sites[i]) * 2;
-            double d = Dot(sites[j], sites[j]) - Dot(sites[i], sites[i]);
-            n = Rotate({n.x / s.stretch[0], n.y / s.stretch[1], n.z / s.stretch[2]}, s.rotation);
-            double len = Length(n);
-            n = n * (1 / len);
-            d /= len;
-            cuts[i][j] = {n, d};
-            cuts[j][i] = {n * -1, -d};
-        }
+    // i の片を j 側から切る二等分面。点数の2乗の表は持たず、使う面だけその場で作る。
+    // 差と符号の反転は浮動小数でも厳密なので、cut(j, i) は cut(i, j) の裏返しと一致する。
+    const auto cut = [&](size_t i, size_t j) {
+        auto n = (sites[j] - sites[i]) * 2;
+        double d = Dot(sites[j], sites[j]) - Dot(sites[i], sites[i]);
+        n = Rotate({n.x / s.stretch[0], n.y / s.stretch[1], n.z / s.stretch[2]}, s.rotation);
+        double len = Length(n);
+        return Plane{n * (1 / len), d / len};
+    };
+    // 片の頂点を、点を置いた空間（回転を戻して伸長で割った空間）へ写す。
+    const auto toSite = [&](D p) {
+        auto q = Rotate(p, s.rotation, true);
+        return D{q.x / s.stretch[0], q.y / s.stretch[1], q.z / s.stretch[2]};
+    };
     PieceCollection out;
     out.producer = producer;
     Hash hash;
@@ -500,9 +518,39 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         if (stop.stop_requested())
             return fail(PieceCancelled);
         auto poly = initial;
+        // 近い点から順に切り、片の半径 R の2倍より遠い点で打ち切る。
+        // 距離 L > 2R の点との二等分面は、片のどの頂点からも i のほうが近いので切らない。
+        // これで片ごとの切断は全点ではなく近傍の点の数で済む。
+        thread_local std::vector<std::pair<double, uint32_t>> order;
+        order.clear();
         for (size_t j = 0; j < sites.size(); ++j)
-            if (i != j && !Clip(poly, cuts[i][j],int(j)))
+            if (j != i) {
+                const D delta = sites[j] - sites[i];
+                order.push_back({Dot(delta, delta), uint32_t(j)});
+            }
+        std::sort(order.begin(), order.end());
+        const auto radius = [&] {
+            double r = 0;
+            for (auto p : poly.vertices) {
+                const D delta = toSite(p) - sites[i];
+                r = std::max(r, Dot(delta, delta));
+            }
+            return std::sqrt(r);
+        };
+        double reach = 2 * radius();
+        for (auto [distance, j] : order) {
+            if (std::sqrt(distance) > reach * (1 + 1e-6) + 1e-9)
+                break;
+            const auto vertices = poly.vertices.size();
+            const auto faces = poly.faces.size();
+            if (!Clip(poly, cut(i, j), int(j)))
                 return fail(PieceOpenCut);
+            // 切れたときだけ半径を測り直す。測り直さなくても半径は大きめに残るだけで結果は変わらない。
+            if (poly.vertices.size() != vertices || poly.faces.size() != faces) {
+                Compact(poly);
+                reach = 2 * radius();
+            }
+        }
         Mesh result;
         std::map<uint32_t, uint32_t> remap;
         std::vector<uint8_t> origins;
@@ -616,8 +664,10 @@ PieceCollection FracturePieces(const PieceCollection& input, const PointSet& poi
                                int producer, std::string& error, std::stop_token stop) {
     error.clear();
     if (!points.grouped || points.source!=input.fingerprint || points.groups.size()!=input.pieces.size() ||
-        input.pieces.size()>MaxScatterPoints || points.positions.size()>MaxScatterPoints) {
-        error="同じPiecesから生成したScatter Pointsを接続してください（合計512点まで）";return {};
+        input.pieces.size()>MaxScatterPoints || points.positions.size()>MaxScatterPoints ||
+        std::any_of(points.groups.begin(),points.groups.end(),[](const auto& g){return g.positions.size()>size_t(PieceIdStride);})) {
+        error="同じPiecesから生成したScatter Pointsを接続してください（1片"+std::to_string(PieceIdStride)+"点、合計"+
+              std::to_string(MaxScatterPoints)+"点まで）";return {};
     }
     PieceCollection out; out.producer=producer;
     // 再分割では親をまたぐ面の重なりをまだ再構築しない。誤った接続で侵食しない。
@@ -629,7 +679,7 @@ PieceCollection FracturePieces(const PieceCollection& input, const PointSet& poi
     for (size_t i=0;i<input.pieces.size();++i) {
         if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}
         const auto& parent=input.pieces[i]; const auto& group=points.groups[i];
-        if (!parent.mesh || group.pieceId!=parent.id || parent.id>uint32_t(std::numeric_limits<int>::max()/MaxScatterPoints-1)) {
+        if (!parent.mesh || group.pieceId!=parent.id || parent.id>uint32_t(std::numeric_limits<int>::max()/PieceIdStride-1)) {
             error="親ピースのIDが不正、または再分割のID上限に達しました";return {};
         }
         PointSet local; local.source=group.source; local.fingerprint=group.fingerprint; local.positions=group.positions;
@@ -637,12 +687,12 @@ PieceCollection FracturePieces(const PieceCollection& input, const PointSet& poi
         if (!error.empty()) {error="ピース "+std::to_string(parent.id)+": "+error;return {};}
         generation.Add(parent.id); generation.Add(children.generation);
         for (auto& p:children.pieces) {
-            p.id=(parent.id+1)*MaxScatterPoints+p.id;
+            p.id=(parent.id+1)*PieceIdStride+p.id;
             if (!ids.insert(p.id).second) {error="ピースIDが重複しています";return {};}
             p.parentId=parent.id; p.parentProducer=input.producer; p.layer=parent.layer; p.layerSize=parent.layerSize;
             p.transform=parent.transform;
             auto neighborhood=std::make_shared<PieceNeighborhood>(*p.neighborhood);
-            for (auto& contact:neighborhood->contacts) contact.neighbor+=(parent.id+1)*MaxScatterPoints;
+            for (auto& contact:neighborhood->contacts) contact.neighbor+=(parent.id+1)*PieceIdStride;
             if (p.layer>=0) std::erase_if(neighborhood->boundary,[](const auto& area) {
                 const double length=std::sqrt(area[0]*area[0]+area[1]*area[1]+area[2]*area[2]);
                 return std::abs(area[1])>length*(1-1e-7); // 板の上下面から侵食を開始しない。
@@ -664,7 +714,7 @@ PieceCollection FracturePieces(const PieceCollection& input, const PointSet& poi
             triangles+=p.mesh->triangles.size();
             out.pieces.push_back(std::move(p));
             if (out.pieces.size()>MaxScatterPoints || triangles>250000) {
-                error="分割結果は合計512ピース・25万三角形までです";return {};
+                error="分割結果は合計"+std::to_string(MaxScatterPoints)+"ピース・25万三角形までです";return {};
             }
         }
     }
@@ -760,6 +810,12 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         for (const auto& p:c.pieces) weights.push_back(layerWeight(p));
         return PeelPieces(c,s,weights,error,stop);
     }
+    // 画面が毎フレーム評価するので、手動IDは並べて二分探索する（片数の2乗にしない）。
+    std::vector<uint32_t> manual;
+    if (s.mode == PieceSelectMode::Manual) {
+        manual = s.ids;
+        std::sort(manual.begin(), manual.end());
+    }
     for (const auto &p : c.pieces) {
         const float rimWeight=layerWeight(p);
         if (rimWeight<0) continue;
@@ -768,7 +824,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
         double volume = p.volume * Determinant(p.transform);
         switch (s.mode) {
         case PieceSelectMode::Manual:
-            selected = Contains(s.ids, p.id);
+            selected = std::binary_search(manual.begin(), manual.end(), p.id);
             break;
         case PieceSelectMode::Outer:
             selected = (p.outerFaces & s.outerFaces) != 0;

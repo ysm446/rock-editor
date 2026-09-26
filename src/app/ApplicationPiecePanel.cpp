@@ -40,7 +40,8 @@ void Application::DrawPieceSettings(graph::Node &node) {
             }
             ui::EndPropertyTable();
         }
-        ui::HintText("閉じた凸形状の内部に点を配置します。同じMesh / PiecesをVoronoi Fractureにも接続してください。Pieces入力では点数は1枚あたり、合計512点までです。");
+        ui::HintText("閉じた凸形状の内部に点を配置します。同じMesh / PiecesをVoronoi Fractureにも接続してください。"
+                     "Pieces入力では点数は1枚あたりで、1枚512点・合計1024点までです。");
     } else if (auto *voronoi = std::get_if<geometry::VoronoiSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("voronoi")) {
             changed |= ui::PropertyFloat3Input("方向 (度)", voronoi->rotation.data(), zero) != 0;
@@ -224,11 +225,14 @@ void Application::DrawPieceSettings(graph::Node &node) {
                     ui::PropertyValue("選択", "%zu / %zu 片", evaluated.ids.size(), total);
                     ui::PropertyValue("残る片", "%zu 片", total - evaluated.ids.size());
                     if (mode == Mode::Peel) {
+                        // 毎フレーム描くので、隣の存在は並べたIDの二分探索で調べる（片数の2乗にしない）。
+                        std::vector<uint32_t> present;
+                        for (const auto& p:m_pieceInput->pieces) present.push_back(p.id);
+                        std::sort(present.begin(), present.end());
                         size_t contacts = 0; double area = 0;
                         for (const auto& p:m_pieceInput->pieces) if (p.neighborhood)
                             for (const auto& edge:p.neighborhood->contacts)
-                                if (p.id < edge.neighbor && std::any_of(m_pieceInput->pieces.begin(),m_pieceInput->pieces.end(),
-                                    [&](const auto& other){return other.id==edge.neighbor;})) {
+                                if (p.id < edge.neighbor && std::binary_search(present.begin(),present.end(),edge.neighbor)) {
                                     ++contacts; area += geometry::PieceFaceArea(p,edge.areaVector);
                                 }
                         ui::PropertyValue("次の候補", "%zu 片", evaluated.frontier.size());
@@ -244,15 +248,17 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 // 上から下への積層図。層の厚さではなく、各層のピース数の内訳を示す。
                 bool hasLayers = false;
                 for (const auto& p : m_pieceInput->pieces) hasLayers |= p.layer >= 0;
+                auto chosenIds = evaluated.ids, candidateIds = candidates.ids;
+                std::sort(chosenIds.begin(), chosenIds.end());
+                std::sort(candidateIds.begin(), candidateIds.end());
                 if (hasLayers && ImGui::TreeNodeEx("層ごとの選択（上 → 下）", ImGuiTreeNodeFlags_DefaultOpen)) {
                     if (ui::BeginPropertyTable("pieceSelectLayers")) {
                         for (int layer = 31; layer >= 0; --layer) {
                             size_t count = 0, chosen = 0, possible = 0;
                             for (const auto& p : m_pieceInput->pieces) if (p.layer == layer) {
                                 ++count;
-                                const bool selected = std::find(evaluated.ids.begin(),evaluated.ids.end(),p.id)!=evaluated.ids.end();
-                                if (selected) ++chosen;
-                                else if (std::find(candidates.ids.begin(),candidates.ids.end(),p.id)!=candidates.ids.end()) ++possible;
+                                if (std::binary_search(chosenIds.begin(),chosenIds.end(),p.id)) ++chosen;
+                                else if (std::binary_search(candidateIds.begin(),candidateIds.end(),p.id)) ++possible;
                             }
                             if (!count) continue;
                             // 1層1行。棒はスライダーと同じ上限の長さに留め、数は棒の右に置く。
