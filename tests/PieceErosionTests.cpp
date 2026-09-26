@@ -98,6 +98,82 @@ void RunPieceErosionTests() {
     RefreshPieceFingerprint(weighted);peel.fraction=.34f;peel.peelNoise=0;
     Check(SelectPieces(weighted,peel,error).ids==std::vector<uint32_t>{2},"接続本数でなく共有面積と露出面積の比で順序を決める");
 
+    // 全層で同じ5×5格子。上下の各接触は面積1、辺だけ接する隣の格子は接続しない。
+    settings.count=3;
+    auto alignedLayers=MakeLayeredBoxes(settings,1,error);
+    auto alignedPoints=ScatterPiecePoints(alignedLayers,{25,4,1,true},error);
+    for (auto& group:alignedPoints.groups) group.positions=points.groups[0].positions;
+    auto aligned=FracturePieces(alignedLayers,alignedPoints,{},20,error);
+    Check(error.empty() && aligned.pieces.size()==75,"上下支持の格子を分割する");
+    size_t verticalEdges=0;bool capCorrect=true;
+    for (const auto& p:aligned.pieces) {
+        const auto& nb=*p.neighborhood;
+        capCorrect &= std::abs(nb.capAreas[0]-1)<1e-6 && std::abs(nb.capAreas[1]-1)<1e-6;
+        for (const auto& edge:nb.vertical) {
+            ++verticalEdges;capCorrect &= std::abs(edge.area-1)<1e-6;
+            const auto q=std::find_if(aligned.pieces.begin(),aligned.pieces.end(),[&](const auto& a){return a.id==edge.neighbor;});
+            capCorrect &= q!=aligned.pieces.end() && std::abs(q->layer-p.layer)==1;
+        }
+    }
+    Check(verticalEdges==100 && capCorrect,"上下50組の面積1の支持だけを記録し、辺と非隣接層を除外する");
+    PieceSelectSettings global;global.mode=PieceSelectMode::Peel;global.peelNoise=.2f;global.protectCore=false;global.fraction=0;
+    auto initialFrontier=SelectPieces(aligned,global,error);
+    bool outerOnly=true;
+    for (auto id:initialFrontier.frontier)
+        outerOnly &= std::none_of(aligned.pieces.begin(),aligned.pieces.end(),[&](const auto& p){return p.id==id && p.layer==1;});
+    Check(error.empty() && outerOnly && initialFrontier.frontier.size()==32,"両面を覆われた中間層を初期候補から除く");
+    global.fraction=.014f;auto one=SelectPieces(aligned,global,error);
+    Check(one.ids.size()==1,"層別予算ではなく全75片から1片だけを選ぶ");
+    global.fraction=.2f;auto prefix=SelectPieces(aligned,global,error);
+    global.fraction=1;auto sequence=SelectPieces(aligned,global,error);
+    Check(sequence.ids.size()==75 && prefix.ids.size()==15 && std::equal(prefix.ids.begin(),prefix.ids.end(),sequence.ids.begin()),
+          "全層を通じた逐次削除で、ばらつきがあっても進行は同じ順序の延長");
+    std::set<uint32_t> gone;bool supportedOrder=true;
+    for (auto id:sequence.ids) {
+        const auto& p=*std::find_if(aligned.pieces.begin(),aligned.pieces.end(),[&](const auto& a){return a.id==id;});
+        if (p.layer==1) supportedOrder &= std::any_of(p.neighborhood->vertical.begin(),p.neighborhood->vertical.end(),
+            [&](const auto& edge){return gone.contains(edge.neighbor);});
+        gone.insert(id);
+    }
+    Check(supportedOrder,"中間層の各片は上下いずれかの支持が欠けてから削除する");
+    auto rest=FilterPieces(aligned,prefix,false,error);
+    global.fraction=.25f;auto next=SelectPieces(rest,global,error);
+    Check(error.empty() && next.ids.size()==15 && std::equal(next.ids.begin(),next.ids.end(),sequence.ids.begin()+15),
+          "Filter後も上下の失われた支持を反映し同じ順序を継続する");
+    global.fraction=.2f;global.rimFalloff=1;
+    Check(SelectPieces(aligned,global,error).ids==prefix.ids,"Peelでは旧来の層別減衰ではなく支持面積を使う");
+    auto reordered=aligned;std::reverse(reordered.pieces.begin(),reordered.pieces.end());
+    Check(SelectPieces(reordered,global,error).ids==prefix.ids,"上下支持があっても入力順に依存しない");
+
+    // 単純な板で重なりを解析的に検証する。幅5の板を0.5ずらすと22.5平方メートル。
+    auto slabs=alignedLayers;
+    for (auto& p:slabs.pieces) p.neighborhood=std::make_shared<PieceNeighborhood>();
+    slabs.pieces[1].transform[3]+=.5;
+    BuildPieceLayerSupport(slabs,error);
+    Check(error.empty() && slabs.pieces[0].neighborhood->vertical.size()==1 &&
+          std::abs(slabs.pieces[0].neighborhood->vertical[0].area-22.5)<1e-5,"ずれた板は実際の重なり面積を支持とする");
+    slabs.pieces[1].transform[3]+=5;
+    BuildPieceLayerSupport(slabs,error);
+    Check(slabs.pieces[0].neighborhood->vertical.empty() && slabs.pieces[1].neighborhood->vertical.empty(),
+          "重なりのない板には上下支持を作らない");
+    auto tiltedSettings=settings;tiltedSettings.rotation={23,17,31};
+    auto tilted=MakeLayeredBoxes(tiltedSettings,1,error);
+    for (auto& p:tilted.pieces) p.neighborhood=std::make_shared<PieceNeighborhood>();
+    BuildPieceLayerSupport(tilted,error);
+    Check(error.empty() && tilted.pieces[0].neighborhood->vertical.size()==1 &&
+          std::abs(tilted.pieces[0].neighborhood->vertical[0].area-25)<1e-4,"積層全体が傾いていても面積を維持する");
+
+    auto deepPoints=ScatterPiecePoints(alignedLayers,{3,2,1,false},error);
+    for (auto& group:deepPoints.groups) group.positions={{0,-.075f,0},{0,0,0},{0,.075f,0}};
+    auto deep=FracturePieces(alignedLayers,deepPoints,{},20,error);
+    bool actualCaps=true;size_t capless=0;
+    for (const auto& p:deep.pieces) if (p.neighborhood->capAreas[0]+p.neighborhood->capAreas[1]==0) {
+        ++capless;actualCaps &= p.neighborhood->vertical.empty();
+    }
+    Check(error.empty() && capless==3 && actualCaps,"立体分割の上下面に届かない片を上下支持へ誤接続しない");
+    std::stop_source supportCancel;supportCancel.request_stop();
+    Check(!BuildPieceLayerSupport(aligned,error,supportCancel.get_token()) && !error.empty(),"上下支持の計算をキャンセルできる");
+
     settings.count=3;auto stack=MakeLayeredBoxes(settings,1,error);
     auto stackPoints=ScatterPiecePoints(stack,{16,3,1,true},error);
     auto pieces=FracturePieces(stack,stackPoints,{},20,error);

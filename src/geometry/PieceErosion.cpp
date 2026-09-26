@@ -30,6 +30,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     }
     struct State {
         std::vector<std::pair<size_t,double>> neighbors;
+        struct Vertical { size_t other; double area; int otherSide; };
+        std::vector<Vertical> vertical;
+        std::array<double,2> cap{}, covered{};
         double total=0, support=0, noise=0;
         bool exposed=false, removed=false, protectedCore=false;
     };
@@ -41,8 +44,24 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     }
     for (size_t i=0;i<n;++i) {
         const auto& p=c.pieces[i]; auto& v=state[i];
-        for (const auto& area:p.neighborhood->boundary) v.total+=PieceFaceArea(p,area);
-        v.exposed=v.total>0;
+        if (p.neighborhood->fixedLayerSupport) {
+            if (p.transform!=p.neighborhood->supportTransform) {
+                error="上下の支持は分割時の固定座標を使います。PeelをPiece Transformより前へ接続してください";return {};
+            }
+            v.cap=p.neighborhood->capAreas;
+            v.total=v.cap[0]+v.cap[1];
+            for (const auto& contact:p.neighborhood->vertical) {
+                const auto it=index.find(contact.neighbor);
+                if (it==index.end()) continue;
+                v.covered[contact.side]+=contact.area;
+                v.support+=contact.area;
+                v.vertical.push_back({it->second,contact.area,1-contact.side});
+            }
+        }
+        double boundary=0;
+        for (const auto& area:p.neighborhood->boundary) boundary+=PieceFaceArea(p,area);
+        v.exposed=boundary>0;
+        v.total+=boundary;
         for (const auto& contact:p.neighborhood->contacts) {
             const double area=PieceFaceArea(p,contact.areaVector);
             if (!std::isfinite(area) || area<=0) {error="共有面積が不正です";return {};}
@@ -99,37 +118,41 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         }
     }
 
-    // 層ごとの削除予算。分割片の個数に対する割合であり体積比ではない。
-    std::map<int,std::vector<size_t>> groups;
-    for (size_t i=0;i<n;++i) if (weights[i]>=0) groups[c.pieces[i].layer].push_back(i);
-    for (const auto& [layer,group]:groups) {
-        (void)layer;
-        const size_t budget=size_t(std::floor(double(group.size())*s.fraction*weights[group.front()]+1e-8));
-        for (size_t step=0;step<budget;++step) {
-            if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}
-            size_t best=n;double score=std::numeric_limits<double>::infinity();
-            for (auto i:group) {
-                const auto& v=state[i];
-                if (!v.exposed || v.removed || v.protectedCore || v.total<=0) continue;
-                const double candidate=v.support/v.total+v.noise;
-                // 面積の足し引きの丸めで、Filterを挟んだ場合の同点順が変わらないようにする。
-                if (best==n || candidate<score-1e-12 ||
-                    (std::abs(candidate-score)<=1e-12 && c.pieces[i].id<c.pieces[best].id)) {
-                    best=i;score=candidate;
-                }
-            }
-            if (best==n) break;
-            state[best].removed=true;
-            out.ids.push_back(c.pieces[best].id);
-            for (auto [other,area]:state[best].neighbors) {
-                state[other].support=std::max(0.,state[other].support-area);
-                state[other].exposed=true;
+    // 上下両面を覆われた片は、外側の支持が欠けるまで候補にしない。
+    const auto candidateAvailable=[&](size_t i) {
+        const auto& v=state[i];
+        const bool sandwiched=v.cap[0]>0 && v.cap[1]>0 &&
+            v.covered[0]>=v.cap[0]*(1-1e-6) && v.covered[1]>=v.cap[1]*(1-1e-6);
+        return weights[i]>0 && v.exposed && !v.removed && !v.protectedCore && v.total>0 && !sandwiched;
+    };
+    const size_t eligible=std::count_if(weights.begin(),weights.end(),[](float w){return w>=0;});
+    const size_t budget=size_t(std::floor(double(eligible)*s.fraction+1e-8));
+    // 全層で1片ずつ選ぶ。進行の変更は同じ削除順の先頭からの長さだけを変える。
+    for (size_t step=0;step<budget;++step) {
+        if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}
+        size_t best=n;double score=std::numeric_limits<double>::infinity();
+        for (size_t i=0;i<n;++i) {
+            if (!candidateAvailable(i)) continue;
+            const auto& v=state[i];
+            const double candidate=v.support/v.total+v.noise;
+            if (best==n || candidate<score-1e-12 ||
+                (std::abs(candidate-score)<=1e-12 && c.pieces[i].id<c.pieces[best].id)) {
+                best=i;score=candidate;
             }
         }
+        if (best==n) break;
+        state[best].removed=true;
+        out.ids.push_back(c.pieces[best].id);
+        for (auto [other,area]:state[best].neighbors) {
+            state[other].support=std::max(0.,state[other].support-area);
+            state[other].exposed=true;
+        }
+        for (auto [other,area,side]:state[best].vertical) {
+            state[other].support=std::max(0.,state[other].support-area);
+            state[other].covered[side]=std::max(0.,state[other].covered[side]-area);
+        }
     }
-    for (size_t i=0;i<n;++i)
-        if (weights[i]>0 && state[i].exposed && !state[i].removed && !state[i].protectedCore)
-            out.frontier.push_back(c.pieces[i].id);
+    for (size_t i=0;i<n;++i) if (candidateAvailable(i)) out.frontier.push_back(c.pieces[i].id);
     if (s.invert) {
         out.ids.clear();out.frontier.clear();
         for (size_t i=0;i<n;++i) if (weights[i]>=0 && !state[i].removed) out.ids.push_back(c.pieces[i].id);

@@ -102,7 +102,7 @@
           "seed": 5,
           "rimLayers": 0,
           "rimSide": 0,
-          "rimFalloff": 0.65,
+          "rimFalloff": 0.0,
           "peelNoise": 0.2,
           "protectCore": true
         }

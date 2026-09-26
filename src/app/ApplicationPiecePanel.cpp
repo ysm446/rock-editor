@@ -84,7 +84,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
             if (ImGui::Button("外周の侵食")) {
                 selection->mode = geometry::PieceSelectMode::Peel;
                 selection->layer = -1; selection->rimLayers = 0; selection->rimSide = 0;
-                selection->rimFalloff = .6f; selection->fraction = .3f; selection->invert = false;
+                selection->rimFalloff = 0; selection->fraction = .3f; selection->invert = false;
                 selection->peelNoise = .15f; selection->protectCore = true;
                 m_pieceSelectionEditing = false; changed = true;
             }
@@ -107,11 +107,6 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 }
                 changed |= ui::PropertyFloat("ばらつき", &selection->peelNoise, 0, 1, .15f,
                     "大きいほど欠ける順序に揺らぎを加えます。0では支持面積だけで決まり、Seedは影響しません。");
-                int seed = int(selection->seed);
-                if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1,
-                                    "同じSeedとばらつきなら同じ順序で欠けます。進行を動かしても引き直しません。")) {
-                    selection->seed = uint32_t(seed); changed = true;
-                }
                 ui::PropertyLabelEmpty("peelRetry");
                 ImGui::BeginDisabled(selection->peelNoise == 0);
                 if (ImGui::Button("別の欠け方を試す")) {
@@ -121,7 +116,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 ImGui::EndDisabled();
                 ui::PropertyEnd();
             }
-            if (mode == Mode::Rim || mode == Mode::Peel) {
+            if (mode == Mode::Rim) {
                 const char* sides[] = {"両側から", "上側から", "下側から"};
                 changed |= ui::PropertyCombo("積層の外側", &selection->rimSide, sides, 3, 0);
                 changed |= ui::PropertyInt("外側から何層", &selection->rimLayers, 0, 32, 0,
@@ -158,20 +153,34 @@ void Application::DrawPieceSettings(graph::Node &node) {
                     changed = true;
                 }
             }
-            changed |= ui::PropertyInt("対象の層",&selection->layer,-1,31,-1,
-                                       "-1は全層。Layered Boxesの層番号を指定できます。反転も指定層の中だけに効きます。");
-            if (mode == Mode::Peel) {
-                changed |= ui::PropertyBool("中心の片を保護", &selection->protectCore, true,
-                    "各連結部分で、露出面から最も遠い片を1つ残します。選択反転時は保護対象も選ばれます。");
+            if (mode != Mode::Peel) {
+                changed |= ui::PropertyInt("対象の層", &selection->layer, -1, 31, -1);
+                changed |= ui::PropertyBool("選択を反転", &selection->invert, false);
             }
-            changed |= ui::PropertyBool("選択を反転", &selection->invert, false);
             ui::EndPropertyTable();
+        }
+        if (mode == Mode::Peel && ImGui::TreeNode("詳細設定")) {
+            if (ui::BeginPropertyTable("peelAdvanced")) {
+                int seed = int(selection->seed);
+                if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1,
+                                    "同じSeedとばらつきなら同じ順序で欠けます。進行を動かしても引き直しません。")) {
+                    selection->seed = uint32_t(seed); changed = true;
+                }
+                changed |= ui::PropertyBool("中心の片を保護", &selection->protectCore, true,
+                    "各板の連結部分で最も奥の片を1つ残します。反転時は保護した片も選ばれます。");
+                const char* sides[] = {"両側から", "上側から", "下側から"};
+                changed |= ui::PropertyCombo("対象の側", &selection->rimSide, sides, 3, 0);
+                changed |= ui::PropertyInt("外側から何層", &selection->rimLayers, 0, 32, 0, "0は全層です。");
+                changed |= ui::PropertyInt("対象の層", &selection->layer, -1, 31, -1, "-1は全層です。");
+                changed |= ui::PropertyBool("選択を反転", &selection->invert, false);
+                ui::EndPropertyTable();
+            }
+            ImGui::TreePop();
         }
         if (mode == Mode::Rim)
             ui::HintText("元の板の側縁に接する片から選択率で選びます。上下面だけに触れる片は選びません。削除後に露出した新しい外周の判定は行いません。");
         if (mode == Mode::Peel)
-            ui::HintText("露出した外周から、残る接触面積の割合が小さい片を順に選びます。隣を除くと次の候補が露出します。"
-                         "進行は各層の片数を基準にし、中心保護や層の減衰により100%でも残る片があります。");
+            ui::HintText("上下に支えられた片を残し、外周から1片ずつ欠けます。中心を保護している場合、100%でも片が残ります。");
         if (mode == Mode::Outer)
             ui::HintText("Boxの指定した外面に接する片を選びます。");
         if (mode == Mode::Manual) {
@@ -225,18 +234,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
                     ui::PropertyValue("選択", "%zu / %zu 片", evaluated.ids.size(), total);
                     ui::PropertyValue("残る片", "%zu 片", total - evaluated.ids.size());
                     if (mode == Mode::Peel) {
-                        // 毎フレーム描くので、隣の存在は並べたIDの二分探索で調べる（片数の2乗にしない）。
-                        std::vector<uint32_t> present;
-                        for (const auto& p:m_pieceInput->pieces) present.push_back(p.id);
-                        std::sort(present.begin(), present.end());
-                        size_t contacts = 0; double area = 0;
-                        for (const auto& p:m_pieceInput->pieces) if (p.neighborhood)
-                            for (const auto& edge:p.neighborhood->contacts)
-                                if (p.id < edge.neighbor && std::binary_search(present.begin(),present.end(),edge.neighbor)) {
-                                    ++contacts; area += geometry::PieceFaceArea(p,edge.areaVector);
-                                }
                         ui::PropertyValue("次の候補", "%zu 片", evaluated.frontier.size());
-                        ui::PropertyValue("隣接", "%zu 組 / %.3f m²", contacts, area);
                     }
                     ui::EndPropertyTable();
                 }
@@ -251,7 +249,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 auto chosenIds = evaluated.ids, candidateIds = candidates.ids;
                 std::sort(chosenIds.begin(), chosenIds.end());
                 std::sort(candidateIds.begin(), candidateIds.end());
-                if (hasLayers && ImGui::TreeNodeEx("層ごとの選択（上 → 下）", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (hasLayers && ImGui::TreeNode("層ごとの選択（上 → 下）")) {
                     if (ui::BeginPropertyTable("pieceSelectLayers")) {
                         for (int layer = 31; layer >= 0; --layer) {
                             size_t count = 0, chosen = 0, possible = 0;

@@ -718,6 +718,7 @@ PieceCollection FracturePieces(const PieceCollection& input, const PointSet& poi
             }
         }
     }
+    if (out.adjacencyComplete && !BuildPieceLayerSupport(out,error,stop)) return {};
     out.generation=generation.value; RefreshPieceFingerprint(out); return out;
 }
 void RefreshPieceFingerprint(PieceCollection &c) {
@@ -737,6 +738,13 @@ void RefreshPieceFingerprint(PieceCollection &c) {
     if (c.adjacencyComplete) {
         h.Add(0x5045454c); // メッシュ生成の世代は変更せず、隣接データをキャッシュキーへ含める。
         for (const auto& p:c.pieces) if (p.neighborhood) {
+            h.Add(p.neighborhood->fixedLayerSupport);
+            for (auto area:p.neighborhood->capAreas) h.Add(std::bit_cast<uint64_t>(area));
+            for (auto value:p.neighborhood->supportTransform) h.Add(std::bit_cast<uint64_t>(value));
+            h.Add(p.neighborhood->vertical.size());
+            for (const auto& contact:p.neighborhood->vertical) {
+                h.Add(contact.neighbor);h.Add(contact.side);h.Add(std::bit_cast<uint64_t>(contact.area));
+            }
             h.Add(p.neighborhood->contacts.size());
             for (const auto& contact:p.neighborhood->contacts) {
                 h.Add(contact.neighbor);
@@ -801,7 +809,7 @@ PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings 
             const int available = s.rimSide ? int(layers.size()) : (int(layers.size())+1)/2;
             const int count = s.rimLayers ? std::min(s.rimLayers,available) : available;
             if (depth >= count) return -1;
-            return 1-s.rimFalloff*float(depth)/float(std::max(1,count-1));
+            return s.mode==PieceSelectMode::Peel ? 1.f : 1-s.rimFalloff*float(depth)/float(std::max(1,count-1));
         }
         return 1;
     };

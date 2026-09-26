@@ -379,8 +379,8 @@ set_target_properties(rock_editor PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:rock_editor>"
 )
 
-target_sources(rock_editor PRIVATE src/geometry/Pieces.cpp src/geometry/PieceErosion.cpp)
-target_sources(rock_editor_tests PRIVATE src/geometry/Pieces.cpp src/geometry/PieceErosion.cpp tests/PieceTests.cpp tests/PieceErosionTests.cpp)
+target_sources(rock_editor PRIVATE src/geometry/Pieces.cpp src/geometry/PieceErosion.cpp src/geometry/PieceLayerSupport.cpp)
+target_sources(rock_editor_tests PRIVATE src/geometry/Pieces.cpp src/geometry/PieceErosion.cpp src/geometry/PieceLayerSupport.cpp tests/PieceTests.cpp tests/PieceErosionTests.cpp)
 
 target_sources(rock_editor PRIVATE src/graph/PieceEvaluator.cpp)
 target_sources(rock_editor_tests PRIVATE src/graph/PieceEvaluator.cpp)

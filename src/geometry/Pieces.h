@@ -45,8 +45,17 @@ struct PieceContact {
     uint32_t neighbor = 0;
     std::array<double,3> areaVector{};
 };
+struct PieceLayerContact {
+    uint32_t neighbor = 0;
+    double area = 0;
+    int side = 0; // 0:下面、1:上面。
+};
 struct PieceNeighborhood {
     std::vector<PieceContact> contacts;
+    std::vector<PieceLayerContact> vertical;
+    std::array<double,2> capAreas{};
+    bool fixedLayerSupport = false;
+    std::array<double,12> supportTransform{};
     std::vector<std::array<double,3>> boundary; // 層付きなら元の側縁だけ（上下面を除く）。
 };
 struct Piece {
@@ -128,6 +137,7 @@ PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSet
 PieceCollection FracturePieces(const PieceCollection&, const PointSet&, const VoronoiSettings&, int producer,
                               std::string&, std::stop_token = {});
 PieceSelection SelectPieces(const PieceCollection &, const PieceSelectSettings &, std::string &, std::stop_token = {});
+bool BuildPieceLayerSupport(PieceCollection&, std::string&, std::stop_token = {});
 double PieceFaceArea(const Piece&, const std::array<double,3>& areaVector);
 PieceSelection PeelPieces(const PieceCollection&, const PieceSelectSettings&, const std::vector<float>& layerWeights,
                           std::string&, std::stop_token = {});
