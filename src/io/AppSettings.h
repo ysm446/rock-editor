@@ -58,6 +58,8 @@ struct DisplaySettings {
     geometry::VolumeMeshingMethod sdfPreviewMethod = geometry::VolumeMeshingMethod::MarchingTetrahedra;
     // アセットの帯（ルートのフォルダ階層とその中身）を出すか。畳むとビューポートが縦に広がる。
     bool showAssetBand = true;
+    // ノードのメモの先頭をグラフのノードの上に表示するか（切るとメモの印とツールチップだけ）。
+    bool showNodeNotes = true;
     // 前面にあるときの FPS 上限。0 で上限なし。
     int frameRateLimit = 0;
     // **背面にあるときの FPS 上限。** 見えていない絵に GPU を回し続けないため、

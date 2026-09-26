@@ -280,8 +280,9 @@ void Application::ResetProject() {
     m_pieceStop.request_stop();
     m_pieceCompletedKey.clear();
     m_pieceSelectionEditing = false;
-    // 前の文書のピンIDや材質IDを持ったまま貼り付けると、無関係なノードへつながる。
-    m_graphClipboard = {};
+    // 控えたノードは残す（別の文書へ貼れるように）。前の文書のピンIDや材質IDのまま貼ると
+    // 無関係なノードへつながるので、文書が変わったことだけ記録し、貼るときに直す（AdoptGraphClipboard）。
+    ++m_documentGeneration;
     m_selectedGraphNode = 0;
     m_previewGraphNode = 0;
     m_previewGraphPin = 0;
@@ -333,6 +334,12 @@ void Application::ProcessPendingFileWork() {
     m_allowSceneSwitch = false;
     ProcessAssetWork();
 
+    // 別の文書でコピーしたノードの貼り付け。アセットの読み込みを伴うのでここで行う。
+    if (const std::optional<ImVec2> paste = std::exchange(m_pendingGraphPaste, std::nullopt)) {
+        AdoptGraphClipboard();
+        PasteGraphNodes(*paste);
+    }
+
     // アンドゥ / リドゥ。マテリアルの破棄を伴うのでここで処理する。
     if (m_pendingHistoryStep != 0) {
         const int step = m_pendingHistoryStep;
@@ -377,7 +384,7 @@ void Application::ProcessPendingFileWork() {
             m_pieceStop.request_stop();
             m_pieceCompletedKey.clear();
             m_pieceSelectionEditing = false;
-            m_graphClipboard = {};
+            ++m_documentGeneration;  // 控えたノードは貼るときに直す（AdoptGraphClipboard）
             m_previewGraphNode = m_graph.FindNode(m_options.previewNode) ? m_options.previewNode : 0;
             m_options.previewNode = 0;
             m_previewGraphPin = 0;

@@ -94,6 +94,8 @@ rock::StartupOptions ParseCommandLine() {
             options.placeModel = argv[++i];
         } else if (argument == L"--open-asset" && (i + 1) < argc) {
             options.openAsset = argv[++i];
+        } else if (argument == L"--test-copy-to" && (i + 1) < argc) {
+            options.testCopyTo = argv[++i];
         } else if (argument == L"--save-project" && (i + 1) < argc) {
             options.saveProjectPath = argv[i + 1];
             ++i;

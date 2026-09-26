@@ -8,6 +8,7 @@
 
 #include "app/Application.h"
 #include "graph/RockEvaluator.h"
+#include "io/ProjectIo.h"
 #include "renderer/RockMesh.h"
 
 #include "app/ApplicationUiHelpers.h"
@@ -18,7 +19,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cwctype>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -26,6 +29,72 @@ namespace ed = ax::NodeEditor;
 
 namespace rock {
 namespace {
+
+// ノードに出すメモの行数の上限。長いメモは末尾を「…」にし、全文はツールチップで見せる。
+constexpr int kNodeNoteLines = 3;
+
+// width で折り返した先頭の lines 行。収まらなければ最後の行の末尾を「…」にする。
+// **自前で文字ごとに折り返す。** ImGui の折り返しは空白や句読点を区切りに使うので、
+// 日本語の長い文では行の見積もりと描画が食い違う。改行はそのまま行の区切りにする。
+std::string NoteExcerpt(const std::string& note, float width, int lines) {
+    const auto advance = [](const std::string& text, size_t i) {
+        const auto c = static_cast<unsigned char>(text[i]);
+        return i + (c < 0x80 ? 1 : c < 0xE0 ? 2 : c < 0xF0 ? 3 : 4);
+    };
+    std::vector<std::string> wrapped;
+    std::string line;
+    for (size_t i = 0; i < note.size() && static_cast<int>(wrapped.size()) <= lines;) {
+        if (note[i] == '\n') {
+            wrapped.push_back(std::move(line));
+            line.clear();
+            ++i;
+            continue;
+        }
+        const size_t next = std::min(advance(note, i), note.size());
+        std::string candidate = line + note.substr(i, next - i);
+        if (!line.empty() && ImGui::CalcTextSize(candidate.c_str()).x > width) {
+            wrapped.push_back(std::move(line));
+            line = note.substr(i, next - i);
+        } else {
+            line = std::move(candidate);
+        }
+        i = next;
+    }
+    if (!line.empty() || wrapped.empty()) wrapped.push_back(std::move(line));
+    const bool truncated = static_cast<int>(wrapped.size()) > lines;
+    wrapped.resize(std::min<size_t>(wrapped.size(), static_cast<size_t>(lines)));
+    if (truncated) {
+        // 末尾の「…」が入るまで、最後の行を文字の境目で削る。
+        std::string& last = wrapped.back();
+        while (!last.empty() && ImGui::CalcTextSize((last + "…").c_str()).x > width) {
+            size_t cut = last.size() - 1;
+            while (cut > 0 && (static_cast<unsigned char>(last[cut]) & 0xC0) == 0x80) --cut;
+            last.resize(cut);
+        }
+        last += "…";
+    }
+    std::string result;
+    for (size_t i = 0; i < wrapped.size(); ++i) {
+        if (i) result += '\n';
+        result += wrapped[i];
+    }
+    return result;
+}
+
+// メモがあることを示す小さな印（紙に罫線 3 本）。色はテーマの淡い文字色。
+void DrawNoteIcon() {
+    const ImVec2 size(10.0f, 12.0f);
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    ImGui::Dummy(size);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImU32 color = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    const ImVec2 top(min.x, min.y + 2.0f);
+    drawList->AddRect(top, ImVec2(top.x + size.x, top.y + size.y), color, 1.5f);
+    for (int i = 0; i < 3; ++i) {
+        const float y = top.y + 3.0f + 2.5f * static_cast<float>(i);
+        drawList->AddLine(ImVec2(top.x + 2.5f, y), ImVec2(top.x + size.x - 2.5f, y), color);
+    }
+}
 
 ImU32 ColorToU32(const ImVec4& color) {
     return ImGui::ColorConvertFloat4ToU32(color);
@@ -192,6 +261,15 @@ bool IsValidNodePosition(float x, float y) {
     constexpr float kMaxCoordinate = 1.0e6f;
     return std::isfinite(x) && std::isfinite(y) && std::abs(x) <= kMaxCoordinate &&
            std::abs(y) <= kMaxCoordinate;
+}
+
+// 同じファイルか（区切りと大文字小文字の揺れを問わない）。空はどれとも一致しない。
+bool SamePath(const std::filesystem::path& a, const std::filesystem::path& b) {
+    if (a.empty() || b.empty()) return false;
+    std::wstring x = a.lexically_normal().wstring(), y = b.lexically_normal().wstring();
+    for (std::wstring* s : {&x, &y})
+        for (wchar_t& c : *s) c = c == L'/' ? L'\\' : static_cast<wchar_t>(std::towlower(c));
+    return x == y;
 }
 
 }  // namespace
@@ -541,6 +619,7 @@ void Application::CopySelectedGraphNodes() {
 
     m_graphClipboard.clear();
     m_graphPasteCount = 0;
+    m_graphClipboardDocument = m_documentGeneration;
     for (const graph::Node* node : nodes) {
         GraphClipboardNode entry;
         entry.originalId = node->id;
@@ -548,6 +627,21 @@ void Application::CopySelectedGraphNodes() {
         entry.settings = node->settings;
         entry.posX = node->posX;
         entry.posY = node->posY;
+        entry.note = node->note;
+        // 参照するアセットのファイルを控える（別の文書へ貼るときに番号を引き直す）。
+        graph::Node probe;
+        probe.settings = node->settings;
+        graph::VisitNodeMaterialLayers(probe, [&](compositor::MaterialLayer& layer) {
+            const compositor::MaterialAsset* material = m_materialLibrary.Find(layer.material);
+            entry.materialPaths.push_back(material != nullptr && !material->transient ? material->assetPath
+                                                                                      : std::filesystem::path());
+        });
+        if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node->settings))
+            if (const compositor::LibraryTexture* texture = m_textureLibrary.Find(mask->texture))
+                entry.texturePath = texture->path;
+        if (const auto* model = std::get_if<graph::ModelNodeSettings>(&node->settings))
+            if (const renderer::ModelAsset* asset = FindModel(model->model))
+                entry.modelPath = asset->assetPath.empty() ? asset->path : asset->assetPath;
         const ImVec2 size = ed::GetNodeSize(ed::NodeId(node->id));
         entry.sizeX = size.x;
         entry.sizeY = size.y;
@@ -582,8 +676,98 @@ void Application::CopySelectedGraphNodes() {
     ROCK_LOG_INFO("ノードをコピーしました: %zu 個", m_graphClipboard.size());
 }
 
+void Application::AdoptGraphClipboard() {
+    if (m_graphClipboardDocument == m_documentGeneration) return;
+    m_graphClipboardDocument = m_documentGeneration;
+
+    const auto findMaterial = [&](const std::filesystem::path& path) {
+        for (const compositor::MaterialAsset& material : m_materialLibrary.Entries())
+            if (!material.transient && SamePath(material.assetPath, path)) return material.id;
+        return compositor::kNoMaterialAsset;
+    };
+    const auto findModel = [&](const std::filesystem::path& path) -> uint64_t {
+        for (const renderer::ModelAsset& model : m_models)
+            if (SamePath(model.assetPath, path) || SamePath(model.path, path)) return model.id;
+        return 0;
+    };
+    size_t missing = 0;
+    bool loaded = false;
+    const auto resolveMaterial = [&](const std::filesystem::path& path) {
+        if (path.empty()) return compositor::kNoMaterialAsset;
+        compositor::MaterialAssetId id = findMaterial(path);
+        if (id == compositor::kNoMaterialAsset &&
+            io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache, m_textureLibrary,
+                                m_materialLibrary, m_skyLibrary)) {
+            id = findMaterial(path);
+            loaded = true;
+        }
+        return id;
+    };
+    const auto resolveModel = [&](const std::filesystem::path& path) -> uint64_t {
+        if (path.empty()) return 0;
+        if (const uint64_t id = findModel(path)) return id;
+        loaded = true;
+        if (_wcsicmp(path.extension().c_str(), L".rockmodel") != 0) return ImportModelFile(path);
+        return io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache, m_textureLibrary,
+                                   m_materialLibrary, m_skyLibrary, true, &m_models)
+                   ? findModel(path) : 0;
+    };
+
+    for (GraphClipboardNode& entry : m_graphClipboard) {
+        // 集合の外の親は前の文書のもの。つながりは外す（集合の中どうしは貼った側で繋ぎ直す）。
+        for (GraphClipboardNode::Source& source : entry.inputs) source.externalPin = 0;
+
+        graph::Node probe;
+        probe.settings = std::move(entry.settings);
+        size_t index = 0;
+        graph::VisitNodeMaterialLayers(probe, [&](compositor::MaterialLayer& layer) {
+            const bool had = layer.material != compositor::kNoMaterialAsset;
+            layer.material = resolveMaterial(index < entry.materialPaths.size() ? entry.materialPaths[index]
+                                                                                : std::filesystem::path());
+            ++index;
+            if (had && layer.material == compositor::kNoMaterialAsset) ++missing;
+        });
+        // ベイク結果は一時的な材質で、前の文書と一緒に消えている。貼った先で焼き直す。
+        if (auto* bake = std::get_if<graph::MaterialBakeSettings>(&probe.settings)) {
+            bake->bakedLayer.material = compositor::kNoMaterialAsset;
+            bake->fingerprint.clear();
+        }
+        if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&probe.settings)) {
+            const bool had = mask->texture != compositor::kNoTexture;
+            mask->texture = compositor::kNoTexture;
+            if (!entry.texturePath.empty()) {
+                mask->texture = m_textureLibrary.FindByPath(entry.texturePath);
+                if (mask->texture == compositor::kNoTexture) {
+                    mask->texture = m_textureLibrary.Load(m_device, m_pipelineCache, entry.texturePath);
+                    loaded = true;
+                }
+            }
+            if (had && mask->texture == compositor::kNoTexture) ++missing;
+        }
+        if (auto* model = std::get_if<graph::ModelNodeSettings>(&probe.settings)) {
+            const bool had = model->model != 0;
+            model->model = resolveModel(entry.modelPath);
+            if (had && model->model == 0) ++missing;
+        }
+        entry.settings = std::move(probe.settings);
+    }
+    if (loaded) {
+        m_assetRefresh = true;
+        m_renderer.InvalidateSceneMaterials();
+    }
+    if (missing > 0) {
+        ROCK_LOG_WARN("別のファイルから貼ったノードのうち %zu 件の参照（マテリアル・テクスチャ・モデル）を"
+                      "見つけられず「なし」にしました", missing);
+    }
+}
+
 void Application::PasteGraphNodes(const ImVec2& viewCenter) {
     if (m_graphClipboard.empty()) {
+        return;
+    }
+    // 別の文書でコピーしたもの。参照するアセットの読み込みを伴うので、フレームの外で貼る。
+    if (m_graphClipboardDocument != m_documentGeneration) {
+        m_pendingGraphPaste = viewCenter;
         return;
     }
     // 貼るたびに少しずらす。同じ場所に重ねると、貼れたのかどうか分からない。
@@ -616,6 +800,7 @@ void Application::PasteGraphNodes(const ImVec2& viewCenter) {
             continue;
         }
         node->settings = entry.settings;
+        node->note = entry.note;
         node->posX = entry.posX + deltaX;
         node->posY = entry.posY + deltaY;
         node->positionValid = true;
@@ -745,6 +930,12 @@ void Application::DrawGraphNode(const graph::Node& node) {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.72f, 0.76f, 0.62f, 1.0f), "●");
         }
+        // メモの印。載せると全文をツールチップで見せる。
+        if (!node.note.empty()) {
+            ImGui::SameLine();
+            DrawNoteIcon();
+            if (ImGui::IsItemHovered()) m_graphNoteHover = node.id;
+        }
         // 種類はヘッダの下に小さく添える。名前と種類の両方が分かるようにする。
         if (const graph::NodeDefinition* definition = graph::FindNodeDefinition(node.kind);
             definition != nullptr && layerSettings != nullptr) {
@@ -843,6 +1034,34 @@ void Application::DrawGraphNode(const graph::Node& node) {
     ed::PopStyleVar(4);
 }
 
+// ノードのメモの先頭を、ノードの上端のすぐ上に吹き出しとして出す（グラフパネルの「メモを表示」）。
+// **ノードの外に描く。** 中に描くとメモの有無や表示の切り替えでノードの高さが変わり、配置が崩れる。
+// ed::Begin と ed::End の間で呼ぶ（キャンバス座標で描き、マウスもキャンバス座標で判定する）。
+void Application::DrawGraphNodeNotes() {
+    if (!m_settings.Display().showNodeNotes) return;
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 padding(6.0f, 3.0f);
+    constexpr float kGap = 4.0f;
+    const ImU32 background = ImGui::GetColorU32(ImGuiCol_PopupBg, 0.92f);
+    const ImU32 border = ImGui::GetColorU32(ImGuiCol_Border);
+    const ImU32 text = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    for (const graph::Node& node : m_graph.Nodes()) {
+        if (node.note.empty()) continue;
+        const ImVec2 position = ed::GetNodePosition(ed::NodeId(node.id));
+        const ImVec2 size = ed::GetNodeSize(ed::NodeId(node.id));
+        // エディタがまだ知らないノード（このフレームに作ったもの）は飛ばす。
+        if (!IsValidNodePosition(position.x, position.y) || size.x <= 0.0f) continue;
+        const std::string excerpt = NoteExcerpt(node.note, size.x - padding.x * 2.0f, kNodeNoteLines);
+        const ImVec2 textSize = ImGui::CalcTextSize(excerpt.c_str());
+        const ImVec2 boxMax(position.x + size.x, position.y - kGap);
+        const ImVec2 boxMin(position.x, boxMax.y - textSize.y - padding.y * 2.0f);
+        drawList->AddRectFilled(boxMin, boxMax, background, 4.0f);
+        drawList->AddRect(boxMin, boxMax, border, 4.0f);
+        drawList->AddText(ImVec2(boxMin.x + padding.x, boxMin.y + padding.y), text, excerpt.c_str());
+        if (excerpt != node.note && ImGui::IsMouseHoveringRect(boxMin, boxMax)) m_graphNoteHover = node.id;
+    }
+}
+
 void Application::DrawGraphEditor() {
     if (m_nodeEditor == nullptr) {
         ed::Config config{};
@@ -896,6 +1115,7 @@ void Application::DrawGraphEditor() {
     for (const graph::Node& node : m_graph.Nodes()) {
         DrawGraphNode(node);
     }
+    DrawGraphNodeNotes();
 
     // A でグラフ全体を画面に収める（ビューポートの A と同じ作法）。
     // 内容の矩形は live なノードから計算されるため、描画の後に呼ぶ。
@@ -907,14 +1127,22 @@ void Application::DrawGraphEditor() {
 
     // Ctrl+C / Ctrl+V でノードをコピーする。**キャンバスの上にいるときだけ**
     // 拾う（名前の入力中や他のパネルの操作を横取りしない）。
-    if (canvasHovered && !io.WantTextInput && io.KeyCtrl) {
-        if (ImGui::IsKeyPressed(ImGuiKey_C, false)) {
-            CopySelectedGraphNodes();
-        }
-        if (ImGui::IsKeyPressed(ImGuiKey_V, false)) {
-            PasteGraphNodes(ed::ScreenToCanvas(ImVec2((canvasMin.x + canvasMax.x) * 0.5f,
-                                                      (canvasMin.y + canvasMax.y) * 0.5f)));
-        }
+    // 開発用 --test-copy-to: 先頭以外の全ノードをコピー → 指定のシーンを開く → 貼る。
+    // 先頭を外すのは、集合の外へのつながりが貼った先で外れることも確かめるため。
+    const bool testCopy = !m_options.testCopyTo.empty() && m_frameCounter == 30;
+    const bool testPaste = !m_options.testCopyTo.empty() && m_frameCounter == 60;
+    if (testCopy) {
+        m_selectedGraphNodes.clear();
+        for (const graph::Node& node : m_graph.Nodes()) m_selectedGraphNodes.push_back(node.id);
+        if (!m_selectedGraphNodes.empty()) m_selectedGraphNodes.erase(m_selectedGraphNodes.begin());
+    }
+    if (testCopy || (canvasHovered && !io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false))) {
+        CopySelectedGraphNodes();
+    }
+    if (testCopy) m_pendingProjectOpen = m_options.testCopyTo;
+    if (testPaste || (canvasHovered && !io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V, false))) {
+        PasteGraphNodes(ed::ScreenToCanvas(ImVec2((canvasMin.x + canvasMax.x) * 0.5f,
+                                                  (canvasMin.y + canvasMax.y) * 0.5f)));
     }
 
     // 位置を流し込んだ後の整列。**ノードを描いた後**でないと内容の矩形が空で
@@ -1162,6 +1390,16 @@ void Application::DrawGraphEditor() {
 
     ed::End();
 
+    // メモの全文。ノードエディタの外（ed::End の後）でないとツールチップの位置がずれる。
+    if (const graph::Node* noted = m_graph.FindNode(std::exchange(m_graphNoteHover, 0));
+        noted != nullptr && !noted->note.empty()) {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ui::Scaled(360.0f));
+        ImGui::TextUnformatted(noted->note.c_str());
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+
     // エディタが持つ位置をノードへ書き戻す（保存はここから読む）。
     // **このフレーム中に作られたばかりでエディタが知らないノードは飛ばす。**
     // エディタは知らないノードに FLT_MAX を返すため、書き戻すと次の流し込みで
@@ -1192,6 +1430,11 @@ void Application::DrawGraphPanel() {
     if (ui::BeginPropertyTable("meshSceneRows")) {
         ui::PropertyValue("メッシュ数", "%zu", static_cast<size_t>(std::count_if(m_renderer.Scene().meshes.begin(),
             m_renderer.Scene().meshes.end(), [](const auto& mesh) { return !mesh.materialOnly; })));
+        if (ui::PropertyBool("メモを表示", &m_settings.Display().showNodeNotes, true,
+                             "ノードのメモの先頭をノードの上に表示する。切るとメモの印だけになり、"
+                             "印に載せると全文が出る")) {
+            m_settings.Save();
+        }
         ui::EndPropertyTable();
     }
 
@@ -1238,6 +1481,16 @@ void Application::DrawGraphPanel() {
     ImGui::EndDisabled();
 
     graph::Node* selected = m_graph.FindMutableNode(m_selectedGraphNode);
+    // メモはどの種類のノードにも共通。評価には使わないので、グラフの改版は進めない
+    // （アンドゥと保存の対象にだけ載せる）。
+    if (selected != nullptr && ui::BeginPropertyTable("graphNodeNote")) {
+        if (ui::PropertyTextMultiline("メモ", selected->note, 3,
+                                      "なぜこのノードを置いたか、などのメモ。ノードビューに表示する"
+                                      "（評価には影響しない）。欄の外をクリックで確定")) {
+            m_documentDirty = true;
+        }
+        ui::EndPropertyTable();
+    }
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
                      "ピンをドラッグして接続、Ctrl+C / Ctrl+V でコピー");

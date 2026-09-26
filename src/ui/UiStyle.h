@@ -3,6 +3,8 @@
 #include <imgui.h>
 
 #include <cstddef>
+#include <string>
+#include <string>
 
 // UI の見た目とプロパティ行の共通部品。
 //
@@ -108,6 +110,10 @@ bool PropertyTextInput(const char* label, char* buffer, size_t bufferSize,
 // ファイルの改名など、1 文字ごとに反応させたくない値に使う。
 bool PropertyTextInputCommit(const char* label, char* buffer, size_t bufferSize,
                              const char* tooltip = nullptr);
+// 複数行の文字列の行。高さは lines 行ぶん。**編集を終えたとき（欄外のクリック）だけ true。**
+// 改行は Enter、確定は欄外のクリック（Enter で閉じると改行が打てないため）。
+bool PropertyTextMultiline(const char* label, std::string& text, int lines,
+                           const char* tooltip = nullptr);
 // 表示専用の値。
 void PropertyValue(const char* label, const char* format, ...);
 

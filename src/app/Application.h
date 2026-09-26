@@ -65,6 +65,9 @@ struct StartupOptions {
     // 指定すると、数フレーム描いてからプロジェクトを保存して終了する。
     // 保存と読み込みを対話なしで確かめるための開発用オプション。
     std::filesystem::path saveProjectPath;
+    // 開発用: 読み込んだシーンの先頭以外の全ノードをコピーし、このシーンを開いて貼る。
+    // 別のファイルへの貼り付けを対話なしで確かめる（--save-project と組み合わせる）。
+    std::filesystem::path testCopyTo;
     // 指定すると、数フレーム描いてからビューポートを PNG に書き出して終了する。
     // 画面キャプチャに頼らず描画結果を確認するための開発用オプション。
     std::filesystem::path screenshotPath;
@@ -140,6 +143,8 @@ private:
     void RequestGraphNodePlacement(bool navigate = true);
     // グラフのエディタ部（imgui-node-editor）。パネルの中で呼ぶ。
     void DrawGraphEditor();
+    // ノードのメモの先頭を、ノードの上に吹き出しで描く。ed::Begin と ed::End の間で呼ぶ。
+    void DrawGraphNodeNotes();
     // グラフのノード 1 枚。カード・ピン・リンクの当たり判定を描く。
     void DrawGraphNode(const graph::Node& node);
     bool IsGraphPinVisible(const graph::Pin& pin) const;
@@ -237,7 +242,13 @@ private:
     void CopySelectedGraphNodes();
     // 控えたノードを貼る。viewCenter は今のキャンバスの中央（キャンバス座標）で、
     // 貼った集合の中心をそこへ置く。相対の配置は保つ。
+    // 別の文書でコピーしたものは、参照するアセットを読み込む必要があるのでフレームの外へ回す
+    // （m_pendingGraphPaste → ProcessPendingFileWork）。
     void PasteGraphNodes(const ImVec2& viewCenter);
+    // 控えたノードを今の文書向けに直す。集合の外へのつながりを外し、マテリアル・テクスチャ・
+    // モデルの番号を控えたファイルから引き直す（無ければ読み込み、見つからなければ「なし」）。
+    // 読み込みを伴うのでフレームの外で呼ぶ。
+    void AdoptGraphClipboard();
     // ビューポートに出すノードを決める。メッシュノード以外や無効な ID は
     // 「Mesh Output の鎖」（0）に落とす。
     // outputPin は**どの出力を見るか**。0 なら最初の出力。
@@ -555,6 +566,12 @@ private:
         // （位置だけだと左上しか分からず、画面中央に寄せると右下へずれる）。
         float sizeX = 0.0f;
         float sizeY = 0.0f;
+        std::string note;
+        // 参照しているアセットのファイル。別の文書へ貼るとき、番号をこれで引き直す。
+        // 空なら持ち越せない（未保存・一時的なもの）。
+        std::vector<std::filesystem::path> materialPaths;  // VisitNodeMaterialLayers の順
+        std::filesystem::path texturePath;                  // Material Mask の画像
+        std::filesystem::path modelPath;                    // Model（.rockmodel か取り込み元）
         struct Source {
             int copiedIndex = -1;              // コピーした集合の中の添字
             graph::GraphId externalPin = 0;    // 集合の外なら、その出力ピン
@@ -564,6 +581,14 @@ private:
     std::vector<GraphClipboardNode> m_graphClipboard;
     // 貼るたびに位置をずらす回数。コピーし直すと 0 に戻す。
     int m_graphPasteCount = 0;
+    // 開いている文書の通し番号。新規・読み込みで進める。控えたノードがどの文書のものかの判定に使う。
+    uint64_t m_documentGeneration = 1;
+    // 控えたノードの番号（ピン・アセット）が有効な文書。
+    uint64_t m_graphClipboardDocument = 0;
+    // フレームの外で貼る予約（別の文書でコピーしたとき）。値は貼る先のキャンバスの中央。
+    std::optional<ImVec2> m_pendingGraphPaste;
+    // メモの印（か省略したメモ）にカーソルが載っているノード。ed::End の後でツールチップを出す。
+    graph::GraphId m_graphNoteHover = 0;
     // ビューポートに出しているメッシュノード。**選択とは別に持つ。**
     // 結果を見ながら別のノードのプロパティをいじれるようにするため。0 は Mesh Output の鎖。
     graph::GraphId m_previewGraphNode = 0;

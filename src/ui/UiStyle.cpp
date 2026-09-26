@@ -3,6 +3,7 @@
 #include "core/ColorSpace.h"
 
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 
 #include <algorithm>
 #include <cmath>
@@ -883,6 +884,20 @@ bool PropertyTextInputCommit(const char* label, char* buffer, size_t bufferSize,
     const bool enter = ImGui::InputText("##value", buffer, bufferSize, ImGuiInputTextFlags_EnterReturnsTrue);
     // Enter で確定した直後のフレームでは Deactivated も立つ。二重に返さないよう Enter を優先する。
     const bool committed = enter || ImGui::IsItemDeactivatedAfterEdit();
+    PropertyEnd();
+    return committed;
+}
+
+bool PropertyTextMultiline(const char* label, std::string& text, int lines, const char* tooltip) {
+    PropertyLabel(label, tooltip);
+    const float width = ImGui::GetContentRegionAvail().x;
+    const float height = ImGui::GetTextLineHeight() * static_cast<float>(std::max(lines, 1)) +
+                         ImGui::GetStyle().FramePadding.y * 2.0f;
+    // 入力中は ImGui が内部バッファで持ち、終えたときに text へ書き戻す。
+    std::string edited = text;
+    ImGui::InputTextMultiline("##value", &edited, ImVec2(width, height), ImGuiInputTextFlags_WordWrap);
+    const bool committed = ImGui::IsItemDeactivatedAfterEdit();
+    if (committed) text = edited;
     PropertyEnd();
     return committed;
 }
