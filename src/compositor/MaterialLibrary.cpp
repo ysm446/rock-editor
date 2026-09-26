@@ -115,6 +115,7 @@ LayerMaterialGpu MaterialLibrary::CompileLayerMaterial(const MaterialAsset& asse
 void MaterialLibrary::Destroy(rhi::Device& device) {
     for (MaterialAsset& asset : m_entries) {
         device.DeferRelease(asset.thumbnail);
+        device.DeferRelease(asset.layerMasks);
     }
     m_entries.clear();
 }
@@ -160,6 +161,7 @@ MaterialAssetId MaterialLibrary::Duplicate(const MaterialAsset& source) {
     asset.assetUid.clear();
     // サムネイルは共有しない。作り直させる。
     asset.thumbnail = rhi::GpuTexture{};
+    asset.layerMasks = rhi::GpuTexture{};
     asset.thumbnailDirty = true;
     m_entries.push_back(std::move(asset));
     return m_entries.back().id;
@@ -172,6 +174,7 @@ void MaterialLibrary::Remove(rhi::Device& device, MaterialAssetId id) {
         return;
     }
     device.DeferRelease(it->thumbnail);
+    device.DeferRelease(it->layerMasks);
     m_entries.erase(it);
 }
 
@@ -215,6 +218,14 @@ D3D12_GPU_DESCRIPTOR_HANDLE MaterialLibrary::ThumbnailHandle(MaterialAssetId id)
         return D3D12_GPU_DESCRIPTOR_HANDLE{0};
     }
     return asset->thumbnail.srv.gpu;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE MaterialLibrary::LayerMaskHandle(MaterialAssetId id) const {
+    const MaterialAsset* asset = Find(id);
+    if (asset == nullptr || !asset->layerMasks.IsValid()) {
+        return D3D12_GPU_DESCRIPTOR_HANDLE{0};
+    }
+    return asset->layerMasks.srv.gpu;
 }
 
 void MaterialLibrary::ProcessPendingWork(rhi::Device& device, rhi::PipelineCache& pipelineCache,
@@ -271,6 +282,23 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
             return false;
         }
     }
+    // レイヤーマテリアルは層ごとの見える範囲も作る。作れなくてもサムネイル本体は続ける。
+    ID3D12PipelineState* maskPipeline =
+        asset.layerMaterial ? pipelineCache.GetCompute(L"MaterialThumbnail.hlsl", L"CsLayerMask") : nullptr;
+    if (maskPipeline != nullptr && !asset.layerMasks.IsValid()) {
+        rhi::TextureDesc desc;
+        desc.width = kLayerMaskThumbnailSize * 4;
+        desc.height = kLayerMaskThumbnailSize;
+        desc.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.allowUnorderedAccess = true;
+        desc.allowRenderTarget = true;  // サムネイル本体と同じく、初回はRTVのクリアで初期化する。
+        desc.createSrv = true;
+        desc.initialState = D3D12_RESOURCE_STATE_COMMON;
+        desc.debugName = L"LayerMaskThumbnail";
+        if (!device.Allocator().CreateTexture2D(desc, asset.layerMasks)) {
+            maskPipeline = nullptr;
+        }
+    }
 
     ThumbnailConstants constants = {};
     constants.layerMaterial = asset.layerGpu;
@@ -319,6 +347,27 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
         // ImGui から SRV として読むので、ピクセルシェーダ可視の状態へ移す。
         rhi::TransitionIfNeeded(commandList, thumbnail,
                                 D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+        if (maskPipeline != nullptr) {
+            rhi::GpuTexture& masks = asset.layerMasks;
+            if (masks.state == D3D12_RESOURCE_STATE_COMMON) {
+                rhi::TransitionIfNeeded(commandList, masks, D3D12_RESOURCE_STATE_RENDER_TARGET);
+                const float clearColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+                commandList->ClearRenderTargetView(masks.rtv.cpu, clearColor, 0, nullptr);
+            }
+            rhi::TransitionIfNeeded(commandList, masks, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            ThumbnailConstants maskConstants = constants;
+            maskConstants.outputIndex = masks.UavIndex();
+            maskConstants.size = kLayerMaskThumbnailSize;
+            const auto maskCb = device.Upload().Allocate(sizeof(maskConstants), 256);
+            if (maskCb.IsValid()) {
+                std::memcpy(maskCb.cpu, &maskConstants, sizeof(maskConstants));
+                commandList->SetPipelineState(maskPipeline);
+                commandList->SetComputeRootConstantBufferView(1, maskCb.gpuAddress);
+                commandList->Dispatch(DispatchCount(kLayerMaskThumbnailSize * 4), DispatchCount(kLayerMaskThumbnailSize), 1);
+            }
+            rhi::TransitionIfNeeded(commandList, masks, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
 
         PIXEndEvent(commandList);
     });

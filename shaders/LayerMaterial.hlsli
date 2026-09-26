@@ -10,7 +10,8 @@ struct LayerMaterialData {
     uint count; float blendRange; float displacementMeters; float pad;
     LayerMaterialSlot slots[4];
 };
-struct LayerMaterialSample { float3 color; float3 normal; float3 surface; float height; float4 coverage; };
+// coverage は各層の被覆（マスク）、visible は合成後に各層が最終的に見えている割合。
+struct LayerMaterialSample { float3 color; float3 normal; float3 surface; float height; float4 coverage; float4 visible; };
 float4 SampleLayerMaterialMap(uint index, float2 uv, float footprint) {
     Texture2D<float4> map = ResourceDescriptorHeap[index];
     uint w, h; map.GetDimensions(w, h);
@@ -35,6 +36,7 @@ LayerMaterialSample EvaluateLayerMaterialBase(LayerMaterialData data, float2 met
         LayerMaterialSlot s = data.slots[i];
         LayerMaterialSample v;
         v.color = s.color.rgb; v.surface = s.surface.xyz; v.normal = float3(0,0,1); v.height = 0.5f;
+        v.coverage = 0; v.visible = 0;
         if (i < data.count) {
             const float2 p = s.surface.w != 0 ? worldMeters : meters;
             const float2 uv = p / max(s.color.w, 0.01f);
@@ -75,6 +77,7 @@ LayerMaterialSample EvaluateLayerMaterialBase(LayerMaterialData data, float2 met
     // 岩用の積層。後の層ほど手前に重なり、被覆0は下の結果を保つ。
     LayerMaterialSample result = samples[0];
     result.coverage = coverage; result.coverage.x = 1;
+    result.visible = float4(1, 0, 0, 0);
     [unroll] for (uint j = 1; j < 4; ++j) if (j < data.count) {
         float weight = saturate(coverage[j]);
         if (modes[j] != 0) {
@@ -83,6 +86,9 @@ LayerMaterialSample EvaluateLayerMaterialBase(LayerMaterialData data, float2 met
             if (coverage[j] <= 0) weight = 0;
             if (coverage[j] >= 1) weight = 1;
         }
+        // 上に重なった分だけ下の層の見える割合が減る。
+        result.visible *= 1 - weight;
+        result.visible[j] = weight;
         result.color = lerp(result.color, samples[j].color, weight);
         result.surface = lerp(result.surface, samples[j].surface, weight);
         result.height = lerp(result.height, heights[j], weight);

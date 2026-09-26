@@ -110,8 +110,14 @@ struct MaterialAsset {
 
     // 一覧に出すサムネイル。マップかパラメータを変えたら作り直す。
     rhi::GpuTexture thumbnail;
+    // レイヤーマテリアルだけ。各層が合成後に見えている範囲の白黒画像を 4 層ぶん横に並べたもの。
+    // サムネイルと一緒に作り直す。
+    rhi::GpuTexture layerMasks;
     bool thumbnailDirty = true;
 };
+
+// layerMasks の 1 層あたりの一辺。一覧の行に並べる大きさに足りればよい。
+inline constexpr uint32_t kLayerMaskThumbnailSize = 64;
 
 // チャンネル指定をシェーダへ渡す形へ詰める。並びは ROCK_CHANNEL_SLOT_* と一致させること。
 uint32_t PackMaterialChannels(const MaterialAsset& asset);
@@ -153,6 +159,8 @@ public:
 
     // 一覧で使うサムネイルのハンドル。まだ無ければ ptr が 0。
     D3D12_GPU_DESCRIPTOR_HANDLE ThumbnailHandle(MaterialAssetId id) const;
+    // レイヤーマテリアルの層ごとの見える範囲（layerMasks）。まだ無ければ ptr が 0。
+    D3D12_GPU_DESCRIPTOR_HANDLE LayerMaskHandle(MaterialAssetId id) const;
 
 private:
     bool BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pipelineCache,

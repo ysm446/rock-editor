@@ -192,3 +192,31 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
     output[dispatchThreadId.xy] =
         float4(LinearToSrgb(ApplyTonemap(radiance, kTonemapAces)), coverage);
 }
+
+// レイヤーマテリアルの各層が、合成後に見えている範囲の白黒画像。
+// size 四方を 4 層ぶん横に並べる（出力は size*4 × size）。白がその層の見える所。
+// 範囲はサムネイルと同じ素材座標 0〜uvScale。層が無い枠はアルファ 0 で抜く。
+[numthreads(8, 8, 1)]
+void CsLayerMask(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    const uint size = g_thumbnail.size;
+    if (dispatchThreadId.x >= size * 4 || dispatchThreadId.y >= size)
+    {
+        return;
+    }
+    RWTexture2D<float4> output = ResourceDescriptorHeap[g_thumbnail.outputIndex];
+    const uint slot = dispatchThreadId.x / size;
+    if (slot >= g_thumbnail.layerMaterial.count)
+    {
+        output[dispatchThreadId.xy] = float4(0.0f, 0.0f, 0.0f, 0.0f);
+        return;
+    }
+    const float2 local = (float2(dispatchThreadId.x % size, dispatchThreadId.y) + 0.5f) / float(size);
+    // サムネイルの円板と同じ向き（v は上向き）。
+    const float2 uv = float2(local.x, 1.0f - local.y) * g_thumbnail.uvScale;
+    const float footprint = g_thumbnail.uvScale / size;
+    const LayerMaterialSample mixed = EvaluateLayerMaterialBase(g_thumbnail.layerMaterial, uv, uv, footprint.xx,
+        float2(1, 0), float2(0, 1));
+    const float value = saturate(mixed.visible[slot]);
+    output[dispatchThreadId.xy] = float4(value, value, value, 1.0f);
+}
