@@ -49,7 +49,7 @@ float MaterialHeight::HeightBlendWeight(float mask,float height,float below,floa
 }
 float MaterialHeight::Sample(GraphId surface,const compositor::MaterialMask* mask,GraphId maskId,
                               geometry::Vec3 p,geometry::Vec3 n,geometry::Mesh::Uv uv,float below,bool uvWrap,
-                              bool heightBlend,float heightBlendRange) const {
+                              bool heightBlend,float heightBlendRange,float opacity) const {
     const auto& s=surfaces.at(surface);
     if(!(s.channels&compositor::ChannelBit(compositor::Channel::Height))) return below;
     const auto weights=[](geometry::Vec3 normal,float sharp) {
@@ -79,6 +79,7 @@ float MaterialHeight::Sample(GraphId surface,const compositor::MaterialMask* mas
     if(mask && mask->invert) alpha=1-alpha;
     alpha=std::clamp(alpha,0.f,1.f);
     if(heightBlend) alpha=HeightBlendWeight(alpha,height,below,heightBlendRange);
+    alpha*=std::clamp(opacity,0.f,1.f);
     return std::lerp(below,height,alpha);
 }
 }

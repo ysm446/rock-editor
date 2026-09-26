@@ -81,6 +81,7 @@ struct AppliedConstants {
     XMFLOAT4 axisX, axisY, axisZ;
     XMFLOAT3 offset; uint32_t method;
     uint32_t maskIndex; float maskValue, maskRepeat; uint32_t maskFlags;
+    float opacity; float opacityPadding[3];
 };
 struct MeshConstants {
     XMFLOAT4X4 viewProjection;
@@ -201,6 +202,7 @@ void FillApplied(AppliedConstants& out, const SceneMesh::AppliedMaterial& source
     out.offset = m.offset; out.method = uint32_t(m.method);
     out.maskIndex = textures.SrvIndex(source.mask.texture, false);
     out.maskValue = source.mask.value; out.maskRepeat = source.mask.repeatMeters;
+    out.opacity = std::clamp(source.opacity, 0.f, 1.f);
     out.maskFlags = (source.mask.invert ? 1u : 0u) | (source.mask.triplanar ? 2u : 0u) | (source.heightBlend ? 4u : 0u) | (source.channels << 8);
 }
 

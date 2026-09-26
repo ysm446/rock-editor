@@ -144,7 +144,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(maskFilter->inputHigh); add(maskFilter->gamma); add(maskFilter->outputLow); add(maskFilter->outputHigh);
         add(maskFilter->invert);
     } else if (const auto* apply = std::get_if<ApplyMaterialSettings>(&node->settings)) {
-        add(apply->heightBlend); add(apply->heightBlendRange);
+        add(apply->heightBlend); add(apply->heightBlendRange); add(apply->opacity);
     } else if (node->kind != NodeKind::PiecesToMesh && node->kind != NodeKind::Merge &&
                node->kind != NodeKind::UvUnwrap && node->kind != NodeKind::MaterialBake &&
                node->kind != NodeKind::ApplyMaterial && node->kind != NodeKind::MeshOutput) return std::nullopt;
@@ -366,16 +366,20 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                     !std::isfinite(settings->repeatMeters) || settings->repeatMeters < .001f || settings->repeatMeters > 10000)
                     return finish(Failure(id, "Apply Material", "マスクの設定が不正です"));
             }
+            const auto* apply = std::get_if<ApplyMaterialSettings>(&node->settings);
+            const float opacity = apply ? std::clamp(apply->opacity, 0.f, 1.f) : 1.f;
             for (auto& rock : result.rocks) {
                 if (rock.volume) return finish(Failure(id, "Apply Material", "Volume to Meshを通してください"));
-                if (!mask) { rock.materials.clear(); rock.maskImages.clear(); }
+                // 全面置換は不透明なときだけ。半透明なら Mask 未接続でも上流へ重ねる。
+                if (!mask && opacity >= 1) { rock.materials.clear(); rock.maskImages.clear(); }
                 else if (rock.materials.empty() && rock.materialSource) rock.materials.push_back({rock.materialSource, 0});
                 if (rock.materials.size() >= 8) return finish(Failure(id, "Apply Material", "素材の重ね合わせは8段までです"));
                 GeneratedRock::MaterialBinding binding{material->id, mask ? mask->id : 0};
-                if (const auto* apply = std::get_if<ApplyMaterialSettings>(&node->settings)) {
+                if (apply) {
                     binding.heightBlend = apply->heightBlend;
                     binding.heightBlendRange = std::clamp(apply->heightBlendRange, .01f, 1.f);
                 }
+                binding.opacity = opacity;
                 rock.materials.push_back(binding);
                 if (shapeMask) rock.maskImages[mask->id] = shapeMask;
                 rock.previewMask.reset();
@@ -493,7 +497,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                 mask = &shape;
                             }
                             h = heights->Sample(binding.surface, mask, binding.mask, p, n, uv, h, wrap,
-                                                binding.heightBlend, binding.heightBlendRange);
+                                                binding.heightBlend, binding.heightBlendRange, binding.opacity);
                         }
                         return h;
                     };

@@ -48,6 +48,8 @@ struct SceneMesh {
         // 素材のハイトで合成する。マスクを基準に、この素材のハイトが下地より高い所を前に出す。
         bool heightBlend = false;
         float heightBlendRange = .2f;
+        // 不透明度。マスク（とハイト合成）で決めた重みに最後に掛ける。
+        float opacity = 1;
     };
     std::vector<AppliedMaterial> appliedMaterials;
     std::vector<size_t> appliedSources; // 描画器内部の素材評価エントリ。

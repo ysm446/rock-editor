@@ -523,7 +523,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["materialMask"] = {{"texture", writeTexture(mask->texture)}, {"value", mask->value},
                 {"repeatMeters", mask->repeatMeters}, {"invert", mask->invert}, {"triplanar", mask->triplanar}};
         } else if (const auto* apply = std::get_if<graph::ApplyMaterialSettings>(&node.settings)) {
-            item["applyMaterial"] = {{"heightBlend", apply->heightBlend}, {"heightBlendRange", apply->heightBlendRange}};
+            item["applyMaterial"] = {{"heightBlend", apply->heightBlend}, {"heightBlendRange", apply->heightBlendRange},
+                                     {"opacity", apply->opacity}};
         } else if (const auto* deposition = std::get_if<geometry::DepositionMaskSettings>(&node.settings)) {
             item["depositionMask"] = {{"amount", deposition->amount}, {"distance", deposition->distance},
                 {"maxSlopeDegrees", deposition->maxSlopeDegrees}, {"recessPreference", deposition->recessPreference},
@@ -814,6 +815,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 if (const json* v = FindMember(item, "applyMaterial"); v && v->is_object()) {
                     settings.heightBlend = ReadBool(*v, "heightBlend", false);
                     settings.heightBlendRange = std::clamp(ReadFloat(*v, "heightBlendRange", .2f), .01f, 1.f);
+                    settings.opacity = std::clamp(ReadFloat(*v, "opacity", 1), 0.f, 1.f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::DepositionMask) {

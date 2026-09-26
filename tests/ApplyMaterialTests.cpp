@@ -86,6 +86,22 @@ void RunApplyMaterialTests() {
     Check(MaterialHeight::HeightBlendWeight(.5f, .6f, .5f, 1.f) < MaterialHeight::HeightBlendWeight(.5f, .6f, .5f, .1f),
           "smaller range makes the transition sharper");
     applySettings.heightBlend = false;
+    // 不透明度。束へ届き、Mask 未接続でも 1 未満なら上流を残して重ねる。
+    applySettings.opacity = .3f;
+    r = graph::EvaluateRocks(g, b);
+    Check(r.error.empty() && r.rocks[0].materials.size() == 2 && r.rocks[0].materials[1].opacity == .3f &&
+              r.rocks[0].materials[0].opacity == 1,
+          "opacity reaches the material binding of that stage");
+    auto thin = g.CreateNode(graph::NodeKind::ApplyMaterial);
+    link(b, thin); link(s, thin, 1);
+    std::get<graph::ApplyMaterialSettings>(g.FindMutableNode(thin)->settings).opacity = .5f;
+    r = graph::EvaluateRocks(g, thin);
+    Check(r.error.empty() && r.rocks[0].materials.size() == 3 && r.rocks[0].materials[2].mask == 0,
+          "translucent stage without mask keeps upstream materials");
+    std::get<graph::ApplyMaterialSettings>(g.FindMutableNode(thin)->settings).opacity = 1;
+    r = graph::EvaluateRocks(g, thin);
+    Check(r.error.empty() && r.rocks[0].materials.size() == 1, "opaque stage without mask replaces everything");
+    applySettings.opacity = 1;
     geometry::Mesh plane;
     plane.positions = {{-1, 0, -1}, {1, 0, -1}, {1, 0, 1}, {-1, 0, 1}};
     plane.triangles = {{0, 2, 1}, {0, 3, 2}};

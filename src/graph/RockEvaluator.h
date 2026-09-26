@@ -21,6 +21,7 @@ struct GeneratedRock {
         // 素材のハイトで合成する（Apply Material の設定）。
         bool heightBlend = false;
         float heightBlendRange = .2f;
+        float opacity = 1;
         bool operator==(const MaterialBinding&) const = default;
     };
     std::vector<MaterialBinding> materials;

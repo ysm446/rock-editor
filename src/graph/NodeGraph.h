@@ -158,6 +158,8 @@ struct ApplyMaterialSettings {
     bool heightBlend = false;
     // 境目のなだらかさ。0.01〜1。小さいほどハイトの差でくっきり分かれる。
     float heightBlendRange = .2f;
+    // 不透明度。0〜1。マスク（とハイト合成）で決めた重みに最後に掛ける。1 未満なら Mask 未接続でも上流へ薄く重ねる。
+    float opacity = 1;
     bool operator==(const ApplyMaterialSettings&) const = default;
 };
 struct MaterialBakeSettings {

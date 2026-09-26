@@ -1822,6 +1822,8 @@ void Application::DrawGraphPanel() {
         bool changed = false;
         const bool masked = selected->inputs.size() > 2 && m_graph.FindUpstreamNodeForPin(selected->inputs[2].id);
         if (ui::BeginPropertyTable("applyMaterialRows")) {
+            changed |= ui::PropertyFloat("不透明度", &apply->opacity, 0, 1, 1,
+                                         "この素材の効き具合。1で通常どおり、下げるほど下地が透けて薄くかかります。Mask未接続でも1未満なら上流の素材に重ねます。");
             changed |= ui::PropertyBool("ハイトで合成", &apply->heightBlend, false,
                                         "マスクを基準に、この素材のハイトが下地より高い所を前に出します。石の隙間に砂が溜まる、苔が凹みに入る、といった合成になります。");
             if (apply->heightBlend)
@@ -1829,9 +1831,13 @@ void Application::DrawGraphPanel() {
                                              "境目の幅。小さいほどハイトの差でくっきり分かれます。");
             ui::EndPropertyTable();
         }
-        ui::HintText("MeshとSurfaceを接続します。Mask未接続なら全面を置換。Mask接続時は白で新しい素材、黒で上流の素材、中間値で混合します。最大8段まで重ねられます。");
+        ui::HintText("MeshとSurfaceを接続します。Mask未接続なら全面を置換（不透明度が1未満なら上流に重ねる）。Mask接続時は白で新しい素材、黒で上流の素材、中間値で混合します。最大8段まで重ねられます。");
         if (apply->heightBlend && !masked) ui::HintText("Maskが未接続なので全面置換です。ハイトで合成するにはMaskを接続してください（定数0.5のMaterial Maskでも可）。");
-        if (changed) { apply->heightBlendRange = std::clamp(apply->heightBlendRange, .01f, 1.0f); m_graph.MarkDirty(); MarkDocumentChanged(); }
+        if (changed) {
+            apply->heightBlendRange = std::clamp(apply->heightBlendRange, .01f, 1.0f);
+            apply->opacity = std::clamp(apply->opacity, 0.0f, 1.0f);
+            m_graph.MarkDirty(); MarkDocumentChanged();
+        }
     } else if (auto* mask = std::get_if<graph::MaterialMaskSettings>(&selected->settings)) {
         bool changed = false;
         if (ui::BeginPropertyTable("materialMask")) {

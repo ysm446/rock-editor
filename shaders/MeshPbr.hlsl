@@ -39,6 +39,7 @@ struct AppliedConstants {
     float4 axisX, axisY, axisZ;
     float3 offset; uint method;
     uint maskIndex; float maskValue, maskRepeat; uint maskFlags;
+    float opacity; float3 opacityPadding;
 };
 
 struct MeshConstants
@@ -946,6 +947,7 @@ AppliedValue EvaluateApplied(VsOutput input) {
             const float d = (height - result.height) * 0.5f + 0.5f;
             mask = saturate((d - (1.0f - mask)) / max(a.axisZ.w, 0.01f) + mask);
         }
+        mask *= a.opacity;
         if ((a.maskFlags & 256u) != 0u) result.color = lerp(result.color,color,mask);
         if ((a.maskFlags & 512u) != 0u) result.normal = normalize(lerp(result.normal,normal,mask));
         if ((a.maskFlags & 1024u) != 0u) result.surface = lerp(result.surface,surface,mask);
