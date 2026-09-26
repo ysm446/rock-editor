@@ -5,6 +5,7 @@
 #include "app/UndoHistory.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
 using namespace rock;
@@ -403,4 +404,94 @@ void RunMaskCombineTests() {
     combineSettings().operation = geometry::MaskCombineOperation::Mix;
     r = graph::EvaluateRocks(g, apply, &cache);
     Check(!r.error.empty() && r.error.find("Mask Combine") != std::string::npos, "invalid settings are diagnosed on the combine node");
+}
+
+void RunNoiseMaskTests() {
+    using tests::Check;
+    tests::Section("Noise Mask");
+    std::string error;
+    geometry::NoiseMaskSettings settings;settings.resolution=128;settings.size=.7f;
+    // 同じ3Dの面を離れたUVの島へ置く。テクセルが同じ位置を指せば同じ値になる。
+    geometry::Mesh mesh;
+    mesh.positions={{0,0,0},{2,0,0},{2,0,2},{0,0,2},{0,0,0},{2,0,0},{2,0,2},{0,0,2}};
+    mesh.triangles={{0,2,1},{0,3,2},{4,6,5},{4,7,6}};
+    mesh.cornerUvs={{{{0,0},{.5f,1},{.5f,0}}},{{{0,0},{0,1},{.5f,1}}},
+                    {{{.5f,0},{1,1},{1,0}}},{{{.5f,0},{.5f,1},{1,1}}}};
+    mesh.uvCharts={0,0,1,1};mesh.uvWidth=mesh.uvHeight=128;
+    auto image=geometry::NoiseMask(mesh,settings,error);
+    Check(error.empty() && image.pixels.size()==128*128,"UV付きメッシュからマスクを生成");
+    if (image.pixels.size()!=128*128) return;
+    const auto range=std::minmax_element(image.pixels.begin(),image.pixels.end());
+    Check(*range.second-*range.first>64,"一定値ではなくムラを生成");
+    bool samePosition=true;
+    for (size_t y=0;y<128;++y) for (size_t x=0;x<64;++x)
+        samePosition &= image.pixels[y*128+x]==image.pixels[y*128+x+64];
+    Check(samePosition,"離れたUVの島でも同じ3D位置には同じ模様");
+    Check(geometry::NoiseMask(mesh,settings,error).pixels==image.pixels,"並列計算でもSeedから再現");
+    auto edited=settings;edited.seed=123;
+    Check(geometry::NoiseMask(mesh,edited,error).pixels!=image.pixels,"Seedで模様を変更");
+    edited=settings;edited.size=1.7f;
+    Check(geometry::NoiseMask(mesh,edited,error).pixels!=image.pixels,"ムラの大きさで模様を変更");
+    edited=settings;edited.invert=true;
+    Check(geometry::NoiseMask(mesh,edited,error).pixels==image.pixels,"反転は消費側で適用し画像を再生成しない");
+    auto lifted=mesh;for (auto& p:lifted.positions) p.y+=.37f;
+    Check(geometry::NoiseMask(lifted,settings,error).pixels!=image.pixels,"XZだけでなくY座標も模様に影響する");
+    auto flipped=mesh;for (auto& face:flipped.cornerUvs) for (auto& uv:face) uv.v=1-uv.v;
+    auto flipImage=geometry::NoiseMask(flipped,settings,error);
+    bool followsUv=flipImage.pixels.size()==image.pixels.size();
+    if (followsUv) for (size_t y=0;y<128;++y) for (size_t x=0;x<128;++x)
+        followsUv &= std::abs(int(image.pixels[y*128+x])-int(flipImage.pixels[(127-y)*128+x]))<=1;
+    Check(followsUv,"UVを反転すると画像も反転し表面の模様を維持");
+    edited=settings;edited.contrast=1;
+    auto high=geometry::NoiseMask(mesh,edited,error);
+    const auto extremes=[](const auto& pixels) {return std::count_if(pixels.begin(),pixels.end(),[](auto v){return v==0 || v==255;});};
+    Check(extremes(high.pixels)>extremes(image.pixels),"コントラストを上げると白黒が明確になる");
+    for (auto bad:{[](auto s){s.size=0;return s;}(settings),
+                  [](auto s){s.warp=std::numeric_limits<float>::quiet_NaN();return s;}(settings),
+                  [](auto s){s.detail=2;return s;}(settings),[](auto s){s.resolution=127;return s;}(settings)})
+        Check(geometry::NoiseMask(mesh,bad,error).pixels.empty() && !error.empty(),"不正なノイズ設定を診断");
+    Check(geometry::NoiseMask(geometry::MakeBox({1,1,1}),settings,error).pixels.empty() && !error.empty(),"UVのないメッシュを診断");
+    std::stop_source stop;stop.request_stop();
+    Check(geometry::NoiseMask(mesh,settings,error,stop.get_token()).pixels.empty() && !error.empty(),"ノイズ生成のキャンセル");
+
+    graph::NodeGraph g;
+    const auto base=g.CreateNode(graph::NodeKind::BaseRock),uv=g.CreateNode(graph::NodeKind::UvUnwrap),
+        noise=g.CreateNode(graph::NodeKind::NoiseMask),shape=g.CreateNode(graph::NodeKind::ShapeMask),
+        combine=g.CreateNode(graph::NodeKind::MaskCombine),apply=g.CreateNode(graph::NodeKind::ApplyMaterial),
+        surface=g.CreateNode(graph::NodeKind::Surface),sub=g.CreateNode(graph::NodeKind::Subdivide);
+    std::get<geometry::UvUnwrapSettings>(g.FindMutableNode(uv)->settings).resolution=128;
+    std::get<geometry::NoiseMaskSettings>(g.FindMutableNode(noise)->settings)=settings;
+    auto& shapeSettings=std::get<geometry::ShapeMaskSettings>(g.FindMutableNode(shape)->settings);
+    shapeSettings.type=geometry::ShapeMaskType::Height;shapeSettings.resolution=128;
+    const auto link=[&](int from,int to,int pin=0){return g.CreateLink(g.FindNode(from)->outputs[0].id,g.FindNode(to)->inputs[pin].id);};
+    Check(link(base,uv) && link(uv,noise) && link(uv,shape) && link(noise,combine) && link(shape,combine,1) &&
+          link(uv,apply) && link(surface,apply,1) && link(noise,apply,2) && link(apply,sub),"Noise Maskの接続と既存経路への統合");
+    const auto* definition=graph::FindNodeDefinitionByName("noiseMask");
+    Check(definition && definition->kind==graph::NodeKind::NoiseMask && graph::IsPreviewableNodeKind(definition->kind),"保存名と白黒プレビュー対象を登録");
+    graph::RockEvaluationCache cache;
+    auto result=graph::EvaluateRocks(g,noise,&cache);
+    Check(result.error.empty() && result.rocks.size()==1 && result.rocks[0].previewMask,"ノード評価でプレビュー画像を返す");
+    if (!result.error.empty() || result.rocks.empty() || !result.rocks[0].previewMask) return;
+    const auto preview=result.rocks[0].previewMask;
+    auto applied=graph::EvaluateRocks(g,sub,&cache);
+    Check(applied.error.empty() && applied.rocks[0].maskImages.at(noise)==preview,"素材適用とSubdivideにマスク画像を渡す");
+    const auto count=cache.computations[noise];
+    auto mixed=graph::EvaluateRocks(g,combine,&cache);
+    Check(mixed.error.empty() && mixed.rocks[0].previewMask && cache.computations[noise]==count,"Shape Maskとの合成で入力キャッシュを再利用");
+    auto& ns=std::get<geometry::NoiseMaskSettings>(g.FindMutableNode(noise)->settings);
+    ns.invert=true;
+    Check(graph::ImageMaskInvert(*g.FindNode(noise)),"描画・ベイク・Displace共通の反転値");
+    auto inverted=graph::EvaluateRocks(g,combine,&cache);
+    Check(inverted.error.empty() && inverted.rocks[0].previewMask->pixels!=mixed.rocks[0].previewMask->pixels &&
+          cache.computations[noise]==count,"反転はノイズを再生成せず合成結果へ反映");
+    DocumentSnapshot before;before.graphNodes=g.Nodes();before.graphLinks=g.Links();
+    ns.seed+=1;
+    auto updated=graph::EvaluateRocks(g,sub,&cache);
+    Check(updated.error.empty() && updated.rocks[0].maskImages.at(noise)!=preview && cache.computations[noise]==count+1,
+          "Seed変更でノイズと下流のキャッシュを更新");
+    DocumentSnapshot after;after.graphNodes=g.Nodes();after.graphLinks=g.Links();
+    UndoHistory history;history.Push(before,0);auto undo=history.Undo(after);g.Replace(undo.graphNodes,undo.graphLinks);
+    Check(std::get<geometry::NoiseMaskSettings>(g.FindNode(noise)->settings).seed==settings.seed,"Noise Mask設定のUndo");
+    auto redo=history.Redo(undo);g.Replace(redo.graphNodes,redo.graphLinks);
+    Check(std::get<geometry::NoiseMaskSettings>(g.FindNode(noise)->settings).seed==settings.seed+1,"Noise Mask設定のRedo");
 }

@@ -493,6 +493,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
                 {"repeatMeters", mask->repeatMeters}, {"invert", mask->invert}, {"triplanar", mask->triplanar}};
         } else if (const auto* apply = std::get_if<graph::ApplyMaterialSettings>(&node.settings)) {
             item["applyMaterial"] = {{"heightBlend", apply->heightBlend}, {"heightBlendRange", apply->heightBlendRange}};
+        } else if (const auto* noiseMask = std::get_if<geometry::NoiseMaskSettings>(&node.settings)) {
+            item["noiseMask"] = {{"size", noiseMask->size}, {"contrast", noiseMask->contrast}, {"seed", noiseMask->seed},
+                {"detail", noiseMask->detail}, {"warp", noiseMask->warp}, {"resolution", noiseMask->resolution}, {"invert", noiseMask->invert}};
         } else if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) {
             const char* type = shape->type == geometry::ShapeMaskType::Direction ? "direction"
                              : shape->type == geometry::ShapeMaskType::Height  ? "height" : "occlusion";
@@ -766,6 +769,19 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 if (const json* v = FindMember(item, "applyMaterial"); v && v->is_object()) {
                     settings.heightBlend = ReadBool(*v, "heightBlend", false);
                     settings.heightBlendRange = std::clamp(ReadFloat(*v, "heightBlendRange", .2f), .01f, 1.f);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::NoiseMask) {
+                geometry::NoiseMaskSettings settings;
+                if (const json* v = FindMember(item, "noiseMask"); v && v->is_object()) {
+                    settings.size = std::clamp(ReadFloat(*v, "size", settings.size), .001f, 1000.f);
+                    settings.contrast = std::clamp(ReadFloat(*v, "contrast", settings.contrast), 0.f, 1.f);
+                    settings.seed = ReadUInt(*v, "seed", settings.seed);
+                    settings.detail = std::clamp(ReadFloat(*v, "detail", settings.detail), 0.f, 1.f);
+                    settings.warp = std::clamp(ReadFloat(*v, "warp", settings.warp), 0.f, 1.f);
+                    settings.resolution = std::clamp(geometry::NormalizeUvResolution(ReadInt(*v, "resolution", settings.resolution)),
+                        geometry::kMinShapeMaskResolution, geometry::kMaxShapeMaskResolution);
+                    settings.invert = ReadBool(*v, "invert", false);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::ShapeMask) {

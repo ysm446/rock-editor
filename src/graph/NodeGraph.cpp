@@ -81,11 +81,12 @@ constexpr std::array<PinDefinition, 1> kMaskPins = {{{PinKind::Output, ValueType
 // 2つのマスクの合成。A が基準（出力の形とメッシュは A 側）。
 constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, ValueType::Mask, "A"},
     {PinKind::Input, ValueType::Mask, "B"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 36> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 37> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
+    {NodeKind::NoiseMask, "noiseMask", "Noise Mask", kShapeMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
     {NodeKind::MaskCombine, "maskCombine", "Mask Combine", kMaskCombinePins},
     {NodeKind::ScatterPoints, "scatterPoints", "Scatter Points", kScatterPins},
@@ -166,11 +167,12 @@ bool IsMeshNodeKind(NodeKind kind) {
 }
 
 bool IsImageMaskNodeKind(NodeKind kind) {
-    return kind == NodeKind::ShapeMask || kind == NodeKind::MaskCombine;
+    return kind == NodeKind::ShapeMask || kind == NodeKind::NoiseMask || kind == NodeKind::MaskCombine;
 }
 
 bool ImageMaskInvert(const Node& node) {
-    // Mask Combine は反転を画像に焼き込むので、使う側で掛けるのは Shape Mask だけ。
+    // Mask Combine は反転を画像に焼き込むので、Shape Mask / Noise Mask は使う側で掛ける。
+    if (const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node.settings)) return noise->invert;
     if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) return shape->invert;
     return false;
 }
@@ -500,6 +502,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = MaterialMaskSettings{};
     } else if (kind == NodeKind::ApplyMaterial) {
         node.settings = ApplyMaterialSettings{};
+    } else if (kind == NodeKind::NoiseMask) {
+        node.settings = geometry::NoiseMaskSettings{};
     } else if (kind == NodeKind::ShapeMask) {
         node.settings = geometry::ShapeMaskSettings{};
     } else if (kind == NodeKind::MaskCombine) {

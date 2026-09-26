@@ -123,6 +123,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(remesh->edgeLength); add(remesh->iterations); add(remesh->featureAngle);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
         add(uv->resolution); add(uv->padding); add(uv->quality);
+    } else if (const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node->settings)) {
+        add(noise->size); add(noise->contrast); add(noise->seed); add(noise->detail); add(noise->warp); add(noise->resolution);
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
         // 反転は画像を変えない（使う側で掛ける）ので含めない。
         add(occlusion->type); add(occlusion->distance); add(occlusion->samples); add(occlusion->resolution); add(occlusion->low); add(occlusion->high); add(occlusion->gamma);
@@ -215,7 +217,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace ||
                                  node->kind == NodeKind::VolumeClose || node->kind == NodeKind::VolumeEdgeWear ||
                                  node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace ||
-                                 node->kind == NodeKind::ShapeMask || node->kind == NodeKind::MaskCombine;
+                                 IsImageMaskNodeKind(node->kind);
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id, heightKeys) : std::nullopt;
         if (persistentKey) {
             const auto found = persistent->entries.find(id);
@@ -256,28 +258,31 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 else persistent->pieceOutputs.erase(id);
             }
             return finish(std::move(pieces));
-        } else if (node->kind == NodeKind::ShapeMask) {
+        } else if (node->kind == NodeKind::ShapeMask || node->kind == NodeKind::NoiseMask) {
+            const char* title = node->kind == NodeKind::NoiseMask ? "Noise Mask" : "Shape Mask";
+            const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node->settings);
             const auto* settings = std::get_if<geometry::ShapeMaskSettings>(&node->settings);
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
-            if (!settings || !upstream) return finish(Failure(id, "Shape Mask", "UV付きのMeshを接続してください"));
+            if ((!settings && !noise) || !upstream) return finish(Failure(id, title, "UV付きのMeshを接続してください"));
             result = evaluate(upstream->id, depth + 1);
             report(id, 0, 0);
             if (!result.error.empty()) return finish(result);
             if (result.hasModels || result.rocks.size() != 1 || result.rocks[0].volume)
-                return finish(Failure(id, "Shape Mask", "UV付きの生成メッシュを1つ接続してください（UV Unwrapの出力）"));
+                return finish(Failure(id, title, "UV付きの生成メッシュを1つ接続してください（UV Unwrapの出力）"));
             std::string error;
-            auto image = geometry::ShapeMask(result.rocks[0].mesh, *settings, error, stop, [&](int p) { report(id, 0, p); });
-            if (!error.empty()) return finish(Failure(id, "Shape Mask", error));
+            auto image = noise ? geometry::NoiseMask(result.rocks[0].mesh, *noise, error, stop, [&](int p) { report(id, 0, p); })
+                               : geometry::ShapeMask(result.rocks[0].mesh, *settings, error, stop, [&](int p) { report(id, 0, p); });
+            if (!error.empty()) return finish(Failure(id, title, error));
             result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
-            result.rocks[0].previewMaskInvert = settings->invert;
+            result.rocks[0].previewMaskInvert = ImageMaskInvert(*node);
         } else if (node->kind == NodeKind::MaskCombine) {
             const auto* settings = std::get_if<geometry::MaskCombineSettings>(&node->settings);
             const auto* a = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[0].id) : nullptr;
             const auto* b = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
-            if (!settings || !a || !b) return finish(Failure(id, "Mask Combine", "AとBにShape MaskかMask Combineを接続してください"));
+            if (!settings || !a || !b) return finish(Failure(id, "Mask Combine", "AとBにShape Mask、Noise MaskまたはMask Combineを接続してください"));
             // Material Mask は面の中心で読む定数か画像で、UV空間の画像を持たない。
             if (!IsImageMaskNodeKind(a->kind) || !IsImageMaskNodeKind(b->kind))
-                return finish(Failure(id, "Mask Combine", "Material Maskは合成できません。Shape MaskかMask Combineを接続してください"));
+                return finish(Failure(id, "Mask Combine", "Material Maskは合成できません。Shape Mask、Noise MaskまたはMask Combineを接続してください"));
             result = evaluate(a->id, depth + 1);
             if (!result.error.empty()) return finish(result);
             const auto second = evaluate(b->id, depth + 1);

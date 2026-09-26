@@ -34,6 +34,7 @@ void RunProjectWorkspaceTests();
 void RunApplyMaterialTests();
 void RunDisplaceTests();
 void RunShapeMaskTests();
+void RunNoiseMaskTests();
 void RunMaskCombineTests();
 int main(int argc, char** argv) {
     RunDisplaceTests();
@@ -41,6 +42,7 @@ int main(int argc, char** argv) {
         return rock::tests::g_failures == 0 ? 0 : 1;
     RunApplyMaterialTests();
     RunShapeMaskTests();
+    RunNoiseMaskTests();
     RunMaskCombineTests();
     RunPieceTests();
     RunMeshVolumeTests();

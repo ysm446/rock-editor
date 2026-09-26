@@ -195,11 +195,47 @@ float MaskImage::Sample(float u, float v) const {
     };
     return std::lerp(std::lerp(at(ix, iy), at(ix + 1, iy), tx), std::lerp(at(ix, iy + 1), at(ix + 1, iy + 1), tx), ty);
 }
-MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::string &error,
-                    std::stop_token stop, const std::function<void(int)> &progress) {
+namespace {
+// 格子値を五次曲線で補間する3Dノイズ。負座標にも対応し、大きな座標を整数化する前に周期内へ戻す。
+uint32_t NoiseHash(uint32_t h) {
+    h ^= h >> 16; h *= 0x7feb352du; h ^= h >> 15; h *= 0x846ca68bu; return h ^ (h >> 16);
+}
+double ValueNoise(V p, uint32_t seed) {
+    const auto lattice=[](double x) { return uint32_t(int64_t(std::fmod(std::floor(x),1048576.))) & 0xfffffu; };
+    const auto fade=[](double x) { x-=std::floor(x); return x*x*x*(x*(x*6-15)+10); };
+    const uint32_t x=lattice(p.x), y=lattice(p.y), z=lattice(p.z);
+    const auto at=[&](uint32_t a,uint32_t b,uint32_t c) {
+        return double(NoiseHash(seed ^ NoiseHash(a&0xfffffu) ^ NoiseHash((b&0xfffffu)+0x9e3779b9u) ^
+            NoiseHash((c&0xfffffu)+0x85ebca6bu))) / double(UINT32_MAX);
+    };
+    const double tx=fade(p.x),ty=fade(p.y),tz=fade(p.z);
+    return std::lerp(std::lerp(std::lerp(at(x,y,z),at(x+1,y,z),tx),
+                              std::lerp(at(x,y+1,z),at(x+1,y+1,z),tx),ty),
+                     std::lerp(std::lerp(at(x,y,z+1),at(x+1,y,z+1),tx),
+                              std::lerp(at(x,y+1,z+1),at(x+1,y+1,z+1),tx),ty),tz);
+}
+double CloudNoise(V surface,const NoiseMaskSettings& settings) {
+    V p=surface*(1./settings.size);
+    if (settings.warp>0) {
+        const V q=p*.5;
+        p=p+V{ValueNoise(q,settings.seed+101)*2-1,ValueNoise(q,settings.seed+211)*2-1,
+              ValueNoise(q,settings.seed+307)*2-1}*double(settings.warp);
+    }
+    double value=0,weight=1,total=0;
+    for (uint32_t octave=0;octave<4;++octave) {
+        value+=weight*ValueNoise(p,settings.seed+octave*0x9e3779b9u);
+        total+=weight;weight*=settings.detail*.7;p=p*2;
+    }
+    return std::clamp((value/total-.5)*(1+15*settings.contrast*settings.contrast)+.5,0.,1.);
+}
+}
+static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::string &error,
+                    std::stop_token stop, const std::function<void(int)> &progress, const NoiseMaskSettings* noise) {
+
     error.clear();
     const int resolution = settings.resolution;
-    const bool occlusion = settings.type == ShapeMaskType::Occlusion;
+    if (stop.stop_requested()) { error="マスク生成をキャンセルしました";return {}; }
+    const bool occlusion = !noise && settings.type == ShapeMaskType::Occlusion;
     if ((settings.type != ShapeMaskType::Occlusion && settings.type != ShapeMaskType::Direction &&
          settings.type != ShapeMaskType::Height) ||
         !std::isfinite(settings.distance) || settings.distance < .001f || settings.distance > 1000 ||
@@ -248,6 +284,7 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
     std::vector<Texel> texels(width * height, Texel{kNoFace, 0, 0});
     const auto cross = [](double ax, double ay, double bx, double by) { return ax * by - ay * bx; };
     for (size_t f = 0; f < mesh.triangles.size(); ++f) {
+        if (stop.stop_requested()) {error="マスク生成をキャンセルしました";return {};}
         const auto uv = mesh.cornerUvs[f];
         const double area = cross(uv[1].u - uv[0].u, uv[1].v - uv[0].v, uv[2].u - uv[0].u, uv[2].v - uv[0].v);
         if (std::abs(area) < 1e-16)
@@ -294,7 +331,9 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
             n = nl > 1e-12 ? n * (1 / nl) : Unit(Cross(t.b - t.a, t.c - t.a));
             const V surface = t.a + (t.b - t.a) * double(texel.b) + (t.c - t.a) * double(texel.c);
             double ratio = 0;
-            if (settings.type == ShapeMaskType::Direction) {
+            if (noise) {
+                ratio=CloudNoise(surface,*noise);
+            } else if (settings.type == ShapeMaskType::Direction) {
                 ratio = (n.y + 1) * .5;
             } else if (settings.type == ShapeMaskType::Height) {
                 ratio = extent.y > 0 ? (surface.y - double(info.minimum.y)) / extent.y : 0;
@@ -334,6 +373,7 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
             frontier.push_back(i);
         }
     while (!frontier.empty()) {
+        if (stop.stop_requested()) {error="マスク生成をキャンセルしました";return {};}
         next.clear();
         for (const size_t i : frontier) {
             const size_t x = i % width, y = i / width;
@@ -354,5 +394,23 @@ MaskImage ShapeMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::st
     if (progress)
         progress(100);
     return image;
+}
+MaskImage ShapeMask(const Mesh& mesh,const ShapeMaskSettings& settings,std::string& error,
+                    std::stop_token stop,const std::function<void(int)>& progress) {
+    return SurfaceMask(mesh,settings,error,stop,progress,nullptr);
+}
+MaskImage NoiseMask(const Mesh& mesh,const NoiseMaskSettings& settings,std::string& error,
+                    std::stop_token stop,const std::function<void(int)>& progress) {
+    error.clear();
+    const auto unit=[](float v){return std::isfinite(v) && v>=0 && v<=1;};
+    if (!std::isfinite(settings.size) || settings.size<.001f || settings.size>1000 ||
+        !unit(settings.contrast) || !unit(settings.detail) || !unit(settings.warp) ||
+        settings.resolution<kMinShapeMaskResolution || settings.resolution>kMaxShapeMaskResolution ||
+        (settings.resolution & (settings.resolution-1))) {
+        error="Noise Maskの設定が不正です";return {};
+    }
+    ShapeMaskSettings raster;raster.type=ShapeMaskType::Height;raster.resolution=settings.resolution;
+    raster.low=0;raster.high=1;
+    return SurfaceMask(mesh,raster,error,stop,progress,&settings);
 }
 } // namespace rock::geometry

@@ -1,0 +1,248 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 5.8,
+      "fovY": 0.785398,
+      "pitch": 0.35,
+      "yaw": 0.7
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "baseRock": {
+          "shape": "roundedBox",
+          "size": [
+            2.4,
+            1.8,
+            2
+          ],
+          "subdivisions": 8,
+          "roundness": 0.3,
+          "noiseStrength": 0.08,
+          "noiseScale": 2,
+          "seed": 11
+        }
+      },
+      {
+        "id": 410,
+        "kind": "uvUnwrap",
+        "inputs": [
+          411
+        ],
+        "outputs": [
+          412
+        ],
+        "position": [
+          260,
+          0
+        ],
+        "uvUnwrap": {
+          "resolution": 1024,
+          "padding": 4,
+          "quality": 1
+        }
+      },
+      {
+        "id": 200,
+        "kind": "applyMaterial",
+        "inputs": [
+          201,
+          202,
+          203
+        ],
+        "outputs": [
+          204
+        ],
+        "position": [
+          520,
+          0
+        ]
+      },
+      {
+        "id": 210,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          211
+        ],
+        "position": [
+          260,
+          200
+        ],
+        "layer": {
+          "name": "Weathered",
+          "baseColor": [
+            0.3,
+            0.29,
+            0.27
+          ],
+          "roughness": 0.85,
+          "ambientOcclusion": 1.0,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar"
+          }
+        }
+      },
+      {
+        "id": 220,
+        "kind": "applyMaterial",
+        "inputs": [
+          221,
+          222,
+          223
+        ],
+        "outputs": [
+          224
+        ],
+        "position": [
+          800,
+          0
+        ]
+      },
+      {
+        "id": 230,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          231
+        ],
+        "position": [
+          540,
+          200
+        ],
+        "layer": {
+          "name": "Rust",
+          "baseColor": [
+            0.35,
+            0.12,
+            0.03
+          ],
+          "roughness": 0.7,
+          "ambientOcclusion": 1.0,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar"
+          }
+        }
+      },
+      {
+        "id": 15,
+        "kind": "meshOutput",
+        "inputs": [
+          16
+        ],
+        "outputs": [],
+        "position": [
+          1060,
+          0
+        ]
+      },
+      {
+        "id": 240,
+        "kind": "noiseMask",
+        "inputs": [
+          241
+        ],
+        "outputs": [
+          242
+        ],
+        "position": [
+          300,
+          350
+        ],
+        "noiseMask": {
+          "size": 0.7,
+          "contrast": 0.4,
+          "seed": 17,
+          "detail": 0.5,
+          "warp": 0.3,
+          "resolution": 1024,
+          "invert": false
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": 500,
+        "start": 2,
+        "end": 411
+      },
+      {
+        "id": 501,
+        "start": 412,
+        "end": 201
+      },
+      {
+        "id": 502,
+        "start": 211,
+        "end": 202
+      },
+      {
+        "id": 503,
+        "start": 204,
+        "end": 221
+      },
+      {
+        "id": 504,
+        "start": 231,
+        "end": 222
+      },
+      {
+        "id": 505,
+        "start": 412,
+        "end": 241
+      },
+      {
+        "id": 506,
+        "start": 242,
+        "end": 223
+      },
+      {
+        "id": 507,
+        "start": 224,
+        "end": 16
+      }
+    ]
+  }
+}

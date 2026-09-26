@@ -146,7 +146,7 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
                 // 反転は画像を作り直さず、キャッシュキーにも入れていない。評価結果の値ではなく、いま見ているノードの設定から読む。
                 applied.mask.invert = rock.previewMaskInvert;
                 if (const auto* node = m_graph.FindNode(m_previewGraphNode))
-                    if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) applied.mask.invert = shape->invert;
+                    applied.mask.invert = graph::ImageMaskInvert(*node);
             }
             mesh.appliedMaterials.push_back(std::move(applied));
         }
@@ -177,7 +177,7 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
                 applied.mask = {};
                 applied.mask.texture = ShapeMaskTextureFor(image->second);
                 if (const auto* maskNode = m_graph.FindNode(binding.mask))
-                    if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&maskNode->settings)) applied.mask.invert = shape->invert;
+                    applied.mask.invert = graph::ImageMaskInvert(*maskNode);
             }
             mesh.appliedMaterials.push_back(std::move(applied));
         }

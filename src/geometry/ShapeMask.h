@@ -43,6 +43,18 @@ inline constexpr int kMinShapeMaskResolution = 128, kMaxShapeMaskResolution = 40
 MaskImage ShapeMask(const Mesh& mesh, const ShapeMaskSettings& settings, std::string& error,
                     std::stop_token stop = {}, const std::function<void(int)>& progress = {});
 
+// メッシュの3D座標から作るムラ。UVは結果の保存先として使う。
+struct NoiseMaskSettings {
+    float size = .5f, contrast = .35f;
+    uint32_t seed = 1;
+    float detail = .5f, warp = .2f;
+    int resolution = 1024;
+    bool invert = false;
+    bool operator==(const NoiseMaskSettings&) const = default;
+};
+MaskImage NoiseMask(const Mesh&, const NoiseMaskSettings&, std::string&,
+                    std::stop_token = {}, const std::function<void(int)>& progress = {});
+
 // 2つのマスク画像の合成（Mask Combine）。保存は名前で行う（ProjectIo）。
 enum class MaskCombineOperation : uint32_t {
     Multiply = 0,  // A × B。両方が白い所だけ白

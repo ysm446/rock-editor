@@ -1093,6 +1093,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Material スロットへ渡す");
         addNodeMenuItem(graph::NodeKind::ApplyMaterial, "Apply Material — マスクで素材を適用");
         addNodeMenuItem(graph::NodeKind::MaterialMask, "Material Mask — 定数・画像マスク");
+        addNodeMenuItem(graph::NodeKind::NoiseMask, "Noise Mask — 3Dノイズでムラのマスクを作る");
         addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（オクルージョン / 上向き度 / 高さ）");
         addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
         addNodeMenuItem(graph::NodeKind::MaterialBake, "Material Bake — UVへ材質を焼き付ける");
@@ -1854,6 +1855,44 @@ void Application::DrawGraphPanel() {
         }
         ui::HintText("画像未指定なら定数。画像はリニアのRを使用。反復幅はUV時はUV単位、Triplanar時はメートルです。");
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+    } else if (auto* noiseMask = std::get_if<geometry::NoiseMaskSettings>(&selected->settings)) {
+        auto edited = *noiseMask;
+        bool changed = false;
+        if (ui::BeginPropertyTable("noiseMaskRows")) {
+            changed |= ui::PropertyFloat("ムラの大きさ", &edited.size, .001f, 1000, .5f,
+                "メートル単位。大きいほど広いムラになります。メッシュの3D座標を使うため、UVの島をまたいで模様がつながります。",
+                "%.3f m", ImGuiSliderFlags_Logarithmic);
+            changed |= ui::PropertyFloat("コントラスト", &edited.contrast, 0, 1, .35f,
+                "大きいほど白黒の境界がはっきりします。");
+            int seed = int(std::min(edited.seed, uint32_t(1000000)));
+            if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1, "同じ値なら同じ模様になります。")) {
+                edited.seed = uint32_t(seed); changed = true;
+            }
+            ui::EndPropertyTable();
+        }
+        if (ImGui::TreeNode("詳細設定")) {
+            if (ui::BeginPropertyTable("noiseMaskAdvanced")) {
+                changed |= ui::PropertyFloat("細部", &edited.detail, 0, 1, .5f, "大きなムラに細かい濃淡を重ねます。");
+                changed |= ui::PropertyFloat("歪み", &edited.warp, 0, 1, .2f, "模様の位置を揺らして輪郭を崩します。");
+                const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+                int resolutionIndex = 0;
+                while ((128 << resolutionIndex) < edited.resolution && resolutionIndex < 5) ++resolutionIndex;
+                if (ui::PropertyCombo("マスク解像度", &resolutionIndex, resolutions, 6, 3)) {
+                    edited.resolution = 128 << resolutionIndex; changed = true;
+                }
+                changed |= ui::PropertyBool("反転", &edited.invert, false);
+                ui::EndPropertyTable();
+            }
+            ImGui::TreePop();
+        }
+        // 更新中も行の高さを保ち、スライダーを動かすときの上下移動を防ぐ。
+        if (EvaluatingNode() == selected->id) ImGui::TextDisabled("マスクを計算中…");
+        else ImGui::TextDisabled("白い部分に素材が適用されます。");
+        ui::HintText("UV付きのMeshを接続し、MaskをApply MaterialまたはMask Combineへつなぎます。選択中は白黒で表示します。");
+        if (changed) {
+            *noiseMask = edited;
+            m_graph.MarkDirty(); MarkDocumentChanged();
+        }
     } else if (auto* shape = std::get_if<geometry::ShapeMaskSettings>(&selected->settings)) {
         auto edited = *shape;
         bool changed = false;
