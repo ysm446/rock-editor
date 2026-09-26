@@ -80,13 +80,28 @@ struct SphereConstants {
     float colorAdjust[2];  // 色相（ラジアン）, 彩度
     float brightness;
     float pad0;
+
+    uint32_t shape;
+    float displacement;  // 球の半径・平面の一辺の半分を 1 とした長さ
+    uint32_t heightFieldIndex;
+    uint32_t heightFieldUav;
+
+    uint32_t heightIndex;
+    uint32_t heightFieldSize;
+    float pad1[2];
     compositor::LayerMaterialGpu layerMaterial;
 };
+
+// 変位の高さを焼く正方形の一辺。出力と同じくらいの細かさがあれば凹凸の輪郭が荒れない。
+constexpr uint32_t kHeightFieldSize = 1024;
+// 平面は真横に近いと凹凸が読めないので、既定は見下ろす角度にする。
+constexpr float kDefaultPlanePitchDegrees = 35.0f;
 
 }  // namespace
 
 void MaterialSphere::Destroy(rhi::Device& device) {
     device.DeferRelease(m_output);
+    device.DeferRelease(m_heightField);
 }
 
 void MaterialSphere::Orbit(float deltaXDegrees, float deltaYDegrees) {
@@ -104,7 +119,7 @@ void MaterialSphere::Zoom(float steps) {
 
 void MaterialSphere::ResetView() {
     m_yawDegrees = 0.0f;
-    m_pitchDegrees = kDefaultPitchDegrees;
+    m_pitchDegrees = m_shape == 1 ? kDefaultPlanePitchDegrees : kDefaultPitchDegrees;
     m_distance = kDefaultDistance;
 }
 
@@ -155,6 +170,31 @@ void MaterialSphere::Render(rhi::Device& device, rhi::PipelineCache& pipelineCac
     constants.colorAdjust[1] = asset.saturation;
     constants.brightness = asset.brightness;
     constants.flipNormalGreen = asset.flipNormalGreen ? 1u : 0u;
+    constants.shape = m_shape == 1 ? 1u : 0u;
+    constants.heightIndex = textures.SrvIndex(asset.height.texture, false);
+    constants.heightFieldSize = kHeightFieldSize;
+    // 変位は形の大きさに対する比で描く。球は半径、平面は一辺の半分が 1。
+    const float halfSize = std::max(m_sizeMeters, 0.01f) * 0.5f;
+    const float displacement = std::max(m_displacementMeters, 0.0f) / halfSize;
+    ID3D12PipelineState* bakePipeline =
+        displacement > 0.0f ? pipelineCache.GetCompute(L"MaterialSphere.hlsl", L"CsBakeHeight") : nullptr;
+    if (bakePipeline != nullptr && !m_heightField.IsValid()) {
+        rhi::TextureDesc desc;
+        desc.width = kHeightFieldSize;
+        desc.height = kHeightFieldSize;
+        desc.format = DXGI_FORMAT_R32_FLOAT;
+        desc.allowUnorderedAccess = true;
+        desc.createSrv = true;
+        desc.initialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+        desc.debugName = L"MaterialPreviewHeight";
+        if (!device.Allocator().CreateTexture2D(desc, m_heightField)) {
+            bakePipeline = nullptr;
+        }
+    }
+    // 焼けないときは変位せずに描く（黙って崩れた絵を出さない）。
+    constants.displacement = bakePipeline != nullptr ? displacement : 0.0f;
+    constants.heightFieldIndex = m_heightField.IsValid() ? m_heightField.SrvIndex() : compositor::kInvalidTextureIndex;
+    constants.heightFieldUav = m_heightField.IsValid() ? m_heightField.UavIndex() : compositor::kInvalidTextureIndex;
 
     // 軌道カメラ。球は原点にあり半径 1。
     const float yaw = m_yawDegrees * (kPi / 180.0f);
@@ -195,11 +235,20 @@ void MaterialSphere::Render(rhi::Device& device, rhi::PipelineCache& pipelineCac
 
     PIXBeginEvent(commandList, PIX_COLOR(120, 200, 200), "MaterialSphere");
 
+    commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
+    commandList->SetComputeRootConstantBufferView(1, cb.gpuAddress);
+    if (constants.displacement > 0.0f) {
+        // 先に素材のハイトを形の座標へ焼き、CsMain がそれを読む。
+        // 素材や設定の変更を追いかけずに済むよう、変位している間は毎フレーム焼き直す。
+        rhi::TransitionIfNeeded(commandList, m_heightField, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        commandList->SetPipelineState(bakePipeline);
+        commandList->Dispatch(DispatchCount(kHeightFieldSize), DispatchCount(kHeightFieldSize), 1);
+        rhi::TransitionIfNeeded(commandList, m_heightField, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    }
+
     rhi::TransitionIfNeeded(commandList, m_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
     commandList->SetPipelineState(pipeline);
-    commandList->SetComputeRootConstantBufferView(1, cb.gpuAddress);
     commandList->Dispatch(DispatchCount(kOutputSize), DispatchCount(kOutputSize), 1);
 
     // ImGui が SRV として読むので、ピクセルシェーダ可視の状態へ戻す。

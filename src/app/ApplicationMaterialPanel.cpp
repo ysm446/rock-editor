@@ -388,8 +388,17 @@ void Application::DrawMaterialSphereWindow() {
 
     // 表示だけの設定。マテリアルの設定とは区切り線で分ける。
     if (ui::BeginPropertyTable("materialSphereViewRows")) {
+        const char* shapes[] = {"球", "平面"};
+        if (ui::PropertyCombo("形", &m_materialSphere.Shape(), shapes, 2, 0, "プレビューの形。マテリアルには保存しない")) {
+            m_materialSphere.ResetView();
+        }
         ui::PropertyFloat("タイル", &m_materialSphere.UvScale(), 0.25f, 8.0f, 2.0f,
-                          "球 1 周に並べるマップの数。マテリアルには保存しない", "%.2f");
+                          "球は 1 周、平面は一辺に並べるマップの数。マテリアルには保存しない", "%.2f");
+        ui::PropertyFloat("大きさ (m)", &m_materialSphere.SizeMeters(), 0.1f, 10.0f, 1.0f,
+                          "球は直径、平面は一辺。変位の高さをこれと比べて描く。マテリアルには保存しない", "%.2f");
+        ui::PropertyFloat("変位 (m)", &m_materialSphere.DisplacementMeters(), 0.0f, 0.5f, 0.0f,
+                          "素材のハイト 0〜1 の差を、この高さの凹凸にして見せる。0 で変位しない。"
+                          "このプレビューだけの表示で、ノードの計算やビューポートの形は変わらない", "%.3f");
         ui::EndPropertyTable();
     }
     if (ui::Button("視点を戻す", ui::kWideButtonWidth)) {

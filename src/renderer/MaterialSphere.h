@@ -36,18 +36,31 @@ public:
     // 正面・既定の距離へ戻す。窓を開いた直後と「戻す」ボタンで使う。
     void ResetView();
 
-    // 球 1 周に並べるタイル数。素材の大きさを見るための表示設定で、
-    // マテリアル自体には保存しない。
+    // 以下はどれも素材の見え方を確かめるための表示設定で、マテリアル自体には保存しない。
+    // 変位もこのプレビューの中だけで、ノードの計算やビューポートの形には関係しない。
+
+    // 形の 1 周（平面は一辺）に並べるタイル数。
     float& UvScale() { return m_uvScale; }
+    // 0 球、1 平面。
+    int& Shape() { return m_shape; }
+    // 形の大きさ（m）。球は直径、平面は一辺。変位の高さをこれと比べて描く。
+    float& SizeMeters() { return m_sizeMeters; }
+    // 素材のハイト 0〜1 の差を何 m の凹凸にするか。0 なら変位しない。
+    float& DisplacementMeters() { return m_displacementMeters; }
 
 private:
     rhi::GpuTexture m_output;
+    // 変位するときに素材のハイトを形の座標へ焼いたもの（R32_FLOAT）。
+    rhi::GpuTexture m_heightField;
 
     float m_yawDegrees = 0.0f;
     float m_pitchDegrees = 12.0f;
     // 既定値は .cpp の kDefault* と揃える（ResetView が入れ直す値）。
     float m_distance = 4.5f;
     float m_uvScale = 2.0f;
+    int m_shape = 0;
+    float m_sizeMeters = 1.0f;
+    float m_displacementMeters = 0.0f;
 };
 
 }  // namespace rock::renderer
