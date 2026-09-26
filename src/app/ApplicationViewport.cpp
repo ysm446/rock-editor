@@ -449,6 +449,23 @@ void Application::DrawPointPreview(const ImVec2& viewportMin, const ImVec2& view
 // 色はテーマから引かない。座標軸ギズモと同じく「意味を持つ色」として固定する。
 void Application::DrawLightGizmo(const renderer::LightSettings& light, const LightInteraction& interaction,
                                 const renderer::Camera& camera, const ImVec2& viewportMin, const ImVec2& viewportMax) {
+    using namespace DirectX;
+    // **カメラの注視点に、画面へ収まる大きさで置く。** 原点固定・実寸固定だと、
+    // パンやズームで注視点を移した先で見えなくなったり、画面からはみ出したりする。
+    // 半径は注視点までの距離と縦画角から決め、リングと矢印が縦の視野の中に収まる比にする。
+    const XMFLOAT3 origin = camera.Target();
+    const XMFLOAT3 eye = camera.Position();
+    const float distance = std::sqrt((eye.x - origin.x) * (eye.x - origin.x) +
+                                     (eye.y - origin.y) * (eye.y - origin.y) +
+                                     (eye.z - origin.z) * (eye.z - origin.z));
+    const float gizmoRadius = std::max(distance * std::tan(camera.FovY() * 0.5f) * 0.45f, 1e-3f);
+    DrawLightGizmoAt(light, interaction, camera.ViewMatrix() * camera.ProjectionMatrix(), origin, gizmoRadius,
+                     viewportMin, viewportMax);
+}
+
+void Application::DrawLightGizmoAt(const renderer::LightSettings& light, const LightInteraction& interaction,
+                                  const DirectX::XMMATRIX& viewProjection, const DirectX::XMFLOAT3& origin,
+                                  float gizmoRadius, const ImVec2& viewportMin, const ImVec2& viewportMax) {
     const double now = ImGui::GetTime();
     if (!interaction.dragging && now >= interaction.gizmoUntil) {
         return;
@@ -463,22 +480,12 @@ void Application::DrawLightGizmo(const renderer::LightSettings& light, const Lig
     }
 
     using namespace DirectX;
-    const XMMATRIX viewProjection = camera.ViewMatrix() * camera.ProjectionMatrix();
     const ImVec2 size(viewportMax.x - viewportMin.x, viewportMax.y - viewportMin.y);
     if (size.x <= 0.0f || size.y <= 0.0f) {
         return;
     }
 
     const XMFLOAT3 direction = light.Direction();
-    // **カメラの注視点に、画面へ収まる大きさで置く。** 原点固定・実寸固定だと、
-    // パンやズームで注視点を移した先で見えなくなったり、画面からはみ出したりする。
-    // 半径は注視点までの距離と縦画角から決め、リングと矢印が縦の視野の中に収まる比にする。
-    const XMFLOAT3 origin = camera.Target();
-    const XMFLOAT3 eye = camera.Position();
-    const float distance = std::sqrt((eye.x - origin.x) * (eye.x - origin.x) +
-                                     (eye.y - origin.y) * (eye.y - origin.y) +
-                                     (eye.z - origin.z) * (eye.z - origin.z));
-    const float gizmoRadius = std::max(distance * std::tan(camera.FovY() * 0.5f) * 0.45f, 1e-3f);
     const XMFLOAT3 horizontal{std::sin(light.azimuth), 0.0f, std::cos(light.azimuth)};
 
     const auto color = [fade](int r, int g, int b, int a) {

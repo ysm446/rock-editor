@@ -303,6 +303,15 @@ bool Application::DrawMaterialProperties(compositor::MaterialAsset& asset) {
     return changed;
 }
 
+renderer::LightSettings Application::MaterialPreviewLight() const {
+    renderer::LightSettings light = m_renderer.EffectiveLight();
+    if (m_materialPreviewLightCustom) {
+        light.azimuth = m_materialPreviewLightAzimuth;
+        light.elevation = m_materialPreviewLightElevation;
+    }
+    return light;
+}
+
 // マテリアルプレビューの窓。回せる球と、そのマテリアルのプロパティ。
 //
 // **映すのは一覧で選んでいるマテリアル。** 窓の側に別の選択を持たせると、
@@ -359,7 +368,14 @@ void Application::DrawMaterialSphereWindow() {
         // 画像より先に ID を持つアイテムを置く（サムネイルと同じ作法）。
         ImGui::InvisibleButton("##materialSphere", ImVec2(sphereSize, sphereSize),
                                ImGuiButtonFlags_MouseButtonLeft);
-        if (ImGui::IsItemActive()) {
+        // L + 左ドラッグは光源の向き、それ以外の左ドラッグは視点を回す（ビューポートと同じ割り当て）。
+        // 動かすのはプレビュー専用の向きで、シーンの太陽は変えない。
+        renderer::LightSettings previewLight = MaterialPreviewLight();
+        if (HandleLightDrag(previewLight, m_materialPreviewLightInteraction, ImGui::IsItemActive())) {
+            m_materialPreviewLightCustom = true;
+            m_materialPreviewLightAzimuth = previewLight.azimuth;
+            m_materialPreviewLightElevation = previewLight.elevation;
+        } else if (ImGui::IsItemActive()) {
             // 1px = 0.35 度。ビューポートのカメラ（0.006 ラジアン ≒ 0.34 度）に合わせる。
             const ImVec2 delta = ImGui::GetIO().MouseDelta;
             m_materialSphere.Orbit(delta.x * 0.35f, delta.y * 0.35f);
@@ -375,6 +391,9 @@ void Application::DrawMaterialSphereWindow() {
             ImGui::GetWindowDrawList()->AddImage(
                 static_cast<ImTextureID>(m_materialSphere.OutputHandle().ptr), min, max);
         }
+        // ビューポートと同じライトのギズモ。形の中心に置き、プレビューの画面に収まる大きさにする。
+        DrawLightGizmoAt(previewLight, m_materialPreviewLightInteraction, m_materialSphere.ViewProjection(),
+                         DirectX::XMFLOAT3{0.0f, 0.0f, 0.0f}, m_materialSphere.GizmoRadius(), min, max);
         ImGui::GetWindowDrawList()->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border),
                                             ImGui::GetStyle().FrameRounding, 0, ui::Scaled(1.0f));
     }
@@ -384,7 +403,7 @@ void Application::DrawMaterialSphereWindow() {
 
     // --- プロパティ（この区画だけスクロールする）------------------------------
     ImGui::BeginChild("materialPropertyPane", ImVec2(0.0f, 0.0f));
-    ui::HintText("ドラッグで回す / ホイールで寄る。照らし方はビューポートと同じ");
+    ui::HintText("ドラッグで回す / ホイールで寄る / L + ドラッグで光源の向き（プレビューだけ）");
 
     // 表示だけの設定。マテリアルの設定とは区切り線で分ける。
     if (ui::BeginPropertyTable("materialSphereViewRows")) {
@@ -403,6 +422,16 @@ void Application::DrawMaterialSphereWindow() {
     }
     if (ui::Button("視点を戻す", ui::kWideButtonWidth)) {
         m_materialSphere.ResetView();
+    }
+    ImGui::SameLine();
+    // 一度も動かしていないときはシーンの太陽のままなので、押しても変わらない。
+    ImGui::BeginDisabled(!m_materialPreviewLightCustom);
+    if (ui::Button("光源を戻す", ui::kWideButtonWidth)) {
+        m_materialPreviewLightCustom = false;
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort)) {
+        ImGui::SetTooltip("プレビューの光源をシーンの太陽の向きへ戻す");
     }
 
     ImGui::Separator();

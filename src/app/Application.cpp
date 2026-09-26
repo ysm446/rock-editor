@@ -476,7 +476,7 @@ int Application::Run() {
             m_materialSphere.Render(m_device, m_pipelineCache, commandList,
                                     materials[static_cast<size_t>(index)], m_textureLibrary,
                                     m_renderer.GetEnvironment(), m_renderer.EnvironmentIntensity(),
-                                    m_renderer.EffectiveLight(), m_renderer.Exposure().Exposure(),
+                                    MaterialPreviewLight(), m_renderer.Exposure().Exposure(),
                                     m_renderer.Tonemap());
         }
 

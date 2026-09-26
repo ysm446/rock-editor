@@ -123,6 +123,28 @@ void MaterialSphere::ResetView() {
     m_distance = kDefaultDistance;
 }
 
+DirectX::XMFLOAT3 MaterialSphere::EyePosition() const {
+    const float yaw = m_yawDegrees * (kPi / 180.0f);
+    const float pitch = m_pitchDegrees * (kPi / 180.0f);
+    const float cosPitch = std::cos(pitch);
+    return {m_distance * cosPitch * std::sin(yaw), m_distance * std::sin(pitch),
+            m_distance * cosPitch * std::cos(yaw)};
+}
+
+DirectX::XMMATRIX MaterialSphere::ViewProjection() const {
+    using namespace DirectX;
+    // シェーダは forward = -eye、right = forward × +Y、up = right × forward で組む。
+    // これは右手系の LookAt（原点を向き、上は +Y）と同じ基底になる。
+    const XMFLOAT3 eye = EyePosition();
+    const XMMATRIX view = XMMatrixLookAtRH(XMLoadFloat3(&eye), XMVectorZero(), XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+    const XMMATRIX projection = XMMatrixPerspectiveFovRH(kFovYDegrees * (kPi / 180.0f), 1.0f, 0.05f, 100.0f);
+    return view * projection;
+}
+
+float MaterialSphere::GizmoRadius() const {
+    return 0.9f * m_distance * std::tan(kFovYDegrees * 0.5f * (kPi / 180.0f));
+}
+
 void MaterialSphere::Render(rhi::Device& device, rhi::PipelineCache& pipelineCache,
                             ID3D12GraphicsCommandList* commandList,
                             const compositor::MaterialAsset& asset,
@@ -197,12 +219,10 @@ void MaterialSphere::Render(rhi::Device& device, rhi::PipelineCache& pipelineCac
     constants.heightFieldUav = m_heightField.IsValid() ? m_heightField.UavIndex() : compositor::kInvalidTextureIndex;
 
     // 軌道カメラ。球は原点にあり半径 1。
-    const float yaw = m_yawDegrees * (kPi / 180.0f);
-    const float pitch = m_pitchDegrees * (kPi / 180.0f);
-    const float cosPitch = std::cos(pitch);
-    constants.cameraPosition[0] = m_distance * cosPitch * std::sin(yaw);
-    constants.cameraPosition[1] = m_distance * std::sin(pitch);
-    constants.cameraPosition[2] = m_distance * cosPitch * std::cos(yaw);
+    const DirectX::XMFLOAT3 eye = EyePosition();
+    constants.cameraPosition[0] = eye.x;
+    constants.cameraPosition[1] = eye.y;
+    constants.cameraPosition[2] = eye.z;
     constants.tanHalfFov = std::tan(kFovYDegrees * 0.5f * (kPi / 180.0f));
 
     const DirectX::XMFLOAT3 lightDirection = light.Direction();

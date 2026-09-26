@@ -35,6 +35,11 @@ public:
     void Zoom(float steps);
     // 正面・既定の距離へ戻す。窓を開いた直後と「戻す」ボタンで使う。
     void ResetView();
+    // プレビューのカメラのビュー × 射影（右手系、縦横比 1）。ギズモを重ねるために使う。
+    // シェーダの軌道カメラと同じ向きの取り方にしてある。
+    DirectX::XMMATRIX ViewProjection() const;
+    // ライトのギズモの半径。寄っても引いても画面の縦に収まる大きさ（原点での画面の半分の 9 割）。
+    float GizmoRadius() const;
 
     // 以下はどれも素材の見え方を確かめるための表示設定で、マテリアル自体には保存しない。
     // 変位もこのプレビューの中だけで、ノードの計算やビューポートの形には関係しない。
@@ -49,6 +54,8 @@ public:
     float& DisplacementMeters() { return m_displacementMeters; }
 
 private:
+    DirectX::XMFLOAT3 EyePosition() const;
+
     rhi::GpuTexture m_output;
     // 変位するときに素材のハイトを形の座標へ焼いたもの（R32_FLOAT）。
     rhi::GpuTexture m_heightField;

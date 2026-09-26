@@ -507,6 +507,13 @@ private:
     // ライトの向きを示すギズモ。動かしている間と、その直後だけ出す。
     void DrawLightGizmo(const renderer::LightSettings& light, const LightInteraction& interaction,
                         const renderer::Camera& camera, const ImVec2& viewportMin, const ImVec2& viewportMax);
+    // 上の本体。origin を中心に半径 gizmoRadius で描く。マテリアルプレビューのように
+    // renderer::Camera を持たない画面からも同じギズモを出すために分けてある。
+    void DrawLightGizmoAt(const renderer::LightSettings& light, const LightInteraction& interaction,
+                          const DirectX::XMMATRIX& viewProjection, const DirectX::XMFLOAT3& origin,
+                          float gizmoRadius, const ImVec2& viewportMin, const ImVec2& viewportMax);
+    // マテリアルプレビューの光源。強さと色はシーンに合わせ、向きだけプレビュー専用にできる。
+    renderer::LightSettings MaterialPreviewLight() const;
 
     // カーソル位置からカメラのレイ（ワールド座標、方向は単位長）。ビューポートが潰れていれば偽。
     bool ViewportRay(const ImVec2& mouse, const ImVec2& viewportMin, const ImVec2& viewportMax,
@@ -653,6 +660,12 @@ private:
     // ライトの向きを掴んでいる間。ギズモは離してからも少しの間だけ残す。
     LightInteraction m_viewportLightInteraction;
     LightInteraction m_layerLightInteraction;
+    // マテリアルプレビューの L + ドラッグ。**シーンの太陽とは別に持つ。**
+    // 一度も動かしていなければシーンの太陽の向きに合わせ、「光源を戻す」でそこへ戻る。
+    LightInteraction m_materialPreviewLightInteraction;
+    bool m_materialPreviewLightCustom = false;
+    float m_materialPreviewLightAzimuth = 0.0f;
+    float m_materialPreviewLightElevation = 0.0f;
 
     int m_selectedTexture = 0;
     // 拡大プレビューで出すチャンネル。0 = RGB、1..4 = R / G / B / A。
