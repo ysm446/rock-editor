@@ -43,6 +43,10 @@ struct DisplaySettings {
     bool showStats = false;
     // 原点中心の50m四方、1m刻みの作業グリッド。
     bool showReferenceGrid = true;
+    bool showHumanScale = false;
+    float humanScaleHeight = 1.7f;
+    // 表示メッシュの右端・底面を基準とした補正（m）。
+    float humanScaleOffset[3] = {0.0f, 0.0f, 0.0f};
     bool showUvChecker = false;
     // 陰影の上に三角形の辺を黒い線で重ねるか。表示モードは変えない。
     bool showWireframeOverlay = false;

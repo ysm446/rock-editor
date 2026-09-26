@@ -459,6 +459,9 @@ int Application::Run() {
         // グリッドは深度テストのためレンダラが描く。設定の写しは持たない方針
         // だが、レンダラは AppSettings を知らないので、描く直前に毎フレーム渡す。
         m_renderer.ShowReferenceGrid() = m_settings.Display().showReferenceGrid;
+        const auto& humanDisplay = m_settings.Display();
+        m_renderer.SetHumanScale(humanDisplay.showHumanScale, humanDisplay.humanScaleHeight,
+            {humanDisplay.humanScaleOffset[0], humanDisplay.humanScaleOffset[1], humanDisplay.humanScaleOffset[2]});
         m_renderer.ShowUvChecker() = m_settings.Display().showUvChecker || m_uvCheckerPreview;
         m_renderer.ShowWireframeOverlay() = m_settings.Display().showWireframeOverlay;
 

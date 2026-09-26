@@ -234,6 +234,22 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
         changed |= ImGui::MenuItem("FPS", nullptr, &settings.showFps);
         changed |= ImGui::MenuItem("統計", nullptr, &settings.showStats);
         changed |= ImGui::MenuItem("グリッド（50 m × 50 m / 1 m間隔）", nullptr, &settings.showReferenceGrid);
+        changed |= ImGui::MenuItem("人のシルエット（サイズ比較）", nullptr, &settings.showHumanScale);
+        if (ImGui::BeginMenu("人のシルエット設定")) {
+            ImGui::TextDisabled("岩の右端・底面に配置 / 1 unit = 1 m");
+            ImGui::SetNextItemWidth(ui::Scaled(180.0f));
+            ImGui::SliderFloat("身長（m）", &settings.humanScaleHeight, 0.5f, 2.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            changed |= ImGui::IsItemDeactivatedAfterEdit();
+            ImGui::SetNextItemWidth(ui::Scaled(240.0f));
+            ImGui::DragFloat3("位置補正 XYZ（m）", settings.humanScaleOffset, 0.05f, -1000.0f, 1000.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            changed |= ImGui::IsItemDeactivatedAfterEdit();
+            if (ImGui::Button("身長・位置をリセット")) {
+                settings.humanScaleHeight = 1.7f;
+                for (float& value : settings.humanScaleOffset) value = 0.0f;
+                changed = true;
+            }
+            ImGui::EndMenu();
+        }
         changed |= ImGui::MenuItem("UVチェッカー", nullptr, &settings.showUvChecker);
         changed |= ImGui::MenuItem("ワイヤーフレームを重ねる", nullptr, &settings.showWireframeOverlay);
         // 法線は頂点に焼くので、切り替えると SyncMeshGraph がメッシュを作り直す。

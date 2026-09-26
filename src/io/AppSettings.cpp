@@ -7,6 +7,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <string>
 #include <system_error>
@@ -108,6 +109,7 @@ void AppSettings::Load() {
             m_display.showStats = showStats->get<bool>();
         }
         for (const auto& setting : {std::pair{"showUvChecker", &m_display.showUvChecker},
+                                     std::pair{"showHumanScale", &m_display.showHumanScale},
                                      std::pair{"showWireframeOverlay", &m_display.showWireframeOverlay},
                                      std::pair{"smoothShading", &m_display.smoothShading}}) {
             const auto it = display->find(setting.first);
@@ -116,6 +118,19 @@ void AppSettings::Load() {
         if (const auto angle = display->find("smoothShadingAngle");
             angle != display->end() && angle->is_number()) {
             m_display.smoothShadingAngle = std::clamp(angle->get<float>(), 0.0f, 180.0f);
+        }
+        if (const auto height = display->find("humanScaleHeight");
+            height != display->end() && height->is_number()) {
+            const float value = height->get<float>();
+            if (std::isfinite(value)) m_display.humanScaleHeight = std::clamp(value, 0.5f, 2.5f);
+        }
+        if (const auto offset = display->find("humanScaleOffset");
+            offset != display->end() && offset->is_array() && offset->size() == 3) {
+            for (size_t i = 0; i < 3; ++i) {
+                if (!(*offset)[i].is_number()) continue;
+                const float value = (*offset)[i].get<float>();
+                if (std::isfinite(value)) m_display.humanScaleOffset[i] = std::clamp(value, -1000.0f, 1000.0f);
+            }
         }
         if (const auto grid = display->find("showReferenceGrid");
             grid != display->end() && grid->is_boolean()) {
@@ -166,6 +181,9 @@ bool AppSettings::Save() const {
     display["showFps"] = m_display.showFps;
     display["showStats"] = m_display.showStats;
     display["showReferenceGrid"] = m_display.showReferenceGrid;
+    display["showHumanScale"] = m_display.showHumanScale;
+    display["humanScaleHeight"] = m_display.humanScaleHeight;
+    display["humanScaleOffset"] = {m_display.humanScaleOffset[0], m_display.humanScaleOffset[1], m_display.humanScaleOffset[2]};
     display["showUvChecker"] = m_display.showUvChecker;
     display["showWireframeOverlay"] = m_display.showWireframeOverlay;
     display["smoothShading"] = m_display.smoothShading;

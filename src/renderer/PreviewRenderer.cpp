@@ -8,8 +8,10 @@
 #include <pix3.h>
 
 #include <cmath>
+#include <cfloat>
 #include <cstddef>
 #include <cstring>
+#include <initializer_list>
 
 using namespace DirectX;
 
@@ -707,6 +709,23 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& inpu
     // 全頂点を含むので複製しない。
     m_meshSceneRadius = MeshSceneRadius(scene);
     m_meshScene = std::move(scene);
+    // 頂点走査はシーン更新時だけ。比較用の人は評価・書き出し用メッシュへ混ぜない。
+    XMFLOAT3 minimum{FLT_MAX, FLT_MAX, FLT_MAX};
+    XMFLOAT3 maximum{-FLT_MAX, -FLT_MAX, -FLT_MAX};
+    bool hasVertex = false;
+    for (const auto& mesh : m_meshScene.meshes) {
+        for (const auto& vertex : mesh.geometry.vertices) {
+            hasVertex = true;
+            minimum.x = std::min(minimum.x, vertex.position.x);
+            minimum.y = std::min(minimum.y, vertex.position.y);
+            minimum.z = std::min(minimum.z, vertex.position.z);
+            maximum.x = std::max(maximum.x, vertex.position.x);
+            maximum.z = std::max(maximum.z, vertex.position.z);
+        }
+    }
+    m_humanScaleAnchor = hasVertex
+        ? XMFLOAT3{maximum.x + 0.65f, minimum.y, (minimum.z + maximum.z) * 0.5f}
+        : XMFLOAT3{3.0f, 0.0f, 0.0f};
     m_diagnostics.ResetScene(device);
     m_meshSceneEnabled = true;
     return true;
@@ -725,6 +744,7 @@ void PreviewRenderer::ClearMeshScene(rhi::Device& device) {
     m_sceneMaterials.clear();
     m_meshScene.meshes.clear();
     m_meshSceneEnabled = false;
+    m_humanScaleAnchor = {3.0f, 0.0f, 0.0f};
 }
 
 void PreviewRenderer::Shutdown(rhi::Device& device) {
@@ -1725,7 +1745,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
 void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
                                        rhi::PipelineCache& pipelineCache,
                                        ID3D12GraphicsCommandList* commandList) {
-    if (!m_showReferenceGrid && m_overlayLines.empty()) {
+    if (!m_showReferenceGrid && !m_showHumanScale && m_overlayLines.empty()) {
         return;
     }
 
@@ -1810,6 +1830,60 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
         submit(constants, count);
     };
     for (const auto& set : m_overlayLines) drawGuide(set);
+    if (m_showHumanScale) {
+        // Y軸だけを回すビルボード。頭頂から靴底までを指定身長に保つ。
+        // 不透明な単色の凸パーツを重ね、腕と胴・左右の脚の隙間を残す。
+        const auto right = m_camera.Basis().right;
+        const float length = std::hypot(right.x, right.z);
+        const float rx = length > 0.0001f ? right.x / length : 1.0f;
+        const float rz = length > 0.0001f ? right.z / length : 0.0f;
+        const float scale = m_humanScaleHeight / 1.7f;
+        const XMFLOAT3 origin{m_humanScaleAnchor.x + m_humanScaleOffset.x,
+                             m_humanScaleAnchor.y + m_humanScaleOffset.y,
+                             m_humanScaleAnchor.z + m_humanScaleOffset.z};
+        OverlayLineSet person;
+        person.triangles = true;
+        person.color = {0.48f, 0.50f, 0.53f, 1.0f};
+        const auto point = [&](XMFLOAT2 p) {
+            return XMFLOAT3{origin.x + rx * p.x * scale, origin.y + p.y * scale,
+                            origin.z + rz * p.x * scale};
+        };
+        const auto polygon = [&](std::initializer_list<XMFLOAT2> points) {
+            const auto* p = points.begin();
+            for (size_t i = 1; i + 1 < points.size(); ++i) {
+                person.points.push_back(point(p[0]));
+                person.points.push_back(point(p[i]));
+                person.points.push_back(point(p[i + 1]));
+            }
+        };
+        // 頭・首・上体・腰。
+        for (int i = 0; i < 32; ++i) {
+            const float a = XM_2PI * float(i) / 32.0f;
+            const float b = XM_2PI * float(i + 1) / 32.0f;
+            polygon({{0, 1.59f}, {0.085f * std::cos(a), 1.59f + 0.11f * std::sin(a)},
+                                  {0.085f * std::cos(b), 1.59f + 0.11f * std::sin(b)}});
+        }
+        polygon({{-0.045f, 1.51f}, {0.045f, 1.51f}, {0.05f, 1.40f}, {-0.05f, 1.40f}});
+        polygon({{-0.05f, 1.44f}, {0.05f, 1.44f}, {0.19f, 1.38f}, {0.15f, 1.19f},
+                 {0.115f, 1.02f}, {-0.115f, 1.02f}, {-0.15f, 1.19f}, {-0.19f, 1.38f}});
+        polygon({{-0.115f, 1.06f}, {0.115f, 1.06f}, {0.14f, 0.86f}, {0.08f, 0.78f},
+                 {-0.08f, 0.78f}, {-0.14f, 0.86f}});
+        for (float side : {-1.0f, 1.0f}) {
+            polygon({{side * 0.15f, 1.39f}, {side * 0.215f, 1.35f},
+                     {side * 0.27f, 1.12f}, {side * 0.20f, 1.10f}});
+            polygon({{side * 0.20f, 1.14f}, {side * 0.27f, 1.14f},
+                     {side * 0.30f, 0.94f}, {side * 0.245f, 0.92f}});
+            polygon({{side * 0.245f, 0.96f}, {side * 0.30f, 0.96f},
+                     {side * 0.305f, 0.87f}, {side * 0.28f, 0.84f}, {side * 0.25f, 0.88f}});
+            polygon({{side * 0.015f, 0.88f}, {side * 0.14f, 0.89f},
+                     {side * 0.155f, 0.49f}, {side * 0.065f, 0.47f}});
+            polygon({{side * 0.065f, 0.51f}, {side * 0.155f, 0.51f},
+                     {side * 0.145f, 0.08f}, {side * 0.085f, 0.08f}});
+            polygon({{side * 0.085f, 0.10f}, {side * 0.145f, 0.10f},
+                     {side * 0.20f, 0.04f}, {side * 0.20f, 0.0f}, {side * 0.075f, 0.0f}});
+        }
+        drawGuide(person);
+    }
     commandList->SetPipelineState(pipeline);
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
     if (!m_showReferenceGrid) {

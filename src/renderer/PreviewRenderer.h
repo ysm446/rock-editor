@@ -331,6 +331,11 @@ public:
     // 陰影の上に三角形の辺を黒い線で重ねる。
     bool& ShowWireframeOverlay() { return m_showWireframeOverlay; }
     bool& ShowReferenceGrid() { return m_showReferenceGrid; }
+    void SetHumanScale(bool visible, float height, DirectX::XMFLOAT3 offset) {
+        m_showHumanScale = visible;
+        m_humanScaleHeight = height;
+        m_humanScaleOffset = offset;
+    }
     // 直前のフレームの描画の量。
     void EnableDiagnostics(bool enabled) { m_diagnostics.SetEnabled(enabled); }
     const RenderStats& Stats() const { return m_stats; }
@@ -432,6 +437,10 @@ private:
     float m_tessellationFactor = kPreviewDefaults.tessellationFactor;
     float m_tessellationTargetPixels = kPreviewDefaults.tessellationTargetPixels;
     bool m_showReferenceGrid = true;
+    bool m_showHumanScale = false;
+    float m_humanScaleHeight = 1.7f;
+    DirectX::XMFLOAT3 m_humanScaleOffset{};
+    DirectX::XMFLOAT3 m_humanScaleAnchor{3.0f, 0.0f, 0.0f};
     bool m_showUvChecker = false;
     bool m_showWireframeOverlay = false;
     // シーンの材質とは別に保持し、保存データやベイクへ混ぜない。
