@@ -1189,7 +1189,10 @@ void Application::DrawGraphPanel() {
         return;
     }
 
-    if (m_renderer.HasMeshScene()) {
+    const auto* selectedForLayout = m_graph.FindNode(m_selectedGraphNode);
+    const bool pieceSelectionLayout = selectedForLayout && selectedForLayout->kind == graph::NodeKind::PieceSelect;
+    const bool pieceSelectionPreview = pieceSelectionLayout && m_previewGraphNode == m_selectedGraphNode;
+    if (m_renderer.HasMeshScene() || pieceSelectionLayout) {
         if (ui::BeginPropertyTable("meshSceneRows")) {
             ui::PropertyValue("メッシュ数", "%zu", static_cast<size_t>(std::count_if(m_renderer.Scene().meshes.begin(),
                 m_renderer.Scene().meshes.end(), [](const auto& mesh) { return !mesh.materialOnly; })));
@@ -1211,13 +1214,15 @@ void Application::DrawGraphPanel() {
                            paneWidth);
     m_graphEditorHeight = editorHeight / std::max(ui::Scaled(1.0f), 0.01f);
 
-    ImGui::BeginChild("graphPropertyPane", ImVec2(0.0f, 0.0f));
+    ImGui::BeginChild("graphPropertyPane", ImVec2(0.0f, 0.0f), 0,
+                      pieceSelectionLayout ? ImGuiWindowFlags_AlwaysVerticalScrollbar : ImGuiWindowFlags_None);
 
     // **プレビュー対象は選択とは別。** どれが画面に出ているかをここに出し、
     // Mesh Output へ戻す手段も置く（出力ピンのクリックで切り替わる、と気づけるように）。
-    if (m_meshGraphActive) {
+    // 全片をワイヤーフレームにして面が0枚になっても、プレビュー見出しを保つ。
+    if (m_meshGraphActive || pieceSelectionPreview) {
         // 途中のメッシュノードを見ているときは、そのノード名を出して Mesh Output へ戻す手段を置く。
-        const graph::Node* previewMeshNode = m_graph.FindNode(m_meshGraphPreviewNode);
+        const graph::Node* previewMeshNode = m_graph.FindNode(pieceSelectionPreview ? m_previewGraphNode : m_meshGraphPreviewNode);
         if (ui::BeginPropertyTable("meshGraphPreviewRow")) {
             ui::PropertyValue("プレビュー", "%s",
                               previewMeshNode != nullptr ? NodeDisplayName(*previewMeshNode) : "Mesh Output");
@@ -1237,7 +1242,14 @@ void Application::DrawGraphPanel() {
         ImGui::Spacing();
     }
 
-    if (!m_meshGraphError.empty()) ui::HintText("%s", m_meshGraphError.c_str());
+    if (pieceSelectionLayout) {
+        // エラー表示も固定の1行。全文はホバーで読む。
+        if (m_meshGraphError.empty()) ImGui::Dummy(ImVec2(0,ImGui::GetTextLineHeight()));
+        else {
+            ImGui::TextDisabled("形状の評価に問題があります（詳細）");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",m_meshGraphError.c_str());
+        }
+    } else if (!m_meshGraphError.empty()) ui::HintText("%s", m_meshGraphError.c_str());
     graph::Node* selected = m_graph.FindMutableNode(m_selectedGraphNode);
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"

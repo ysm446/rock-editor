@@ -6,8 +6,12 @@ namespace rock {
 void Application::DrawPieceSettings(graph::Node &node) {
     bool changed = false;
     const float zero[3] = {0, 0, 0}, one[3] = {1, 1, 1};
-    const bool ready = !m_pieceUpdating && m_pieceInputNode == node.id && m_pieceInput;
-    if (m_pieceUpdating)
+    const bool hasInput = m_pieceInputNode == node.id && m_pieceInput;
+    const bool ready = !m_pieceUpdating && hasInput;
+    if (node.kind == graph::NodeKind::PieceSelect) {
+        // 非同期評価の開始・終了でスライダーの位置を変えない。折り返さず常に1行を使う。
+        ImGui::TextDisabled("%s", m_pieceUpdating ? "更新中…前回の形状を表示" : "設定を変更すると形状に反映します");
+    } else if (m_pieceUpdating)
         ui::HintText("更新中…表示は前回の結果です。選択・ベイクは完了後に操作できます。");
     if (auto *layers = std::get_if<geometry::LayeredBoxesSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("layeredBoxes")) {
@@ -55,6 +59,40 @@ void Application::DrawPieceSettings(graph::Node &node) {
             ui::EndPropertyTable();
         }
     } else if (auto *selection = std::get_if<geometry::PieceSelectSettings>(&node.settings)) {
+        if (selection->mode == geometry::PieceSelectMode::Peel) {
+            ui::SectionHeader("欠けの進行");
+            float progress = selection->fraction * 100.f;
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                                ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y * 1.8f));
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::SliderFloat("##peelProgress", &progress, 0, 100, "%.1f %%", ImGuiSliderFlags_AlwaysClamp)) {
+                selection->fraction = progress / 100.f;
+                changed = true;
+            }
+            ImGui::PopStyleVar();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("右へ動かすと外周から欠け、左へ戻すと復元します。Ctrl+クリックで数値を入力できます。");
+            if (ImGui::Button("最初に戻す")) { selection->fraction = 0; changed = true; }
+            ImGui::SameLine();
+            ImGui::TextDisabled("0%% 開始 → 100%% 終点");
+            if (ui::BeginPropertyTable("peelProgressSettings")) {
+                changed |= ui::PropertyFloat("ばらつき", &selection->peelNoise, 0, 1, .15f,
+                    "大きいほど欠ける順序に揺らぎを加えます。0では支持面積だけで決まり、Seedは影響しません。");
+                int seed = int(selection->seed);
+                if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1,
+                                    "同じSeedとばらつきなら同じ順序で欠けます。進行を動かしても引き直しません。")) {
+                    selection->seed = uint32_t(seed); changed = true;
+                }
+                ui::EndPropertyTable();
+            }
+            ImGui::BeginDisabled(selection->peelNoise == 0);
+            if (ImGui::Button("別の欠け方を試す")) {
+                selection->seed = (selection->seed + 1) % 1000001;
+                changed = true;
+            }
+            ImGui::EndDisabled();
+            ui::HintText("進行は各層の片数を基準にします。中心保護や層の減衰により、100%でも残る片があります。");
+        }
         ui::SectionHeader("選択のプレビュー");
         bool viewChanged = false;
         viewChanged |= ImGui::RadioButton("選択状態", &m_pieceSelectView, 0);
@@ -113,15 +151,11 @@ void Application::DrawPieceSettings(graph::Node &node) {
             changed |= ui::PropertyInt("対象の層",&selection->layer,-1,31,-1,
                                        "-1は全層。Layered Boxesの層番号を指定できます。反転も指定層の中だけに効きます。");
             if (selection->mode == geometry::PieceSelectMode::Peel) {
-                changed |= ui::PropertyFloat("欠けのばらつき", &selection->peelNoise, 0, 1, .15f);
                 changed |= ui::PropertyBool("中心の片を保護", &selection->protectCore, true,
                     "各連結部分で、露出面から最も遠い片を1つ残します。選択反転時は保護対象も選ばれます。");
             }
-            if (selection->mode == geometry::PieceSelectMode::Random || selection->mode == geometry::PieceSelectMode::Rim ||
-                selection->mode == geometry::PieceSelectMode::Peel) {
-                changed |= ui::PropertyFloat(selection->mode == geometry::PieceSelectMode::Peel ? "削除量" : "選択率",
-                                             &selection->fraction, 0, 1, .5f,
-                                             "Peelでは各層のピース数に対する削除割合です。体積の割合ではありません。");
+            if (selection->mode == geometry::PieceSelectMode::Random || selection->mode == geometry::PieceSelectMode::Rim) {
+                changed |= ui::PropertyFloat("選択率", &selection->fraction, 0, 1, .5f);
                 int seed = int(selection->seed);
                 if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
                     selection->seed = uint32_t(seed);
@@ -161,7 +195,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 selection->generation = m_pieceInput->generation;
                 changed = true;
             }
-            if (ready && ImGui::TreeNode("ピースID一覧")) {
+            if (hasInput && ImGui::TreeNode("ピースID一覧")) {
                 for (const auto &p : m_pieceInput->pieces) {
                     bool on =
                         std::find(selection->ids.begin(), selection->ids.end(), p.id) != selection->ids.end();
@@ -187,7 +221,9 @@ void Application::DrawPieceSettings(graph::Node &node) {
             ui::HintText("クリックで選択、Shiftで追加・解除、空白で解除。入力の分割を変更した後はリセットが必"
                          "要です。");
         }
-        if (ready) {
+        // 上流の入力は更新完了まで保持される。更新中も集計・層一覧を消さず、
+        // 下部の高さが縮んでスクロール位置が巻き戻るのを防ぐ。
+        if (hasInput) {
             std::string error;
             auto evaluated = geometry::SelectPieces(*m_pieceInput, *selection, error);
             if (error.empty()) {
@@ -237,7 +273,8 @@ void Application::DrawPieceSettings(graph::Node &node) {
                     ImGui::TreePop();
                 }
                 if (!m_pieceInput->pieces.empty() && evaluated.ids.size() == m_pieceInput->pieces.size())
-                    ui::HintText("全片を選択しています。Deleteすると空になります。");
+                    ImGui::TextDisabled("全片を選択中：Deleteすると空になります。");
+                else ImGui::Dummy(ImVec2(0,ImGui::GetTextLineHeight()));
             } else
                 ui::HintText("%s", error.c_str());
         }
@@ -344,7 +381,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
     } else
         ui::HintText("ピースの配置を適用して単一Meshにまとめます。内部の接触面は残します。UV Unwrap → "
                      "Material Bakeへ接続できます。");
-    if (ready)
+    if (hasInput)
         ImGui::TextDisabled("入力: %zu ピース", m_pieceInput->pieces.size());
     if (changed) {
         m_graph.MarkDirty();
