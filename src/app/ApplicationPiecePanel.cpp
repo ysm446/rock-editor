@@ -23,6 +23,7 @@ void Application::DrawPieceSettings(graph::Node &node) {
             ui::EndPropertyTable();
         }
         ui::HintText("板は平行を保ち、下から層0、1…と番号を持ちます。Pieces出力を Scatter Points と Voronoi Fracture の両方へ接続します。");
+        ui::HintText("向きはビューポートの回転ギズモ（原点の輪）でも変えられます。Ctrl で15度刻み、Esc で元に戻します。");
     } else if (auto *scatter = std::get_if<geometry::ScatterSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("scatter")) {
             changed |= ui::PropertyInt("点数", &scatter->count, 2, geometry::MaxScatterPoints, 24);

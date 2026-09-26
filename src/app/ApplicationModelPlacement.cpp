@@ -395,6 +395,11 @@ bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
         out = {pose->position.data(), pose->rotation.data(), pose->scale.data(), true, pose->scale.data()};
         return true;
     }
+    if (auto* layers = std::get_if<geometry::LayeredBoxesSettings>(&node->settings)) {
+        // 位置と倍率は持たず、積み重ね全体の向きだけ。回転ギズモだけを出す。
+        out = {nullptr, layers->rotation.data(), nullptr, true};
+        return true;
+    }
     return false;
 }
 
@@ -461,6 +466,13 @@ bool Application::NodeGizmoFrame(graph::GraphId nodeId, XMFLOAT3& pivot, XMFLOAT
         if (settings == nullptr || !m_meshGraphError.empty() || !m_meshGraphActive) return false;
         if (!RockMeshUsesNode(nodeId)) return false;
         pivot = {settings->position[0], settings->position[1], settings->position[2]};
+        XMStoreFloat4x4(&parent, XMMatrixIdentity());
+        return true;
+    }
+    if (node && node->kind == graph::NodeKind::LayeredBoxes) {
+        // 積み重ねは原点を中心に置かれ、向きもそこを中心に回る。表示中の岩がこのノードを通っているときだけ出す。
+        if (!m_meshGraphError.empty() || !m_meshGraphActive || !RockMeshUsesNode(nodeId)) return false;
+        pivot = {0.0f, 0.0f, 0.0f};
         XMStoreFloat4x4(&parent, XMMatrixIdentity());
         return true;
     }
@@ -663,7 +675,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
                     SetModelNodeRotation(*settings, drag.modelNodeName, drag.startNodeRotation);
                 documentChanged();
             } else if (drag.dragging) {
-                std::copy(std::begin(drag.startPosition), std::end(drag.startPosition), target.position);
+                if (target.position) std::copy(std::begin(drag.startPosition), std::end(drag.startPosition), target.position);
                 std::copy(std::begin(drag.startRotation), std::end(drag.startRotation), target.rotation);
                 if (target.scale) *target.scale = drag.startScale;
                 if (target.scaleXYZ) std::copy(std::begin(drag.startScaleXYZ), std::end(drag.startScaleXYZ), target.scaleXYZ);
@@ -712,6 +724,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         const XMVECTOR pivot = XMLoadFloat3(&drag.pivot);
         // ワールドでの移動量を、ノードの親（下流の Transform）の座標へ戻して足す。
         const auto applyTranslation = [&](FXMVECTOR worldDelta) {
+            if (!target.position) return;
             XMVECTOR determinant;
             const XMMATRIX inverse = XMMatrixInverse(&determinant, parent);
             if (XMVectorGetX(determinant) == 0.0f) return;
@@ -815,7 +828,9 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         m_modelGizmoHover = HitGizmo(gizmo, GizmoKind::Rotate, io.MousePos);
     } else if (hasGizmo && itemHovered) {
         const GizmoScreen gizmo = BuildGizmo(m_renderer.GetCamera(), pivot, viewportMin, viewportMax);
-        m_modelGizmoHover = HitGizmo(gizmo, static_cast<GizmoKind>(m_modelGizmoMode), io.MousePos);
+        // 位置を持たないノード（Layered Boxes）は回転ギズモだけ。
+        const ModelGizmoMode mode = selected.position ? m_modelGizmoMode : ModelGizmoMode::Rotate;
+        m_modelGizmoHover = HitGizmo(gizmo, static_cast<GizmoKind>(mode), io.MousePos);
     }
     const auto beginDrag = [&](graph::GraphId nodeId, int handle) {
         NodeTransformRef target;
@@ -829,7 +844,7 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
         drag.pressPos = io.MousePos;
         drag.pivot = framePivot;
         drag.parent = frameParent;
-        std::copy(target.position, target.position + 3, drag.startPosition);
+        if (target.position) std::copy(target.position, target.position + 3, drag.startPosition);
         std::copy(target.rotation, target.rotation + 3, drag.startRotation);
         drag.startScale = target.scale ? *target.scale : 1.0f;
         if (target.scaleXYZ) std::copy(target.scaleXYZ, target.scaleXYZ+3, drag.startScaleXYZ);
@@ -1151,7 +1166,8 @@ void Application::DrawModelInstanceOverlay(const ImVec2& viewportMin, const ImVe
     const ImU32 hoverColor = ImGui::GetColorU32(ImGuiCol_PlotLinesHovered);
     const ImU32 shadow = IM_COL32(0, 0, 0, 140);
     const int active = m_modelGizmoHover;
-    const ModelGizmoMode mode = hasNodeGizmo ? ModelGizmoMode::Rotate : m_modelGizmoMode;
+    const ModelGizmoMode mode =
+        hasNodeGizmo || !activeTransform.position ? ModelGizmoMode::Rotate : m_modelGizmoMode;
     if (mode == ModelGizmoMode::Translate) {
         for (int axis = 0; axis < 3; ++axis) {
             const bool on = active == kHandlePlane + axis;
