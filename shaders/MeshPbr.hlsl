@@ -1164,10 +1164,13 @@ float4 PsMain(VsOutput input) : SV_Target0
         }
     }
 
+    // Apply Material の合成後のハイト。ハイトの表示は下地の素材ではなくこちらを映す。
+    float appliedHeight = 0.5f;
     if (appliedOverrides) {
         AppliedValue a = EvaluateApplied(input);
         baseColor=a.color; normal=a.normal; roughnessValue=a.surface.r; metallicValue=a.surface.g;
         ambientOcclusion=a.surface.b; opacity=a.surface.a;
+        appliedHeight = a.height;
     }
     // --- チャンネルを覗く表示 ----------------------------------------------
     // チャンネルの中身をそのまま出す。露出もトーンマップも掛けない
@@ -1219,6 +1222,11 @@ float4 PsMain(VsOutput input) : SV_Target0
             {
                 height = ConnectionHeight(RoadMetersFromUv(input.roadUv), input.worldPosition);
             }
+            else if (appliedOverrides)
+            {
+                // Apply Material があれば、ハイトで合成したあとの値を映す。
+                height = appliedHeight;
+            }
             else if (g_mesh.useMaterialTextures != 0u)
             {
                 Texture2D<float> heightMap = ResourceDescriptorHeap[g_mesh.materialHeightIndex];
@@ -1247,6 +1255,33 @@ float4 PsMain(VsOutput input) : SV_Target0
                     sum += ConnectionHeight(meters + offset, input.worldPosition);
                 }
                 local = 0.5f + (center - sum / 8) * kLocalHeightGain;
+            }
+            else if (appliedOverrides)
+            {
+                // Apply Material の合成後のハイトから、周りの平均を引く。周りの 8 点でも合成をやり直す
+                // （マスクとハイトの合成は点ごとに違うので、合成前のマップだけでは求まらない）。
+                // 半径は最初の Apply Material のハイトマップのテクセル基準。UV で読む層は UV を、
+                // Triplanar の層はその長さぶん表面に沿って位置をずらす。
+                Texture2D<float> firstHeight = ResourceDescriptorHeap[g_mesh.applied[0].maps.w];
+                float2 size = float2(1.0f, 1.0f);
+                firstHeight.GetDimensions(size.x, size.y);
+                const float2 texel = 1.0f / max(size, float2(1.0f, 1.0f));
+                const float metersPerUv = 1.0f / max(g_mesh.applied[0].axisX.w, 1e-6f);
+                const float3 n = normalize(input.worldNormal);
+                const float3 t = normalize(input.worldTangent - n * dot(input.worldTangent, n));
+                const float3 b = cross(n, t) * input.tangentSign;
+                float sum = 0.0f;
+                [loop]
+                for (int i = 0; i < 8; ++i)
+                {
+                    const float angle = (float(i) / 8.0f) * 6.28318530718f;
+                    const float2 offset = float2(cos(angle), sin(angle)) * kLocalHeightRadiusTexels * texel;
+                    VsOutput shifted = input;
+                    shifted.uv += offset;
+                    shifted.worldPosition += (t * offset.x + b * offset.y) * metersPerUv;
+                    sum += EvaluateApplied(shifted).height;
+                }
+                local = 0.5f + (appliedHeight - sum / 8.0f) * kLocalHeightGain;
             }
             else if (g_mesh.useMaterialTextures != 0u)
             {
