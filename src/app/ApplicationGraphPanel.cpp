@@ -728,7 +728,7 @@ void Application::DrawGraphNode(const graph::Node& node) {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(ImVec2(cursor.x, cursor.y + 3.0f),
                                 ImVec2(cursor.x + 10.0f, cursor.y + 13.0f),
-                                ColorToU32(accent), 2.0f);
+                                EvaluatingNode() == node.id ? ui::WarnColor() : ColorToU32(accent), 2.0f);
         ImGui::Dummy(ImVec2(16.0f, 16.0f));
         ImGui::SameLine();
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 2.0f);
@@ -739,15 +739,6 @@ void Application::DrawGraphNode(const graph::Node& node) {
             // ビューポートに出ている印。名前の右に小さく添える。
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.72f, 0.76f, 0.62f, 1.0f), "●");
-        }
-        if (EvaluatingNode() == node.id) {
-            // いま評価スレッドが計算しているノード。どこで待っているのかをグラフの上で示す。
-            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
-            ImGui::SameLine();
-            if (percent > 0)
-                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ui::WarnColor()), "計算中 %d%%", percent);
-            else
-                ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ui::WarnColor()), "計算中…");
         }
         // 種類はヘッダの下に小さく添える。名前と種類の両方が分かるようにする。
         if (const graph::NodeDefinition* definition = graph::FindNodeDefinition(node.kind);
@@ -1190,17 +1181,10 @@ void Application::DrawGraphPanel() {
         return;
     }
 
-    const auto* selectedForLayout = m_graph.FindNode(m_selectedGraphNode);
-    const bool pieceSelectionLayout = selectedForLayout && selectedForLayout->kind == graph::NodeKind::PieceSelect;
-    const bool pieceSelectionPreview = pieceSelectionLayout && m_previewGraphNode == m_selectedGraphNode;
-    if (m_renderer.HasMeshScene() || pieceSelectionLayout) {
-        if (ui::BeginPropertyTable("meshSceneRows")) {
-            ui::PropertyValue("メッシュ数", "%zu", static_cast<size_t>(std::count_if(m_renderer.Scene().meshes.begin(),
-                m_renderer.Scene().meshes.end(), [](const auto& mesh) { return !mesh.materialOnly; })));
-            ui::EndPropertyTable();
-        }
-    } else {
-        ui::HintText("Mesh Output へ繋いだものがビューポートに出る");
+    if (ui::BeginPropertyTable("meshSceneRows")) {
+        ui::PropertyValue("メッシュ数", "%zu", static_cast<size_t>(std::count_if(m_renderer.Scene().meshes.begin(),
+            m_renderer.Scene().meshes.end(), [](const auto& mesh) { return !mesh.materialOnly; })));
+        ui::EndPropertyTable();
     }
 
     float editorHeight = ui::Scaled(m_graphEditorHeight);
@@ -1215,42 +1199,36 @@ void Application::DrawGraphPanel() {
                            paneWidth);
     m_graphEditorHeight = editorHeight / std::max(ui::Scaled(1.0f), 0.01f);
 
-    ImGui::BeginChild("graphPropertyPane", ImVec2(0.0f, 0.0f), 0,
-                      pieceSelectionLayout ? ImGuiWindowFlags_AlwaysVerticalScrollbar : ImGuiWindowFlags_None);
+    // 全ノード共通の固定ステータス欄。設定のスクロール領域の外に置き、
+    // 文字数・折り返し・進捗の有無でパラメータの位置やスクロール範囲を変えない。
+    std::string evaluationStatus;
+    if (m_pieceUpdating) evaluationStatus = "計算中: " + EvaluationProgressText();
+    else if (!m_meshGraphError.empty()) evaluationStatus = "評価エラー: " + m_meshGraphError;
+    else evaluationStatus = "設定を変更すると形状に反映します";
+    const auto drawStatusLine = [](const std::string& text) {
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const ImVec2 end(start.x + ImGui::GetContentRegionAvail().x, start.y + ImGui::GetTextLineHeight());
+        ImGui::Dummy(ImVec2(std::max(1.f, end.x - start.x), ImGui::GetTextLineHeight()));
+        auto* draw = ImGui::GetWindowDrawList();
+        draw->PushClipRect(start, end, true);
+        draw->AddText(start, ImGui::GetColorU32(ImGuiCol_TextDisabled), text.c_str());
+        draw->PopClipRect();
+        if (ImGui::IsItemHovered() && !text.empty()) ImGui::SetTooltip("%s", text.c_str());
+    };
+    drawStatusLine(evaluationStatus);
+    ImGui::BeginChild("graphPropertyPane", ImVec2(0.0f, 0.0f), 0, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
-    // **プレビュー対象は選択とは別。** どれが画面に出ているかをここに出し、
-    // Mesh Output へ戻す手段も置く（出力ピンのクリックで切り替わる、と気づけるように）。
-    // 全片をワイヤーフレームにして面が0枚になっても、プレビュー見出しを保つ。
-    if (m_meshGraphActive || pieceSelectionPreview) {
-        // 途中のメッシュノードを見ているときは、そのノード名を出して Mesh Output へ戻す手段を置く。
-        const graph::Node* previewMeshNode = m_graph.FindNode(pieceSelectionPreview ? m_previewGraphNode : m_meshGraphPreviewNode);
-        if (ui::BeginPropertyTable("meshGraphPreviewRow")) {
-            ui::PropertyValue("プレビュー", "%s",
-                              previewMeshNode != nullptr ? NodeDisplayName(*previewMeshNode) : "Mesh Output");
-            ui::EndPropertyTable();
-        }
-        if (previewMeshNode != nullptr) {
-            ui::HintText("このノードまでのメッシュを表示中。出力ピンのクリックで切り替わる。");
-            if (ui::Button("Mesh Output へ戻す", ui::kWideButtonWidth)) {
-                SetPreviewGraphNode(0);
-            }
-        } else {
-            ui::HintText("Mesh Output へ接続したメッシュを表示中。");
-        }
-    } else {
-        ui::HintText("メッシュノードの出力ピンをクリック（またはノードをダブルクリック）で、"
-                     "そのノードまでをビューポートに出す");
-        ImGui::Spacing();
+    // プレビューの見出しは非同期の評価結果ではなく、ユーザーが選んだ対象から描く。
+    const auto* previewMeshNode = m_graph.FindNode(m_previewGraphNode);
+    if (previewMeshNode && !graph::IsMeshNodeKind(previewMeshNode->kind)) previewMeshNode = nullptr;
+    if (ui::BeginPropertyTable("meshGraphPreviewRow")) {
+        ui::PropertyValue("プレビュー", "%s", previewMeshNode ? NodeDisplayName(*previewMeshNode) : "Mesh Output");
+        ui::EndPropertyTable();
     }
+    ImGui::BeginDisabled(!previewMeshNode);
+    if (ui::Button("Mesh Output へ戻す", ui::kWideButtonWidth)) SetPreviewGraphNode(0);
+    ImGui::EndDisabled();
 
-    if (pieceSelectionLayout) {
-        // エラー表示も固定の1行。全文はホバーで読む。
-        if (m_meshGraphError.empty()) ImGui::Dummy(ImVec2(0,ImGui::GetTextLineHeight()));
-        else {
-            ImGui::TextDisabled("形状の評価に問題があります（詳細）");
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",m_meshGraphError.c_str());
-        }
-    } else if (!m_meshGraphError.empty()) ui::HintText("%s", m_meshGraphError.c_str());
     graph::Node* selected = m_graph.FindMutableNode(m_selectedGraphNode);
     if (selected == nullptr) {
         ui::HintText("ノードを選ぶと設定が出る。背景の右クリックで追加、"
@@ -1711,7 +1689,8 @@ void Application::DrawGraphPanel() {
         ui::HintText("Maskをつなぐと、白い面だけを割ります（Shape Maskや画像マスクを使用。見える場所だけ細かくするなど）。"
                      "隣の面は共有辺に合わせて2〜4分割し、閉じたまま保ちます。");
         if (const auto counts=m_rockEvaluationCache.detailCounts.find(selected->id); counts!=m_rockEvaluationCache.detailCounts.end())
-            ui::HintText("前回入力 %llu面 → 予測 %llu面", static_cast<unsigned long long>(counts->second.first), static_cast<unsigned long long>(counts->second.first*factor));
+            drawStatusLine("前回入力 " + std::to_string(counts->second.first) + "面 → 予測 " + std::to_string(counts->second.first*factor) + "面");
+        else drawStatusLine("前回入力: 未評価");
         ui::HintText("辺の中点を共有して分割します。元の形とUVを保持し、丸めません。");
         if (changed) { subdivide->threshold = std::clamp(subdivide->threshold, 0.0f, 1.0f); m_graph.MarkDirty(); MarkDocumentChanged(); }
     } else if (auto* displace = std::get_if<geometry::DisplaceSettings>(&selected->settings)) {
@@ -1737,11 +1716,7 @@ void Application::DrawGraphPanel() {
                                          "これより大きく折れた辺を稜線として保ちます。180 で稜線を保たず、角も丸くなります。", "%.0f");
             ui::EndPropertyTable();
         }
-        if (EvaluatingNode() == selected->id) {
-            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
-            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
-                               EvaluationProgressText().c_str());
-        } else if (!m_pieceUpdating) {
+        {
             size_t triangles = 0;
             bool shown = false;
             for (size_t i = 0; i < m_rockMeshReferences.size() && i < m_rockTriangleCounts.size(); ++i)
@@ -1749,7 +1724,7 @@ void Application::DrawGraphPanel() {
                     triangles += m_rockTriangleCounts[i];
                     shown = true;
                 }
-            if (shown) ui::HintText("現在の出力: %zu 三角形", triangles);
+            drawStatusLine(shown ? "現在の出力: " + std::to_string(triangles) + " 三角形" : "現在の出力: 未評価");
         }
         ui::HintText("三角形を一様な大きさの正三角形に近い形へ作り直します（等方リメッシュ）。Volume to Mesh の細長い面や大きさのばらつきを揃え、"
                      "Displace の密度を均一にします。頂点は元の表面へ投影するので形は保たれます。");
@@ -1776,11 +1751,7 @@ void Application::DrawGraphPanel() {
                                          "折れ角の大きい辺を動かしにくくします。0 で保護なし。");
             ui::EndPropertyTable();
         }
-        if (EvaluatingNode() == selected->id) {
-            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
-            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
-                               EvaluationProgressText().c_str());
-        } else if (!m_pieceUpdating) {
+        {
             // 実際に何枚になったかを出す。上限や形の制約で、目標に届かないことがある。
             size_t triangles = 0;
             bool shown = false;
@@ -1789,10 +1760,10 @@ void Application::DrawGraphPanel() {
                     triangles += m_rockTriangleCounts[i];
                     shown = true;
                 }
+            std::string output = shown ? "現在の出力: " + std::to_string(triangles) + " 三角形" : "現在の出力: 未評価";
             if (shown && triangles > size_t(edited.targetTriangles) + size_t(edited.targetTriangles) / 20)
-                ui::HintText("現在の出力: %zu 三角形。目標に届いていません。形のずれの上限やUVの継ぎ目の保護によって削減が制限されます。", triangles);
-            else if (shown)
-                ui::HintText("現在の出力: %zu 三角形", triangles);
+                output += "（目標未達。形のずれやUVの継ぎ目の保護で制限されています）";
+            drawStatusLine(output);
         }
         ui::HintText("形をできるだけ保ったまま三角形を減らします（QEM による辺の縮約）。平らな場所は大きく減り、稜線や割れ目の縁は残ります。"
                      "UV Unwrap の前に置くと、展開が大幅に速くなります。");
@@ -1820,14 +1791,6 @@ void Application::DrawGraphPanel() {
             ui::EndPropertyTable();
         }
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
-        if (EvaluatingNode() == selected->id) {
-            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
-            // 進み具合が分からない段階は、バーを左右へ動かして「動いている」ことだけを示す。
-            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
-                               EvaluationProgressText().c_str());
-            ui::HintText("UV展開はCPUで行います。三角形が多いほど時間がかかり、6万三角形で15秒ほどです。島への分割の前半は進み具合が出ず、その間は打ち切りも効きません。"
-                         "表示は前回の結果です。");
-        }
         ui::HintText("選択するとUVチェッカーを表示します。UVビューのタブで島の配置を確認できます。複数の入力メッシュは1枚のアトラスへまとめます。");
     } else if (auto* apply = std::get_if<graph::ApplyMaterialSettings>(&selected->settings)) {
         bool changed = false;
@@ -1885,9 +1848,7 @@ void Application::DrawGraphPanel() {
             }
             ImGui::TreePop();
         }
-        // 更新中も行の高さを保ち、スライダーを動かすときの上下移動を防ぐ。
-        if (EvaluatingNode() == selected->id) ImGui::TextDisabled("マスクを計算中…");
-        else ImGui::TextDisabled("白い部分に素材が適用されます。");
+        ImGui::TextDisabled("白い部分に素材が適用されます。");
         ui::HintText("UV付きのMeshを接続し、MaskをApply MaterialまたはMask Combineへつなぎます。選択中は白黒で表示します。");
         if (changed) {
             *noiseMask = edited;
@@ -1923,11 +1884,6 @@ void Application::DrawGraphPanel() {
                                          "中間の階調を寄せます。1 で直線、大きいほど白い範囲が細く、小さいほど白い範囲が太くなります（値 ^ ガンマ）。", "%.2f", ImGuiSliderFlags_Logarithmic);
             changed |= ui::PropertyBool("反転", &edited.invert, false);
             ui::EndPropertyTable();
-        }
-        if (EvaluatingNode() == selected->id) {
-            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
-            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
-                               EvaluationProgressText().c_str());
         }
         ui::HintText("UV付きのMesh（UV Unwrapの出力）を接続し、MaskをApply Materialへつなぎます。マスクはそのUVに対応する画像で、"
                      "Apply MaterialのMeshには同じUV Unwrapの出力（またはその下流）を接続します。選択中は、マスクを白黒で貼って表示します。");
@@ -1966,11 +1922,6 @@ void Application::DrawGraphPanel() {
             changed |= ui::PropertyBool("反転", &edited.invert, false);
             ui::EndPropertyTable();
         }
-        if (EvaluatingNode() == selected->id) {
-            const int percent = m_pieceProgress->percent.load(std::memory_order_relaxed);
-            ImGui::ProgressBar(percent > 0 ? float(percent) / 100.0f : -1.0f * float(ImGui::GetTime()), ImVec2(-1, 0),
-                               EvaluationProgressText().c_str());
-        }
         ui::HintText("AとBにShape Mask（またはMask Combine）を接続し、MaskをApply Materialへつなぎます。2つは同じUV Unwrapの出力から作ったマスクにします。"
                      "出力の解像度は大きいほうに合わせます。選択中は、合成したマスクを白黒で貼って表示します。");
         switch (edited.operation) {
@@ -2008,10 +1959,10 @@ void Application::DrawGraphPanel() {
         if (ImGui::Button("ベイク実行")) m_pendingBake=selected->id;
         ImGui::EndDisabled();
         if (m_bakeJob && m_bakeJob->id == selected->id)
-            ui::HintText("形状AOをGPUで計算中です。進捗ウィンドウからキャンセルできます。");
+            drawStatusLine("形状AOをGPUで計算中です。進捗ウィンドウからキャンセルできます。");
         else if (const auto status=m_bakeStatus.find(selected->id); status!=m_bakeStatus.end())
-            ui::HintText("%s", status->second.c_str());
-        else ui::HintText("未ベイク。ノードの出力をプレビューして状態を確認してください。");
+            drawStatusLine(status->second);
+        else drawStatusLine("未ベイク。ノードの出力をプレビューして状態を確認してください。");
         DrawBakedTextureTiles(bake);
         {
             // 出力できるのは、この起動中にベイクした結果だけ（画像をメモリに持っているもの）。

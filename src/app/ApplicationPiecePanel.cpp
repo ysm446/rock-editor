@@ -8,11 +8,6 @@ void Application::DrawPieceSettings(graph::Node &node) {
     const float zero[3] = {0, 0, 0}, one[3] = {1, 1, 1};
     const bool hasInput = m_pieceInputNode == node.id && m_pieceInput;
     const bool ready = !m_pieceUpdating && hasInput;
-    if (node.kind == graph::NodeKind::PieceSelect) {
-        // 非同期評価の開始・終了でスライダーの位置を変えない。折り返さず常に1行を使う。
-        ImGui::TextDisabled("%s", m_pieceUpdating ? "更新中…前回の形状を表示" : "設定を変更すると形状に反映します");
-    } else if (m_pieceUpdating)
-        ui::HintText("更新中…表示は前回の結果です。選択・ベイクは完了後に操作できます。");
     if (auto *layers = std::get_if<geometry::LayeredBoxesSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("layeredBoxes")) {
             const float size[3]={3,.12f,2.4f};
