@@ -1084,6 +1084,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Surface, "Surface — マテリアルを Material スロットへ渡す");
         addNodeMenuItem(graph::NodeKind::ApplyMaterial, "Apply Material — マスクで素材を適用");
         addNodeMenuItem(graph::NodeKind::MaterialMask, "Material Mask — 定数・画像マスク");
+        addNodeMenuItem(graph::NodeKind::DepositionMask, "Deposition Mask — 隙間や上向きの面に堆積する土のマスク");
         addNodeMenuItem(graph::NodeKind::NoiseMask, "Noise Mask — 3Dノイズでムラのマスクを作る");
         addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（オクルージョン / 上向き度 / 高さ）");
         addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
@@ -1818,6 +1819,35 @@ void Application::DrawGraphPanel() {
         }
         ui::HintText("画像未指定なら定数。画像はリニアのRを使用。反復幅はUV時はUV単位、Triplanar時はメートルです。");
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
+    } else if (auto* deposition = std::get_if<geometry::DepositionMaskSettings>(&selected->settings)) {
+        auto edited = *deposition;
+        bool changed = false;
+        if (ui::BeginPropertyTable("depositionRows")) {
+            changed |= ui::PropertyFloat("堆積量", &edited.amount, 0, 1, 1, "白いほど土の素材を強く適用します。");
+            changed |= ui::PropertyFloat("隙間の範囲", &edited.distance, .001f, 1000, .3f,
+                "周囲の壁や岩を探す距離。上方の開口はこの距離に関係なく入力Mesh全体で判定します。", "%.3f m", ImGuiSliderFlags_Logarithmic);
+            changed |= ui::PropertyFloat("許容する傾斜", &edited.maxSlopeDegrees, 1, 89, 60,
+                "水平面からの角度。この角度以上の急斜面には堆積しません。", "%.0f 度");
+            ui::EndPropertyTable();
+        }
+        if (ImGui::TreeNode("詳細設定")) {
+            if (ui::BeginPropertyTable("depositionAdvanced")) {
+                changed |= ui::PropertyFloat("隙間を優先", &edited.recessPreference, 0, 1, .8f,
+                    "0は開いた上面にも堆積。1は周囲に囲まれた隙間だけに絞ります。");
+                const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+                int resolutionIndex = 0;
+                while ((128 << resolutionIndex) < edited.resolution && resolutionIndex < 5) ++resolutionIndex;
+                if (ui::PropertyCombo("マスク解像度", &resolutionIndex, resolutions, 6, 3)) {
+                    edited.resolution = 128 << resolutionIndex; changed = true;
+                }
+                changed |= ui::PropertyInt("サンプル数", &edited.samples, 8, 128, 32, "隙間の判定精度。多いほど計算時間が増えます。");
+                changed |= ui::PropertyBool("反転", &edited.invert, false);
+                ui::EndPropertyTable();
+            }
+            ImGui::TreePop();
+        }
+        ui::HintText("UV付きMeshを接続。白い部分が土の堆積候補です。MaskをApply Materialへつなぎます。上は入力の+Y方向です。");
+        if (changed) { *deposition = edited; m_graph.MarkDirty(); MarkDocumentChanged(); }
     } else if (auto* noiseMask = std::get_if<geometry::NoiseMaskSettings>(&selected->settings)) {
         auto edited = *noiseMask;
         bool changed = false;

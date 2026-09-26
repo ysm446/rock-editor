@@ -495,3 +495,98 @@ void RunNoiseMaskTests() {
     auto redo=history.Redo(undo);g.Replace(redo.graphNodes,redo.graphLinks);
     Check(std::get<geometry::NoiseMaskSettings>(g.FindNode(noise)->settings).seed==settings.seed+1,"Noise Mask設定のRedo");
 }
+
+void RunDepositionMaskTests() {
+    using namespace rock;
+    using tests::Check;
+    using tests::Section;
+    Section("Deposition Mask — 受け面・隙間・上方の開口");
+    geometry::Mesh mesh;
+    mesh.positions = {{-1,0,-1},{1,0,-1},{1,0,1},{-1,0,1}};
+    mesh.triangles = {{0,2,1},{0,3,2}};
+    mesh.cornerUvs = {{{{0,0},{1,1},{1,0}}},{{{0,0},{0,1},{1,1}}}};
+    mesh.uvWidth=128; mesh.uvHeight=128;
+    geometry::DepositionMaskSettings settings; settings.resolution=128; settings.recessPreference=0;
+    std::string error;
+    auto image=geometry::DepositionMask(mesh,settings,error);
+    Check(error.empty() && image.Sample(.5f,.5f)>.99f,"開いた水平面は土を受ける");
+    auto underside=mesh;
+    for(auto& face:underside.triangles) std::swap(face[1],face[2]);
+    Check(geometry::DepositionMask(underside,settings,error).Sample(.5f,.5f)==0,"下向き面には堆積しない");
+    auto wall=mesh; for(auto& p:wall.positions) {p.y=p.x;p.x=0;}
+    Check(geometry::DepositionMask(wall,settings,error).Sample(.5f,.5f)==0,"垂直面には堆積しない");
+    auto slope=mesh;for(auto& p:slope.positions) p.y=p.x*2;
+    Check(geometry::DepositionMask(slope,settings,error).Sample(.5f,.5f)==0,"許容角度を超えた斜面を除く");
+    // レイに使う天井は別のUV島。隙間の探索距離より遠くても降下を遮る。
+    auto roof=mesh;
+    roof.positions.insert(roof.positions.end(),{{-2,1,-2},{2,1,-2},{2,1,2},{-2,1,2}});
+    roof.triangles.push_back({4,5,6});roof.triangles.push_back({4,6,7});
+    roof.cornerUvs.push_back({{{0,0},{.001f,0},{0,.001f}}});roof.cornerUvs.push_back({{{0,0},{.001f,0},{0,.001f}}});
+    Check(geometry::DepositionMask(roof,settings,error).Sample(.5f,.5f)==0,"近傍範囲より遠い天井も上からの堆積を遮る");
+    auto pocket=mesh;
+    pocket.positions.insert(pocket.positions.end(),{{-1,1,-1},{-1,1,1}});
+    pocket.triangles.push_back({0,4,5});pocket.triangles.push_back({0,5,3});
+    pocket.cornerUvs.push_back({{{0,0},{.001f,0},{0,.001f}}});pocket.cornerUvs.push_back({{{0,0},{.001f,0},{0,.001f}}});
+    settings.recessPreference=1;settings.distance=.8f;
+    auto cavity=geometry::DepositionMask(pocket,settings,error);
+    Check(error.empty() && cavity.Sample(.06f,.5f)>cavity.Sample(.8f,.5f)+.2f,"上に開いた入隅を平面の中央より優先");
+    auto shorter=settings;shorter.distance=.01f;
+    Check(geometry::DepositionMask(pocket,shorter,error).Sample(.06f,.5f)<cavity.Sample(.06f,.5f),"距離で対象にする隙間の大きさが変わる");
+    Check(geometry::DepositionMask(pocket,settings,error).pixels==cavity.pixels,"並列計算でも結果は再現可能");
+    auto half=settings;half.amount=.5f;
+    Check(geometry::DepositionMask(pocket,half,error).Sample(.06f,.5f)<cavity.Sample(.06f,.5f),"堆積量で被覆が減る");
+    half.amount=0;
+    auto zero=geometry::DepositionMask(pocket,half,error);
+    Check(std::all_of(zero.pixels.begin(),zero.pixels.end(),[](auto v){return v==0;}),"堆積量0は全面黒");
+    half=settings;half.invert=true;
+    Check(geometry::DepositionMask(pocket,half,error).pixels==cavity.pixels,"反転は消費側で適用");
+    for(auto bad:{[](auto s){s.distance=0;return s;}(settings),
+                 [](auto s){s.amount=std::numeric_limits<float>::quiet_NaN();return s;}(settings),
+                 [](auto s){s.maxSlopeDegrees=90;return s;}(settings),
+                 [](auto s){s.resolution=127;return s;}(settings),
+                 [](auto s){s.recessPreference=2;return s;}(settings)})
+        Check(geometry::DepositionMask(mesh,bad,error).pixels.empty() && !error.empty(),"不正な堆積設定を拒否");
+    Check(geometry::DepositionMask(geometry::MakeBox({1,1,1}),settings,error).pixels.empty() && !error.empty(),"UVなしを診断");
+    std::stop_source stop;stop.request_stop();
+    Check(geometry::DepositionMask(mesh,settings,error,stop.get_token()).pixels.empty() && !error.empty(),"堆積生成のキャンセル");
+    graph::NodeGraph g;
+    const auto base=g.CreateNode(graph::NodeKind::BaseRock),uv=g.CreateNode(graph::NodeKind::UvUnwrap),
+        noise=g.CreateNode(graph::NodeKind::DepositionMask),shape=g.CreateNode(graph::NodeKind::ShapeMask),
+        combine=g.CreateNode(graph::NodeKind::MaskCombine),apply=g.CreateNode(graph::NodeKind::ApplyMaterial),
+        surface=g.CreateNode(graph::NodeKind::Surface),sub=g.CreateNode(graph::NodeKind::Subdivide);
+    std::get<geometry::UvUnwrapSettings>(g.FindMutableNode(uv)->settings).resolution=128;
+    std::get<geometry::DepositionMaskSettings>(g.FindMutableNode(noise)->settings)=settings;
+    auto& shapeSettings=std::get<geometry::ShapeMaskSettings>(g.FindMutableNode(shape)->settings);
+    shapeSettings.type=geometry::ShapeMaskType::Height;shapeSettings.resolution=128;
+    const auto link=[&](int from,int to,int pin=0){return g.CreateLink(g.FindNode(from)->outputs[0].id,g.FindNode(to)->inputs[pin].id);};
+    Check(link(base,uv) && link(uv,noise) && link(uv,shape) && link(noise,combine) && link(shape,combine,1) &&
+          link(uv,apply) && link(surface,apply,1) && link(noise,apply,2) && link(apply,sub),"Deposition Maskの接続と既存経路への統合");
+    const auto* definition=graph::FindNodeDefinitionByName("depositionMask");
+    Check(definition && definition->kind==graph::NodeKind::DepositionMask && graph::IsPreviewableNodeKind(definition->kind),"保存名と白黒プレビュー対象を登録");
+    graph::RockEvaluationCache cache;
+    auto result=graph::EvaluateRocks(g,noise,&cache);
+    Check(result.error.empty() && result.rocks.size()==1 && result.rocks[0].previewMask,"ノード評価でプレビュー画像を返す");
+    if (!result.error.empty() || result.rocks.empty() || !result.rocks[0].previewMask) return;
+    const auto preview=result.rocks[0].previewMask;
+    auto applied=graph::EvaluateRocks(g,sub,&cache);
+    Check(applied.error.empty() && applied.rocks[0].maskImages.at(noise)==preview,"素材適用とSubdivideにマスク画像を渡す");
+    const auto count=cache.computations[noise];
+    auto mixed=graph::EvaluateRocks(g,combine,&cache);
+    Check(mixed.error.empty() && mixed.rocks[0].previewMask && cache.computations[noise]==count,"Shape Maskとの合成で入力キャッシュを再利用");
+    auto& ns=std::get<geometry::DepositionMaskSettings>(g.FindMutableNode(noise)->settings);
+    ns.invert=true;
+    Check(graph::ImageMaskInvert(*g.FindNode(noise)),"描画・ベイク・Displace共通の反転値");
+    auto inverted=graph::EvaluateRocks(g,combine,&cache);
+    Check(inverted.error.empty() && inverted.rocks[0].previewMask->pixels!=mixed.rocks[0].previewMask->pixels &&
+          cache.computations[noise]==count,"反転は堆積マスクを再生成せず合成結果へ反映");
+    DocumentSnapshot before;before.graphNodes=g.Nodes();before.graphLinks=g.Links();
+    ns.amount=.4f;
+    auto updated=graph::EvaluateRocks(g,sub,&cache);
+    Check(updated.error.empty() && updated.rocks[0].maskImages.at(noise)!=preview && cache.computations[noise]==count+1,
+          "堆積量変更で堆積マスクと下流のキャッシュを更新");
+    DocumentSnapshot after;after.graphNodes=g.Nodes();after.graphLinks=g.Links();
+    UndoHistory history;history.Push(before,0);auto undo=history.Undo(after);g.Replace(undo.graphNodes,undo.graphLinks);
+    Check(std::get<geometry::DepositionMaskSettings>(g.FindNode(noise)->settings).amount==settings.amount,"Deposition Mask設定のUndo");
+    auto redo=history.Redo(undo);g.Replace(redo.graphNodes,redo.graphLinks);
+    Check(std::get<geometry::DepositionMaskSettings>(g.FindNode(noise)->settings).amount==.4f,"Deposition Mask設定のRedo");
+}

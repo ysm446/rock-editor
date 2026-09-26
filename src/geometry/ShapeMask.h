@@ -55,6 +55,17 @@ struct NoiseMaskSettings {
 MaskImage NoiseMask(const Mesh&, const NoiseMaskSettings&, std::string&,
                     std::stop_token = {}, const std::function<void(int)>& progress = {});
 
+// 上向きの受け面・近傍の遮蔽・上方の開口から土の堆積候補を作る。
+struct DepositionMaskSettings {
+    float amount = 1, distance = .3f, maxSlopeDegrees = 60;
+    float recessPreference = .8f;
+    int resolution = 1024, samples = 32;
+    bool invert = false;
+    bool operator==(const DepositionMaskSettings&) const = default;
+};
+MaskImage DepositionMask(const Mesh&, const DepositionMaskSettings&, std::string&,
+                         std::stop_token = {}, const std::function<void(int)>& progress = {});
+
 // 2つのマスク画像の合成（Mask Combine）。保存は名前で行う（ProjectIo）。
 enum class MaskCombineOperation : uint32_t {
     Multiply = 0,  // A × B。両方が白い所だけ白

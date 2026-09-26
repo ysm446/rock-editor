@@ -1,7 +1,9 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-26 18:43
+更新日時: 2026-09-26 19:19
+
+Deposition Maskを追加。土が溜まる候補をメッシュの形からマスクにし、既存のApply Materialへ渡す。形状の厚み生成は含めない。[仕様](../reference/deposition-mask.md)。
 
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 

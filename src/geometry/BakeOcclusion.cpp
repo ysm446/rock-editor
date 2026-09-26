@@ -230,7 +230,7 @@ double CloudNoise(V surface,const NoiseMaskSettings& settings) {
 }
 }
 static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::string &error,
-                    std::stop_token stop, const std::function<void(int)> &progress, const NoiseMaskSettings* noise) {
+                    std::stop_token stop, const std::function<void(int)> &progress, const NoiseMaskSettings* noise, const DepositionMaskSettings* deposition = nullptr) {
 
     error.clear();
     const int resolution = settings.resolution;
@@ -352,6 +352,28 @@ static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings
                     occluded += bvh.Hit(p, direction, distance, texel.face);
                 }
                 ratio = counted > 0 ? double(occluded) / counted : 0;
+                if (deposition) {
+                    // 土を受ける面だけを対象とする。壁面の平滑法線による回り込みも除く。
+                    const double slopeLimit = std::cos(deposition->maxSlopeDegrees * std::numbers::pi / 180.);
+                    double support = std::clamp((n.y - slopeLimit) / (1 - slopeLimit), 0., 1.);
+                    support = support * support * (3 - 2 * support);
+                    if (faceNormal.y <= 0) support = 0;
+                    // 近傍半球の遮蔽は隙間の優先度。上方の開口は入力全体の外まで調べる。
+                    // 真上と15度の円錐を固定サンプリングし、天井の下に土を塗らない。
+                    int open = 0;
+                    if (support > 0 && deposition->amount > 0) {
+                        const double skyDistance = std::sqrt(Dot(extent, extent)) + distance;
+                        for (int ray = 0; ray < 9; ++ray) {
+                            const double radius = ray == 0 ? 0 : std::sin(15. * std::numbers::pi / 180.);
+                            const double angle = ray * 2. * std::numbers::pi / 8.;
+                            const V direction{radius * std::cos(angle), std::sqrt(1 - radius * radius), radius * std::sin(angle)};
+                            open += !bvh.Hit(p, direction, skyDistance, texel.face);
+                        }
+                    }
+                    const double recess = std::clamp(ratio * 3., 0., 1.);
+                    ratio = deposition->amount * support * (open / 9.) *
+                        (1 - deposition->recessPreference + deposition->recessPreference * recess);
+                }
             }
             double level = std::clamp((ratio - settings.low) / double(settings.high - settings.low), 0., 1.);
             if (settings.gamma != 1) level = std::pow(level, double(settings.gamma));
@@ -398,6 +420,23 @@ static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings
 MaskImage ShapeMask(const Mesh& mesh,const ShapeMaskSettings& settings,std::string& error,
                     std::stop_token stop,const std::function<void(int)>& progress) {
     return SurfaceMask(mesh,settings,error,stop,progress,nullptr);
+}
+MaskImage DepositionMask(const Mesh& mesh, const DepositionMaskSettings& settings, std::string& error,
+                         std::stop_token stop, const std::function<void(int)>& progress) {
+    error.clear();
+    const auto unit = [](float v) { return std::isfinite(v) && v >= 0 && v <= 1; };
+    if (!unit(settings.amount) || !unit(settings.recessPreference) || !std::isfinite(settings.maxSlopeDegrees) ||
+        settings.maxSlopeDegrees < 1 || settings.maxSlopeDegrees > 89 ||
+        !std::isfinite(settings.distance) || settings.distance < .001f || settings.distance > 1000 ||
+        settings.samples < kMinOcclusionSamples || settings.samples > kMaxOcclusionSamples ||
+        settings.resolution < kMinShapeMaskResolution || settings.resolution > kMaxShapeMaskResolution ||
+        (settings.resolution & (settings.resolution - 1))) {
+        error = "Deposition Maskの設定が不正です"; return {};
+    }
+    ShapeMaskSettings raster;
+    raster.resolution = settings.resolution; raster.distance = settings.distance; raster.samples = settings.samples;
+    raster.low = 0; raster.high = 1;
+    return SurfaceMask(mesh, raster, error, stop, progress, nullptr, &settings);
 }
 MaskImage NoiseMask(const Mesh& mesh,const NoiseMaskSettings& settings,std::string& error,
                     std::stop_token stop,const std::function<void(int)>& progress) {

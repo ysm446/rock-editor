@@ -36,6 +36,7 @@ void RunApplyMaterialTests();
 void RunDisplaceTests();
 void RunShapeMaskTests();
 void RunNoiseMaskTests();
+void RunDepositionMaskTests();
 void RunMaskCombineTests();
 int main(int argc, char** argv) {
     RunDisplaceTests();
@@ -45,6 +46,7 @@ int main(int argc, char** argv) {
     RunApplyMaterialTests();
     RunShapeMaskTests();
     RunNoiseMaskTests();
+    RunDepositionMaskTests();
     RunMaskCombineTests();
     RunPieceTests();
     RunMeshVolumeTests();

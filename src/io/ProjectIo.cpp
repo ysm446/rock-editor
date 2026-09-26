@@ -524,6 +524,10 @@ json WriteGraph(const graph::NodeGraph& graphData,
                 {"repeatMeters", mask->repeatMeters}, {"invert", mask->invert}, {"triplanar", mask->triplanar}};
         } else if (const auto* apply = std::get_if<graph::ApplyMaterialSettings>(&node.settings)) {
             item["applyMaterial"] = {{"heightBlend", apply->heightBlend}, {"heightBlendRange", apply->heightBlendRange}};
+        } else if (const auto* deposition = std::get_if<geometry::DepositionMaskSettings>(&node.settings)) {
+            item["depositionMask"] = {{"amount", deposition->amount}, {"distance", deposition->distance},
+                {"maxSlopeDegrees", deposition->maxSlopeDegrees}, {"recessPreference", deposition->recessPreference},
+                {"resolution", deposition->resolution}, {"samples", deposition->samples}, {"invert", deposition->invert}};
         } else if (const auto* noiseMask = std::get_if<geometry::NoiseMaskSettings>(&node.settings)) {
             item["noiseMask"] = {{"size", noiseMask->size}, {"contrast", noiseMask->contrast}, {"seed", noiseMask->seed},
                 {"detail", noiseMask->detail}, {"warp", noiseMask->warp}, {"resolution", noiseMask->resolution}, {"invert", noiseMask->invert}};
@@ -800,6 +804,18 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 if (const json* v = FindMember(item, "applyMaterial"); v && v->is_object()) {
                     settings.heightBlend = ReadBool(*v, "heightBlend", false);
                     settings.heightBlendRange = std::clamp(ReadFloat(*v, "heightBlendRange", .2f), .01f, 1.f);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::DepositionMask) {
+                geometry::DepositionMaskSettings settings;
+                if (const json* v = FindMember(item, "depositionMask"); v && v->is_object()) {
+                    settings.amount = ReadFloat(*v, "amount", settings.amount);
+                    settings.distance = ReadFloat(*v, "distance", settings.distance);
+                    settings.maxSlopeDegrees = ReadFloat(*v, "maxSlopeDegrees", settings.maxSlopeDegrees);
+                    settings.recessPreference = ReadFloat(*v, "recessPreference", settings.recessPreference);
+                    settings.resolution = ReadInt(*v, "resolution", settings.resolution);
+                    settings.samples = ReadInt(*v, "samples", settings.samples);
+                    settings.invert = ReadBool(*v, "invert", settings.invert);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::NoiseMask) {
