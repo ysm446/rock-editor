@@ -20,7 +20,7 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
         const auto& s = std::get<geometry::LayeredBoxesSettings>(node.settings);
         std::string key;
         const auto add=[&](const auto& v){key.append(reinterpret_cast<const char*>(&v),sizeof(v));};
-        add(node.kind); add(node.id); add(s.count); add(s.size); add(s.rotation); add(s.gap);
+        add(node.kind); add(node.id); add(s.count); add(s.size); add(s.rotation); add(s.position); add(s.gap);
         add(s.thicknessVariation); add(s.sizeVariation); add(s.offset); add(s.seed);
         if (cache)
             if (auto it=cache->pieceEntries.find(node.id);it!=cache->pieceEntries.end() && it->second.key==key)

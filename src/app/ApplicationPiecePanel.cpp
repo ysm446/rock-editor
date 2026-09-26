@@ -17,13 +17,14 @@ void Application::DrawPieceSettings(graph::Node &node) {
             changed |= ui::PropertyFloat("厚さのばらつき",&layers->thicknessVariation,0,.8f,.3f);
             changed |= ui::PropertyFloat("広さのばらつき",&layers->sizeVariation,0,.8f,.1f);
             changed |= ui::PropertyFloat("面内のずれ (m)",&layers->offset,0,1,.12f);
+            changed |= ui::PropertyFloat3Input("位置 (m)",layers->position.data(),zero)!=0;
             changed |= ui::PropertyFloat3Input("向き (度)",layers->rotation.data(),zero)!=0;
             int seed=int(layers->seed);
             if (ui::PropertyInt("Seed",&seed,0,1000000,1)) {layers->seed=uint32_t(seed);changed=true;}
             ui::EndPropertyTable();
         }
         ui::HintText("板は平行を保ち、下から層0、1…と番号を持ちます。Pieces出力を Scatter Points と Voronoi Fracture の両方へ接続します。");
-        ui::HintText("向きはビューポートの回転ギズモ（原点の輪）でも変えられます。Ctrl で15度刻み、Esc で元に戻します。");
+        ui::HintText("位置と向きはビューポートのギズモでも変えられます。W で移動、E で回転（Ctrl で15度刻み）、Esc で元に戻します。");
     } else if (auto *scatter = std::get_if<geometry::ScatterSettings>(&node.settings)) {
         if (ui::BeginPropertyTable("scatter")) {
             changed |= ui::PropertyInt("点数", &scatter->count, 2, geometry::MaxScatterPoints, 24);

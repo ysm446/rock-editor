@@ -291,6 +291,16 @@ static void RunLayeredPieceTests() {
     auto rotatedSettings=settings;rotatedSettings.rotation={27,13,19};
     const auto rotated=MakeLayeredBoxes(rotatedSettings,10,error);
     Check(error.empty() && rotated.pieces[0].transform!=layers.pieces[0].transform,"向きを変えると平行を保って回転する");
+    auto shiftedSettings=rotatedSettings;shiftedSettings.position={1.5f,-2,.25f};
+    const auto shiftedLayers=MakeLayeredBoxes(shiftedSettings,10,error);
+    bool shifted=error.empty() && shiftedLayers.pieces.size()==rotated.pieces.size() && shiftedLayers.fingerprint!=rotated.fingerprint;
+    for (size_t i=0;shifted && i<shiftedLayers.pieces.size();++i)
+        for (int row=0;row<3;++row) {
+            shifted &= std::abs(shiftedLayers.pieces[i].transform[row*4+3]-rotated.pieces[i].transform[row*4+3]-shiftedSettings.position[row])<1e-5;
+            for (int column=0;column<3;++column)
+                shifted &= shiftedLayers.pieces[i].transform[row*4+column]==rotated.pieces[i].transform[row*4+column];
+        }
+    Check(shifted,"位置を変えると向きを保ったまま積み重ね全体を平行移動する");
     ScatterSettings scatter; scatter.count=32;scatter.planar=true;
     auto points=ScatterPiecePoints(layers,scatter,error);
     Check(error.empty() && points.grouped && points.groups.size()==3 && points.positions.size()==96,

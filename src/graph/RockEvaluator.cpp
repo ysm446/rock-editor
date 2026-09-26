@@ -96,7 +96,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         const auto method = s ? s->method : geometry::VolumeMeshingMethod::MarchingTetrahedra;
         add(method);
     } else if (const auto* layers = std::get_if<geometry::LayeredBoxesSettings>(&node->settings)) {
-        add(layers->count); add(layers->size); add(layers->rotation); add(layers->gap);
+        add(layers->count); add(layers->size); add(layers->rotation); add(layers->position); add(layers->gap);
         add(layers->thicknessVariation); add(layers->sizeVariation); add(layers->offset); add(layers->seed);
     } else if (const auto* scatter = std::get_if<geometry::ScatterSettings>(&node->settings)) {
         add(scatter->count); add(scatter->seed); add(scatter->version); add(scatter->planar);

@@ -275,7 +275,8 @@ PieceCollection MakeLayeredBoxes(const LayeredBoxesSettings& s, int producer, st
     if (s.count<1 || s.count>32 || !range(s.gap,0,10) || !range(s.thicknessVariation,0,.8f) ||
         !range(s.sizeVariation,0,.8f) || !range(s.offset,0,1000) ||
         std::any_of(s.size.begin(),s.size.end(),[&](float v){return !range(v,.001f,1000);}) ||
-        std::any_of(s.rotation.begin(),s.rotation.end(),[](float v){return !std::isfinite(v);})) {
+        std::any_of(s.rotation.begin(),s.rotation.end(),[](float v){return !std::isfinite(v);}) ||
+        std::any_of(s.position.begin(),s.position.end(),[](float v){return !std::isfinite(v) || std::abs(v)>100000;})) {
         error="板は1〜32枚、寸法0.001〜1000m、隙間0〜10m、ばらつき0〜0.8、ずれ0〜1000mにしてください";
         return {};
     }
@@ -286,6 +287,7 @@ PieceCollection MakeLayeredBoxes(const LayeredBoxesSettings& s, int producer, st
     Hash hash; hash.Add(s.count); hash.Add(s.seed);
     for (auto v:s.size) hash.Float(v);
     for (auto v:s.rotation) hash.Float(v);
+    for (auto v:s.position) hash.Float(v);
     hash.Float(s.gap); hash.Float(s.thicknessVariation); hash.Float(s.sizeVariation); hash.Float(s.offset);
     out.generation=hash.value;
     std::vector<D> centers;
@@ -308,7 +310,8 @@ PieceCollection MakeLayeredBoxes(const LayeredBoxesSettings& s, int producer, st
     }
     for (size_t i=0;i<out.pieces.size();++i) {
         centers[i].y-=height*.5;
-        const auto position=Rotate(centers[i],rotation);
+        auto position=Rotate(centers[i],rotation);
+        position.x+=s.position[0]; position.y+=s.position[1]; position.z+=s.position[2];
         out.pieces[i].transform={axes[0].x,axes[1].x,axes[2].x,position.x,
                                  axes[0].y,axes[1].y,axes[2].y,position.y,
                                  axes[0].z,axes[1].z,axes[2].z,position.z};

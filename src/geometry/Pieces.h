@@ -36,7 +36,7 @@ struct PointSet {
 };
 struct LayeredBoxesSettings {
     int count = 5;
-    std::array<float, 3> size{3, .12f, 2.4f}, rotation{0, 0, 0};
+    std::array<float, 3> size{3, .12f, 2.4f}, rotation{0, 0, 0}, position{0, 0, 0};
     float gap = .005f, thicknessVariation = .3f, sizeVariation = .1f, offset = .12f;
     uint32_t seed = 1;
 };

@@ -9,7 +9,7 @@ inline nlohmann::json WritePiecePose(const geometry::PiecePose &s) {
 inline nlohmann::json WritePieceSettings(const graph::Node &node) {
     using namespace geometry;
     if (auto *s = std::get_if<LayeredBoxesSettings>(&node.settings))
-        return {{"count",s->count},{"size",s->size},{"rotation",s->rotation},{"gap",s->gap},
+        return {{"count",s->count},{"size",s->size},{"rotation",s->rotation},{"position",s->position},{"gap",s->gap},
                 {"thicknessVariation",s->thicknessVariation},{"sizeVariation",s->sizeVariation},
                 {"offset",s->offset},{"seed",s->seed}};
     if (auto *s = std::get_if<ScatterSettings>(&node.settings))
@@ -94,7 +94,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
     };
     if (auto *s = std::get_if<LayeredBoxesSettings>(&node.settings)) {
         read(value,"count",s->count); read(value,"size",s->size); read(value,"rotation",s->rotation);
-        read(value,"gap",s->gap); read(value,"thicknessVariation",s->thicknessVariation);
+        read(value,"position",s->position); read(value,"gap",s->gap); read(value,"thicknessVariation",s->thicknessVariation);
         read(value,"sizeVariation",s->sizeVariation); read(value,"offset",s->offset); read(value,"seed",s->seed);
     }
     if (auto *s = std::get_if<ScatterSettings>(&node.settings)) {

@@ -396,8 +396,8 @@ bool Application::NodeTransform(graph::GraphId nodeId, NodeTransformRef& out) {
         return true;
     }
     if (auto* layers = std::get_if<geometry::LayeredBoxesSettings>(&node->settings)) {
-        // 位置と倍率は持たず、積み重ね全体の向きだけ。回転ギズモだけを出す。
-        out = {nullptr, layers->rotation.data(), nullptr, true};
+        // 倍率は持たず、積み重ね全体の位置と向きだけ。移動と回転のギズモを出す。
+        out = {layers->position.data(), layers->rotation.data(), nullptr, true};
         return true;
     }
     return false;
@@ -470,9 +470,10 @@ bool Application::NodeGizmoFrame(graph::GraphId nodeId, XMFLOAT3& pivot, XMFLOAT
         return true;
     }
     if (node && node->kind == graph::NodeKind::LayeredBoxes) {
-        // 積み重ねは原点を中心に置かれ、向きもそこを中心に回る。表示中の岩がこのノードを通っているときだけ出す。
+        // 積み重ねは位置を中心に置かれ、向きもそこを中心に回る。表示中の岩がこのノードを通っているときだけ出す。
         if (!m_meshGraphError.empty() || !m_meshGraphActive || !RockMeshUsesNode(nodeId)) return false;
-        pivot = {0.0f, 0.0f, 0.0f};
+        const auto& position = std::get<geometry::LayeredBoxesSettings>(node->settings).position;
+        pivot = {position[0], position[1], position[2]};
         XMStoreFloat4x4(&parent, XMMatrixIdentity());
         return true;
     }
