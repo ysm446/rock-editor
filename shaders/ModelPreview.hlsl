@@ -8,6 +8,7 @@
 
 #include "Brdf.hlsli"
 #include "CompositeCommon.hlsli"
+#include "LayerMaterial.hlsli"
 #include "EnvCommon.hlsli"
 #include "Tonemap.hlsli"
 
@@ -33,6 +34,7 @@ struct ModelConstants
     float4 shadowSplits;
     float4 shadowBiases;
     float shadowTexelSize, shadowBlend, shadowNear; uint shadowCascadeCount;
+    LayerMaterialData layerMaterial;
 };
 
 ConstantBuffer<ModelConstants> g_model : register(b1);
@@ -232,6 +234,16 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
     }
 
     // --- 陰影（ビューポートと同じ式）---------------------------------------
+    if (g_model.layerMaterial.count > 0) {
+        const MapUv m = MAP_UV(ROCK_MAP_BASE_COLOR);
+        const float footprint = max(length(m.deltaX), length(m.deltaY));
+        const LayerMaterialSample mixed = EvaluateLayerMaterial(g_model.layerMaterial, m.uv, m.uv, footprint.xx,
+            float2(1,1), float2(1,0), float2(0,1));
+        baseColor = mixed.color; roughness = mixed.surface.x; metallic = mixed.surface.y; ambientOcclusion = mixed.surface.z;
+        const float3 tangent = normalize(input.tangent.xyz - normalGeometric * dot(input.tangent.xyz, normalGeometric));
+        normal = normalize(tangent * mixed.normal.x + cross(normalGeometric, tangent) * input.tangent.w * mixed.normal.y + normalGeometric * mixed.normal.z);
+    }
+
     const float3 viewDirection = normalize(g_model.cameraPosition - input.position);
     float3 diffuseColor;
     float3 f0;

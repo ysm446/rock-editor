@@ -1,3 +1,5 @@
+#include "io/LayerMaterialIo.h"
+#include "graph/SurfacePresetGraph.h"
 #include "io/PieceSettings.h"
 #include "io/ProjectIo.h"
 
@@ -240,7 +242,23 @@ const char* const kMaterialMapNames[] = {"baseColor", "normal", "roughness", "me
                                          "ambientOcclusion", "height", "opacity"};
 static_assert(std::size(kMaterialMapNames) == static_cast<size_t>(compositor::MaterialMap::Count));
 
+void RemapLayerReferences(compositor::MaterialAsset& asset, const std::unordered_map<int, compositor::MaterialAssetId>& ids) {
+    if (!asset.layerMaterial) return;
+    auto body = WriteLayerMaterial(*asset.layerMaterial);
+    MapLayerMaterials(body, [&](const json& value) -> json {
+        const auto it = ids.find(value.is_number_integer() ? value.get<int>() : 0);
+        return it == ids.end() ? json(0) : json(it->second);
+    });
+    std::string error;
+    ReadLayerMaterial(body, *asset.layerMaterial, error);
+}
+
 json WriteMaterialBody(const compositor::MaterialAsset& asset, const TextureWriter& writeTexture) {
+    if (asset.layerMaterial) {
+        auto node = WriteLayerMaterial(*asset.layerMaterial);
+        node["name"] = asset.name;
+        return node;
+    }
     json node;
     node["name"] = asset.name;
     node["baseColorTint"] = WriteFloat3(asset.baseColorTint);
@@ -278,6 +296,19 @@ json WriteMaterialBody(const compositor::MaterialAsset& asset, const TextureWrit
 
 void ReadMaterialBody(const json& node, compositor::MaterialAsset& asset,
                       const TextureReader& readTexture) {
+    if (node.contains("materials") || node.contains("materialGraph")) {
+        graph::LayerMaterial layer;
+        std::string error;
+        if (ReadLayerMaterial(node, layer, error)) {
+            if (layer.materialGraph) {
+                graph::ExtractPresetLayers(layer, layer.materials, error);
+                layer.materialGraph.reset();
+            }
+            asset.layerMaterial = std::move(layer); asset.name = asset.layerMaterial->name;
+        }
+        else { asset.layerError = error; ROCK_LOG_ERROR("レイヤーマテリアル: %s", error.c_str()); }
+        return;
+    }
     const compositor::MaterialAsset defaults;
     asset.name = ReadString(node, "name", defaults.name);
     asset.baseColorTint = ReadFloat3(node, "baseColorTint", defaults.baseColorTint);
@@ -1513,6 +1544,10 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
         }
         materials.push_back(std::move(node));
     }
+    for (auto& node : materials) MapLayerMaterials(node, [&](const json& value) -> json {
+        const auto it = materialIndex.find(value.is_number_integer() ? value.get<uint32_t>() : 0);
+        return it == materialIndex.end() ? json(0) : json(it->second);
+    });
     document["materials"] = std::move(materials);
 
     // --- モデル（FBX は参照。スロットのマテリアルは文書内の番号） ----------
@@ -1686,6 +1721,8 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
         }
     }
 
+    for (const auto& [index, id] : materialIds) RemapLayerReferences(*refs.materials.FindMutable(id), materialIds);
+
     // --- モデル -----------------------------------------------------------
     // 欠けた FBX も参照を残す（リンク切れとして表示し、別の場所へ保存し直しても割り当てを失わない）。
     std::unordered_map<int, uint64_t> modelIds;
@@ -1833,13 +1870,20 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
         }
         return workspace.UniquePath(workspace.Root() / folder, name, extension);
     };
-    for (const compositor::MaterialAsset& entry : refs.materials.Entries()) {
-        if (entry.transient) continue;
+    for (int pass = 0; pass < 2; ++pass) for (const compositor::MaterialAsset& entry : refs.materials.Entries()) {
+        if (entry.transient || bool(entry.layerMaterial) != (pass == 1)) continue;
         compositor::MaterialAsset* asset = refs.materials.FindMutable(entry.id);
         json body = WriteMaterialBody(*asset, writeTexture);
         body["uid"] = asset->assetUid;
-        fs::path assetPath = placement(body, asset->assetPath, "material-asset", L"Materials", asset->name, ".rockmat");
-        if (!valid || !workspace.SaveAsset(assetPath, "material-asset", body)) {
+        if (asset->layerMaterial) MapLayerMaterials(body, [&](const json& value) -> json {
+            const auto* source = refs.materials.Find(value.is_number_integer() ? value.get<uint32_t>() : 0);
+            if (!source) return 0;
+            if (source->layerMaterial || source->assetPath.empty()) { valid = false; return 0; }
+            return workspace.Reference(source->assetPath);
+        });
+        const char* kind = asset->layerMaterial ? "layer-material-asset" : "material-asset";
+        fs::path assetPath = placement(body, asset->assetPath, kind, L"Materials", asset->name, asset->layerMaterial ? ".tglayer" : ".rockmat");
+        if (!valid || !workspace.SaveAsset(assetPath, kind, body)) {
             ROCK_LOG_ERROR("マテリアルを保存できません: %s", asset->name.c_str());
             return false;
         }
@@ -1909,23 +1953,26 @@ void AddExpandedLibraries(const json& document, rhi::Device& device, rhi::Pipeli
         const auto it = textureIds.find(value.is_number_integer() ? value.get<int>() : 0);
         return (it != textureIds.end()) ? it->second : compositor::kNoTexture;
     };
+    std::vector<compositor::MaterialAssetId> added;
     for (const json& node : document.at("materials")) {
         const std::string uid = ReadString(node, "uid");
         const auto& entries = materials.Entries();
         const auto existing = std::find_if(entries.begin(), entries.end(),
                                            [&uid](const compositor::MaterialAsset& a) { return a.assetUid == uid; });
-        if (existing != entries.end()) {
+        if (!uid.empty() && existing != entries.end()) {
             materialIds[ReadInt(node, "id", 0)] = existing->id;
             continue;
         }
         const compositor::MaterialAssetId id = materials.Add(ReadString(node, "name"));
         compositor::MaterialAsset* asset = materials.FindMutable(id);
         ReadMaterialBody(node, *asset, readTexture);
+        added.push_back(id);
         asset->assetUid = uid;
         asset->assetPath = FromUtf8(ReadString(node, "_assetPath"));
         asset->thumbnailDirty = true;
         materialIds[ReadInt(node, "id", 0)] = id;
     }
+    for (const auto id : added) RemapLayerReferences(*materials.FindMutable(id), materialIds);
 }
 
 }  // namespace
@@ -1948,7 +1995,7 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
         return false;
     }
     const json reference = {{"uid", assetUid}, {"path", RelativePathString(path, workspace.Root())}};
-    const bool isMaterial = _wcsicmp(path.extension().c_str(), L".rockmat") == 0;
+    const bool isMaterial = _wcsicmp(path.extension().c_str(), L".rockmat") == 0 || _wcsicmp(path.extension().c_str(), L".tglayer") == 0;
     const bool isModel = _wcsicmp(path.extension().c_str(), L".rockmodel") == 0;
     if (isModel && models == nullptr) {
         return false;
@@ -2002,6 +2049,7 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
 
 bool SaveMaterial(const std::filesystem::path& path, const compositor::MaterialAsset& asset,
                   const compositor::TextureLibrary& textures) {
+    if (asset.layerMaterial) { ROCK_LOG_ERROR("レイヤーマテリアルは共有アセットとして保存してください"); return false; }
     // SaveProject と同じく、裸のファイル名でも相対パスが作れるよう絶対化する。
     std::error_code absoluteError;
     const fs::path absolutePath = fs::absolute(path, absoluteError);

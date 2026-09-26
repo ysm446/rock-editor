@@ -243,7 +243,7 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
         }
         device.DeferRelease(thumbnail);
     }
-    if (extension == ".tglayer" || extension == ".tgboundary") {
+    if (extension == ".tgboundary") {
         fs::path source;
         nlohmann::json body;
         if (extension == ".tgboundary" && workspace.ReadAsset(path, "boundary-material-asset", body))
@@ -255,8 +255,7 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
             Store(device, path, std::move(thumbnail));
             return;
         }
-        // レイヤーマテリアルはここでは描画できない（道路の評価と描画が要る）。読み込んで保存したときに
-        // アプリが残した画像（上の ThumbnailIsCurrent）だけを使い、無ければ帯が種類の文字を出す。
+        // プレビューが作れない形式は種類の文字で示す。
         Store(device, path, std::move(thumbnail), false);
         m_entries[path].failed = false;
         return;
@@ -268,7 +267,7 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
         ClearScratch(device, false);
         return;
     }
-    if (extension != ".rockmat" && extension != ".rocksky") {
+    if (extension != ".rockmat" && extension != ".tglayer" && extension != ".rocksky") {
         if (!BuildImage(device, path, thumbnail)) device.DeferRelease(thumbnail);
         Store(device, path, std::move(thumbnail));
         return;

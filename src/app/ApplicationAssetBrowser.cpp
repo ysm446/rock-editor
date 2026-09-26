@@ -351,7 +351,7 @@ void Application::RefreshAssetBrowser() {
         // .meta と内部フォルダ（.rock-editor）は出さない。
         if (entry.is_symlink(error) || entry.path().filename().wstring().starts_with(L".")) continue;
         const auto ext = Extension(entry.path());
-        if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".rockmat" && ext != ".rocksky" &&
+        if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".rockmat" && ext != ".tglayer" && ext != ".rocksky" &&
             ext != ".rockmodel" && ext != ".fbx" && ext != ".rockscene") continue;
         m_assetEntries.push_back(entry);
     }
@@ -533,7 +533,7 @@ void Application::ProcessAssetWork() {
             }
         } else if (ext == ".fbx") {
             m_pendingModelImports.push_back(path);
-        } else if (ext == ".rockmat" || ext == ".rocksky") {
+        } else if (ext == ".rockmat" || ext == ".tglayer" || ext == ".rocksky") {
             nlohmann::json header;
             if (ext == ".rockmat" && io::ProjectWorkspace::ReadJson(path, header) &&
                 io::ProjectWorkspace::String(header, "format") != "rock-editor.material-asset") {
@@ -543,7 +543,7 @@ void Application::ProcessAssetWork() {
             }
             if (io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache,
                                     m_textureLibrary, m_materialLibrary, m_skyLibrary)) {
-                if (ext == ".rockmat") {
+                if (ext == ".rockmat" || ext == ".tglayer") {
                     const auto& entries = m_materialLibrary.Entries();
                     for (size_t i = 0; i < entries.size(); ++i)
                         if (SameFile(entries[i].assetPath, path)) m_selectedMaterial = static_cast<int>(i);
@@ -768,7 +768,7 @@ void Application::DrawAssetBrowser() {
             if (folder) {
                 DrawFolderIcon(thumb.min, thumb.max);
             } else if (!handle) {
-                const char* type = ext == ".rockscene" ? "シーン" : ext == ".rockmat" ? "マテリアル" :
+                const char* type = ext == ".rockscene" ? "シーン" : (ext == ".rockmat" || ext == ".tglayer") ? "マテリアル" :
                     ext == ".rocksky" ? "天球" :
                     (ext == ".rockmodel" || ext == ".fbx") ? "モデル" :
                     IsImage(ext) || ext == ".hdr" ? "画像" : "ファイル";
@@ -926,6 +926,22 @@ void Application::DrawAssetBrowser() {
                 m_pendingAssetsSave = true;
                 MarkDocumentChanged();
             }
+            if (ImGui::MenuItem("レイヤーマテリアルを作成")) {
+                const auto id = m_materialLibrary.Add("新規レイヤーマテリアル");
+                auto* asset = m_materialLibrary.FindMutable(id);
+                asset->layerMaterial.emplace();
+                auto& layer = *asset->layerMaterial;
+                layer.name = asset->name;
+                layer.materials.emplace_back();
+                layer.materials.emplace_back();
+                layer.materials.back().baseColor = {0.19f, 0.16f, 0.12f};
+                layer.materials.back().mask.emplace();
+                asset->assetPath = m_workspace.UniquePath(m_assetDirectory, asset->name, ".tglayer");
+                m_selectedMaterial = static_cast<int>(m_materialLibrary.Entries().size()) - 1;
+                m_showMaterialSphere = true;
+                m_pendingAssetsSave = true;
+                MarkDocumentChanged();
+            }
             if (ImGui::MenuItem("天球を作成")) {
                 const auto id = m_skyLibrary.Add("新規天球");
                 auto* asset = m_skyLibrary.FindMutable(id);
@@ -937,7 +953,7 @@ void Application::DrawAssetBrowser() {
             if (ImGui::MenuItem("ファイルを読み込む…")) {
                 const auto paths = ShowOpenFilesDialog(
                     L"アセットを読み込む",
-                    {{L"画像 / HDRI / マテリアル / モデル", L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.exr;*.hdr;*.rockmat;*.fbx"}});
+                    {{L"画像 / HDRI / マテリアル / モデル", L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.exr;*.hdr;*.rockmat;*.tglayer;*.fbx"}});
                 HandleDroppedFiles(paths);
             }
             ImGui::EndPopup();

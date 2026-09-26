@@ -402,3 +402,7 @@ target_sources(rock_editor_tests PRIVATE src/geometry/Displace.cpp src/graph/Mat
 target_sources(rock_editor_tests PRIVATE tests/DisplaceTests.cpp)
 
 target_sources(rock_editor_tests PRIVATE tests/ShapeMaskTests.cpp)
+
+# terrain-graphから移植した共有レイヤーマテリアル。
+target_sources(rock_editor PRIVATE src/graph/SurfacePresetGraph.cpp src/io/LayerMaterialIo.cpp src/app/ApplicationLayerMaterial.cpp)
+target_sources(rock_editor_tests PRIVATE src/graph/SurfacePresetGraph.cpp src/io/LayerMaterialIo.cpp tests/LayerMaterialTests.cpp)

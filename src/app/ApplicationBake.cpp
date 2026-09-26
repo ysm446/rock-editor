@@ -1,3 +1,4 @@
+#include "io/LayerMaterialIo.h"
 #include "app/Application.h"
 #include "core/FileDialog.h"
 #include "core/PathUtf8.h"
@@ -72,6 +73,7 @@ std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const 
             add(layer.heightNoise.octaves);
             add(layer.heightNoise.offset);
             if (const auto *asset = m_materialLibrary.Find(layer.material)) {
+                const auto hashMaterial = [&](const compositor::MaterialAsset* asset) {
                 add(asset->baseColorTint);
                 add(asset->hueShiftDegrees);
                 add(asset->saturation);
@@ -87,6 +89,21 @@ std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const 
                                   asset->opacity}) {
                     add(slot.channel);
                     texture(slot.texture);
+                }
+                };
+                hashMaterial(asset);
+                if (asset->layerMaterial) {
+                    auto body = io::WriteLayerMaterial(*asset->layerMaterial);
+                    // 同じファイルを再読込した時の実行時IDの変化を指紋へ持ち込まない。
+                    io::MapLayerMaterials(body, [&](const nlohmann::json& value) -> nlohmann::json {
+                        const auto* source = m_materialLibrary.Find(value.is_number_integer() ? value.get<uint32_t>() : 0);
+                        const bool found = source && !source->layerMaterial;
+                        add(found);
+                        if (found) hashMaterial(source);
+                        return 0;
+                    });
+                    body.erase("name");
+                    const auto serialized = body.dump(); bytes(serialized.data(), serialized.size());
                 }
             } else {
                 add(layer.baseColor);

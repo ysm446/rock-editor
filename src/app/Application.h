@@ -248,6 +248,7 @@ private:
     void DrawMaterialContextMenu(compositor::MaterialAssetId target);
     // マテリアル 1 つのプロパティ（基本 + マップ）。変更があれば真を返す。
     // **置き場所はプレビューの窓だけ**（一覧はサムネイルだけを出す）。
+    bool DrawLayerMaterialProperties(compositor::MaterialAsset& asset);
     bool DrawMaterialProperties(compositor::MaterialAsset& asset);
     // マテリアルプレビューの窓（回せる球 + プロパティ）。
     // 一覧のサムネイルをダブルクリックするか、ウィンドウメニューから開く。
@@ -645,6 +646,8 @@ private:
     // （プレビュー設定を履歴に載せないのと同じ理由）。
     renderer::SkyLibrary m_skyLibrary;
     int m_selectedMaterial = 0;
+    compositor::MaterialAssetId m_layerEditorAsset = 0;
+    int m_layerEditorSelection = 0;
     // ORD をまとめて割り当てるときに選ぶテクスチャ（UI の一時状態）。
     compositor::TextureId m_ordTexture = compositor::kNoTexture;
     // ライトの向きを掴んでいる間。ギズモは離してからも少しの間だけ残す。

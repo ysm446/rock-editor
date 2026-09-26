@@ -10,6 +10,7 @@
 
 #include "Brdf.hlsli"
 #include "CompositeCommon.hlsli"
+#include "LayerMaterial.hlsli"
 #include "EnvCommon.hlsli"
 #include "Tonemap.hlsli"
 
@@ -56,6 +57,7 @@ struct SphereConstants
     float2 colorAdjust;  // 色相（ラジアン）, 彩度
     float brightness;
     float pad0;
+    LayerMaterialData layerMaterial;
 };
 
 ConstantBuffer<SphereConstants> g_sphere : register(b1);
@@ -244,6 +246,17 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
             const float3 bitangent = cross(normalGeometric, tangent);
             normal = normalize(tangent * sampled.x + bitangent * sampled.y +
                                normalGeometric * sampled.z);
+        }
+    }
+
+    if (g_sphere.layerMaterial.count > 0) {
+        const float footprint = max(length(deltaX), length(deltaY));
+        LayerMaterialSample mixed = EvaluateLayerMaterial(g_sphere.layerMaterial, uv, uv, footprint.xx,
+            float2(1,1), float2(1,0), float2(0,1));
+        baseColor = mixed.color; roughness = mixed.surface.x; metallic = mixed.surface.y; ambientOcclusion = mixed.surface.z;
+        if (length(normalGeometric.xz) > 1e-3f) {
+            const float3 tangent = normalize(float3(-normalGeometric.z, 0, normalGeometric.x));
+            normal = normalize(tangent * mixed.normal.x + cross(normalGeometric, tangent) * mixed.normal.y + normalGeometric * mixed.normal.z);
         }
     }
 

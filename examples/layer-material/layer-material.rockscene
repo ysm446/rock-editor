@@ -1,0 +1,170 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 5.8,
+      "fovY": 0.785398,
+      "pitch": 0.35,
+      "yaw": 0.7
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "baseRock": {
+          "shape": "roundedBox",
+          "size": [
+            2.4,
+            1.8,
+            2
+          ],
+          "subdivisions": 8,
+          "roundness": 0.3,
+          "noiseStrength": 0.08,
+          "noiseScale": 2,
+          "seed": 11
+        }
+      },
+      {
+        "id": 410,
+        "kind": "uvUnwrap",
+        "inputs": [
+          411
+        ],
+        "outputs": [
+          412
+        ],
+        "position": [
+          260,
+          0
+        ],
+        "uvUnwrap": {
+          "resolution": 1024,
+          "padding": 4,
+          "quality": 1
+        }
+      },
+      {
+        "id": 200,
+        "kind": "applyMaterial",
+        "inputs": [
+          201,
+          202,
+          203
+        ],
+        "outputs": [
+          204
+        ],
+        "position": [
+          520,
+          0
+        ]
+      },
+      {
+        "id": 210,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          211
+        ],
+        "position": [
+          260,
+          200
+        ],
+        "layer": {
+          "name": "Weathered rock",
+          "baseColor": [
+            0.3,
+            0.29,
+            0.27
+          ],
+          "roughness": 0.85,
+          "ambientOcclusion": 1.0,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar",
+            "repeatMeters": 1.5
+          },
+          "material": 1
+        }
+      },
+      {
+        "id": 15,
+        "kind": "meshOutput",
+        "inputs": [
+          16
+        ],
+        "outputs": [],
+        "position": [
+          1060,
+          0
+        ]
+      }
+    ],
+    "links": [
+      {
+        "id": 500,
+        "start": 2,
+        "end": 411
+      },
+      {
+        "id": 501,
+        "start": 412,
+        "end": 201
+      },
+      {
+        "id": 502,
+        "start": 211,
+        "end": 202
+      },
+      {
+        "id": 503,
+        "start": 204,
+        "end": 16
+      }
+    ]
+  },
+  "materials": [
+    {
+      "id": 1,
+      "asset": {
+        "uid": "{4DCA026F-0527-4EAB-BAC3-64F7FE57B870}",
+        "path": "Materials/weathered-rock.tglayer"
+      }
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "format": "rock-editor.layer-material-asset",
+  "version": 1,
+  "uid": "{4DCA026F-0527-4EAB-BAC3-64F7FE57B870}",
+  "name": "weathered-rock",
+  "displacement": 0,
+  "layerBlendRange": 0.2,
+  "materials": [
+    {
+      "material": {
+        "uid": "{473202E5-F3D0-45ED-A055-AB28B95C4E57}",
+        "path": "Materials/granite.rockmat"
+      },
+      "uvRepeat": 1,
+      "worldUv": false,
+      "baseColor": [
+        0.33,
+        0.3,
+        0.26
+      ],
+      "roughness": 0.85,
+      "metallic": 0,
+      "ambientOcclusion": 1,
+      "blendMode": 0,
+      "heightGate": 0,
+      "heightGateThreshold": 0.5,
+      "heightGateSoftness": 0.2,
+      "mask": null
+    },
+    {
+      "material": 0,
+      "uvRepeat": 1,
+      "worldUv": false,
+      "baseColor": [
+        0.09,
+        0.065,
+        0.04
+      ],
+      "roughness": 0.85,
+      "metallic": 0,
+      "ambientOcclusion": 1,
+      "blendMode": 0,
+      "heightGate": 0,
+      "heightGateThreshold": 0.5,
+      "heightGateSoftness": 0.2,
+      "mask": {
+        "shape": 4,
+        "noiseScale": 0.22,
+        "threshold": 0.51,
+        "softness": 0.12,
+        "seed": 7,
+        "breakupAmount": 0,
+        "breakupScale": 1,
+        "strength": 1,
+        "invert": false
+      }
+    },
+    {
+      "material": 0,
+      "uvRepeat": 1,
+      "worldUv": false,
+      "baseColor": [
+        0.55,
+        0.52,
+        0.46
+      ],
+      "roughness": 0.85,
+      "metallic": 0,
+      "ambientOcclusion": 1,
+      "blendMode": 0,
+      "heightGate": 0,
+      "heightGateThreshold": 0.5,
+      "heightGateSoftness": 0.2,
+      "mask": {
+        "shape": 4,
+        "noiseScale": 0.08,
+        "threshold": 0.62,
+        "softness": 0.12,
+        "seed": 13,
+        "breakupAmount": 0,
+        "breakupScale": 1,
+        "strength": 1,
+        "invert": false
+      }
+    }
+  ]
+}

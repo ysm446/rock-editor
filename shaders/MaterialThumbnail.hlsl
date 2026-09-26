@@ -10,6 +10,7 @@
 
 #include "Brdf.hlsli"
 #include "CompositeCommon.hlsli"
+#include "LayerMaterial.hlsli"
 #include "Tonemap.hlsli"
 
 struct ThumbnailConstants
@@ -37,9 +38,10 @@ struct ThumbnailConstants
     float2 colorAdjust;  // 色相（ラジアン）, 彩度
     float brightness;
     float pad0;
+    LayerMaterialData layerMaterial;
 };
 
-ConstantBuffer<ThumbnailConstants> g_thumbnail : register(b0);
+ConstantBuffer<ThumbnailConstants> g_thumbnail : register(b1);
 
 
 float4 SampleMap(uint index, float2 uv)
@@ -133,6 +135,16 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
         const float3 bitangent = cross(geometricNormal, tangent);
         normal = normalize(tangent * sampled.x + bitangent * sampled.y +
                            geometricNormal * sampled.z);
+    }
+
+    if (g_thumbnail.layerMaterial.count > 0) {
+        const float footprint = g_thumbnail.uvScale / g_thumbnail.size;
+        LayerMaterialSample mixed = EvaluateLayerMaterial(g_thumbnail.layerMaterial, uv, uv, footprint.xx,
+            float2(1,1), float2(1,0), float2(0,1));
+        baseColor = mixed.color; roughness = mixed.surface.x; metallic = mixed.surface.y; ambientOcclusion = mixed.surface.z;
+        const float3 axis = abs(geometricNormal.x) < .99f ? float3(1,0,0) : float3(0,1,0);
+        const float3 tangent = normalize(axis - geometricNormal * dot(axis, geometricNormal));
+        normal = normalize(tangent * mixed.normal.x + cross(geometricNormal, tangent) * mixed.normal.y + geometricNormal * mixed.normal.z);
     }
 
     float3 diffuseColor;

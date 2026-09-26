@@ -7,6 +7,7 @@
 #include "TestSupport.h"
 #include <cstring>
 
+void RunLayerMaterialTests();
 void RunPieceTests();
 void RunMeshVolumeTests();
 void RunRockTests();
@@ -40,6 +41,7 @@ int main(int argc, char** argv) {
     RunDisplaceTests();
     if (argc == 2 && std::strcmp(argv[1], "--displace-only") == 0)
         return rock::tests::g_failures == 0 ? 0 : 1;
+    RunLayerMaterialTests();
     RunApplyMaterialTests();
     RunShapeMaskTests();
     RunNoiseMaskTests();

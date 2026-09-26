@@ -392,9 +392,12 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
         };
     };
     std::unordered_map<int, json> materialRefs;
-    for (auto& entry : document["materials"]) {
+    for (int pass = 0; pass < 2; ++pass) for (auto& entry : document["materials"]) {
+        const bool layered = entry.contains("materials") || entry.contains("materialGraph");
+        if (layered != (pass == 1)) continue;
         MapTextures(entry, byNumber(textures));
-        if (!save(entry, "material-asset", "Materials", ".rockmat")) return false;
+        if (layered) MapLayerMaterials(entry, byNumber(materialRefs));
+        if (!save(entry, layered ? "layer-material-asset" : "material-asset", "Materials", layered ? ".tglayer" : ".rockmat")) return false;
         if (entry.contains("id") && entry["id"].is_number_integer()) materialRefs[entry["id"].get<int>()] = entry["asset"];
     }
     for (auto& entry : document["skies"]) {
@@ -551,15 +554,21 @@ bool ProjectWorkspace::Expand(json& document) {
     }
     // 消えた .rockmat でシーン全体を開けなくしない。その表の項目を外し、参照していたレイヤーやモデルの
     // スロットは読み込み器で「なし」へ落ちる（旧版が Bakes/ へ自動保存した Baked 材質を消した後など）。
-    for (auto it = materials.begin(); it != materials.end();) {
-        if (!read(*it, "material-asset")) {
-            ROCK_LOG_WARN("マテリアルが見つからないので外します: %s",
-                          String(it->value("asset", json::object()), "path").c_str());
-            it = materials.erase(it);
+    for (size_t i = 0; i < materials.size();) {
+        json entry = materials[i];
+        const bool layered = _wcsicmp(Resolve(entry.value("asset", json::object())).extension().c_str(), L".tglayer") == 0;
+        if (!read(entry, layered ? "layer-material-asset" : "material-asset")) {
+            materials.erase(materials.begin() + i);
             continue;
         }
-        MapTextures(*it, textureId);
-        ++it;
+        bool valid = true;
+        if (layered) MapLayerMaterials(entry, [&](const json& ref) -> json {
+            if (ref.is_object() && _wcsicmp(Resolve(ref).extension().c_str(), L".tglayer") == 0) { valid = false; return 0; }
+            return materialId(ref);
+        });
+        if (!valid) return false;
+        MapTextures(entry, textureId);
+        materials[i++] = std::move(entry);
     }
     for (auto& entry : textures) {
         const auto& ref = entry["source"];

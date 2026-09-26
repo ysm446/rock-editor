@@ -232,7 +232,7 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
         } else if (extension == ".fbx") {
             // ルート外ならアセットの帯で表示中のフォルダへ取り込む（ProcessModelWork）。
             m_pendingModelImports.push_back(path);
-        } else if (extension == ".rockmat") {
+        } else if (extension == ".rockmat" || extension == ".tglayer") {
             // 共有アセットか持ち出し用かは ProcessAssetWork が中身を見て振り分ける。
             m_pendingAssetOpen = path;
         } else if (extension == ".hdr") {

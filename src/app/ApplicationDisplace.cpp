@@ -1,3 +1,5 @@
+#include "io/LayerMaterialIo.h"
+#include "graph/SurfacePresetGraph.h"
 #include "app/Application.h"
 #include <cstring>
 #include <algorithm>
@@ -66,7 +68,19 @@ void Application::PrepareMaterialHeights() {
                 if(layer.material) {
                     const auto* asset=m_materialLibrary.Find(layer.material);
                     const bool valid=asset!=nullptr; add(valid);
-                    if(asset) { textureKey(asset->height.texture); add(asset->height.channel); }
+                    if(asset) {
+                        textureKey(asset->height.texture); add(asset->height.channel);
+                        if (asset->layerMaterial) {
+                            auto body = io::WriteLayerMaterial(*asset->layerMaterial);
+                            key += body.dump();
+                            io::MapLayerMaterials(body, [&](const nlohmann::json& value) -> nlohmann::json {
+                                const auto* source = m_materialLibrary.Find(value.is_number_integer() ? value.get<uint32_t>() : 0);
+                                const bool found = source && !source->layerMaterial; add(found);
+                                if (found) { textureKey(source->height.texture); add(source->height.channel); }
+                                return 0;
+                            });
+                        }
+                    }
                 } else {
                     add(layer.heightSource); add(layer.heightBase); add(layer.heightGain);
                     add(layer.heightNoise.type); add(layer.heightNoise.scale); add(layer.heightNoise.octaves); add(layer.heightNoise.offset);
@@ -93,8 +107,19 @@ void Application::PrepareMaterialHeights() {
                 layer.heightSource=compositor::ValueSource::Texture; layer.heightBase=compositor::kHeightPivot; layer.heightGain=1;
                 const auto* asset=m_materialLibrary.Find(layer.material);
                 if(!asset) { output.error="参照する材質がありません"; break; }
-                if(asset->height.texture) {
-                    const auto* image=m_textureLibrary.Find(asset->height.texture);
+                std::vector<const compositor::MaterialAsset*> heightSources{asset};
+                if (asset->layerMaterial) {
+                    heightSources.clear();
+                    std::vector<graph::PresetMaterial> layers;
+                    if (!graph::CompilePresetMaterials(*asset->layerMaterial, layers, output.error)) break;
+                    for (const auto& entry : layers) if (entry.material) {
+                        const auto* source = m_materialLibrary.Find(entry.material);
+                        if (!source || source->layerMaterial) { output.error = "参照するPBR素材がありません"; break; }
+                        heightSources.push_back(source);
+                    }
+                }
+                for (const auto* source : heightSources) if (source->height.texture) {
+                    const auto* image=m_textureLibrary.Find(source->height.texture);
                     if(!image || image->missing) { output.error="ハイトテクスチャがリンク切れです"; break; }
                     resolution=std::max(resolution,std::max(image->texture.width,image->texture.height));
                 }

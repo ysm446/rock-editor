@@ -1,6 +1,8 @@
 #pragma once
 
 #include "compositor/MaterialLayer.h"
+#include "graph/LayerMaterial.h"
+#include "compositor/LayerMaterialGpu.h"
 #include "compositor/TextureLibrary.h"
 #include "rhi/Device.h"
 #include "rhi/PipelineCache.h"
@@ -43,6 +45,9 @@ struct MaterialAsset {
     std::filesystem::path assetPath;
     std::string assetUid;
     std::string name;
+    std::optional<graph::LayerMaterial> layerMaterial;
+    LayerMaterialGpu layerGpu;
+    std::string layerError;
     // **一時的な材質。** Material Bake の結果。シーンにも共有アセット（.rockmat）にも保存しない。
     bool transient = false;
 
@@ -123,6 +128,7 @@ public:
     void Destroy(rhi::Device& device);
 
     MaterialAssetId Add(const std::string& name);
+    LayerMaterialGpu CompileLayerMaterial(const MaterialAsset&, const TextureLibrary&, std::string&) const;
     // ID を保ったまま作り直す。**アンドゥで削除を取り消すときに使う。**
     // Add で作ると新しい ID が振られ、レイヤーからの参照が切れてしまう。
     MaterialAsset& RestoreAsset(MaterialAssetId id, const std::string& name);

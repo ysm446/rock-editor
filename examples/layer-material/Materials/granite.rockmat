@@ -1,0 +1,15 @@
+{
+  "format": "rock-editor.material-asset",
+  "version": 1,
+  "uid": "{473202E5-F3D0-45ED-A055-AB28B95C4E57}",
+  "name": "granite",
+  "baseColorTint": [
+    0.33,
+    0.3,
+    0.26
+  ],
+  "roughness": 0.85,
+  "metallic": 0,
+  "ambientOcclusion": 1,
+  "maps": {}
+}

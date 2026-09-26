@@ -4,6 +4,7 @@
 // GPU の無いテストから使えなくなる。ID と MapSlot は MaterialLayer.h にある。
 // NodeGraph.h も STL と compositor のデータ構造にしか依存しない。
 #include "compositor/MaterialLayer.h"
+#include "graph/LayerMaterial.h"
 #include "graph/NodeGraph.h"
 // ModelAsset は GPU リソースを持たない（形状は共有ポインタ）。そのまま複製できる。
 #include "renderer/ModelAsset.h"
@@ -28,6 +29,7 @@ namespace rock {
 //
 // **`MaterialAsset` にフィールドを足したら、ここと Capture / Apply にも足すこと。**
 struct MaterialSnapshot {
+    std::optional<graph::LayerMaterial> layerMaterial;
     compositor::MaterialAssetId id = compositor::kNoMaterialAsset;
     std::string name;
     std::filesystem::path assetPath;

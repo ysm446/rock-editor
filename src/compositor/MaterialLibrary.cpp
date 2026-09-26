@@ -1,6 +1,9 @@
 #include "compositor/MaterialLibrary.h"
 
 #include "core/Log.h"
+#include "graph/SurfacePresetGraph.h"
+#include <cmath>
+#include <cstring>
 
 #include <pix3.h>
 
@@ -45,6 +48,7 @@ struct ThumbnailConstants {
     float colorAdjust[2];  // 色相（ラジアン）, 彩度
     float brightness;
     float pad0;
+    LayerMaterialGpu layerMaterial;
 };
 
 }  // namespace
@@ -59,6 +63,54 @@ uint32_t PackMaterialChannels(const MaterialAsset& asset) {
 namespace {
 
 }  // namespace
+
+LayerMaterialGpu MaterialLibrary::CompileLayerMaterial(const MaterialAsset& asset, const TextureLibrary& textures, std::string& error) const {
+    LayerMaterialGpu result;
+    error.clear();
+    if (!asset.layerMaterial) return result;
+    std::vector<graph::PresetMaterial> layers;
+    if (!graph::CompilePresetMaterials(*asset.layerMaterial, layers, error) || layers.size() > 4) return result;
+    result.blendRange = asset.layerMaterial->layerBlendRange;
+    result.displacementMeters = asset.layerMaterial->displacementMeters;
+    for (const auto& layer : layers) {
+        const auto* source = Find(layer.material);
+        if ((layer.material && !source) || (source && source->layerMaterial)) { error = "合成材質の入力には通常のPBR素材を指定してください"; return {}; }
+        auto& g = result.slots[result.count++];
+        std::fill(std::begin(g.textures0), std::end(g.textures0), kInvalidTextureIndex);
+        std::fill(std::begin(g.textures1), std::end(g.textures1), kInvalidTextureIndex);
+        g.color[0] = source ? source->baseColorTint.x : layer.baseColor[0];
+        g.color[1] = source ? source->baseColorTint.y : layer.baseColor[1];
+        g.color[2] = source ? source->baseColorTint.z : layer.baseColor[2];
+        g.color[3] = layer.uvRepeatMeters;
+        g.surface[0] = source ? source->roughnessValue : layer.roughness;
+        g.surface[1] = source ? source->metallicValue : layer.metallic;
+        g.surface[2] = source ? source->ambientOcclusionValue : layer.ambientOcclusion;
+        g.surface[3] = layer.worldUv ? 1.0f : 0.0f;
+        g.adjust[0] = source ? source->hueShiftDegrees * 0.01745329252f : 0;
+        g.adjust[1] = source ? source->saturation : 1;
+        g.adjust[2] = source ? source->brightness : 1;
+        g.adjust[3] = source && source->flipNormalGreen ? 1.0f : 0.0f;
+        if (source) {
+            g.textures0[0] = textures.SrvIndex(source->baseColor, true); g.textures0[1] = textures.SrvIndex(source->normal, false);
+            g.textures0[2] = textures.SrvIndex(source->roughness.texture, false); g.textures0[3] = textures.SrvIndex(source->metallic.texture, false);
+            g.textures1[0] = textures.SrvIndex(source->ambientOcclusion.texture, false); g.textures1[1] = textures.SrvIndex(source->height.texture, false);
+            g.textures1[2] = PackMaterialChannels(*source);
+        } else g.textures1[2] = 0;
+        g.textures1[3] = layer.enabled ? 1 : 0;
+        g.mask[0] = -1;
+        if (layer.mask) {
+            const auto& m = *layer.mask;
+            g.mask[0] = static_cast<float>(m.shape); g.mask[1] = m.noiseScaleMeters;
+            g.mask[2] = m.threshold; g.mask[3] = m.softness;
+            g.breakup[0] = m.strength; g.breakup[1] = m.breakupAmount;
+            g.breakup[2] = m.breakupScaleMeters; g.breakup[3] = static_cast<float>(m.seed);
+            if (m.invert) g.textures1[3] |= 2;
+        }
+        g.blend[0] = static_cast<float>(layer.blendMode); g.blend[1] = static_cast<float>(layer.heightGate);
+        g.blend[2] = layer.heightGateThreshold; g.blend[3] = layer.heightGateSoftness;
+    }
+    return result;
+}
 
 void MaterialLibrary::Destroy(rhi::Device& device) {
     for (MaterialAsset& asset : m_entries) {
@@ -167,6 +219,12 @@ D3D12_GPU_DESCRIPTOR_HANDLE MaterialLibrary::ThumbnailHandle(MaterialAssetId id)
 
 void MaterialLibrary::ProcessPendingWork(rhi::Device& device, rhi::PipelineCache& pipelineCache,
                                          const TextureLibrary& textures) {
+    const bool sourceDirty = std::any_of(m_entries.begin(),m_entries.end(),[](const auto& a){return a.thumbnailDirty && !a.layerMaterial;});
+    for (auto& asset:m_entries) if (asset.layerMaterial && (asset.thumbnailDirty || sourceDirty)) {
+        asset.layerGpu=CompileLayerMaterial(asset,textures,asset.layerError);
+        asset.thumbnailDirty=true;
+    }
+
     const bool anyDirty = std::any_of(m_entries.begin(), m_entries.end(),
                                       [](const MaterialAsset& a) { return a.thumbnailDirty; });
     if (!anyDirty) {
@@ -215,6 +273,7 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
     }
 
     ThumbnailConstants constants = {};
+    constants.layerMaterial = asset.layerGpu;
     constants.outputIndex = asset.thumbnail.UavIndex();
     constants.size = kThumbnailSize;
     // ベースカラーだけ sRGB として読む。それ以外はリニア。
@@ -231,7 +290,7 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
     constants.roughnessValue = asset.roughnessValue;
     constants.metallicValue = asset.metallicValue;
     constants.aoValue = asset.ambientOcclusionValue;
-    constants.uvScale = kThumbnailUvScale;
+    constants.uvScale = asset.layerMaterial ? 1.f : kThumbnailUvScale;
     constants.colorAdjust[0] = asset.hueShiftDegrees * (3.14159265358979f / 180.0f);
     constants.colorAdjust[1] = asset.saturation;
     constants.brightness = asset.brightness;
@@ -251,8 +310,10 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
 
         commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
         commandList->SetPipelineState(pipeline);
-        commandList->SetComputeRoot32BitConstants(0, sizeof(constants) / sizeof(uint32_t),
-                                                  &constants, 0);
+        const auto cb = device.Upload().Allocate(sizeof(constants), 256);
+        if (!cb.IsValid()) { PIXEndEvent(commandList); return; }
+        std::memcpy(cb.cpu, &constants, sizeof(constants));
+        commandList->SetComputeRootConstantBufferView(1, cb.gpuAddress);
         commandList->Dispatch(DispatchCount(kThumbnailSize), DispatchCount(kThumbnailSize), 1);
 
         // ImGui から SRV として読むので、ピクセルシェーダ可視の状態へ移す。

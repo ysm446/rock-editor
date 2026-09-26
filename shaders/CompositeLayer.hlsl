@@ -9,6 +9,7 @@
 // 出力タイル矩形と解像度を引数に取る形は崩さないこと（エクスポート時のタイル評価に必要）。
 
 #include "CompositeCommon.hlsli"
+#include "LayerMaterial.hlsli"
 
 #define ROCK_SOURCE_CONSTANT 0
 #define ROCK_SOURCE_NOISE    1
@@ -40,6 +41,7 @@ struct LayerConstants
     uint4 mapChannels;  // x にすべて入る。yzw は未使用
     // ベースカラーの調整。マテリアルが持つ（ティントを掛けた**あと**に効く）。
     float4 colorAdjust;  // 色相（ラジアン）, 彩度, 明るさ, 未使用
+    LayerMaterialData layerMaterial;
 };
 
 ConstantBuffer<LayerConstants> g_layer : register(b1);
@@ -209,8 +211,17 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
                                          uvPerOutputTexel);
     }
 
-    const float layerHeight = SampleLayerHeight(uv, uvPerOutputTexel);
-    const float3 layerNormal = ComputeLayerNormal(uv, noiseTexelSize, uvPerOutputTexel);
+    float layerHeight = SampleLayerHeight(uv, uvPerOutputTexel);
+    float3 layerNormal = ComputeLayerNormal(uv, noiseTexelSize, uvPerOutputTexel);
+
+    if (g_layer.layerMaterial.count > 0) {
+        LayerMaterialSample mixed = EvaluateLayerMaterial(g_layer.layerMaterial, uv, uv, uvPerOutputTexel.xx,
+            float2(1,1), float2(1,0), float2(0,1));
+        layerBaseColor = mixed.color * g_layer.baseColor.rgb;
+        layerRoughness = mixed.surface.x; layerMetallic = mixed.surface.y; layerAo = mixed.surface.z;
+        layerHeight = g_layer.surfaceParams.w + (mixed.height - .5f) * g_layer.heightNoise.y;
+        layerNormal = mixed.normal;
+    }
 
     // --- 各チャンネルへ書く ------------------------------------------------
     if ((g_layer.channelMask & 0x1u) != 0u)

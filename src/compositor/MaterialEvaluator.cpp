@@ -53,6 +53,7 @@ struct LayerConstants {
     uint32_t noiseTypes[4];       // height, 未使用 x3
     uint32_t mapChannels[4];      // x にすべて入る。yzw は未使用
     float colorAdjust[4];         // 色相（ラジアン）, 彩度, 明るさ, 未使用
+    LayerMaterialGpu layerMaterial;
 };
 
 bool CreateChannelTexture(rhi::Device& device, uint32_t resolution, DXGI_FORMAT format,
@@ -322,6 +323,11 @@ bool MaterialEvaluator::Evaluate(rhi::Device& device, rhi::PipelineCache& pipeli
         constants.flags = 0;
         // マップはレイヤーが参照するマテリアルから引く。
         const MaterialAsset* material = materials.Find(layer.material);
+        if (material && material->layerMaterial) {
+            std::string layerError;
+            constants.layerMaterial = materials.CompileLayerMaterial(*material, textures, layerError);
+            if (!layerError.empty()) { ROCK_LOG_WARN("%s", layerError.c_str()); return false; }
+        }
 
         // 法線マップの規約はマテリアルごと。マップが無ければ関係ない。
         if (material != nullptr && material->flipNormalGreen) {
