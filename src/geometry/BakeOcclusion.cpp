@@ -7,6 +7,7 @@
 #include <execution>
 #include <numeric>
 #include <numbers>
+#include <unordered_map>
 namespace rock::geometry {
 namespace {
 struct V {
@@ -236,8 +237,9 @@ static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings
     const int resolution = settings.resolution;
     if (stop.stop_requested()) { error="マスク生成をキャンセルしました";return {}; }
     const bool occlusion = !noise && settings.type == ShapeMaskType::Occlusion;
+    const bool curvature = !noise && !deposition && (settings.type == ShapeMaskType::ValleyCurvature || settings.type == ShapeMaskType::RidgeCurvature);
     if ((settings.type != ShapeMaskType::Occlusion && settings.type != ShapeMaskType::Direction &&
-         settings.type != ShapeMaskType::Height) ||
+         settings.type != ShapeMaskType::Height && !curvature) ||
         !std::isfinite(settings.distance) || settings.distance < .001f || settings.distance > 1000 ||
         settings.samples < kMinOcclusionSamples || settings.samples > kMaxOcclusionSamples ||
         resolution < kMinShapeMaskResolution || resolution > kMaxShapeMaskResolution ||
@@ -270,6 +272,39 @@ static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings
     for (auto &n : vertexNormals) {
         const double length = std::sqrt(Dot(n, n));
         if (length > 0) n = n * (1 / length);
+    }
+    // 面積で正規化したcotangent Laplacianを法線へ射影する。
+    // 符号は凹が正、凸が負。UVの島ではなくメッシュの共有頂点を使う。
+    std::vector<double> signedCurvature;
+    if (curvature) {
+        std::vector<V> laplacian(mesh.positions.size(), V{0,0,0});
+        std::vector<double> areas(mesh.positions.size(), 0);
+        std::unordered_map<uint64_t, uint32_t> edgeCounts;
+        for (const auto& face : mesh.triangles) {
+            if (stop.stop_requested()) { error="曲率マスクをキャンセルしました"; return {}; }
+            const V a=Convert(mesh.positions[face[0]]), b=Convert(mesh.positions[face[1]]), c=Convert(mesh.positions[face[2]]);
+            const V cross=Cross(b-a,c-a);
+            const double twiceArea=std::sqrt(Dot(cross,cross));
+            for (auto index : face) areas[index] += twiceArea / 6.;
+            for (int corner=0; corner<3; ++corner) {
+                const auto i=face[(corner+1)%3], j=face[(corner+2)%3], k=face[corner];
+                const V pi=Convert(mesh.positions[i]), pj=Convert(mesh.positions[j]), pk=Convert(mesh.positions[k]);
+                const double weight=twiceArea>1e-20 ? Dot(pi-pk,pj-pk)/twiceArea : 0;
+                laplacian[i]=laplacian[i]+(pj-pi)*weight;
+                laplacian[j]=laplacian[j]+(pi-pj)*weight;
+                const auto lo=std::min(i,j), hi=std::max(i,j);
+                ++edgeCounts[(uint64_t(lo)<<32)|hi];
+            }
+        }
+        // 開いた端や非多様体の端を、曲がりとして誤認しない。
+        std::vector<bool> boundary(mesh.positions.size(), false);
+        for (const auto& [edge,count] : edgeCounts) if (count!=2) {
+            boundary[edge>>32]=true; boundary[uint32_t(edge)]=true;
+        }
+        signedCurvature.resize(mesh.positions.size(), 0);
+        for (size_t i=0; i<signedCurvature.size(); ++i)
+            if (!boundary[i] && areas[i]>1e-20)
+                signedCurvature[i]=Dot(laplacian[i],vertexNormals[i])/(4*areas[i]);
     }
     // レイを飛ばすのは遮蔽だけ。
     if (occlusion) {
@@ -333,6 +368,10 @@ static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings
             double ratio = 0;
             if (noise) {
                 ratio=CloudNoise(surface,*noise);
+            } else if (curvature) {
+                const double value = signedCurvature[f[0]] * wa + signedCurvature[f[1]] * double(texel.b) + signedCurvature[f[2]] * double(texel.c);
+                const double sign = settings.type == ShapeMaskType::ValleyCurvature ? 1 : -1;
+                ratio = std::clamp(sign * value * settings.distance, 0., 1.);
             } else if (settings.type == ShapeMaskType::Direction) {
                 ratio = (n.y + 1) * .5;
             } else if (settings.type == ShapeMaskType::Height) {

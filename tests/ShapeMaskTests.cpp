@@ -590,3 +590,66 @@ void RunDepositionMaskTests() {
     auto redo=history.Redo(undo);g.Replace(redo.graphNodes,redo.graphLinks);
     Check(std::get<geometry::DepositionMaskSettings>(g.FindNode(noise)->settings).amount==.4f,"Deposition Mask設定のRedo");
 }
+
+void RunCurvatureMaskTests() {
+    using namespace rock;
+    using tests::Check;
+    tests::Section("Shape Mask — 谷と山の符号付き曲率");
+    const auto grid=[](int steps, float bend) {
+        geometry::Mesh mesh;
+        for(int z=0;z<=steps;++z) for(int x=0;x<=steps;++x) {
+            const float px=2.f*x/steps-1, pz=2.f*z/steps-1;
+            mesh.positions.push_back({px,bend*(px*px+pz*pz),pz});
+        }
+        for(int z=0;z<steps;++z) for(int x=0;x<steps;++x) {
+            const uint32_t a=z*(steps+1)+x,b=a+1,c=a+steps+1,d=c+1;
+            mesh.triangles.push_back({a,d,b});mesh.triangles.push_back({a,c,d});
+        }
+        for(const auto& face:mesh.triangles) {
+            std::array<geometry::Mesh::Uv,3> uv;
+            for(int k=0;k<3;++k) {const auto p=mesh.positions[face[k]];uv[k]={(p.x+1)/2,(p.z+1)/2};}
+            mesh.cornerUvs.push_back(uv);
+        }
+        mesh.uvWidth=mesh.uvHeight=128;return mesh;
+    };
+    geometry::ShapeMaskSettings settings;settings.resolution=128;settings.low=0;settings.high=1;settings.distance=.3f;
+    std::string error;
+    const auto bowl=grid(16,.5f),hill=grid(16,-.5f),flat=grid(16,0);
+    settings.type=geometry::ShapeMaskType::ValleyCurvature;
+    const auto valley=geometry::ShapeMask(bowl,settings,error);
+    Check(error.empty() && valley.Sample(.5f,.5f)>.2f,"凹面の中央を谷として検出");
+    Check(geometry::ShapeMask(hill,settings,error).Sample(.5f,.5f)<.01f,"谷マスクは凸面を除く");
+    const auto planeValley=geometry::ShapeMask(flat,settings,error);
+    Check(std::all_of(planeValley.pixels.begin(),planeValley.pixels.end(),[](auto v){return v==0;}),"開いた平面の端を含め谷は黒");
+    settings.type=geometry::ShapeMaskType::RidgeCurvature;
+    const auto ridge=geometry::ShapeMask(hill,settings,error);
+    Check(error.empty() && ridge.Sample(.5f,.5f)>.2f,"凸面の中央を山として検出");
+    Check(geometry::ShapeMask(bowl,settings,error).Sample(.5f,.5f)<.01f,"山マスクは凹面を除く");
+    const auto planeRidge=geometry::ShapeMask(flat,settings,error);
+    Check(planeRidge.pixels==planeValley.pixels,"谷と山の両方で平面は黒（白黒反転ではない）");
+    auto larger=hill;for(auto& p:larger.positions) {p.x*=2;p.y*=2;p.z*=2;}
+    settings.distance*=2;
+    Check(geometry::ShapeMask(larger,settings,error).pixels==ridge.pixels,"メッシュと曲率スケールの等倍拡大は同じ結果");
+    settings.distance=.3f;
+    const auto fine=geometry::ShapeMask(grid(32,-.5f),settings,error);
+    Check(std::abs(fine.Sample(.5f,.5f)-ridge.Sample(.5f,.5f))<.03f,"滑らかな面の細分化で曲率の強さをほぼ維持");
+    auto flipped=hill;for(auto& face:flipped.cornerUvs)for(auto& uv:face)uv.v=1-uv.v;
+    const auto flippedMask=geometry::ShapeMask(flipped,settings,error);
+    bool same=flippedMask.pixels.size()==ridge.pixels.size();
+    for(int y=0;same && y<128;++y)for(int x=0;x<128;++x)
+        same &= std::abs(int(flippedMask.pixels[y*128+x])-int(ridge.pixels[(127-y)*128+x]))<=1;
+    Check(same,"曲率はUVの向きに依存しない");
+    graph::NodeGraph graph;
+    const auto base=graph.CreateNode(graph::NodeKind::BaseRock),uv=graph.CreateNode(graph::NodeKind::UvUnwrap),mask=graph.CreateNode(graph::NodeKind::ShapeMask);
+    std::get<geometry::UvUnwrapSettings>(graph.FindMutableNode(uv)->settings).resolution=128;
+    std::get<geometry::ShapeMaskSettings>(graph.FindMutableNode(mask)->settings)=settings;
+    graph.CreateLink(graph.FindNode(base)->outputs[0].id,graph.FindNode(uv)->inputs[0].id);
+    graph.CreateLink(graph.FindNode(uv)->outputs[0].id,graph.FindNode(mask)->inputs[0].id);
+    graph::RockEvaluationCache cache;
+    auto first=graph::EvaluateRocks(graph,mask,&cache);
+    Check(first.error.empty() && first.rocks.size()==1 && first.rocks[0].previewMask,"既存Shape Maskで曲率をプレビュー");
+    auto& config=std::get<geometry::ShapeMaskSettings>(graph.FindMutableNode(mask)->settings);
+    const auto count=cache.computations[mask];config.type=geometry::ShapeMaskType::ValleyCurvature;
+    auto next=graph::EvaluateRocks(graph,mask,&cache);
+    Check(next.error.empty() && cache.computations[mask]==count+1,"山から谷への切替で画像を再評価");
+}

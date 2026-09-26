@@ -35,6 +35,7 @@ void RunProjectWorkspaceTests();
 void RunApplyMaterialTests();
 void RunDisplaceTests();
 void RunShapeMaskTests();
+void RunCurvatureMaskTests();
 void RunNoiseMaskTests();
 void RunDepositionMaskTests();
 void RunMaskCombineTests();
@@ -45,6 +46,7 @@ int main(int argc, char** argv) {
     RunLayerMaterialTests();
     RunApplyMaterialTests();
     RunShapeMaskTests();
+    RunCurvatureMaskTests();
     RunNoiseMaskTests();
     RunDepositionMaskTests();
     RunMaskCombineTests();

@@ -533,7 +533,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
                 {"detail", noiseMask->detail}, {"warp", noiseMask->warp}, {"resolution", noiseMask->resolution}, {"invert", noiseMask->invert}};
         } else if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) {
             const char* type = shape->type == geometry::ShapeMaskType::Direction ? "direction"
-                             : shape->type == geometry::ShapeMaskType::Height  ? "height" : "occlusion";
+                             : shape->type == geometry::ShapeMaskType::Height  ? "height"
+                             : shape->type == geometry::ShapeMaskType::ValleyCurvature ? "valleyCurvature"
+                             : shape->type == geometry::ShapeMaskType::RidgeCurvature ? "ridgeCurvature" : "occlusion";
             item["shapeMask"] = {{"type", type}, {"resolution", shape->resolution}, {"low", shape->low}, {"high", shape->high}, {"gamma", shape->gamma},
                 {"invert", shape->invert}, {"distance", shape->distance}, {"samples", shape->samples}};
         } else if (const auto* combine = std::get_if<geometry::MaskCombineSettings>(&node.settings)) {
@@ -836,7 +838,9 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 if (const json* v = FindMember(item, "shapeMask"); v && v->is_object()) {
                     const std::string type = ReadString(*v, "type");
                     settings.type = type == "direction" ? geometry::ShapeMaskType::Direction
-                                  : type == "height"    ? geometry::ShapeMaskType::Height : geometry::ShapeMaskType::Occlusion;
+                                  : type == "height"    ? geometry::ShapeMaskType::Height
+                                  : type == "valleyCurvature" ? geometry::ShapeMaskType::ValleyCurvature
+                                  : type == "ridgeCurvature" ? geometry::ShapeMaskType::RidgeCurvature : geometry::ShapeMaskType::Occlusion;
                     // 2のべき乗へ切り上げる（UV Unwrap の解像度と同じ扱い）。
                     settings.resolution = std::clamp(geometry::NormalizeUvResolution(ReadInt(*v, "resolution", settings.resolution)),
                                                      geometry::kMinShapeMaskResolution, geometry::kMaxShapeMaskResolution);

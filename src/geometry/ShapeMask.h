@@ -17,6 +17,8 @@ struct MaskImage {
 enum class ShapeMaskType : uint32_t {
     Occlusion = 0,  // 遮蔽。白は周りを形に囲まれた所（溝・割れ目・入隅）
     Direction = 1,  // 上向き度。白は上（+Y）を向いた面、黒は下を向いた面
+    ValleyCurvature = 3, // 凹の平均曲率。平面と凸部は黒。
+    RidgeCurvature = 4,  // 凸の平均曲率。平面と凹部は黒。
     Height = 2,     // 高さ。白は形の最上部、黒は最下部
 };
 struct ShapeMaskSettings {
@@ -27,8 +29,8 @@ struct ShapeMaskSettings {
     // 値 = 伸ばした値 ^ gamma。0.1〜10。
     float gamma = 1;
     bool invert = false;          // 使う側（描画・Displace・プレビュー）で 1 - mask にする。画像には掛けない。
-    // 遮蔽だけが使う。
-    float distance = .3f;  // 遮蔽物を探す距離（m）
+    // 遮蔽では探索距離、曲率では1/mの値を0〜1へ写すスケール。
+    float distance = .3f;  // 距離／曲率スケール（m）
     int samples = 32;      // 画素ごとのレイの数
     bool operator==(const ShapeMaskSettings&) const = default;
 };

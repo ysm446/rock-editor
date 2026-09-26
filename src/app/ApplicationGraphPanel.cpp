@@ -1086,7 +1086,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::MaterialMask, "Material Mask — 定数・画像マスク");
         addNodeMenuItem(graph::NodeKind::DepositionMask, "Deposition Mask — 隙間や上向きの面に堆積する土のマスク");
         addNodeMenuItem(graph::NodeKind::NoiseMask, "Noise Mask — 3Dノイズでムラのマスクを作る");
-        addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（オクルージョン / 上向き度 / 高さ）");
+        addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（遮蔽 / 上向き度 / 高さ / 曲率）");
         addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
         addNodeMenuItem(graph::NodeKind::MaterialBake, "Material Bake — UVへ材質を焼き付ける");
         ImGui::EndPopup();
@@ -1277,7 +1277,7 @@ void Application::DrawGraphPanel() {
         bool changed = false;
         if (ui::BeginPropertyTable("volumeNoiseRows")) {
             const char* types[] = {"なめらか", "セル状（丸い盛り上がり）", "小面（割れ肌）"};
-            int type = std::clamp(static_cast<int>(edited.type), 0, 2);
+            int type = std::clamp(static_cast<int>(edited.type), 0, 4);
             if (ui::PropertyCombo("種類", &type, types, 3, 2)) {
                 edited.type = static_cast<geometry::VolumeNoiseType>(type);
                 changed = true;
@@ -1889,9 +1889,9 @@ void Application::DrawGraphPanel() {
         bool changed = false;
         const bool occlusion = edited.type == geometry::ShapeMaskType::Occlusion;
         if (ui::BeginPropertyTable("shapeMaskRows")) {
-            const char* types[] = {"オクルージョン（溝・割れ目）", "上向き度", "高さ"};
-            int type = std::clamp(static_cast<int>(edited.type), 0, 2);
-            if (ui::PropertyCombo("種類", &type, types, 3, 0)) {
+            const char* types[] = {"オクルージョン（溝・割れ目）", "上向き度", "高さ", "曲率（谷）", "曲率（山）"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 4);
+            if (ui::PropertyCombo("種類", &type, types, 5, 0)) {
                 edited.type = static_cast<geometry::ShapeMaskType>(type);
                 changed = true;
             }
@@ -1908,6 +1908,9 @@ void Application::DrawGraphPanel() {
                 changed |= ui::PropertyInt("サンプル数", &edited.samples, geometry::kMinOcclusionSamples, geometry::kMaxOcclusionSamples, 32,
                                            "画素ごとに飛ばすレイの数。多いほど階調がなめらかになり、時間がかかります。");
             }
+            if (edited.type == geometry::ShapeMaskType::ValleyCurvature || edited.type == geometry::ShapeMaskType::RidgeCurvature)
+                changed |= ui::PropertyFloat("曲率スケール", &edited.distance, .001f, 1000, .3f,
+                    "大きいほど緩やかな曲がりまで白くします。探索半径ではなく曲率の強さの調整です。谷と山は互いの反転ではなく、どちらも平面は黒になります。", "%.3f m", ImGuiSliderFlags_Logarithmic);
             changed |= ui::PropertyFloat("下限", &edited.low, 0, 1, .2f, "元の値がこれ以下の所を黒（0）にします。");
             changed |= ui::PropertyFloat("上限", &edited.high, 0, 1, .8f, "元の値がこれ以上の所を白（1）にします。");
             changed |= ui::PropertyFloat("カーブ（ガンマ）", &edited.gamma, .1f, 10, 1,
@@ -1921,6 +1924,8 @@ void Application::DrawGraphPanel() {
             ui::HintText("オクルージョン：白は周りを形に囲まれた所（溝・割れ目・入隅）、黒は開けた面。CPUで計算し、解像度とサンプル数が大きいほど時間がかかります。");
         else if (edited.type == geometry::ShapeMaskType::Direction)
             ui::HintText("上向き度：白は上（+Y）を向いた面、灰色は垂直な面、黒は下を向いた面。下限と上限で「どこから上面とみなすか」を決めます。");
+        else if (edited.type == geometry::ShapeMaskType::ValleyCurvature || edited.type == geometry::ShapeMaskType::RidgeCurvature)
+            ui::HintText("曲率：谷は凹部、山は凸部が白。どちらも平面は黒です。粗いメッシュでは面の分割がマスクの広がりに影響します。");
         else
             ui::HintText("高さ：白は形の最上部、黒は最下部。反転すると接地側の汚れに使えます。");
         if (changed) {
