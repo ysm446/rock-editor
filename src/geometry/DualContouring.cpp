@@ -103,8 +103,9 @@ Mesh ExtractDualContour(const VolumeGrid& g, std::string& error) {
     std::vector<std::array<uint32_t, 12>> cellVertices;
     const auto cellIndex = [=](uint32_t x, uint32_t y, uint32_t z) { return (size_t(z) * cy + y) * cx + x; };
     Mesh mesh;
-    std::vector<Plane> planes;
+    std::vector<Plane> planes, patch;
     planes.reserve(12);
+    patch.reserve(12);
     for (uint32_t z = 0; z < cz; ++z)
         for (uint32_t y = 0; y < cy; ++y)
             for (uint32_t x = 0; x < cx; ++x) {
@@ -176,7 +177,7 @@ Mesh ExtractDualContour(const VolumeGrid& g, std::string& error) {
                 const auto origin = g.Position(x, y, z);
                 for (int e = 0; e < 12; ++e) {
                     if (planeForEdge[e] < 0 || ids[e] != absent) continue;
-                    std::vector<Plane> patch;
+                    patch.clear();
                     for (int other = 0; other < 12; ++other)
                         if (planeForEdge[other] >= 0 && root(e) == root(other)) patch.push_back(planes[planeForEdge[other]]);
                     const auto fitted = FitVertex(patch);

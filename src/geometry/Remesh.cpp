@@ -271,7 +271,8 @@ struct Remesher {
     }
     // 頂点に集まる特徴辺の数と、その相手。
     int FeatureDegree(uint32_t v, std::array<uint32_t, 2>* along = nullptr) const {
-        std::vector<uint32_t> around;
+        // 辺ごと・頂点ごとに呼ばれる。周りの頂点の配列は使い回す。
+        thread_local std::vector<uint32_t> around;
         Neighbours(v, around);
         int count = 0;
         for (const uint32_t n : around)
@@ -629,7 +630,8 @@ Mesh RemeshMesh(const Mesh& input, const RemeshSettings& s, std::string& error, 
         return {};
     }
     const bool hasUvs = !input.cornerUvs.empty() || !input.uvCharts.empty();
-    if (hasUvs && !HasValidUvs(input)) {
+    // 島番号は面ごとに読むので、UV と同じ数が無ければ範囲外を読む。
+    if (hasUvs && (!HasValidUvs(input) || input.uvCharts.size() != input.triangles.size())) {
         error = "入力のUVが不正です";
         return {};
     }

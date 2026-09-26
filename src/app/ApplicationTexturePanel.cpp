@@ -448,7 +448,7 @@ bool Application::MaterialHasMissingTexture(const compositor::MaterialAsset& ass
     };
     return missing(asset.baseColor) || missing(asset.normal) || missing(asset.roughness.texture) ||
            missing(asset.metallic.texture) || missing(asset.ambientOcclusion.texture) ||
-           missing(asset.height.texture);
+           missing(asset.height.texture) || missing(asset.opacity.texture);
 }
 
 // 予約した繋ぎ直しを処理する。**フレームの外で呼ぶこと**（読み込みは GPU 待機を伴う）。

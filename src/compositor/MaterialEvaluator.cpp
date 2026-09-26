@@ -190,14 +190,6 @@ void MaterialEvaluator::BakeLayerThumbnail(rhi::Device& device, ID3D12PipelineSt
     PIXEndEvent(commandList);
 }
 
-D3D12_GPU_DESCRIPTOR_HANDLE MaterialEvaluator::LayerThumbnailHandle(size_t layerIndex) const {
-    const std::vector<rhi::GpuTexture>& thumbnails = DisplayedLayerThumbnails();
-    if (layerIndex >= thumbnails.size() || !thumbnails[layerIndex].IsValid()) {
-        return D3D12_GPU_DESCRIPTOR_HANDLE{0};
-    }
-    return thumbnails[layerIndex].srv.gpu;
-}
-
 void MaterialEvaluator::ReleaseTextures(rhi::Device& device) {
     ReleaseTextureSet(device, m_textures);
     ReleaseTextureSet(device, m_frontTextures);
@@ -326,7 +318,12 @@ bool MaterialEvaluator::Evaluate(rhi::Device& device, rhi::PipelineCache& pipeli
         if (material && material->layerMaterial) {
             std::string layerError;
             constants.layerMaterial = materials.CompileLayerMaterial(*material, textures, layerError);
-            if (!layerError.empty()) { ROCK_LOG_WARN("%s", layerError.c_str()); return false; }
+            if (!layerError.empty()) {
+                ROCK_LOG_WARN("%s", layerError.c_str());
+                // ここで return すると PIX のイベントと出力の状態が閉じられない。後始末へ抜ける。
+                complete = false;
+                break;
+            }
         }
 
         // 法線マップの規約はマテリアルごと。マップが無ければ関係ない。

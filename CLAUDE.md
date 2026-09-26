@@ -35,7 +35,7 @@
 
 ## バージョン管理
 
-- アプリのバージョンは `package.json` の `version` を基準にする。
+- アプリのバージョンは `CMakeLists.txt` の `project(rock_editor VERSION ...)` を基準にする(`vcpkg.json` の `version` も揃える)。
 - ユーザー向けの明確な変更を行った場合は、必要に応じて `docs/changelog.md` に記録する。
 - 未確定の変更は、必要に応じて先頭付近に「未リリース」セクションを作って記録する。
 - バージョン見出しや履歴見出しに日時を書く場合は `YYYY-MM-DD HH:MM` 形式を使う。

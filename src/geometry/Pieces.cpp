@@ -142,7 +142,9 @@ bool Clip(Poly &poly, Plane plane, int neighbor) {
         poly.faces.clear();
         return true;
     }
-    std::map<std::pair<uint32_t, uint32_t>, uint32_t> intersections;
+    // 距離と同じく、辺の表も呼び出しごとに確保し直さない。
+    thread_local std::map<std::pair<uint32_t, uint32_t>, uint32_t> intersections;
+    intersections.clear();
     const auto intersect = [&](uint32_t a, uint32_t b) {
         if (distances[a] == 0)
             return a;
@@ -173,7 +175,8 @@ bool Clip(Poly &poly, Plane plane, int neighbor) {
         if (out.ids.size() >= 3)
             faces.push_back(std::move(out));
     }
-    std::map<std::pair<uint32_t, uint32_t>, int> edges;
+    thread_local std::map<std::pair<uint32_t, uint32_t>, int> edges;
+    edges.clear();
     for (const auto &f : faces)
         for (size_t i = 0; i < f.ids.size(); ++i) {
             auto a = f.ids[i], b = f.ids[(i + 1) % f.ids.size()];
@@ -183,7 +186,8 @@ bool Clip(Poly &poly, Plane plane, int neighbor) {
             else
                 edges[{a, b}] = 1;
         }
-    std::map<uint32_t, uint32_t> next;
+    thread_local std::map<uint32_t, uint32_t> next;
+    next.clear();
     for (const auto &[e, count] : edges)
         if (!next.emplace(e.second, e.first).second)
             return false;
@@ -524,14 +528,14 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         // 近い点から順に切り、片の半径 R の2倍より遠い点で打ち切る。
         // 距離 L > 2R の点との二等分面は、片のどの頂点からも i のほうが近いので切らない。
         // これで片ごとの切断は全点ではなく近傍の点の数で済む。
-        thread_local std::vector<std::pair<double, uint32_t>> order;
-        order.clear();
+        thread_local std::vector<std::pair<double, uint32_t>> nearby;
+        nearby.clear();
         for (size_t j = 0; j < sites.size(); ++j)
             if (j != i) {
                 const D delta = sites[j] - sites[i];
-                order.push_back({Dot(delta, delta), uint32_t(j)});
+                nearby.push_back({Dot(delta, delta), uint32_t(j)});
             }
-        std::sort(order.begin(), order.end());
+        std::sort(nearby.begin(), nearby.end());
         const auto radius = [&] {
             double r = 0;
             for (auto p : poly.vertices) {
@@ -541,7 +545,7 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
             return std::sqrt(r);
         };
         double reach = 2 * radius();
-        for (auto [distance, j] : order) {
+        for (auto [distance, j] : nearby) {
             if (std::sqrt(distance) > reach * (1 + 1e-6) + 1e-9)
                 break;
             const auto vertices = poly.vertices.size();
@@ -766,7 +770,7 @@ Vec3 PieceCenter(const Piece &p) {
 PieceSelection SelectPieces(const PieceCollection &c, const PieceSelectSettings &s, std::string &error, std::stop_token stop) {
     error.clear();
     PieceSelection out{c.producer, c.generation, c.fingerprint, {}};
-    if (int(s.mode) < 0 || int(s.mode) > 6 || s.layer < -1) {
+    if (int(s.mode) < 0 || int(s.mode) > int(PieceSelectMode::Peel) || s.layer < -1) {
         error = "選別方法が不正です";
         return {};
     }

@@ -39,7 +39,7 @@
 
 ## バージョン管理
 
-- アプリのバージョンは `package.json` の `version` を基準にする。
+- アプリのバージョンは `CMakeLists.txt` の `project(rock_editor VERSION ...)` を基準にする（`vcpkg.json` の `version` も揃える）。
 - ユーザー向けの明確な変更を行った場合は、必要に応じて `docs/changelog.md` に記録する。
 - `docs/changelog.md` は日本語で書く。
 - 未確定の変更は、必要に応じて先頭付近に「未リリース」セクションを作って記録する。
@@ -60,6 +60,6 @@
 
 ## 検証
 
-- フロントエンドや型に関わる変更後は、可能な限り `npm run build` を実行する。
-- バックエンド Python の単体ファイル変更では、可能な限り `py_compile` などで構文確認する。
+- C++ やシェーダの変更後は、可能な限り `cmake --build --preset x64-debug` と `ctest --test-dir build -C Debug --output-on-failure` を実行する。
+- `tools/` の Python スクリプトを変更したときは、可能な限り `py_compile` などで構文確認する。
 - 検証できなかった場合は、その理由を作業報告に書く。

@@ -926,6 +926,10 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
             m_graph.DeleteNode(m_selectedGraphNode);
             m_graph.NormalizeVariablePins();
             m_graph.MarkDirty();
+            if (m_previewGraphNode == m_selectedGraphNode) {
+                m_previewGraphNode = 0;
+                m_previewGraphPin = 0;
+            }
             m_selectedGraphNode = 0;
             m_graphSelectionRequest = 0;
             MarkDocumentChanged();

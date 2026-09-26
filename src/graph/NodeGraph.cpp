@@ -129,10 +129,6 @@ constexpr std::array<NodeDefinition, 40> kNodeDefinitions = {{
 
 }  // namespace
 
-std::span<const NodeDefinition> NodeDefinitions() {
-    return kNodeDefinitions;
-}
-
 const NodeDefinition* FindNodeDefinition(NodeKind kind) {
     for (const NodeDefinition& definition : kNodeDefinitions) {
         if (definition.kind == kind) {

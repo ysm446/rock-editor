@@ -28,7 +28,7 @@ bool ReadTextureRgba8(Device& device, GpuTexture& texture, LdrImage& image) {
     });
     void* mapped=nullptr;
     const D3D12_RANGE range{0,static_cast<SIZE_T>(bytes)};
-    bool success=copied && SUCCEEDED(buffer.resource->Map(0,&range,&mapped));
+    bool success=copied && ROCK_CHECK_HR(buffer.resource->Map(0,&range,&mapped));
     if (success) {
         image.width=texture.width; image.height=texture.height;
         image.pixels.resize(size_t(image.width)*image.height*4);

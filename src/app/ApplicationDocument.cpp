@@ -158,7 +158,6 @@ void Application::ApplyDocument(const DocumentSnapshot& snapshot) {
             model->model = 0;
     }
     m_graph.Replace(std::move(nodes), snapshot.graphLinks);
-    m_layerPreviewDirty = true;
     // ノードの位置も一緒に戻すので、エディタへ流し込み直す。視点は動かさない。
     RequestGraphNodePlacement(false);
 
@@ -172,7 +171,6 @@ void Application::ApplyDocument(const DocumentSnapshot& snapshot) {
 void Application::MarkDocumentChanged() {
     ++m_pieceEpoch;
     m_meshGraphRevision = 0; // 材質の変更でもベイクの有効性を再判定する。
-    m_layerPreviewDirty = true;
     m_documentDirty = true;
     // マテリアルの変更はモデルの見た目にも効くので、サムネイルを描き直す。
     m_renderedModelThumbnails.clear();

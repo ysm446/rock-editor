@@ -104,6 +104,7 @@ struct PieceSelectSettings {
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;
+    bool operator==(const PieceSelectSettings&) const = default;
 };
 struct PieceSelection {
     int producer = 0;

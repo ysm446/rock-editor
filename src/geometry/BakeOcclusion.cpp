@@ -80,7 +80,8 @@ struct Bvh {
     }
     bool Hit(V origin, V direction, double distance, size_t ignored, int id = 0) const {
         const auto &n = nodes[id];
-        double near = 0, far = distance;
+        // near / far は Windows.h のマクロと衝突するので使わない。
+        double tNear = 0, tFar = distance;
         for (int axis = 0; axis < 3; ++axis) {
             double d = direction.At(axis), o = origin.At(axis);
             if (std::abs(d) < 1e-15) {
@@ -90,9 +91,9 @@ struct Bvh {
                 double a = (n.lo.At(axis) - o) / d, b = (n.hi.At(axis) - o) / d;
                 if (a > b)
                     std::swap(a, b);
-                near = std::max(near, a);
-                far = std::min(far, b);
-                if (near > far)
+                tNear = std::max(tNear, a);
+                tFar = std::min(tFar, b);
+                if (tNear > tFar)
                     return false;
             }
         }

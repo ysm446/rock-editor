@@ -294,54 +294,6 @@ void IconTileFrame(ImDrawList* drawList, const ImVec2& min, const ImVec2& max) {
 
 }  // namespace
 
-void MountainIcon(float size) {
-    const ImVec2 min = ImGui::GetCursorScreenPos();
-    const ImVec2 max(min.x + size, min.y + size);
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    // 高い峰と低い峰の 2 つ。地面の線は引かない（稜線だけで山と読める）。
-    const auto at = [&](float x, float y) {
-        return ImVec2(min.x + x * size, min.y + y * size);
-    };
-    drawList->PathClear();
-    drawList->PathLineTo(at(0.14f, 0.74f));
-    drawList->PathLineTo(at(0.40f, 0.30f));
-    drawList->PathLineTo(at(0.54f, 0.52f));
-    drawList->PathLineTo(at(0.68f, 0.40f));
-    drawList->PathLineTo(at(0.86f, 0.74f));
-    drawList->PathStroke(ImGui::GetColorU32(ImGuiCol_Text), ImDrawFlags_None, Scaled(1.3f));
-
-    IconTileFrame(drawList, min, max);
-    ImGui::Dummy(ImVec2(size, size));
-}
-
-void WavesIcon(float size) {
-    const ImVec2 min = ImGui::GetCursorScreenPos();
-    const ImVec2 max(min.x + size, min.y + size);
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    // 横に走る波を 2 本。1 周期の正弦をずらして重ねる。
-    constexpr int kSegments = 16;
-    constexpr float kPi = 3.14159265358979323846f;
-    const float left = min.x + size * 0.16f;
-    const float width = size * 0.68f;
-    const float amplitude = size * 0.07f;
-    const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
-    for (int wave = 0; wave < 2; ++wave) {
-        const float baseY = min.y + size * (0.40f + 0.24f * static_cast<float>(wave));
-        drawList->PathClear();
-        for (int i = 0; i <= kSegments; ++i) {
-            const float t = static_cast<float>(i) / static_cast<float>(kSegments);
-            drawList->PathLineTo(
-                ImVec2(left + t * width, baseY + std::sin(t * 2.0f * kPi) * amplitude));
-        }
-        drawList->PathStroke(color, ImDrawFlags_None, Scaled(1.3f));
-    }
-
-    IconTileFrame(drawList, min, max);
-    ImGui::Dummy(ImVec2(size, size));
-}
-
 // 目のアイコン。字形を持たないので図形で描く。
 //
 // 開いた目は上下 2 本の放物線で作った紡錘形と瞳、閉じた目は下向きの弧 1 本。

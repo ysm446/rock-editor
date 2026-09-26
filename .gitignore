@@ -22,3 +22,6 @@ docs/references/
 # サンプルを開くとアプリが作るワークスペースの控え。環境ごとに違うのでコミットしない。
 examples/**/project.reproj
 examples/**/.rock-editor/
+
+# tools/ の Python スクリプトを実行すると作られる。
+__pycache__/

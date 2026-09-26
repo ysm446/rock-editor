@@ -14,40 +14,24 @@
 
 ## 現在の状態
 
-road-editor（旧 terrain-graph）のアプリ基盤を土台に、道路・地形に特化した実装を撤去した段階。
-**Base Rock の Box / RoundedBox / Sphere / Ellipsoid 生成に対応**。ノードグラフの右クリックから Base Rock と Mesh Output を追加し、
-Mesh ピンを接続すると母岩を表示する。寸法 X/Y/Z と Seed を編集でき、Undo・保存／読み込みに対応する。
-母岩は原点中心。Sphere は直径、それ以外は各軸の寸法を指定する。
-RoundedBox の丸み、曲面/ノイズ用の面分割数（4/8/16/32）、弱い形状ノイズの強度・細かさ・Seed を編集できる。
-ノイズ強度は0～0.15（原点からの距離に対する最大変位率）。同じ設定と Seed で再現する。
-ノイズが0なら Seed は形状に影響せず、従来の Box シーンの形も変わらない。
-`Base Rock → Crack → Mesh Output` で有限亀裂の候補範囲（青）・到達範囲（橙）を透視ガイド表示できる。
-Crack の中心・回転・半幅 U/V・Depth・Persistence・Aperture は設定パネルから編集する。
-Crack の「部分切断」をオンにすると、Box に亀裂壁・終端のある有限切り込みを作り、
-奥に Rock Bridge（未破断部）を残す。現在は未加工の Box 1個に対する、軸に沿った1回の切り込みに対応する。曲面やノイズ付きの母岩には、新しい「Mesh 有限溝」を使う。
-Box 専用方式は回転90度単位。貫通して Bridge が消える設定は診断する。
-「Mesh 有限溝」は曲面・任意角度に対応し、U 半幅で長さを指定し、+V 端を外面まで伸ばして、奥に未破断部を残す。
-未加工の母岩1個・切り込み1回・4096三角形以下に限定。交差する複数亀裂は未対応。数値的に不安定な断面は診断し、位置・角度の調整を求める。Bridge 断面の数値と緑の表示は Box 専用方式のみ。
-「Bridge 表示」で未破断断面を緑で示し、実切込深さ・残存厚さ・断面積を確認できる。
-`Base Rock → (Crack →) Fracture → Mesh Output` で、岩を平面の両側の2片へ完全分割できる。
-部分亀裂の形を保ったまま残存断面を閉じる。Fracture の中心・回転は独立した無限平面で、Crack の深さを自動延長しない。
-設定欄またはビューポートで Chunk を選び、Locked を解除すると数値欄と W（移動）/ E（回転）のギズモで操作できる。
-Locked は現在の配置を固定する編集フラグで、物理計算はしない。設定は保存・Undo に対応する。
-曲面・ノイズ付き母岩も Fracture へ接続できる。初期実装は未分割の岩1個、単純な断面ループ1本、分割後の各側が1連結体の場合。穴のある断面・再帰分割は未対応。
-`Base Rock → Joint Set → Mesh Output` で、方向・間隔・位置/角度ばらつき・本数・Seed を持つ有限パッチ列を表示できる。
-Joint Set を直列接続すると複数方向を重ねられる。設定は保存・Undo に対応する。Joint Set 単体はガイド表示で、母岩の切断は行わない。
-`Base Rock → Joint Set → (Joint Set →) Fracture → Mesh Output` で、Fracture の「Joint Set で分割」をオンにすると多片へ完全分割する。
-このモードは節理の中心・向きを無限平面として使い、有限範囲・Depth・Persistence・Aperture を使用しない。ガイドを非表示にしても分割結果は変わらない。
-上限は合計32平面・128片・20万三角形。非交差・接触はスキップし、重複平面は最初の定義を使う。各切断の断面は単純ループ1本が条件。
-各片をドロップダウンまたはビューポートで選び、Locked を解除して移動・回転できる。設定は節理ノード/パッチ番号と各平面の側を表すキーで保存する。
+road-editor（旧 terrain-graph）のアプリ基盤を土台に、岩の形をボリュームとピースで試す段階。
+2026-09-21 に旧 Crack / Fracture / Joint Set ノードは撤去した（[目的と完成形](docs/plan/goals.md)）。
+ノードはグラフの右クリックから追加する。各ノードの仕様は [docs/reference/](docs/reference/) にある。
+
+- **形の元**: Base Shape（Box / RoundedBox / Sphere / Ellipsoid）、Random Boxes、Layered Boxes、Model、Merge、Transform
+- **ボリューム**: To Volume、Volume Transform / Boolean / Noise / Smooth / Terrace / Close / Edge Wear / Clip、Plane Cuts、Volume Crack、Parallel Planes、Volume to Mesh
+- **ピース**: Scatter Points、Voronoi Fracture、Piece Select / Filter / Transform、Pieces to Mesh
+- **メッシュ**: Subdivide、Displace、Decimate、Remesh、UV Unwrap
+- **表面**: Surface、Apply Material、Material Mask、Shape Mask、Noise Mask、Deposition Mask、Mask Combine、Mask Filter、Material Bake
+- **出力**: Mesh Output
+
 目指す外観と参考写真は [外観目標](docs/reference/visual-target.md) を参照。
 
 土台として動いているもの:
 
 - DX12 + Dear ImGui のウィンドウ、ドックレイアウト、ビューポートと軌道カメラ
-- ノードグラフ（Base Rock / Surface / Model / Transform / Merge / Mesh Output）と、
-  コピー／貼り付け、アンドゥ、グラフの保存と読み込み
-- PBR マテリアル合成、テクスチャ、天球（HDRI / 手続き的な空）、直接光・IBL・露出・トーンマップ
+- ノードグラフのコピー／貼り付け（別のファイルへの貼り付けを含む）、アンドゥ、ノードのメモ、グラフの保存と読み込み
+- PBR マテリアル合成、レイヤーマテリアル、テクスチャ、天球（HDRI / 手続き的な空）、直接光・IBL・露出・トーンマップ
 - FBX モデルの取り込みと配置、ギズモ（移動 / 回転 / 倍率）
 - ルートフォルダによるアセット管理とアセットブラウザ
 
@@ -100,12 +84,15 @@ rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
                 [--select-node <id>] [--focus-panel <name>]
                 [--screenshot <path>] [--screenshot-ui <path>]
                 [--screenshot-frame <n>]
+                [--test-gpu-ao] [--test-copy-to <scene>]
 ```
 
 `--root` はプロジェクトのルートフォルダ（省略時は最近使ったルート、無ければ `data/`）。
 `--project` にはシーンかルートのフォルダを渡せる。
 `--save-project` は指定フレーム後に保存して終了する。
 `--screenshot` はビュー、`--screenshot-ui` は UI を含む PNG を出力して終了する。
+`--test-gpu-ao` は GPU の AO ベイクを CPU 版と比べ、結果を終了コードで返す（CTest には入れていない。GPU が要るため）。
+`--test-copy-to` は先頭以外のノードをコピーして指定シーンへ貼る（`--save-project` と併用）。
 検証素材・プロジェクト・スクリーンショットは Git 対象外の `data/` に置く。
 
 ## ドキュメント

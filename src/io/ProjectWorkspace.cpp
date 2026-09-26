@@ -150,7 +150,9 @@ bool ProjectWorkspace::Open(const fs::path& root) {
 }
 
 bool ProjectWorkspace::Scan() {
+    // 改名・移動・削除の後にも呼ばれる。パスから ID への表も作り直し、古いパスを残さない。
     m_paths.clear();
+    m_knownUids.clear();
     std::error_code error;
     fs::recursive_directory_iterator it(m_root, fs::directory_options::skip_permission_denied, error), end;
     for (; it != end && !error; it.increment(error)) {
@@ -219,7 +221,12 @@ fs::path ProjectWorkspace::Import(const fs::path& source, const fs::path& direct
     if (Contains(source)) return Absolute(source);
     const auto sourcePath = Absolute(source);
     const auto sourceKey = ToUtf8Portable(sourcePath);
-    if (const auto found = m_imports.find(sourceKey); found != m_imports.end()) return found->second;
+    // 取り込んだ控えが後から改名・削除されていたら、もう一度コピーする。
+    if (const auto found = m_imports.find(sourceKey); found != m_imports.end()) {
+        std::error_code existsError;
+        if (fs::is_regular_file(found->second, existsError)) return found->second;
+        m_imports.erase(found);
+    }
     const auto target = UniquePath(directory, ToUtf8Display(source.stem()),
                                    ToUtf8Portable(source.extension()).c_str());
     std::error_code error;

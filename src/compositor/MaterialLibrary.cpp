@@ -324,6 +324,7 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
     constants.brightness = asset.brightness;
 
     rhi::GpuTexture& thumbnail = asset.thumbnail;
+    bool dispatched = false;
     const bool executed = device.ExecuteImmediate([&](ID3D12GraphicsCommandList* commandList) {
         PIXBeginEvent(commandList, PIX_COLOR(120, 200, 200), "MaterialThumbnail");
 
@@ -339,10 +340,16 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
         commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
         commandList->SetPipelineState(pipeline);
         const auto cb = device.Upload().Allocate(sizeof(constants), 256);
-        if (!cb.IsValid()) { PIXEndEvent(commandList); return; }
+        if (!cb.IsValid()) {
+            // UAV のまま ImGui に渡さないよう、読める状態へ戻してから失敗を返す。
+            rhi::TransitionIfNeeded(commandList, thumbnail, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            PIXEndEvent(commandList);
+            return;
+        }
         std::memcpy(cb.cpu, &constants, sizeof(constants));
         commandList->SetComputeRootConstantBufferView(1, cb.gpuAddress);
         commandList->Dispatch(DispatchCount(kThumbnailSize), DispatchCount(kThumbnailSize), 1);
+        dispatched = true;
 
         // ImGui から SRV として読むので、ピクセルシェーダ可視の状態へ移す。
         rhi::TransitionIfNeeded(commandList, thumbnail,
@@ -372,10 +379,7 @@ bool MaterialLibrary::BuildThumbnail(rhi::Device& device, rhi::PipelineCache& pi
         PIXEndEvent(commandList);
     });
 
-    if (!executed) {
-        return false;
-    }
-    return true;
+    return executed && dispatched;
 }
 
 }  // namespace rock::compositor

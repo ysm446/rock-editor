@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-27 03:19
+更新日時: 2026-09-27 04:04
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,14 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-09-27 全体レビューと整理
+
+- geometry / graph / io / app / renderer / compositor とビルド・ドキュメントを分担してレビューし、確認できた不具合を修正した（内容は changelog）。描画のエラー経路も直した。`MaterialLibrary::BuildThumbnail` は定数の確保に失敗するとサムネイルを UAV のまま成功扱いにしていた。`MaterialEvaluator::Evaluate` はレイヤーマテリアルのエラーで PIX イベントと出力の遷移を閉じずに戻っていた。
+- 削除: `ApplicationUiHelpers.h` の未使用定数・`AcceptComboDrop`・`DrawMeshMaterialSlotRow`、`m_layerPreview` 系メンバー、`DrawGraphBackground`、`IsGraphPinVisible`、`NodeDefinitions()`、アプリ設定 `ui.layerListHeight`、`MountainIcon` / `WavesIcon`、`SaveRgb8Png` / `SaveGray8Png`、`MaterialEvaluator::LayerThumbnailHandle`。`DeletePresetNode` は terrain-graph との同期のため残した。
+- AGENTS.md / CLAUDE.md の package.json・npm 前提の記述を CMake の手順へ直した。docs/README.md から全ての仕様書へリンクした。
+- Debug ビルド警告0、全テスト成功、`--test-gpu-ao` 成功。`examples/layered-pieces/progressive-peel.rockscene` で Piece Select の集計表示を画像で確認（data/review-check/）。実マウスでの操作は未確認。
+- 見送った改善: `RockEvaluator` の評価結果がメッシュを値で複製している（共有ポインタ化で大きく減る）。モデルの一覧 `CollectVisibleModels` を1フレームに数回作り直している。レイヤーの結果サムネイルは表示先が無いのに毎評価で焼いている。CMake はアプリとテストで同じソースを2回コンパイルしているので、共通の静的ライブラリにまとめられる。サムネイル一覧・テクスチャのアップロード・ベクトル計算などの重複も残っている。
 
 ### 2026-09-27 ノードを別のファイルへ貼り付け
 

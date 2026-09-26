@@ -24,10 +24,6 @@ struct UiSettings {
     // 拡大率と違って余白や部品幅は動かないので、**文字だけを詰めたい / 大きくしたい**
     // ときに使う。既定と範囲は `ui/UiStyle.h` の kDefaultFontSize / kMinFontSize / kMaxFontSize と揃える。
     int fontSize = 17;
-    // レイヤーパネルの一覧側（上の区画）の高さ（96 DPI 基準）。
-    // 境界のドラッグで変わる。**拡大率を掛ける前の値で持つ**ので、
-    // 表示スケールを変えても区画の見た目の高さが保たれる。
-    float layerListHeight = 260.0f;
     // アセットの帯のフォルダ階層（左の区画）の幅。同じく拡大率を掛ける前の値。
     float assetFolderWidth = 190.0f;
 };

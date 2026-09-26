@@ -1,11 +1,11 @@
 # ドキュメント案内
 
 作成日時: 2026-09-20 22:04
-更新日時: 2026-09-21 01:02
+更新日時: 2026-09-27 03:52
 
 現在の入口は [Random Boxes → To Volume](reference/box-volume.md)。ランダムに重ねた直方体から単純な塊を作り、ボリュームへ変換する。
 
-Rock Editor は、母岩の割れやすい方向、亀裂の深さ、未破断部、完全分離した岩塊をノードで組み立てる Windows 向け岩生成エディタ。現在は4種類の母岩と弱い形状ノイズ、有限パッチと複数方向の Joint Set ガイド表示、Box の軸に沿う部分切断と Rock Bridge 計測、曲面の有限長部分溝に対応。単一平面または Joint Set の平面列による完全分割と、Chunk の選択・移動・回転にも対応。対応範囲と制約は進捗を参照する。
+Rock Editor は、岩の形をノードで組み立てる Windows 向け岩生成エディタ。現在はボリューム（直方体の塊・切断・ノイズ・摩耗など）とピース（Voronoi 分割・選別・欠け）で形を作り、マスクと素材で表面を付けて、UV 展開・ベイクまで行える。旧 Crack / Fracture / Joint Set は 2026-09-21 に撤去した。対応範囲と制約は進捗を参照する。
 
 | 資料 | 役割 |
 | --- | --- |
@@ -17,6 +17,14 @@ Rock Editor は、母岩の割れやすい方向、亀裂の深さ、未破断�
 | [検証計画](reference/validation.md) | プロトタイプと MVP の受け入れ条件 |
 | [v2 原仕様](rock_generator_spec_v2.md) | 製品要件の原文（全55節） |
 | [変更履歴](changelog.md) | 過去の変更 |
+
+## ノードと機能の仕様
+
+- **形とボリューム**: [直方体の塊とボリューム](reference/box-volume.md)、[Volume to Mesh の変換方式](reference/volume-meshing.md)、[Volume Boolean](reference/volume-boolean.md)、[Plane Cuts](reference/plane-cuts.md)、[Volume Crack](reference/volume-crack.md)、[Volume Crack の入力の拡張と割り方の候補（設計メモ）](reference/volume-crack-sources.md)、[Parallel Planes — 平行な構造面](reference/parallel-planes.md)、[Volume Noise](reference/volume-noise.md)、[Volume Smooth](reference/volume-smooth.md)、[Volume Terrace](reference/volume-terrace.md)、[Volume Close](reference/volume-close.md)、[Volume Edge Wear](reference/volume-edge-wear.md)、[Volume Clip](reference/volume-clip.md)
+- **ピース**: [Voronoi分割とピース操作の設計](reference/voronoi-pieces.md)、[薄板の積層とピースの欠け](reference/layered-pieces.md)、[隣接面積によるピースの侵食](reference/piece-erosion.md)
+- **メッシュ**: [Subdivide / Displace](reference/displace.md)、[Decimate](reference/decimate.md)、[Remesh](reference/remesh.md)
+- **表面と素材**: [素材の適用と形状AO](reference/material-application.md)、[岩用レイヤーマテリアル](reference/layer-material.md)、[生成メッシュへの材質とTriplanar](reference/triplanar.md)、[自動UV展開・UVビュー・材質ベイク](reference/uv-bake.md)、[Shape Mask](reference/shape-mask.md)、[Noise Mask](reference/noise-mask.md)、[Deposition Mask](reference/deposition-mask.md)、[Mask Combine](reference/mask-combine.md)、[Mask Filter](reference/mask-filter.md)
+- **設計メモ**: [岩らしい形と色のためのノード設計メモ](reference/rock-shaping-nodes.md)
 
 要件の出発点は v2 原仕様。着手順と段階ごとの範囲は実装計画に整理する。設計資料の提案は実装済みの仕様ではない。原仕様内で段階の記述が異なる機能は計画に整理理由を記す。
 

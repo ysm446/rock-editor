@@ -6,6 +6,7 @@
 #include <imgui.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <optional>
 
 namespace rock::ui {

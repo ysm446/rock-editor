@@ -373,6 +373,8 @@ bool BakeMaterial(rhi::Device& device, rhi::PipelineCache& pipelines, const Scen
     targetDesc.width=width; targetDesc.height=height; targetDesc.allowRenderTarget=true;
     targetDesc.initialState=D3D12_RESOURCE_STATE_RENDER_TARGET;
     targetDesc.debugName=L"MaterialBake";
+    // 描いてコピーで読み戻すだけなので、SRV の枠は取らない。
+    targetDesc.createSrv=false;
     if (!pipeline || !device.Allocator().CreateTexture2D(targetDesc,target) ||
         !device.Allocator().CreateUploadBuffer((sizeof(MeshConstants)+255)&~255ull,L"BakeConstants",constantsBuffer)) {
         error="ベイク用シェーダまたはターゲットを作成できません"; cleanup(); return false;
@@ -1911,12 +1913,6 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
         return;
     }
 
-    const rhi::UploadAllocation cb = device.Upload().Allocate(sizeof(OverlayLineConstants), 256);
-    if (!cb.IsValid()) {
-        PIXEndEvent(commandList);
-        return;
-    }
-
     OverlayLineConstants constants = {};
     XMStoreFloat4x4(&constants.viewProjection,
                     XMMatrixMultiply(m_camera.ViewMatrix(), m_camera.ProjectionMatrix()));
@@ -1947,11 +1943,8 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
         }
     }
 
-    std::memcpy(cb.cpu, &constants, sizeof(constants));
-    commandList->SetGraphicsRootConstantBufferView(1, cb.gpuAddress);
-    commandList->DrawInstanced(count, 1, 0, 0);
-    ++m_stats.drawCalls;
-    m_stats.vertices += count;
+    // 全体（4000 端点）ではなく、使う端点の分だけ送る。
+    submit(constants, count);
 
     PIXEndEvent(commandList);
 }

@@ -87,12 +87,6 @@ public:
     uint32_t Resolution() const { return m_resolution; }
     uint32_t EvaluatedLayerCount() const { return m_evaluatedLayerCount; }
 
-    // --- ノードの結果サムネイル ------------------------------------------
-    // そのレイヤーまで合成した結果（アルベド + Height の勾配の陰影）の 64² のサムネイル。
-    // 添字は評価したスタックのレイヤーの添字。評価は非同期なので、
-    // 表側の結果がどの版のスタックかは EvaluatedRevision() で見分ける。
-    // ImGui へ渡すハンドル。まだ無ければ ptr が 0。
-    D3D12_GPU_DESCRIPTOR_HANDLE LayerThumbnailHandle(size_t layerIndex) const;
     // 表側の結果が、どの版のスタックを評価したものか。
     uint64_t EvaluatedRevision() const { return m_evaluatedRevision; }
 
@@ -108,10 +102,6 @@ private:
     void BakeLayerThumbnail(rhi::Device& device, ID3D12PipelineState* pipeline,
                             ID3D12GraphicsCommandList* commandList, const MaterialStack& stack,
                             size_t layerIndex);
-    const std::vector<rhi::GpuTexture>& DisplayedLayerThumbnails() const {
-        return m_frontTextures.IsValid() ? m_frontLayerThumbnails : m_layerThumbnails;
-    }
-
     // 定数バッファの置き場。コンピュートキューへ記録している間はそのキューの
     // 置き場から、それ以外（同期評価）はフレームのアップロードリングから取る。
     // **評価器の中で device.Upload() を直接呼ばない**（キューの仕事はフレームより長生きする）。

@@ -325,7 +325,6 @@ struct ModelPlacementPath {
 // ほかのメッシュのノードなら何も出さない（途中経過を見ているとき）。
 std::vector<ModelPlacementPath> CollectOutputModels(const NodeGraph& graph, GraphId previewNodeId = 0);
 
-std::span<const NodeDefinition> NodeDefinitions();
 const NodeDefinition* FindNodeDefinition(NodeKind kind);
 const NodeDefinition* FindNodeDefinitionByName(std::string_view name);
 // レイヤー設定を持つ種類か（Surface）。

@@ -46,8 +46,10 @@ ThumbnailRecord AssetThumbnailRecord(ProjectWorkspace& workspace, const fs::path
         const auto size = fs::file_size(file, error);
         if (!error) stamp = Hash(std::to_string(size), stamp);
         const auto extension = file.extension().wstring();
+        // モデルも FBX とスロットの .rockmat を参照するので、たどらないと差し替えがサムネイルに映らない。
         if (_wcsicmp(extension.c_str(), L".rockmat") && _wcsicmp(extension.c_str(), L".rocksky") &&
-            _wcsicmp(extension.c_str(), L".tglayer") && _wcsicmp(extension.c_str(), L".tgboundary")) return;
+            _wcsicmp(extension.c_str(), L".tglayer") && _wcsicmp(extension.c_str(), L".tgboundary") &&
+            _wcsicmp(extension.c_str(), L".rockmodel")) return;
         nlohmann::json document;
         if (!ProjectWorkspace::ReadJson(file, document)) return;
         const auto refs = [&](auto&& self, const nlohmann::json& value) -> void {

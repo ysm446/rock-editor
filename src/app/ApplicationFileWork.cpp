@@ -480,6 +480,12 @@ void Application::ProcessPendingFileWork() {
         m_pendingMaterialRemove = compositor::kNoMaterialAsset;
 
         if (m_materialLibrary.Find(removed) != nullptr) {
+            // 選択は位置で持つので、消した項目より後ろを選んでいたときだけ1つ前へずらす。
+            int removedIndex = 0;
+            for (const auto& entry : m_materialLibrary.Entries()) {
+                if (entry.id == removed) break;
+                ++removedIndex;
+            }
             m_materialLibrary.Remove(m_device, removed);
             // 参照していたノードは「なし」へ戻す。無効な ID を残さない。
             bool graphChanged = false;
@@ -500,7 +506,9 @@ void Application::ProcessPendingFileWork() {
                 }
             }
             m_renderedModelThumbnails.clear();
-            m_selectedMaterial = std::max(0, m_selectedMaterial - 1);
+            if (removedIndex < m_selectedMaterial) --m_selectedMaterial;
+            m_selectedMaterial = std::clamp(m_selectedMaterial, 0,
+                                            std::max(0, static_cast<int>(m_materialLibrary.Entries().size()) - 1));
             MarkDocumentChanged();
         }
     }

@@ -281,10 +281,6 @@ void Application::DestroyGraphEditor() {
     }
 }
 
-void Application::DrawGraphBackground(const ImVec2& min, const ImVec2& max) {
-    DrawGraphDots(min, max);
-}
-
 void Application::RequestGraphNodePlacement(bool navigate) {
     m_graphNodesToPlace.clear();
     for (const graph::Node& node : m_graph.Nodes()) {
@@ -856,10 +852,6 @@ void Application::PasteGraphNodes(const ImVec2& viewCenter) {
     ROCK_LOG_INFO("ノードを貼り付けました: %zu 個", m_graphClipboard.size());
 }
 
-bool Application::IsGraphPinVisible(const graph::Pin& /*pin*/) const {
-    return true;
-}
-
 void Application::DrawGraphNode(const graph::Node& node) {
     // ノードの幅。**ピンのラベルが重ならない幅まで広げる。**
     // 入力は左、出力は右へ寄せるので、同じ行に並ぶ 2 つのラベルの合計が要る幅になる。
@@ -870,8 +862,8 @@ void Application::DrawGraphNode(const graph::Node& node) {
     const float pinWidth = 14.0f + ImGui::GetStyle().ItemSpacing.x;
     float rowWidth = 0.0f;
     std::vector<const graph::Pin*> visibleInputs;
+    visibleInputs.reserve(node.inputs.size());
     for (const graph::Pin& input : node.inputs) {
-        if (!IsGraphPinVisible(input)) continue;
         visibleInputs.push_back(&input);
     }
     for (size_t row = 0; row < std::max(visibleInputs.size(), node.outputs.size()); ++row) {
@@ -1159,10 +1151,6 @@ void Application::DrawGraphEditor() {
     }
 
     for (const graph::Link& link : m_graph.Links()) {
-        if (const auto* pin = m_graph.FindPin(link.endPin); pin && !IsGraphPinVisible(*pin)) {
-            ed::DeselectLink(ed::LinkId(link.id));
-            continue;
-        }
         ImVec4 color(0.52f, 0.60f, 0.55f, 1.0f);
         if (const graph::Pin* startPin = m_graph.FindPin(link.startPin)) {
             color = PinTypeColor(startPin->valueType);
@@ -1375,8 +1363,9 @@ void Application::DrawGraphEditor() {
         if (*m_graphSelectionRequest != 0) ed::SelectNode(ed::NodeId(*m_graphSelectionRequest));
         m_graphSelectionRequest.reset();
     }
-    ed::NodeId selectedNodes[64];
-    const int selectedCount = ed::GetSelectedNodes(selectedNodes, IM_ARRAYSIZE(selectedNodes));
+    // 枠で多数を囲んでもコピーから漏らさないよう、選択数に合わせて受け取る。
+    std::vector<ed::NodeId> selectedNodes(static_cast<size_t>(std::max(ed::GetSelectedObjectCount(), 1)));
+    const int selectedCount = ed::GetSelectedNodes(selectedNodes.data(), static_cast<int>(selectedNodes.size()));
     if (selectedCount > 0) {
         m_selectedGraphNodes.clear();
         for (int i = 0; i < selectedCount; ++i) {

@@ -83,57 +83,20 @@ inline float PreviewPaneSize() {
     return std::max(ui::Scaled(120.0f), std::min(available.x, maxHeight));
 }
 
-// レイヤー一覧のドラッグ＆ドロップで使うペイロードの種別。
-inline constexpr const char* kLayerDragDropType = "ROCK_LAYER";
 // レイヤー一覧の行に並べるサムネイルの一辺（96 DPI 基準）。行の高さはこれで決まる。
 // 中身（マテリアルとマスク）を読めることを優先して、文字より大きく取る。
 inline constexpr float kLayerRowThumbnail = 40.0f;
-// レイヤー一覧の行で、部品どうしと行の左右に空ける間隔（96 DPI 基準）。
-// ImGui の ItemInnerSpacing（6）では目・サムネイル・マスク・名前が詰まって
-// 1 つの塊に見える。**どれも意味の違う情報なので、読み分けられる間隔を取る。**
-inline constexpr float kLayerRowGap = 12.0f;
-// 目のアイコンの一辺。**サムネイルより小さくする。**
-// 同じ大きさだと切り替えのアイコンが素材と同じ重みで並び、目線が散る。
-inline constexpr float kLayerRowEye = 20.0f;
-// レイヤーパネルの一覧側（上の区画）の高さの下限と上限（96 DPI 基準）。
-// 既定値は AppSettings が持ち、境界のドラッグで変わる。
-// 下限はツールバーの 1 行 + 行 2 つ + ヒントの 1 行が入る高さ。
-inline constexpr float kLayerListMinHeight = 120.0f;
-inline constexpr float kLayerListMaxHeight = 640.0f;
-
-// テクスチャの拡大プレビューの一辺（96 DPI 基準）。
-// サムネイル（72）では中身を確かめられないので、その 3 倍弱を取る。
-inline constexpr float kTexturePreviewSize = 200.0f;
 
 // テクスチャ一覧からマップ欄へのドラッグ＆ドロップで使うペイロードの種別。
 inline constexpr const char* kTextureDragDropType = "ROCK_TEXTURE";
 // マテリアル一覧から Surface のマテリアル欄（プロパティの行 / ノードのサムネイル）へ
 // ドラッグ＆ドロップで割り当てるときのペイロードの種別。中身は MaterialAssetId。
 inline constexpr const char* kMaterialDragDropType = "ROCK_MATERIAL";
-// アセットの帯のレイヤーマテリアル / 境界マテリアルのサムネイルをドラッグしたときのペイロード
-//（どちらも graph::SurfaceId）。Road の沿道欄の該当行へ落とすと、その区間に割り当たる。
-inline constexpr const char* kLayerMaterialDragDropType = "ROCK_LAYER_MATERIAL";
-inline constexpr const char* kBoundaryMaterialDragDropType = "ROCK_BOUNDARY_MATERIAL";
+
 // アセットの帯で、ライブラリの ID を持たないファイル（未読み込みの画像・シーンなど）をドラッグしたときのペイロード。
 // 中身はパスの wchar_t 文字列（終端込み）。一覧のフォルダ・左のフォルダ階層へ落とすと移動する。
 inline constexpr const char* kAssetPathDragDropType = "ROCK_ASSET_PATH";
 
-// 直前の ui::PropertyCombo の値の矩形（サムネイル＋コンボ）を受け口にして、type のペイロードを受ける。
-// 落とされた ID を outId に入れて真。コンボ本体だけでなくサムネイルにも落とせるようにするための部品。
-template <typename Id>
-inline bool AcceptComboDrop(const char* type, Id& outId) {
-    ImVec2 min, max;
-    ui::LastPropertyComboRect(min, max);
-    bool accepted = false;
-    if (ImGui::BeginDragDropTargetCustom(ImRect(min, max), ImGui::GetID(type))) {
-        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(type); payload != nullptr) {
-            outId = *static_cast<const Id*>(payload->Data);
-            accepted = true;
-        }
-        ImGui::EndDragDropTarget();
-    }
-    return accepted;
-}
 inline constexpr const char* kTextureRemoveModalTitle = "テクスチャを削除";
 
 // テクスチャの一覧に出すフォーマット名。DXGI の名前は長いので短く言い換える。
@@ -229,20 +192,6 @@ inline bool DrawMaterialSlotRow(const char* label, compositor::MaterialAssetId& 
     changed |= AcceptMaterialDrop(slot);
     ui::PropertyEnd();
     return changed;
-}
-
-// 旧Surfaceの定数設定を保持し、新しく選び直した場合は素材の標準設定に戻す。
-inline bool DrawMeshMaterialSlotRow(const char* label, std::optional<compositor::MaterialLayer>& slot,
-                                    const compositor::MaterialLibrary& library) {
-    auto material = slot ? slot->material : compositor::kNoMaterialAsset;
-    if (!DrawMaterialSlotRow(label, material, library, true,
-        "「なし」を選ぶとノードの既定色に戻る。マテリアル一覧からドラッグして割り当てもできる")) return false;
-    slot.reset();
-    if (material != compositor::kNoMaterialAsset) {
-        slot.emplace();
-        slot->material = material;
-    }
-    return true;
 }
 
 // テクスチャを選ぶコンボの候補。読み込み済みのライブラリに加えて、

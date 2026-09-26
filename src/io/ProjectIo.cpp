@@ -17,6 +17,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <system_error>
 #include <unordered_map>
@@ -90,7 +91,14 @@ float ReadFloat(const json& node, const char* key, float fallback) {
 
 int ReadInt(const json& node, const char* key, int fallback) {
     const json* member = FindMember(node, key);
-    return (member != nullptr && member->is_number_integer()) ? member->get<int>() : fallback;
+    if (member == nullptr || !member->is_number_integer()) {
+        return fallback;
+    }
+    // int に収まらない値を切り詰めると、別のノードやピンの ID と衝突する。
+    const int64_t value = member->get<int64_t>();
+    return (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max())
+               ? fallback
+               : static_cast<int>(value);
 }
 
 uint32_t ReadUInt(const json& node, const char* key, uint32_t fallback) {
@@ -758,7 +766,11 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                 for (; inputIndex < inputIds->size(); ++inputIndex) {
                     if (!(*inputIds)[inputIndex].is_number_integer()) continue;
                     graph::Pin extra = created.inputs.back();
-                    extra.id = (*inputIds)[inputIndex].get<int>();
+                    const int64_t storedId = (*inputIds)[inputIndex].get<int64_t>();
+                    // 範囲外は 0 にして、下で新しい番号を振る。
+                    extra.id = (storedId > 0 && storedId <= std::numeric_limits<int>::max())
+                                   ? static_cast<graph::GraphId>(storedId)
+                                   : 0;
                     extra.label = "Input " + std::to_string(created.inputs.size() + 1);
                     maxId = std::max(maxId, extra.id);
                     created.inputs.push_back(std::move(extra));
@@ -1130,16 +1142,15 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
         }
     }
 
-    // ID が欠けていたピンへ新しい番号を振る（0 のままだと ID が衝突する）。
+    // ID が欠けていたピン・重複したピンへ新しい番号を振る（衝突するとリンクが別のピンへ付く）。
+    std::unordered_set<graph::GraphId> pinIds;
     for (graph::Node& created : nodes) {
-        for (graph::Pin& pin : created.inputs) {
-            if (pin.id <= 0) {
-                pin.id = ++maxId;
-            }
-        }
-        for (graph::Pin& pin : created.outputs) {
-            if (pin.id <= 0) {
-                pin.id = ++maxId;
+        for (auto* pins : {&created.inputs, &created.outputs}) {
+            for (graph::Pin& pin : *pins) {
+                if (pin.id <= 0 || !pinIds.insert(pin.id).second) {
+                    pin.id = ++maxId;
+                    pinIds.insert(pin.id);
+                }
             }
         }
     }

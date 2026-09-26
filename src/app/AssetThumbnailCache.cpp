@@ -229,7 +229,8 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
     if (extension == ".rockscene") {
         const auto preview = io::SceneThumbnailPath(workspace, path);
         std::error_code error;
-        if (fs::is_regular_file(preview, error)) BuildImage(device, preview, thumbnail);
+        if (fs::is_regular_file(preview, error) && !BuildImage(device, preview, thumbnail))
+            device.DeferRelease(thumbnail);
         Store(device, path, std::move(thumbnail), false);
         // 保存前のシーンにプレビューが無いのは正常。次に保存すると生成される。
         m_entries[path].failed = false;
@@ -246,7 +247,7 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
     if (extension == ".tgboundary") {
         fs::path source;
         nlohmann::json body;
-        if (extension == ".tgboundary" && workspace.ReadAsset(path, "boundary-material-asset", body))
+        if (workspace.ReadAsset(path, "boundary-material-asset", body))
             for (const char* slot : {"mask", "height"})
                 if (source.empty() && body.contains(slot) && body[slot].is_object()) source = workspace.Resolve(body[slot]);
         if (!source.empty()) {

@@ -115,6 +115,8 @@ void Application::DrawSkyContextMenu(renderer::SkyAssetId target) {
             m_skyLibrary.Add("天球 " + std::to_string(assets.size() + 1));
         m_skyLibrary.SetActive(added);
         m_scrollToSelectedSky = true;
+        // 追加で一覧の配列が確保し直されると、上で取った asset は無効になる。
+        asset = m_skyLibrary.Find(target);
     }
     if (asset != nullptr) {
         if (ImGui::MenuItem("複製")) {

@@ -162,15 +162,17 @@ bool Application::DrawLayerMaterialProperties(compositor::MaterialAsset& asset) 
         }
         if (i > 0) {
             // 未接続だったマスクも、操作するまでは保存データを変更しない。
+            // 名前・素材・合成などの別の操作では書き戻さない（被覆量0のマスクで層が消えるため）。
             auto mask = layer.mask.value_or(graph::LayerMaskSettings{});
             if (!layer.mask) mask.strength = 0;
+            bool maskChanged = false;
             int mode = mask.shape == graph::LayerMaskShape::Noise ? 1 : 0;
             if (ui::BeginPropertyTable("maskRows")) {
                 const char* modes[] = {"均一", "ムラ"};
                 if (ui::PropertyCombo("被覆方式", &mode, modes, 2, 1)) {
-                    mask.shape = mode ? graph::LayerMaskShape::Noise : graph::LayerMaskShape::Constant; changed = true;
+                    mask.shape = mode ? graph::LayerMaskShape::Noise : graph::LayerMaskShape::Constant; maskChanged = true;
                 }
-                changed |= ui::PropertyFloat("被覆量", &mask.strength, 0, 1, 1, "この層を重ねる強さ");
+                maskChanged |= ui::PropertyFloat("被覆量", &mask.strength, 0, 1, 1, "この層を重ねる強さ");
                 int blend = layer.blendMode != 0 ? 1 : 0;
                 const char* blends[] = {"通常", "高さ"};
                 if (ui::PropertyCombo("合成", &blend, blends, 2, 0,
@@ -182,16 +184,16 @@ bool Application::DrawLayerMaterialProperties(compositor::MaterialAsset& asset) 
                     changed |= ui::PropertyFloat("境界の幅", &data.layerBlendRange, .001f, 1, .2f,
                                                  "高さで合成する境界の柔らかさ（全層で共通）");
                 if (mode) {
-                    changed |= ui::PropertyFloat("ムラのサイズ", &mask.noiseScaleMeters, .05f, 8, 1, "素材座標内のムラの大きさ");
-                    changed |= ui::PropertyFloat("しきい値", &mask.threshold, 0, 1, .5f, "高くすると被覆範囲が狭まる");
-                    changed |= ui::PropertyFloat("ぼかし", &mask.softness, .001f, 1, .2f, "ムラの境界の柔らかさ");
+                    maskChanged |= ui::PropertyFloat("ムラのサイズ", &mask.noiseScaleMeters, .05f, 8, 1, "素材座標内のムラの大きさ");
+                    maskChanged |= ui::PropertyFloat("しきい値", &mask.threshold, 0, 1, .5f, "高くすると被覆範囲が狭まる");
+                    maskChanged |= ui::PropertyFloat("ぼかし", &mask.softness, .001f, 1, .2f, "ムラの境界の柔らかさ");
                 }
                 ui::EndPropertyTable();
             }
             if (mode && ui::BeginPropertyTable("seedRows")) {
                 int seed = static_cast<int>(mask.seed);
-                if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1, "同じ値なら同じムラ")) { mask.seed = static_cast<uint32_t>(seed); changed = true; }
-                changed |= ui::PropertyBool("反転", &mask.invert, false);
+                if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1, "同じ値なら同じムラ")) { mask.seed = static_cast<uint32_t>(seed); maskChanged = true; }
+                maskChanged |= ui::PropertyBool("反転", &mask.invert, false);
                 ui::EndPropertyTable();
             }
             if (ImGui::TreeNode("詳細")) {
@@ -210,7 +212,10 @@ bool Application::DrawLayerMaterialProperties(compositor::MaterialAsset& asset) 
                 }
                 ImGui::TreePop();
             }
-            if (changed) layer.mask = mask;
+            if (maskChanged) {
+                layer.mask = mask;
+                changed = true;
+            }
         }
         ImGui::PopID();
     }

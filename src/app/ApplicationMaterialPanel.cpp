@@ -260,10 +260,12 @@ bool Application::DrawMaterialProperties(compositor::MaterialAsset& asset) {
     }
 
     ui::SectionHeader("マップ");
+    // 候補はルートのパスと関数を抱えるので、行ごとに作らず1回だけ作る。
+    const TextureChoices textureChoices = TextureChoicesForUi();
     if (ui::BeginPropertyTable("materialMapRows")) {
-        changed |= DrawTextureSlotRow("ベースカラー", asset.baseColor, TextureChoicesForUi(), &asset.mapUvSets,
+        changed |= DrawTextureSlotRow("ベースカラー", asset.baseColor, textureChoices, &asset.mapUvSets,
                                       compositor::MaterialMap::BaseColor);
-        changed |= DrawTextureSlotRow("法線", asset.normal, TextureChoicesForUi(), &asset.mapUvSets,
+        changed |= DrawTextureSlotRow("法線", asset.normal, textureChoices, &asset.mapUvSets,
                                       compositor::MaterialMap::Normal);
         if (asset.normal != compositor::kNoTexture) {
             changed |= ui::PropertyBool(
@@ -271,16 +273,16 @@ bool Application::DrawMaterialProperties(compositor::MaterialAsset& asset) {
                 "法線マップの規約。OpenGL（Megascans などの既定）は入、"
                 "DirectX 規約の素材は切る。切り替えて陰影が自然なほうが正しい");
         }
-        changed |= DrawMapSlotRow("ラフネス", asset.roughness, TextureChoicesForUi(), &asset.mapUvSets,
+        changed |= DrawMapSlotRow("ラフネス", asset.roughness, textureChoices, &asset.mapUvSets,
                                   compositor::MaterialMap::Roughness);
-        changed |= DrawMapSlotRow("メタルネス", asset.metallic, TextureChoicesForUi(), &asset.mapUvSets,
+        changed |= DrawMapSlotRow("メタルネス", asset.metallic, textureChoices, &asset.mapUvSets,
                                   compositor::MaterialMap::Metallic);
-        changed |= DrawMapSlotRow("AO", asset.ambientOcclusion, TextureChoicesForUi(), &asset.mapUvSets,
+        changed |= DrawMapSlotRow("AO", asset.ambientOcclusion, textureChoices, &asset.mapUvSets,
                                   compositor::MaterialMap::AmbientOcclusion);
-        changed |= DrawMapSlotRow("ハイト", asset.height, TextureChoicesForUi());
+        changed |= DrawMapSlotRow("ハイト", asset.height, textureChoices);
         {
             const compositor::TextureId before = asset.opacity.texture;
-            const bool slotChanged = DrawMapSlotRow("不透明度", asset.opacity, TextureChoicesForUi(),
+            const bool slotChanged = DrawMapSlotRow("不透明度", asset.opacity, textureChoices,
                                                    &asset.mapUvSets, compositor::MaterialMap::Opacity);
             // マップを付けたのに不透明のままだと何も起きないので、マスク抜きへ切り替える。
             if (slotChanged && before == compositor::kNoTexture && asset.opacity.texture != compositor::kNoTexture &&
@@ -298,7 +300,7 @@ bool Application::DrawMaterialProperties(compositor::MaterialAsset& asset) {
             ui::Scaled(60.0f),
             std::min(ui::Scaled(ui::kComboMaxWidth), ImGui::GetContentRegionAvail().x) -
                 ordButtonWidth - ordSpacing);
-        DrawTextureCombo("##ord", m_ordTexture, TextureChoicesForUi(), ordComboWidth);
+        DrawTextureCombo("##ord", m_ordTexture, textureChoices, ordComboWidth);
         ImGui::SameLine(0.0f, ordSpacing);
         ImGui::BeginDisabled(m_ordTexture == compositor::kNoTexture);
         if (ui::Button("割り当て")) {

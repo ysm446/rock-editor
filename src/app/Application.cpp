@@ -239,7 +239,6 @@ void Application::Shutdown() {
     m_skyLibrary.Destroy(m_device);
     m_textureLibrary.Destroy(m_device);
     m_renderer.Shutdown(m_device);
-    if (m_layerPreviewInitialized) m_layerPreview.Shutdown(m_device);
     m_imgui.Shutdown();
     m_pipelineCache.Destroy();
     m_shaderCompiler.Destroy();

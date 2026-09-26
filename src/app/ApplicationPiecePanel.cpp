@@ -205,8 +205,29 @@ void Application::DrawPieceSettings(graph::Node &node) {
         // 上流の入力は更新完了まで保持される。更新中も集計・層一覧を消さず、
         // 下部の高さが縮んでスクロール位置が巻き戻るのを防ぐ。
         if (hasInput) {
-            std::string error;
-            auto evaluated = geometry::SelectPieces(*m_pieceInput, *selection, error);
+            if (!m_pieceSelectSummary || m_pieceSelectSummary->input != m_pieceInput ||
+                !(m_pieceSelectSummary->settings == *selection)) {
+                PieceSelectSummary summary;
+                summary.input = m_pieceInput;
+                summary.settings = *selection;
+                summary.evaluated = geometry::SelectPieces(*m_pieceInput, *selection, summary.error);
+                if (summary.error.empty()) {
+                    auto candidateSettings = *selection;
+                    candidateSettings.fraction = 1; candidateSettings.rimFalloff = 0; candidateSettings.invert = false;
+                    std::string candidateError;
+                    // キャッシュの鍵と揃えるため、このフレームで変わった後の方式を使う。
+                    summary.candidateIds = selection->mode == Mode::Peel
+                        ? summary.evaluated.frontier
+                        : geometry::SelectPieces(*m_pieceInput, candidateSettings, candidateError).ids;
+                    summary.chosenIds = summary.evaluated.ids;
+                    std::sort(summary.chosenIds.begin(), summary.chosenIds.end());
+                    std::sort(summary.candidateIds.begin(), summary.candidateIds.end());
+                }
+                m_pieceSelectSummary = std::move(summary);
+            }
+            const PieceSelectSummary& summary = *m_pieceSelectSummary;
+            const geometry::PieceSelection& evaluated = summary.evaluated;
+            const std::string& error = summary.error;
             if (error.empty()) {
                 const size_t total = m_pieceInput->pieces.size();
                 if (ui::BeginPropertyTable("pieceSelectResult")) {
@@ -217,17 +238,11 @@ void Application::DrawPieceSettings(graph::Node &node) {
                     }
                     ui::EndPropertyTable();
                 }
-                auto candidateSettings = *selection;
-                candidateSettings.fraction = 1; candidateSettings.rimFalloff = 0; candidateSettings.invert = false;
-                auto candidates = geometry::PieceSelection{};
-                if (mode == Mode::Peel) candidates.ids = evaluated.frontier;
-                else candidates = geometry::SelectPieces(*m_pieceInput, candidateSettings, error);
                 // 上から下への積層図。層の厚さではなく、各層のピース数の内訳を示す。
                 bool hasLayers = false;
                 for (const auto& p : m_pieceInput->pieces) hasLayers |= p.layer >= 0;
-                auto chosenIds = evaluated.ids, candidateIds = candidates.ids;
-                std::sort(chosenIds.begin(), chosenIds.end());
-                std::sort(candidateIds.begin(), candidateIds.end());
+                const std::vector<uint32_t>& chosenIds = summary.chosenIds;
+                const std::vector<uint32_t>& candidateIds = summary.candidateIds;
                 if (hasLayers && ImGui::TreeNode("層ごとの選択（上 → 下）")) {
                     if (ui::BeginPropertyTable("pieceSelectLayers")) {
                         for (int layer = 31; layer >= 0; --layer) {

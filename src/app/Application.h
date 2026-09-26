@@ -147,8 +147,6 @@ private:
     void DrawGraphNodeNotes();
     // グラフのノード 1 枚。カード・ピン・リンクの当たり判定を描く。
     void DrawGraphNode(const graph::Node& node);
-    bool IsGraphPinVisible(const graph::Pin& pin) const;
-    void DrawGraphBackground(const ImVec2& min, const ImVec2& max);
     bool DrawLayerSettings(compositor::MaterialLayer& layer);
     // グラフの変更をメッシュシーンへ反映する。フレームの頭（フレームの外）で呼ぶ。
     void SyncMeshGraph();
@@ -174,6 +172,15 @@ private:
     graph::GraphId EvaluatingNode() const;
     std::string EvaluationProgressText() const;
     std::shared_ptr<const geometry::PieceCollection> m_pieceInput, m_piecePreview;
+    // Piece Select の設定欄の集計。選別は重いので、入力か設定が変わったときだけ計算し直す。
+    struct PieceSelectSummary {
+        std::shared_ptr<const geometry::PieceCollection> input;
+        geometry::PieceSelectSettings settings;
+        geometry::PieceSelection evaluated;
+        std::vector<uint32_t> chosenIds, candidateIds;  // 並べ替え済み
+        std::string error;
+    };
+    std::optional<PieceSelectSummary> m_pieceSelectSummary;
     // Scatter Points をプレビューしているときの点。ビューポートに 2D の点で重ねる。
     std::shared_ptr<const geometry::PointSet> m_pointPreview;
     graph::GraphId m_pieceInputNode = 0;
@@ -536,9 +543,6 @@ private:
     rhi::ShaderCompiler m_shaderCompiler;
     rhi::PipelineCache m_pipelineCache;
     renderer::PreviewRenderer m_renderer;
-    renderer::PreviewRenderer m_layerPreview;
-    bool m_layerPreviewInitialized = false;
-    bool m_layerPreviewDirty = true;
     // マテリアルプレビューの球。窓を開いている間だけ描く。
     renderer::MaterialSphere m_materialSphere;
     // 天球プレビューの球。同じく窓を開いている間だけ描く。
@@ -684,7 +688,6 @@ private:
     compositor::TextureId m_ordTexture = compositor::kNoTexture;
     // ライトの向きを掴んでいる間。ギズモは離してからも少しの間だけ残す。
     LightInteraction m_viewportLightInteraction;
-    LightInteraction m_layerLightInteraction;
     // マテリアルプレビューの L + ドラッグ。**シーンの太陽とは別に持つ。**
     // 一度も動かしていなければシーンの太陽の向きに合わせ、「光源を戻す」でそこへ戻る。
     LightInteraction m_materialPreviewLightInteraction;
