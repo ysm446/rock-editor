@@ -1832,7 +1832,7 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
     for (const auto& set : m_overlayLines) drawGuide(set);
     if (m_showHumanScale) {
         // Y軸だけを回すビルボード。頭頂から靴底までを指定身長に保つ。
-        // 不透明な単色の凸パーツを重ね、腕と胴・左右の脚の隙間を残す。
+        // 不透明な単色のパーツを重ね、腕と胴・左右の脚の隙間を残す。
         const auto right = m_camera.Basis().right;
         const float length = std::hypot(right.x, right.z);
         const float rx = length > 0.0001f ? right.x / length : 1.0f;
@@ -1856,31 +1856,49 @@ void PreviewRenderer::DrawGuideOverlay(rhi::Device& device,
                 person.points.push_back(point(p[i + 1]));
             }
         };
-        // 頭・首・上体・腰。
-        for (int i = 0; i < 32; ++i) {
-            const float a = XM_2PI * float(i) / 32.0f;
-            const float b = XM_2PI * float(i + 1) / 32.0f;
-            polygon({{0, 1.59f}, {0.085f * std::cos(a), 1.59f + 0.11f * std::sin(a)},
-                                  {0.085f * std::cos(b), 1.59f + 0.11f * std::sin(b)}});
+        // 上から順に {中心 x, 高さ y, 半幅} の断面を並べ、隣り合う断面を台形でつなぐ。
+        // 凸でない輪郭（首の付け根・腰のくびれ）もそのまま描ける。
+        const auto strip = [&](float side, const XMFLOAT3* rows, size_t count) {
+            for (size_t i = 0; i + 1 < count; ++i) {
+                const XMFLOAT3& a = rows[i];
+                const XMFLOAT3& b = rows[i + 1];
+                polygon({{side * (a.x - a.z), a.y}, {side * (a.x + a.z), a.y},
+                         {side * (b.x + b.z), b.y}, {side * (b.x - b.z), b.y}});
+            }
+        };
+        const auto limb = [&](float side, std::initializer_list<XMFLOAT3> rows) {
+            strip(side, rows.begin(), rows.size());
+        };
+        // 身長 1.70 m の標準的な成人の比率（約 7.5 頭身）。頭頂 1.70、顎 1.47、
+        // 肩峰 1.39、肘 1.07、股 0.80、手首 0.82、指先 0.64、膝 0.49、足首 0.07。
+        XMFLOAT3 head[17];
+        for (int i = 0; i <= 16; ++i) {
+            const float t = XM_PI * float(i) / 16.0f;
+            const float y = 0.115f * std::cos(t);
+            // 下半分は顎へ向けて少し細くする。
+            const float jaw = y < 0.0f ? 1.0f + 0.2f * y / 0.115f : 1.0f;
+            head[i] = {0.0f, 1.585f + y, 0.078f * std::sin(t) * jaw};
         }
-        polygon({{-0.045f, 1.51f}, {0.045f, 1.51f}, {0.05f, 1.40f}, {-0.05f, 1.40f}});
-        polygon({{-0.05f, 1.44f}, {0.05f, 1.44f}, {0.19f, 1.38f}, {0.15f, 1.19f},
-                 {0.115f, 1.02f}, {-0.115f, 1.02f}, {-0.15f, 1.19f}, {-0.19f, 1.38f}});
-        polygon({{-0.115f, 1.06f}, {0.115f, 1.06f}, {0.14f, 0.86f}, {0.08f, 0.78f},
-                 {-0.08f, 0.78f}, {-0.14f, 0.86f}});
+        strip(1.0f, head, 17);
+        limb(1.0f, {{0, 1.52f, 0.047f}, {0, 1.46f, 0.052f}, {0, 1.44f, 0.08f},
+                    {0, 1.425f, 0.13f}, {0, 1.41f, 0.17f}, {0, 1.395f, 0.195f},
+                    {0, 1.37f, 0.20f}, {0, 1.30f, 0.178f}, {0, 1.22f, 0.160f},
+                    {0, 1.12f, 0.145f}, {0, 1.04f, 0.137f}, {0, 0.98f, 0.150f},
+                    {0, 0.92f, 0.165f}, {0, 0.86f, 0.162f}, {0, 0.82f, 0.11f},
+                    {0, 0.79f, 0.02f}});
         for (float side : {-1.0f, 1.0f}) {
-            polygon({{side * 0.15f, 1.39f}, {side * 0.215f, 1.35f},
-                     {side * 0.27f, 1.12f}, {side * 0.20f, 1.10f}});
-            polygon({{side * 0.20f, 1.14f}, {side * 0.27f, 1.14f},
-                     {side * 0.30f, 0.94f}, {side * 0.245f, 0.92f}});
-            polygon({{side * 0.245f, 0.96f}, {side * 0.30f, 0.96f},
-                     {side * 0.305f, 0.87f}, {side * 0.28f, 0.84f}, {side * 0.25f, 0.88f}});
-            polygon({{side * 0.015f, 0.88f}, {side * 0.14f, 0.89f},
-                     {side * 0.155f, 0.49f}, {side * 0.065f, 0.47f}});
-            polygon({{side * 0.065f, 0.51f}, {side * 0.155f, 0.51f},
-                     {side * 0.145f, 0.08f}, {side * 0.085f, 0.08f}});
-            polygon({{side * 0.085f, 0.10f}, {side * 0.145f, 0.10f},
-                     {side * 0.20f, 0.04f}, {side * 0.20f, 0.0f}, {side * 0.075f, 0.0f}});
+            // 腕は体側からわずかに離して下ろす。
+            limb(side, {{0.175f, 1.415f, 0.02f}, {0.19f, 1.405f, 0.036f}, {0.205f, 1.375f, 0.045f},
+                        {0.222f, 1.28f, 0.040f}, {0.228f, 1.16f, 0.034f}, {0.233f, 1.07f, 0.031f},
+                        {0.240f, 0.98f, 0.031f}, {0.246f, 0.88f, 0.024f}, {0.249f, 0.83f, 0.021f},
+                        {0.251f, 0.80f, 0.027f}, {0.252f, 0.72f, 0.025f}, {0.248f, 0.66f, 0.016f},
+                        {0.245f, 0.64f, 0.006f}});
+            limb(side, {{0.090f, 0.88f, 0.080f}, {0.092f, 0.78f, 0.078f}, {0.090f, 0.65f, 0.066f},
+                        {0.088f, 0.52f, 0.050f}, {0.088f, 0.485f, 0.047f}, {0.088f, 0.44f, 0.046f},
+                        {0.090f, 0.36f, 0.052f}, {0.090f, 0.25f, 0.042f}, {0.090f, 0.12f, 0.030f},
+                        {0.090f, 0.07f, 0.029f}});
+            polygon({{side * 0.062f, 0.075f}, {side * 0.118f, 0.075f}, {side * 0.14f, 0.025f},
+                     {side * 0.135f, 0.0f}, {side * 0.05f, 0.0f}, {side * 0.048f, 0.025f}});
         }
         drawGuide(person);
     }
