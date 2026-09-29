@@ -811,7 +811,8 @@ bool Application::HandleModelInstanceInput(bool itemActive, bool itemHovered, co
     const bool hasGizmo = NodeTransform(m_selectedGraphNode, selected) && NodeGizmoFrame(m_selectedGraphNode, pivot, parent);
     if (hasGizmo && !selected.scale && m_modelGizmoMode == ModelGizmoMode::Scale)
         m_modelGizmoMode = ModelGizmoMode::Translate;
-    if (itemHovered && !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && hasGizmo) {
+    // フライ中（右ボタンを押している間）の W / E は移動なので、ギズモの切り替えに渡さない。
+    if (itemHovered && !io.WantTextInput && !io.KeyCtrl && !io.KeyAlt && !m_fly.held && hasGizmo) {
         // W / E / R はモデルのギズモ。ノード用のギズモから戻る。
         const auto choose = [&](ModelGizmoMode mode) {
             m_modelGizmoMode = mode;

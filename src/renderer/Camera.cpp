@@ -74,6 +74,23 @@ void Camera::Dolly(float deltaPixels) {
     Zoom(deltaPixels * kDollyNotchPerPixel);
 }
 
+// 目の位置を保ったまま向きだけ変える。m_yaw / m_pitch は「注視点から目への向き」なので、
+// 符号は Orbit と同じでよい（右へ動かすと右を向き、下へ動かすと下を向く）。
+void Camera::Look(float deltaYaw, float deltaPitch) {
+    const XMFLOAT3 eye = Position();
+    m_yaw -= deltaYaw;
+    m_pitch = std::clamp(m_pitch + deltaPitch, -kPitchLimit, kPitchLimit);
+    m_target = XMFLOAT3{eye.x - m_distance * std::cos(m_pitch) * std::sin(m_yaw),
+                        eye.y - m_distance * std::sin(m_pitch),
+                        eye.z - m_distance * std::cos(m_pitch) * std::cos(m_yaw)};
+}
+
+void Camera::Translate(const XMFLOAT3& delta) {
+    m_target.x += delta.x;
+    m_target.y += delta.y;
+    m_target.z += delta.z;
+}
+
 void Camera::Focus(const XMFLOAT3& center) {
     m_target = center;
 }

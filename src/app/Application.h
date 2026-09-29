@@ -520,8 +520,15 @@ private:
     void HandleMeshHover(bool itemHovered, const ImVec2& viewportMin, const ImVec2& viewportMax);
     bool HandleLightDrag(renderer::LightSettings& light, LightInteraction& interaction, bool itemActive);
     // ビューポート上の F / A キーで視点をメッシュへ戻す。
+    // flying はフライ中（右ボタンを押している間）。ホイールのズームと F / A を止める。
     void HandleCameraInput(renderer::PreviewRenderer& preview, bool itemActive, bool itemHovered,
-                           bool includeReferenceGrid = false);
+                           bool includeReferenceGrid = false, bool flying = false);
+    // フライの入力。ビューポートの不可視ボタンの直後に呼ぶ。右ボタンを押している間は true。
+    bool HandleFlyCamera(bool itemActive, bool enabled);
+    // フライの速さ（m/s、Shift を含まない）。被写体の大きさから決める基準 × 倍率。
+    float FlySpeed() const;
+    // ホイールで速さを変えた直後だけ、ビューポートの下の中央に速さを出す。
+    void DrawFlySpeed(const ImVec2& viewportMin, const ImVec2& viewportMax);
     // ライトの向きを示すギズモ。動かしている間と、その直後だけ出す。
     void DrawLightGizmo(const renderer::LightSettings& light, const LightInteraction& interaction,
                         const renderer::Camera& camera, const ImVec2& viewportMin, const ImVec2& viewportMax);
@@ -688,6 +695,16 @@ private:
     compositor::TextureId m_ordTexture = compositor::kNoTexture;
     // ライトの向きを掴んでいる間。ギズモは離してからも少しの間だけ残す。
     LightInteraction m_viewportLightInteraction;
+    // フライ（UE5 / terrain-graph と同じ）: ビューポートで右ボタンを押している間、
+    // マウスで見回し WASD / QE で動く。
+    struct FlyCamera {
+        bool held = false;     // ビューポートで右ボタンを押している
+        bool active = false;   // この押下でフライになった（見回したか、キーで動いた）
+        float dragPixels = 0;  // 押してから動いた量（フライになるまで）
+        int anchorX = 0, anchorY = 0;  // 押した位置（画面座標）。見回す間はここへカーソルを戻す
+        float speedScale = 1;          // ホイールで変える速さの倍率
+        double speedShownUntil = 0;    // 速さを表示する時刻（ImGui::GetTime）
+    } m_fly;
     // マテリアルプレビューの L + ドラッグ。**シーンの太陽とは別に持つ。**
     // 一度も動かしていなければシーンの太陽の向きに合わせ、「光源を戻す」でそこへ戻る。
     LightInteraction m_materialPreviewLightInteraction;
