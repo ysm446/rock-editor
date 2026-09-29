@@ -72,6 +72,8 @@ struct SceneMesh {
     // 接続すべき二辺の頂点。位置の一致から逆算せず、生成時の隣接関係を記録する。
     std::vector<std::array<uint32_t, 4>> connectionSeams;
     MaterialSettings material;
+    // Rock Asset の LOD の段（色分け表示に使う）。LOD でないメッシュは -1。
+    int lod = -1;
     compositor::MaterialMapping mapping;
     // 道路の表示用メタデータ。0は道路以外。生成時に再構築する。
     float roadMetersPerUv = 0.0f;

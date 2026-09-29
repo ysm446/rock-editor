@@ -99,6 +99,9 @@ enum class NodeKind : uint32_t {
     VolumeEdgeWear = 65,
     // Volume を水平な平面で切り、片側（既定は下）を捨てる。
     VolumeClip = 71,
+    // 岩グラフの最終段。入力のメッシュから段階的な LOD を作り、この岩グラフの岩アセットにする。
+    // 出力は LOD0（Mesh Output へ繋いで表示できる）。選ぶとビューポートで LOD を切り替えて見られる。
+    RockAsset = 72,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -170,6 +173,25 @@ struct MaterialBakeSettings {
     std::string fingerprint;
 };
 
+// Rock Asset。入力のメッシュから LOD0〜LODn を作る。LOD0 は入力そのもの（maxTriangles を超えるときだけ減らす）。
+// LOD1 以降は 1 つ前の段を Decimate（UV の島の境界を固定して UV を保つ）で減らすので、全段が同じ UV を持ち、
+// 同じテクスチャ（Material Bake の結果など）をそのまま使える。
+inline constexpr int kMaxRockAssetLods = 6;
+inline constexpr int kMinRockAssetTriangles = 64;
+inline constexpr int kMaxRockAssetTriangles = 500000;
+struct RockAssetSettings {
+    // LOD の段数（LOD0 を含む）。1〜kMaxRockAssetLods。
+    int lodCount = 4;
+    // LOD0 の三角形数の上限。入力がこれを超えるときだけ LOD0 を減らす。
+    int maxTriangles = 20000;
+    // 段ごとの三角形数。LOD0 に対する割合（%）。[0] は使わない（LOD0 は常に 100%）。
+    std::array<float, kMaxRockAssetLods> trianglePercent = {100.0f, 50.0f, 25.0f, 12.5f, 6.25f, 3.125f};
+    // その段へ切り替える画面上の大きさ。岩を包む球の直径が画面の高さに占める割合。
+    // これを下回ったらその段にする（UE の Screen Size と同じ考え方）。[0] は使わない。
+    std::array<float, kMaxRockAssetLods> screenSize = {1.0f, 0.5f, 0.25f, 0.12f, 0.06f, 0.03f};
+    bool operator==(const RockAssetSettings&) const = default;
+};
+
 // モデル。model は Application のモデル一覧の ID（0 = なし）。position はモデルの底面の中心の位置（m）、
 // 倍率はモデルアセットの倍率に掛ける。
 // 回転は X・Y・Z 軸まわりの角度（度）で、Z → X → Y の順に回す（DirectX の RollPitchYaw と同じ）。
@@ -215,7 +237,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
-                                  geometry::PieceTransformSettings, std::monostate>;
+                                  geometry::PieceTransformSettings, RockAssetSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;

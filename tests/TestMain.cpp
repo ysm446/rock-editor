@@ -24,6 +24,7 @@ void RunVolumeTerraceTests();
 void RunVolumeCloseTests();
 void RunDecimateTests();
 void RunRemeshTests();
+void RunRockAssetTests();
 void RunUvTests();
 void RunShadowCascadeTests();
 void RunMeshSceneTests();
@@ -69,6 +70,7 @@ int main(int argc, char** argv) {
     RunVolumeCloseTests();
     RunDecimateTests();
     RunRemeshTests();
+    RunRockAssetTests();
     RunUvTests();
     RunShadowCascadeTests();
     RunMeshSceneTests();

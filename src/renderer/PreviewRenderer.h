@@ -48,6 +48,15 @@ enum class DebugView : uint32_t {
     // 合成結果から切り離し、単色マテリアルと**面の向き**（画面微分で起こした法線）
     // で陰影を付ける。法線マップに隠れない、実際のポリゴンの形が見える。
     Clay = 10,
+    // **LOD を色分けする表示**（UE5 の LOD Coloration と同じ配色。terrain-graph から移植）。
+    // クレイと同じ陰影で、Rock Asset の LOD のメッシュだけベースカラーを段の色にする。
+    Lod = 11,
+};
+
+// LOD の色分け表示の色（リニア）。UE5 の LOD Coloration と同じ並び。8 段目以降も最後の色。
+inline constexpr DirectX::XMFLOAT3 kLodDebugColors[] = {
+    {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f},
+    {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.5f, 0.0f},
 };
 
 enum class TonemapMode : uint32_t {

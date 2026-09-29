@@ -68,6 +68,10 @@ rock::StartupOptions ParseCommandLine() {
             options.testDelete = true;
         } else if (argument == L"--select-node" && (i + 1) < argc) {
             options.selectNode = ::_wtoi(argv[++i]);
+        } else if (argument == L"--rock-asset-lod" && (i + 1) < argc) {
+            options.rockAssetLod = ::_wtoi(argv[++i]);
+        } else if (argument == L"--view" && (i + 1) < argc) {
+            options.debugView = ::_wtoi(argv[++i]);
         } else if (argument == L"--bake-node" && (i + 1) < argc) {
             options.bakeNode = ::_wtoi(argv[++i]);
             options.exportBakeNode = options.bakeNode;

@@ -171,6 +171,7 @@ static const float kLocalHeightGain = 16.0f;
 #define ROCK_VIEW_HEIGHT_LOCAL    8
 #define ROCK_VIEW_WIREFRAME       9
 #define ROCK_VIEW_CLAY            10
+#define ROCK_VIEW_LOD             11
 
 ConstantBuffer<MeshConstants> g_mesh : register(b1);
 
@@ -1020,7 +1021,8 @@ float4 PsMain(VsOutput input) : SV_Target0
 
     // **クレイ表示**は、形（変位）はそのままで陰影だけをテクスチャ抜きにする。
     // 合成の色 / 法線 / サーフェスを読まず、単色マテリアルと面の向きで塗る。
-    const bool clay = (g_mesh.debugView == ROCK_VIEW_CLAY);
+    // LOD の色分けもクレイと同じ陰影にする（ベースカラーは C++ 側で段の色にしてある）。
+    const bool clay = (g_mesh.debugView == ROCK_VIEW_CLAY) || (g_mesh.debugView == ROCK_VIEW_LOD);
     const bool useMaterialShading = (g_mesh.useMaterialTextures != 0u) && !clay && !uvChecker;
     const bool appliedOverrides = g_mesh.appliedCount != 0u && !uvChecker && !clay;
 

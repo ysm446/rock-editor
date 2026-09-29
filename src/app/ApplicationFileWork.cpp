@@ -378,6 +378,11 @@ void Application::ProcessPendingFileWork() {
                 ROCK_LOG_INFO("ファイルが無く、どこからも使われていないテクスチャを %zu 件外しました", pruned);
             m_selectedGraphNode = m_graph.FindNode(m_options.selectNode) ? m_options.selectNode : 0;
             m_options.selectNode = 0;
+            m_rockAssetEvaluation.reset();
+            m_rockAssetView = {};
+            if (m_options.rockAssetLod >= -1) m_rockAssetLodMode = std::min(m_options.rockAssetLod, graph::kMaxRockAssetLods - 1);
+            if (m_options.debugView >= 0 && m_options.debugView <= int(renderer::DebugView::Lod))
+                m_renderer.Debug() = static_cast<renderer::DebugView>(m_options.debugView);
             ++m_pieceEpoch;
             m_pendingBake = 0;
             m_bakeStatus.clear(); m_bakeImages.clear(); m_shapeMaskTextures.clear();

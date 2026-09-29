@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-30 06:20
+更新日時: 2026-09-30 08:55
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,15 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-09-30 Rock Asset ノード（LOD）と LOD の色分け
+
+- 計画の A1〜A2 のうち、LOD の生成とビューポートでの確認までを実装した。仕様は [Rock Asset](../reference/rock-asset.md)。Rock Asset は入力のメッシュから LOD0〜LODn（既定 4 段）を Decimate で作り、全段が同じ UV を持つ。出力は LOD0。評価結果の `GeneratedRock::lods` に全段、`bakeMesh` に減らす前のメッシュ（Material Bake の結果の照合用）を持つ。
+- 選ぶとビューポート左上に LOD の切り替え（自動 / 固定）を出す。段の切り替えは評価し直さず、直近の結果（`m_rockAssetEvaluation`）からメッシュだけを差し替える。表示モード「LOD（色分け）」（`DebugView::Lod`）を terrain-graph から移植した。
+- Decimate が継ぎ目に触れる辺を全て断っていたため、細かい段が目標に届かなかった（uv-bake のサンプルで LOD2 1,876 / LOD3 1,866）。継ぎ目の頂点へ寄せる縮約と、継ぎ目に沿った縮約を足して、LOD2 1,050 / LOD3 524 まで減るようにした。
+- Debug ビルド警告 0、全テスト成功（`tests/RockAssetTests.cpp` を追加）。`examples/rock-asset/` で固定の段、クレイ、陰影（チェッカーの模様が継ぎ目でそろうこと）、色分けと凡例を画像で確認（`build/rock-asset-validation/`）。
+- 未確認: Material Bake の結果を LOD1 以降に貼った見た目（ベイクするとプレビューが Material Bake へ移るため、起動引数だけでは撮れない。指紋の照合はコードとテストで確認）、実マウスでの LOD のボタンと自動の切り替え、保存 → 再読込での設定の復元。
+- 次: 付属フォルダへ焼いて保存する（A1 の残り）、変種（A3）。
 
 ### 2026-09-30 岩アセットと山グラフの計画（未着手）
 

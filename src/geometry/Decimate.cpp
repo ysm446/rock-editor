@@ -60,13 +60,27 @@ constexpr double kMinTriangleQuality = .05;
 // 優先順位へ足し、短い辺から縮約して三角形の大きさを揃える。形のずれの判定には含めない。
 constexpr double kEdgeLengthPriority = 1e-4;
 
+// 縮約の種類。UV を持つメッシュでは、島の境界（継ぎ目）の頂点の扱いで分ける。
+enum class CollapseMode : uint8_t {
+    // 両端とも島の内部。位置と UV を辺の上で同じ比率に補間する。
+    Interior,
+    // 島の内部の頂点 b を、継ぎ目の頂点 a へ寄せる。a は動かさず、b の面は a のその島での UV を使う。
+    OntoSeam,
+    // 継ぎ目に沿って b を a へ寄せる。b は継ぎ目 1 本の上にあり（UV が 2 つ）、両側の島の UV をそれぞれ a の UV へ移す。
+    AlongSeam,
+};
+
 struct Candidate {
     // priority は取り出す順序、cost は形のずれ（面からの距離の二乗の重み付き和）。
     double priority = 0;
     double cost = 0;
+    // a が残る頂点、b が消える頂点。
     uint32_t a = 0, b = 0, versionA = 0, versionB = 0;
     P position{};
     Mesh::Uv uv{};
+    CollapseMode mode = CollapseMode::Interior;
+    // AlongSeam のとき。b の UV（両側の島）と、それぞれを置き換える a の UV。
+    std::array<Mesh::Uv, 2> fromUv{}, toUv{};
 };
 // 誤差の小さい縮約から取り出す。同じ誤差は頂点番号で順序を決め、結果を再現できるようにする。
 struct Later {
@@ -110,9 +124,51 @@ struct Simplifier {
         std::sort(out.begin(), out.end());
         out.erase(std::unique(out.begin(), out.end()), out.end());
     }
+    // 面 f の頂点 v の UV。
+    Mesh::Uv CornerUv(uint32_t f, uint32_t v) const {
+        const auto& face = faces[f];
+        for (int k = 0; k < 3; ++k)
+            if (face.v[k] == v) return face.uv[k];
+        return {};
+    }
+    // 辺 ab を挟む 2 面。閉じた多様体なので必ず 2 面だが、壊れていれば false。
+    bool EdgeFaces(uint32_t a, uint32_t b, std::array<uint32_t, 2>& out) const {
+        size_t count = 0;
+        for (const uint32_t f : vertices[b].faces) {
+            const auto& face = faces[f];
+            if (face.v[0] != a && face.v[1] != a && face.v[2] != a) continue;
+            if (count == 2) return false;
+            out[count++] = f;
+        }
+        return count == 2;
+    }
+    // 縮約した後の、面 f の k 番目の角の UV。
+    Mesh::Uv NewUv(const Candidate& c, const Face& face, int k) const {
+        const uint32_t v = face.v[k];
+        switch (c.mode) {
+        case CollapseMode::Interior:
+            return (v == c.a || v == c.b) ? c.uv : face.uv[k];
+        case CollapseMode::OntoSeam:
+            return v == c.b ? c.uv : face.uv[k];
+        case CollapseMode::AlongSeam:
+            if (v != c.b) return face.uv[k];
+            return face.uv[k] == c.fromUv[0] ? c.toUv[0] : c.toUv[1];
+        }
+        return face.uv[k];
+    }
     void Push(uint32_t a, uint32_t b) {
         if (a > b) std::swap(a, b);
-        if (hasUvs && (vertices[a].seam || vertices[b].seam)) return;
+        if (hasUvs && (vertices[a].seam || vertices[b].seam)) {
+            if (vertices[a].seam && vertices[b].seam) {
+                PushAlongSeam(a, b);
+                PushAlongSeam(b, a);
+            } else if (vertices[a].seam) {
+                PushOntoSeam(a, b);
+            } else {
+                PushOntoSeam(b, a);
+            }
+            return;
+        }
         Quadric q = vertices[a].quadric;
         q.Add(vertices[b].quadric);
         const P &pa = vertices[a].position, &pb = vertices[b].position;
@@ -149,6 +205,51 @@ struct Simplifier {
         c.cost = std::max(c.cost, 0.0);
         c.priority = c.cost + kEdgeLengthPriority * edge * edge * q.weight;
         queue.push(c);
+    }
+    // 継ぎ目の頂点へ寄せる縮約は、残る頂点を動かさない（両側の島の UV をずらさないため）。
+    void PushFixed(Candidate& c, double seamPenalty) {
+        Quadric q = vertices[c.a].quadric;
+        q.Add(vertices[c.b].quadric);
+        c.versionA = vertices[c.a].version;
+        c.versionB = vertices[c.b].version;
+        c.position = vertices[c.a].position;
+        c.cost = std::max(q.Cost(c.position), 0.0);
+        const double edge = Length(Sub(vertices[c.a].position, vertices[c.b].position));
+        c.priority = c.cost + kEdgeLengthPriority * seamPenalty * edge * edge * q.weight;
+        queue.push(c);
+    }
+    void PushOntoSeam(uint32_t keep, uint32_t gone) {
+        std::array<uint32_t, 2> shared;
+        if (!EdgeFaces(keep, gone, shared)) return;
+        // gone は島の内部なので、辺を挟む 2 面は同じ島。keep のその島での UV は 1 つに決まる。
+        const Mesh::Uv uv = CornerUv(shared[0], keep);
+        if (!(uv == CornerUv(shared[1], keep))) return;
+        Candidate c;
+        c.a = keep;
+        c.b = gone;
+        c.mode = CollapseMode::OntoSeam;
+        c.uv = uv;
+        PushFixed(c, 1.0);
+    }
+    void PushAlongSeam(uint32_t keep, uint32_t gone) {
+        std::array<uint32_t, 2> shared;
+        if (!EdgeFaces(keep, gone, shared)) return;
+        const Mesh::Uv from0 = CornerUv(shared[0], gone), from1 = CornerUv(shared[1], gone);
+        // 辺そのものが継ぎ目でなければ（島の内部を横切る辺）、縮約すると片側の島だけ形が崩れる。
+        if (from0 == from1) return;
+        // gone は継ぎ目 1 本の上だけにあること（UV が 2 つ）。3 つ以上の島が集まる頂点は動かさない。
+        for (const uint32_t f : vertices[gone].faces) {
+            const Mesh::Uv uv = CornerUv(f, gone);
+            if (!(uv == from0) && !(uv == from1)) return;
+        }
+        Candidate c;
+        c.a = keep;
+        c.b = gone;
+        c.mode = CollapseMode::AlongSeam;
+        c.fromUv = {from0, from1};
+        c.toUv = {CornerUv(shared[0], keep), CornerUv(shared[1], keep)};
+        // 継ぎ目は両側の島の模様がつながる所なので、内部より後に減らす。
+        PushFixed(c, 4.0);
     }
     // 縮約しても閉じた多様体のままか、面が裏返らないかを調べる。
     bool CanCollapse(const Candidate& c) {
@@ -191,8 +292,7 @@ struct Simplifier {
                 if (hasA && hasB) continue;  // この2面は消える。
                 if (hasUvs) {
                     auto afterUv = face.uv;
-                    for (int k = 0; k < 3; ++k)
-                        if (face.v[k] == c.a || face.v[k] == c.b) afterUv[k] = c.uv;
+                    for (int k = 0; k < 3; ++k) afterUv[k] = NewUv(c, face, k);
                     const auto area = [](const auto& uv) {
                         return double(uv[1].u-uv[0].u)*(uv[2].v-uv[0].v) - double(uv[1].v-uv[0].v)*(uv[2].u-uv[0].u);
                     };
@@ -224,12 +324,16 @@ struct Simplifier {
                 for (const uint32_t v : face.v)
                     if (v != c.b) std::erase(vertices[v].faces, f);
             } else {
+                // 継ぎ目の縮約では、消える頂点の角の UV を残る頂点のその島での UV にする（置き換える前に読む）。
+                if (hasUvs && c.mode != CollapseMode::Interior)
+                    for (int k = 0; k < 3; ++k)
+                        if (face.v[k] == c.b) face.uv[k] = NewUv(c, face, k);
                 for (uint32_t& v : face.v)
                     if (v == c.b) v = c.a;
                 keep.faces.push_back(f);
             }
         }
-        if (hasUvs) {
+        if (hasUvs && c.mode == CollapseMode::Interior) {
             for (const auto f : keep.faces)
                 for (int k = 0; k < 3; ++k) if (faces[f].v[k] == c.a) faces[f].uv[k] = c.uv;
             keep.uv = c.uv;

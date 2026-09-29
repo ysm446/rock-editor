@@ -340,7 +340,7 @@ struct TonemapConstants {
 // 陰影は本物なので、背景・被写界深度・露出・トーンマップはシェーディングと同じ）。
 // チャンネルを覗く表示だけが、値をそのまま画面へ出す。
 bool IsShadedView(DebugView view) {
-    return view == DebugView::Shaded || view == DebugView::Clay;
+    return view == DebugView::Shaded || view == DebugView::Clay || view == DebugView::Lod;
 }
 
 }  // namespace
@@ -1301,6 +1301,9 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
             }
             const auto& material = m_meshScene.meshes[i].material;
             drawConstants.baseColor = material.baseColor;
+            // LOD の色分け。陰影はクレイと同じ（シェーダ側）で、ベースカラーだけ段の色にする。
+            if (displayView == DebugView::Lod && m_meshScene.meshes[i].lod >= 0)
+                drawConstants.baseColor = kLodDebugColors[std::min<size_t>(size_t(m_meshScene.meshes[i].lod), std::size(kLodDebugColors) - 1)];
             drawConstants.roughness = material.roughness;
             drawConstants.metallic = material.metallic;
             const auto& mapping = m_meshScene.meshes[i].mapping;

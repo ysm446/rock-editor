@@ -183,6 +183,87 @@ std::string GroupDigits(uint64_t value) {
     return digits;
 }
 
+// 岩を包む球の直径が画面の高さに占める割合。距離 d で画面の高さに写る範囲は 2 d tan(画角 / 2) なので、
+// 直径 2r との比は r / (d tan(画角 / 2))。球の中にカメラがあるときは画面を覆うので大きな値を返す。
+float Application::RockAssetScreenSize() const {
+    const renderer::Camera& camera = m_renderer.GetCamera();
+    const DirectX::XMFLOAT3 eye = camera.Position();
+    const float dx = eye.x - m_rockAssetView.center.x, dy = eye.y - m_rockAssetView.center.y,
+                dz = eye.z - m_rockAssetView.center.z;
+    const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    if (m_rockAssetView.radius <= 0.0f || distance <= m_rockAssetView.radius) return 10.0f;
+    return m_rockAssetView.radius / (distance * std::tan(camera.FovY() * 0.5f));
+}
+
+// 固定ならその段。自動なら、画面上の大きさが「LODnの切替」を下回った段のうち最も粗いもの。
+int Application::RockAssetWantedLod(graph::GraphId previewNode) const {
+    if (previewNode == 0 || m_rockAssetView.node != previewNode || m_rockAssetView.triangles.empty()) return 0;
+    const int last = static_cast<int>(m_rockAssetView.triangles.size()) - 1;
+    if (m_rockAssetLodMode >= 0) return std::min(m_rockAssetLodMode, last);
+    const graph::Node* node = m_graph.FindNode(previewNode);
+    const auto* settings = node ? std::get_if<graph::RockAssetSettings>(&node->settings) : nullptr;
+    if (settings == nullptr) return 0;
+    const float size = RockAssetScreenSize();
+    int lod = 0;
+    for (int level = 1; level <= last && level < graph::kMaxRockAssetLods; ++level)
+        if (size < settings->screenSize[level]) lod = level;
+    return lod;
+}
+
+// 表示モードのボタンの右に「LOD 自動 0 1 2 3」と、いま出している段を並べる。
+// 段の切り替えは評価し直さず、SyncMeshGraph が直近の結果からメッシュだけを差し替える。
+void Application::DrawRockAssetLodControls() {
+    if (m_rockAssetView.node == 0 || m_rockAssetView.node != m_meshGraphPreviewNode || m_rockAssetView.triangles.empty()) {
+        return;
+    }
+    const int count = static_cast<int>(m_rockAssetView.triangles.size());
+    const bool lodView = m_renderer.Debug() == renderer::DebugView::Lod;
+    ImGui::SameLine();
+    const auto choice = [&](const char* label, int mode, const std::string& tooltip) {
+        const bool active = m_rockAssetLodMode == mode;
+        // 選んでいる段は、チェックの色を下地にして一目で分かるようにする。
+        if (active) {
+            ImVec4 color = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
+            color.w = 0.55f;
+            ImGui::PushStyleColor(ImGuiCol_Button, color);
+        }
+        if (ImGui::Button(label)) m_rockAssetLodMode = mode;
+        if (active) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip.c_str());
+    };
+    choice("LOD 自動##rockAssetLod", -1, "カメラから見た大きさで段を切り替えます（Rock Asset の「LODnの切替」）");
+    for (int level = 0; level < count; ++level) {
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        char label[32] = {};
+        std::snprintf(label, sizeof(label), "%d##rockAssetLod%d", level, level);
+        choice(label, level, "LOD" + std::to_string(level) + " に固定（" + GroupDigits(m_rockAssetView.triangles[level]) + " 三角形）");
+        // 色分け表示のときは、ボタンの下端に段の色を引いて凡例を兼ねる。
+        if (lodView) {
+            const auto& color = renderer::kLodDebugColors[std::min<size_t>(size_t(level), std::size(renderer::kLodDebugColors) - 1)];
+            const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(min.x + 2.0f, max.y - ui::Scaled(3.0f)), ImVec2(max.x - 2.0f, max.y),
+                ImGui::ColorConvertFloat4ToU32(ImVec4(color.x, color.y, color.z, 1.0f)));
+        }
+    }
+    // いま出している段。画像の上でも読めるよう下地を敷く。
+    const int shown = std::clamp(m_rockAssetView.shown, 0, count - 1);
+    char text[128] = {};
+    if (m_rockAssetLodMode < 0)
+        std::snprintf(text, sizeof(text), "LOD%d · %s 三角形 · 画面 %.2f", shown,
+                      GroupDigits(m_rockAssetView.triangles[shown]).c_str(), RockAssetScreenSize());
+    else
+        std::snprintf(text, sizeof(text), "LOD%d · %s 三角形", shown, GroupDigits(m_rockAssetView.triangles[shown]).c_str());
+    ImGui::SameLine();
+    const ImVec2 padding(ui::Scaled(6.0f), ImGui::GetStyle().FramePadding.y);
+    const ImVec2 size = ImGui::CalcTextSize(text);
+    const ImVec2 position = ImGui::GetCursorScreenPos();
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(position, ImVec2(position.x + size.x + padding.x * 2.0f, position.y + size.y + padding.y * 2.0f),
+                            IM_COL32(20, 20, 20, 200), ui::Scaled(4.0f));
+    drawList->AddText(ImVec2(position.x + padding.x, position.y + padding.y), ImGui::GetColorU32(ImGuiCol_Text), text);
+    ImGui::Dummy(ImVec2(size.x + padding.x * 2.0f, size.y + padding.y * 2.0f));
+}
+
 // ビューポートに重ねる操作。表示モードの切り替えと、重ねる情報の切り替え。
 //
 // トップメニューではなくビューポートの中に置く。見ている場所から目を離さずに
@@ -267,6 +348,9 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
         }
         ImGui::EndPopup();
     }
+
+    // Rock Asset を出しているときは、その右に LOD の切り替えを並べる。
+    DrawRockAssetLodControls();
 
     // ノード設定欄が閉じていても、生成できない理由をビューポートで確認できるようにする。
     if (!m_meshGraphError.empty()) {

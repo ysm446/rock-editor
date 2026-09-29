@@ -145,7 +145,7 @@ compositor::TextureId Application::ShapeMaskTextureFor(const std::shared_ptr<con
 }
 
 void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::GeneratedRock &rock,
-                                    bool useBaked) {
+                                    bool useBaked, const renderer::MeshData* bakeGeometry) {
     if (rock.previewMask) {
         // Shape Mask を見ているとき。黒の全面の上に、マスクで白を重ねる（既存の素材の合成をそのまま使う）。
         const auto texture = ShapeMaskTextureFor(rock.previewMask);
@@ -225,7 +225,17 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
         return;
     const auto *node = m_graph.FindNode(rock.bakeSource);
     const auto *bake = node ? std::get_if<graph::MaterialBakeSettings>(&node->settings) : nullptr;
-    bool ready = bake && !bake->fingerprint.empty() && bake->fingerprint == BakeFingerprint(mesh, rock.mesh, rock.bakeSource);
+    std::string fingerprint;
+    if (bake && bakeGeometry) {
+        // Rock Asset の LOD。焼いたときのメッシュの形で照らし、表示する形へ戻す。
+        renderer::MeshData shown = std::move(mesh.geometry);
+        mesh.geometry = *bakeGeometry;
+        fingerprint = BakeFingerprint(mesh, rock.bakeMesh ? *rock.bakeMesh : rock.mesh, rock.bakeSource);
+        mesh.geometry = std::move(shown);
+    } else if (bake) {
+        fingerprint = BakeFingerprint(mesh, rock.mesh, rock.bakeSource);
+    }
+    bool ready = bake && !bake->fingerprint.empty() && bake->fingerprint == fingerprint;
     const auto *baked = ready ? m_materialLibrary.Find(bake->bakedLayer.material) : nullptr;
     ready &= baked != nullptr;
     if (baked)

@@ -526,6 +526,9 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["decimate"] = {{"targetTriangles", decimate->targetTriangles},
                                 {"maxError", decimate->maxError},
                                 {"creaseWeight", decimate->creaseWeight}};
+        } else if (const auto* asset = std::get_if<graph::RockAssetSettings>(&node.settings)) {
+            item["rockAsset"] = {{"lodCount", asset->lodCount}, {"maxTriangles", asset->maxTriangles},
+                                 {"trianglePercent", asset->trianglePercent}, {"screenSize", asset->screenSize}};
         } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node.settings)) {
             item["uvUnwrap"] = {{"resolution", uv->resolution}, {"padding", uv->padding}, {"quality", uv->quality}};
         } else if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings)) {
@@ -796,6 +799,23 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.targetTriangles = ReadInt(*v, "targetTriangles", settings.targetTriangles);
                     settings.maxError = ReadFloat(*v, "maxError", settings.maxError);
                     settings.creaseWeight = ReadFloat(*v, "creaseWeight", settings.creaseWeight);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::RockAsset) {
+                graph::RockAssetSettings settings;
+                if (const json* v = FindMember(item, "rockAsset"); v && v->is_object()) {
+                    settings.lodCount = std::clamp(ReadInt(*v, "lodCount", settings.lodCount), 1, graph::kMaxRockAssetLods);
+                    settings.maxTriangles = std::clamp(ReadInt(*v, "maxTriangles", settings.maxTriangles),
+                                                       graph::kMinRockAssetTriangles, graph::kMaxRockAssetTriangles);
+                    // 段ごとの配列。足りない段や壊れた値は既定のまま残す。
+                    const auto readLevels = [&](const char* name, auto& values, float low, float high) {
+                        const json* array = FindMember(*v, name);
+                        if (!array || !array->is_array()) return;
+                        for (size_t i = 0; i < values.size() && i < array->size(); ++i)
+                            if ((*array)[i].is_number()) values[i] = std::clamp((*array)[i].get<float>(), low, high);
+                    };
+                    readLevels("trianglePercent", settings.trianglePercent, 0.1f, 100.0f);
+                    readLevels("screenSize", settings.screenSize, 0.001f, 4.0f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::Remesh) {

@@ -99,6 +99,9 @@ struct StartupOptions {
     // プロジェクト読込後に選択するノード。スクリーンショット検証用。
     graph::GraphId selectNode = 0;
     graph::GraphId previewNode = 0;
+    // Rock Asset の LOD の出し方（--rock-asset-lod <n>。-1 は自動）と表示モード（--view <番号>）。撮影用。
+    int rockAssetLod = -2;
+    int debugView = -1;
     bool testDrag = false;
     bool testLayerThumbnailCache = false;
     bool testDragShift = false;
@@ -188,7 +191,9 @@ private:
     std::shared_ptr<const geometry::PieceSelection> m_pieceTransformSelection;
 
     void DrawUvPanel();
-    void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked);
+    // bakeGeometry を渡すと、Material Bake の結果がまだ使えるかをそのメッシュで照らす（Rock Asset の LOD は形が違うため）。
+    void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked,
+                           const renderer::MeshData* bakeGeometry = nullptr);
     std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input, graph::GraphId bakeNode = 0) const;
     void ProcessPendingBake();
     void PrepareMaterialHeights();
@@ -245,6 +250,24 @@ private:
     std::vector<RockMeshReference> m_rockMeshReferences;
     // m_rockMeshReferences と同じ並びの三角形数。ノードの設定欄に出力の規模を出す。
     std::vector<size_t> m_rockTriangleCounts;
+    // Rock Asset のプレビュー。選んでいる間、ビューポートで LOD を切り替えて見る。
+    struct RockAssetView {
+        graph::GraphId node = 0;             // いま LOD を出している Rock Asset（無ければ 0）
+        std::vector<size_t> triangles;       // 段ごとの三角形数（全メッシュの合計）
+        DirectX::XMFLOAT3 center{};          // LOD0 を包む球
+        float radius = 0.0f;
+        int shown = 0;                       // いま出している段
+    } m_rockAssetView;
+    // -1 は自動（画面上の大きさで選ぶ）、0 以上はその段に固定。
+    int m_rockAssetLodMode = -1;
+    // LOD だけを切り替えるときに評価し直さないよう、Rock Asset を出している間だけ直近の評価結果を持つ。
+    std::optional<graph::RockEvaluation> m_rockAssetEvaluation;
+    // 岩を包む球の直径が画面の高さに占める割合（UE の Screen Size）。
+    float RockAssetScreenSize() const;
+    // いま出すべき段。previewNode が LOD を出している Rock Asset でなければ 0。
+    int RockAssetWantedLod(graph::GraphId previewNode) const;
+    // ビューポート左上の LOD の切り替え（Rock Asset を出しているときだけ）。
+    void DrawRockAssetLodControls();
     // 選択中のノードを控える / 貼り付ける（Ctrl+C / Ctrl+V）。
     void CopySelectedGraphNodes();
     // 控えたノードを貼る。viewCenter は今のキャンバスの中央（キャンバス座標）で、

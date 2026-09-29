@@ -84,7 +84,7 @@ constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, Val
 // 1つのマスクの加工。出力の形とメッシュは入力のマスクのもの。
 constexpr std::array<PinDefinition, 2> kMaskFilterPins = {{{PinKind::Input, ValueType::Mask, "Mask"},
     {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 40> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 41> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -106,6 +106,7 @@ constexpr std::array<NodeDefinition, 40> kNodeDefinitions = {{
     {NodeKind::Remesh, "remesh", "Remesh", kMeshFilterPins},
     {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kMeshFilterPins},
     {NodeKind::MaterialBake, "materialBake", "Material Bake", kBakePins},
+    {NodeKind::RockAsset, "rockAsset", "Rock Asset", kMeshFilterPins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
     {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
@@ -164,6 +165,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
+           kind == NodeKind::RockAsset ||
            // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
            IsImageMaskNodeKind(kind);
 }
@@ -504,6 +506,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::DecimateSettings{};
     } else if (kind == NodeKind::Remesh) {
         node.settings = geometry::RemeshSettings{};
+    } else if (kind == NodeKind::RockAsset) {
+        node.settings = RockAssetSettings{};
     } else if (kind == NodeKind::MaterialMask) {
         node.settings = MaterialMaskSettings{};
     } else if (kind == NodeKind::ApplyMaterial) {

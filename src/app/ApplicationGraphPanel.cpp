@@ -18,6 +18,7 @@
 #include <imgui-node-editor/imgui_node_editor.h>
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cwctype>
 #include <string>
@@ -401,15 +402,18 @@ void Application::DrawBakedTextureTiles(const graph::MaterialBakeSettings& bake)
 void Application::SyncMeshGraph() {
     if (m_uvLastSelectedNode != m_selectedGraphNode) {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
-            previous && (previous->kind == graph::NodeKind::UvUnwrap || previous->kind == graph::NodeKind::PieceSelect || graph::IsImageMaskNodeKind(previous->kind)) &&
+            previous && (previous->kind == graph::NodeKind::UvUnwrap || previous->kind == graph::NodeKind::PieceSelect ||
+                         previous->kind == graph::NodeKind::RockAsset || graph::IsImageMaskNodeKind(previous->kind)) &&
             m_previewGraphNode == previous->id)
             SetPreviewGraphNode(m_uvPreviousPreviewNode, m_uvPreviousPreviewPin);
         m_pieceSelectionEditing = false;
         m_pieceGizmoId = -1;
         m_uvLastSelectedNode = m_selectedGraphNode;
-        // UV Unwrap は選ぶとUVチェッカー、Shape Mask / Mask Combine は選ぶとマスクを貼った入力メッシュを出す。選択を外すと元のプレビューへ戻す。
+        // UV Unwrap は選ぶとUVチェッカー、Shape Mask / Mask Combine は選ぶとマスクを貼った入力メッシュ、
+        // Rock Asset は選ぶと LOD を出す。選択を外すと元のプレビューへ戻す。
         if (const auto* node = m_graph.FindNode(m_selectedGraphNode);
-            node && (node->kind == graph::NodeKind::UvUnwrap || node->kind == graph::NodeKind::PieceSelect || graph::IsImageMaskNodeKind(node->kind))) {
+            node && (node->kind == graph::NodeKind::UvUnwrap || node->kind == graph::NodeKind::PieceSelect ||
+                     node->kind == graph::NodeKind::RockAsset || graph::IsImageMaskNodeKind(node->kind))) {
             m_uvPreviousPreviewNode = m_previewGraphNode;
             m_uvPreviousPreviewPin = m_previewGraphPin;
             SetPreviewGraphNode(node->id);
@@ -427,7 +431,7 @@ void Application::SyncMeshGraph() {
         // 計算中であることも表示できない。
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
                n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate || n.kind == graph::NodeKind::Remesh ||
-               n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace ||
+               n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace || n.kind == graph::NodeKind::RockAsset ||
                graph::IsImageMaskNodeKind(n.kind);
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
@@ -438,16 +442,23 @@ void Application::SyncMeshGraph() {
     if (m_meshGraphSmoothShading != m_settings.Display().smoothShading ||
         m_meshGraphSmoothShadingAngle != m_settings.Display().smoothShadingAngle)
         m_pieceCompletedKey.clear();
-    if ((!hasPieces || m_pieceCompletedKey == taskKey) && m_meshGraphRevision == m_graph.Revision() && m_meshGraphPreviewNode == previewMeshNode &&
+    const bool upToDate = (!hasPieces || m_pieceCompletedKey == taskKey) && m_meshGraphRevision == m_graph.Revision() &&
+        m_meshGraphPreviewNode == previewMeshNode &&
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
         m_meshGraphSmoothShadingAngle == m_settings.Display().smoothShadingAngle &&
-        m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod)
+        m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod;
+    // Rock Asset の LOD だけが変わったとき（切り替えやカメラの移動）は、評価し直さず直近の結果から作り直す。
+    const bool lodOnly = upToDate && m_rockAssetEvaluation && m_rockAssetView.node == previewMeshNode &&
+                         RockAssetWantedLod(previewMeshNode) != m_rockAssetView.shown;
+    if (upToDate && !lodOnly)
         return;
     m_meshGraphSmoothShading = m_settings.Display().smoothShading;
     m_meshGraphSmoothShadingAngle = m_settings.Display().smoothShadingAngle;
     m_meshGraphSdfPreviewMethod = m_settings.Display().sdfPreviewMethod;
     graph::RockEvaluation evaluated;
-    if (hasPieces) {
+    if (lodOnly) {
+        evaluated = *m_rockAssetEvaluation;
+    } else if (hasPieces) {
         m_pieceUpdating = true;
         if (m_pieceTask.valid()) {
             // 選択を変えただけなら実行中の重い評価を止めない。完了後にそのキャッシュを引き継ぎ、
@@ -505,6 +516,38 @@ void Application::SyncMeshGraph() {
     }
     m_piecePreview = evaluated.pieces;
     m_pointPreview = evaluated.points;
+    // Rock Asset を出しているときは LOD の段を選んで出す。LOD だけの切り替えに備えて結果を持っておく。
+    const auto* assetNode = m_graph.FindNode(previewMeshNode);
+    const bool assetView = assetNode && assetNode->kind == graph::NodeKind::RockAsset && evaluated.error.empty() &&
+        std::any_of(evaluated.rocks.begin(), evaluated.rocks.end(), [](const auto& rock) { return rock.lods != nullptr; });
+    if (assetView) {
+        if (!lodOnly) m_rockAssetEvaluation = evaluated;
+        m_rockAssetView.node = previewMeshNode;
+        m_rockAssetView.triangles.clear();
+        DirectX::XMFLOAT3 low{FLT_MAX, FLT_MAX, FLT_MAX}, high{-FLT_MAX, -FLT_MAX, -FLT_MAX};
+        for (const auto& rock : evaluated.rocks) {
+            if (!rock.lods) continue;
+            if (m_rockAssetView.triangles.size() < rock.lods->size()) m_rockAssetView.triangles.resize(rock.lods->size(), 0);
+            for (size_t level = 0; level < rock.lods->size(); ++level)
+                m_rockAssetView.triangles[level] += (*rock.lods)[level].triangles.size();
+            for (const auto& p : rock.lods->front().positions) {
+                low = {std::min(low.x, p.x), std::min(low.y, p.y), std::min(low.z, p.z)};
+                high = {std::max(high.x, p.x), std::max(high.y, p.y), std::max(high.z, p.z)};
+            }
+        }
+        m_rockAssetView.center = {(low.x + high.x) * 0.5f, (low.y + high.y) * 0.5f, (low.z + high.z) * 0.5f};
+        m_rockAssetView.radius = 0.0f;
+        for (const auto& rock : evaluated.rocks)
+            if (rock.lods)
+                for (const auto& p : rock.lods->front().positions) {
+                    const float dx = p.x - m_rockAssetView.center.x, dy = p.y - m_rockAssetView.center.y, dz = p.z - m_rockAssetView.center.z;
+                    m_rockAssetView.radius = std::max(m_rockAssetView.radius, std::sqrt(dx * dx + dy * dy + dz * dz));
+                }
+        m_rockAssetView.shown = RockAssetWantedLod(previewMeshNode);
+    } else {
+        m_rockAssetEvaluation.reset();
+        m_rockAssetView = {};
+    }
     renderer::MeshScene scene;
     for (auto& entry : m_shapeMaskTextures) entry.used = false;
     m_uvPreviewMesh = {};
@@ -554,9 +597,13 @@ void Application::SyncMeshGraph() {
             // 手動編集時だけ面を残し、選択済みの片もクリックで解除できるようにする。
             if (rock.pieceSelected && !m_pieceSelectionEditing) continue;
         }
-        if (geometry::HasValidUvs(rock.mesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = rock.mesh;
+        // Rock Asset を出しているときは選んだ段、それ以外は LOD0（rock.mesh）。
+        const size_t level = assetView && rock.lods ? std::min<size_t>(size_t(m_rockAssetView.shown), rock.lods->size() - 1) : 0;
+        const geometry::Mesh& shownMesh = assetView && rock.lods ? (*rock.lods)[level] : rock.mesh;
+        if (geometry::HasValidUvs(shownMesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = shownMesh;
         renderer::SceneMesh mesh;
-        mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
+        mesh.geometry = renderer::MakeRockMeshData(shownMesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
+        mesh.lod = rock.lods ? int(level) : -1;
         mesh.material.baseColor = DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
         if (rock.pieceId >= 0) {
             float r,g,b;
@@ -571,10 +618,19 @@ void Application::SyncMeshGraph() {
             if (rock.pieceSelected && (!selectionView || m_pieceSelectionEditing)) selectedPieces.push_back(int(scene.meshes.size()));
         }
         m_rockMeshReferences.push_back({rock.source, rock.pieceId});
-        m_rockTriangleCounts.push_back(rock.mesh.triangles.size());
-        m_rockPreviewSurfaces.push_back({rock.mesh.positions, rock.mesh.triangles});
+        m_rockTriangleCounts.push_back(shownMesh.triangles.size());
+        m_rockPreviewSurfaces.push_back({shownMesh.positions, shownMesh.triangles});
         mesh.material.roughness = 0.8f;
-        if (!selectionView) ApplyRockMaterial(mesh, rock, true);
+        if (!selectionView) {
+            // Rock Asset は形を減らしているので、焼いた結果が使えるかは減らす前のメッシュで照らす。
+            if (rock.bakeSource && rock.bakeMesh) {
+                const auto bakeGeometry = renderer::MakeRockMeshData(*rock.bakeMesh, m_settings.Display().smoothShading,
+                                                                     m_settings.Display().smoothShadingAngle);
+                ApplyRockMaterial(mesh, rock, true, &bakeGeometry);
+            } else {
+                ApplyRockMaterial(mesh, rock, true);
+            }
+        }
         scene.meshes.push_back(std::move(mesh));
     }
     m_meshGraphError = evaluated.error;
@@ -1270,6 +1326,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Decimate, "Decimate — 形を保ったまま三角形を減らす");
         addNodeMenuItem(graph::NodeKind::Remesh, "Remesh — 三角形を一様な大きさに作り直す");
         addNodeMenuItem(graph::NodeKind::UvUnwrap, "UV Unwrap — 自動UV展開");
+        addNodeMenuItem(graph::NodeKind::RockAsset, "Rock Asset — 岩グラフの最終段。段階的な LOD を作る");
         ImGui::Separator();
         ImGui::TextDisabled("分割・ピース操作");
         addNodeMenuItem(graph::NodeKind::LayeredBoxes, "Layered Boxes — 平行な板をPiecesとして積む");
@@ -2003,6 +2060,59 @@ void Application::DrawGraphPanel() {
             edited.iterations = std::clamp(edited.iterations, 1, geometry::kMaxRemeshIterations);
             edited.featureAngle = std::clamp(edited.featureAngle, 0.0f, 180.0f);
             *remesh = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* asset = std::get_if<graph::RockAssetSettings>(&selected->settings)) {
+        auto edited = *asset;
+        bool changed = false;
+        const graph::RockAssetSettings defaults;
+        if (ui::BeginPropertyTable("rockAssetRows")) {
+            changed |= ui::PropertyInt("LODの段数", &edited.lodCount, 1, graph::kMaxRockAssetLods, defaults.lodCount,
+                                       "LOD0 を含む段の数です。");
+            changed |= ui::PropertyInt("LOD0の上限", &edited.maxTriangles, graph::kMinRockAssetTriangles, 100000, defaults.maxTriangles,
+                                       "LOD0 の三角形数の上限です。入力がこれを超えるときだけ減らします。Ctrl + クリックで 500000 まで入力できます。");
+            for (int level = 1; level < std::clamp(edited.lodCount, 1, graph::kMaxRockAssetLods); ++level) {
+                char label[48] = {};
+                std::snprintf(label, sizeof(label), "LOD%dの割合", level);
+                changed |= ui::PropertyFloat(label, &edited.trianglePercent[level], 0.1f, 100.0f, defaults.trianglePercent[level],
+                                             "LOD0 の三角形数に対する割合です。", "%.1f %%");
+                std::snprintf(label, sizeof(label), "LOD%dの切替", level);
+                changed |= ui::PropertyFloat(label, &edited.screenSize[level], 0.001f, 1.0f, defaults.screenSize[level],
+                                             "岩を包む球の直径が画面の高さに占める割合がこれを下回ったら、この段にします（ビューポートの「LOD 自動」）。",
+                                             "%.3f");
+            }
+            ui::EndPropertyTable();
+        }
+        {
+            // 段ごとの実際の三角形数。UV の島の境界は動かせないので、細かい段ほど目標に届かないことがある。
+            std::string counts = "三角形: 未評価";
+            std::string warning;
+            if (m_rockAssetView.node == selected->id && !m_rockAssetView.triangles.empty()) {
+                counts = "三角形:";
+                const auto& triangles = m_rockAssetView.triangles;
+                for (size_t level = 0; level < triangles.size(); ++level) {
+                    counts += (level ? " · LOD" : " LOD") + std::to_string(level) + " " + std::to_string(triangles[level]);
+                    if (level == 0 || level >= size_t(graph::kMaxRockAssetLods)) continue;
+                    const double target = std::max(double(graph::kMinRockAssetTriangles),
+                                                   double(triangles[0]) * edited.trianglePercent[level] / 100.0);
+                    if (double(triangles[level]) > target * 1.05)
+                        warning += (warning.empty() ? "" : "、") + std::string("LOD") + std::to_string(level);
+                }
+            }
+            drawStatusLine(counts);
+            drawStatusLine(warning.empty() ? std::string()
+                                           : warning + " は目標に届いていません（UV の島の境界は固定するため）");
+        }
+        ui::HintText("岩グラフの最終段です。入力のメッシュから段階的な LOD を作ります。LOD1 以降は 1 つ前の段を Decimate で減らし、"
+                     "UV を保つので、全ての段で同じテクスチャ（Material Bake の結果など）をそのまま使えます。出力は LOD0 です。");
+        ui::HintText("選んでいる間は、ビューポート左上の「LOD 自動 / 0 / 1 …」で段を切り替えて見られます。表示モードの「LOD（色分け）」で段を色で見分けられます。");
+        if (changed) {
+            edited.lodCount = std::clamp(edited.lodCount, 1, graph::kMaxRockAssetLods);
+            edited.maxTriangles = std::clamp(edited.maxTriangles, graph::kMinRockAssetTriangles, graph::kMaxRockAssetTriangles);
+            for (auto& percent : edited.trianglePercent) percent = std::clamp(percent, 0.1f, 100.0f);
+            for (auto& size : edited.screenSize) size = std::clamp(size, 0.001f, 4.0f);
+            *asset = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

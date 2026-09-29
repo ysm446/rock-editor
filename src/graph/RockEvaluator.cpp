@@ -123,6 +123,10 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(subdivide->levels); add(subdivide->threshold);
     } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node->settings)) {
         add(decimate->targetTriangles); add(decimate->maxError); add(decimate->creaseWeight);
+    } else if (const auto* asset = std::get_if<RockAssetSettings>(&node->settings)) {
+        // 切り替えの大きさ（screenSize）は表示だけに使うので含めない。
+        add(asset->lodCount); add(asset->maxTriangles);
+        for (const float percent : asset->trianglePercent) add(percent);
     } else if (const auto* remesh = std::get_if<geometry::RemeshSettings>(&node->settings)) {
         add(remesh->edgeLength); add(remesh->iterations); add(remesh->featureAngle);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
@@ -228,6 +232,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate || node->kind == NodeKind::Remesh ||
+                                 node->kind == NodeKind::RockAsset ||
                                  node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace ||
                                  node->kind == NodeKind::VolumeClose || node->kind == NodeKind::VolumeEdgeWear ||
                                  node->kind == NodeKind::VolumeClip ||
@@ -568,6 +573,8 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                     return finish(Failure(id, "Material Bake", "Apply Materialを通すかMaterialにSurfaceを接続してください"));
                 result.rocks[0].source = id;
                 result.rocks[0].bakeSource = id;
+                // 焼くのはこのメッシュそのもの。上流の Rock Asset が残した照合用のメッシュは使わない。
+                result.rocks[0].bakeMesh.reset();
             }
         } else if (node->kind == NodeKind::RandomBoxes) {
             const auto* settings = std::get_if<geometry::BoxClusterSettings>(&node->settings);
@@ -687,6 +694,67 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 rock.source = id;
                 rock.bakeSource = 0;
                 done += before;
+            }
+        } else if (node->kind == NodeKind::RockAsset) {
+            const auto* settings = std::get_if<RockAssetSettings>(&node->settings);
+            const auto* upstream =
+                node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!settings || !upstream) return finish(Failure(id, "Rock Asset", "Mesh出力を接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty())
+                return finish(Failure(id, "Rock Asset", "生成メッシュが必要です。Modelは岩アセットにできません"));
+            size_t total = 0;
+            for (const auto& rock : result.rocks) {
+                if (rock.volume) return finish(Failure(id, "Rock Asset", "Mesh入力が必要です（Volume to Meshを挟んでください）"));
+                total += rock.mesh.triangles.size();
+            }
+            const int lodCount = std::clamp(settings->lodCount, 1, kMaxRockAssetLods);
+            const int maxTriangles = std::clamp(settings->maxTriangles, kMinRockAssetTriangles, kMaxRockAssetTriangles);
+            // 形のずれの上限は設けず、目標の数まで減らす（段の三角形数を揃えるため）。UV の島の境界は Decimate が固定する。
+            geometry::DecimateSettings reduce;
+            reduce.maxError = 0;
+            // 進み具合は「メッシュ × 段」の数で割る。
+            const double steps = double(result.rocks.size()) * lodCount;
+            double step = 0;
+            const auto decimate = [&](const geometry::Mesh& input, int target, std::string& error) {
+                reduce.targetTriangles = std::clamp(target, geometry::MinDecimateTriangles, geometry::MaxDecimateTriangles);
+                return geometry::DecimateMesh(input, reduce, error, stop, [&](int percent) {
+                    report(id, 0, int((step + percent / 100.0) * 100.0 / steps));
+                });
+            };
+            for (auto& rock : result.rocks) {
+                std::vector<geometry::Mesh> lods;
+                lods.reserve(lodCount);
+                // LOD0。上限は入力全体に対する数なので、複数のメッシュには三角形数に応じて割り振る（Decimate と同じ）。
+                const int lod0Target = std::max(kMinRockAssetTriangles,
+                    int(double(maxTriangles) * double(rock.mesh.triangles.size()) / double(std::max<size_t>(total, 1))));
+                std::string error;
+                if (rock.mesh.triangles.size() > size_t(lod0Target)) lods.push_back(decimate(rock.mesh, lod0Target, error));
+                else lods.push_back(rock.mesh);
+                if (!error.empty()) return finish(Failure(id, "Rock Asset", "LOD0: " + error));
+                ++step;
+                // LOD1 以降は 1 つ前の段から減らす（速く、段どうしの形も揃う）。
+                for (int level = 1; level < lodCount; ++level, ++step) {
+                    const float percent = std::clamp(settings->trianglePercent[level], 0.1f, 100.0f);
+                    const int target = std::max(kMinRockAssetTriangles, int(double(lods[0].triangles.size()) * percent / 100.0));
+                    const geometry::Mesh& previous = lods.back();
+                    if (previous.triangles.size() <= size_t(target)) {
+                        lods.push_back(previous);
+                        continue;
+                    }
+                    auto reduced = decimate(previous, target, error);
+                    if (!error.empty()) return finish(Failure(id, "Rock Asset", "LOD" + std::to_string(level) + ": " + error));
+                    lods.push_back(std::move(reduced));
+                }
+                // LOD は UV を保つので、上流の Material Bake の結果をそのまま使える。
+                // 形が変わるので、焼いた結果がまだ使えるかは減らす前のメッシュで照らす。
+                if (rock.bakeSource && !rock.bakeMesh) rock.bakeMesh = std::make_shared<const geometry::Mesh>(rock.mesh);
+                rock.mesh = lods[0];
+                rock.lods = std::make_shared<const std::vector<geometry::Mesh>>(std::move(lods));
+                rock.boxes.reset();
+                rock.meshHistory.push_back(rock.source);
+                rock.source = id;
             }
         } else if (node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace || node->kind == NodeKind::VolumeClose ||
                    node->kind == NodeKind::VolumeEdgeWear || node->kind == NodeKind::VolumeClip) {

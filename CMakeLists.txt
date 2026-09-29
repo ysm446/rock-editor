@@ -391,7 +391,7 @@ target_sources(rock_editor PRIVATE src/geometry/MeshVolume.cpp)
 target_sources(rock_editor_tests PRIVATE src/geometry/MeshVolume.cpp tests/MeshVolumeTests.cpp)
 
 target_sources(rock_editor PRIVATE src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp)
-target_sources(rock_editor_tests PRIVATE src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp tests/DecimateTests.cpp tests/RemeshTests.cpp)
+target_sources(rock_editor_tests PRIVATE src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp tests/DecimateTests.cpp tests/RemeshTests.cpp tests/RockAssetTests.cpp)
 
 target_sources(rock_editor_tests PRIVATE tests/ApplyMaterialTests.cpp)
 
