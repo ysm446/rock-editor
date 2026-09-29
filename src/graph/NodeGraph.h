@@ -2,6 +2,7 @@
 #include "geometry/Displace.h"
 #include "geometry/ShapeMask.h"
 #include "geometry/Decimate.h"
+#include "geometry/DetailTransfer.h"
 #include "geometry/Remesh.h"
 #include "geometry/UvUnwrap.h"
 #include "geometry/Pieces.h"
@@ -169,6 +170,8 @@ struct MaterialBakeSettings {
     bool geometryAo = false;
     float aoDistance = 0.5f, aoStrength = 1;
     int aoSamples = 32;
+    // High（ハイポリ）を探す距離（m）。ローポリの面から内外へこの距離までを探す。High 未接続なら使わない。
+    float cageDistance = 0.1f;
     compositor::MaterialLayer bakedLayer;
     std::string fingerprint;
 };

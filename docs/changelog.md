@@ -5,6 +5,8 @@
 
 ## 未リリース
 
+- Material Bakeにハイポリからの転写（High → Low のベイク）を追加。3本目の入力「High」にDecimate前の高密度のメッシュを繋ぐと、ベイクのときにその細部を法線マップとハイトへ焼き込む。素材の法線は細部として重ね、ハイトにはハイポリまでの距離を足す。探す距離は「ケージ距離」（既定0.1 m）。未接続なら従来どおり。形状AOは今のところローポリで計算する。仕様は [UVとベイク](reference/uv-bake.md)、サンプルは `examples/high-low-bake/`。
+
 - Rock Assetノードを追加（岩グラフの最終段）。入力のメッシュから段階的なLOD（既定4段、LOD0に対して50 / 25 / 12.5%）を作る。どの段も同じUVを持つので、Apply MaterialやMaterial Bakeの結果をそのまま使える。選ぶとビューポート左上に「LOD 自動 / 0 / 1 …」が出て、段を固定するか、カメラから見た大きさで自動で切り替えて確かめられる。出力はLOD0。付属フォルダへの保存と変種は未実装。仕様は [Rock Asset](reference/rock-asset.md)、サンプルは `examples/rock-asset/`。
 
 - 表示モードに「LOD（色分け）」を追加（terrain-graphから移植。UE5と同じ配色）。クレイと同じ陰影で、Rock AssetのLODを段ごとの色で塗る。

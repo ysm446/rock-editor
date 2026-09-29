@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-30 08:55
+更新日時: 2026-09-30 10:30
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,13 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-09-30 Material Bake のハイポリからの転写（High → Low）
+
+- Material Bake に 3 本目の入力 High（Mesh）を追加。繋ぐと、ベイクで素材を焼いた後に `geometry::TransferDetail`（CPU、最近傍の交点を返す BVH、行ごとに並列）でハイポリの法線とローポリからの距離を転写し、`Application::TransferHighDetail` が法線（whiteout 合成）とハイト（距離を加算）へ重ねる。接線空間は `MakeRockMeshData` の頂点と `PsBake` の取り方に合わせた。
+- 評価結果の `GeneratedRock::bakeDetail` にハイポリの内容のハッシュを持ち、指紋に含める（ケージ距離も）。未接続なら従来の指紋と同じ。
+- Debug ビルド警告 0、全テスト成功（`tests/DetailTransferTests.cpp`: 球どうしの距離と法線、同じ形、ケージ不足、内側、入力の検査、High のピンとハッシュ）。
+- 未実装: ハイポリでの形状 AO、ハイポリの色の転写、16bit の出力、非同期実行。
 
 ### 2026-09-30 Rock Asset ノード（LOD）と LOD の色分け
 

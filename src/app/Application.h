@@ -194,13 +194,18 @@ private:
     // bakeGeometry を渡すと、Material Bake の結果がまだ使えるかをそのメッシュで照らす（Rock Asset の LOD は形が違うため）。
     void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked,
                            const renderer::MeshData* bakeGeometry = nullptr);
-    std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input, graph::GraphId bakeNode = 0) const;
+    // detail は Material Bake の High（ハイポリ）の内容のハッシュ（GeneratedRock::bakeDetail）。0 は未接続。
+    std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input, graph::GraphId bakeNode = 0,
+                                uint64_t detail = 0) const;
     void ProcessPendingBake();
     void PrepareMaterialHeights();
     std::shared_ptr<const graph::MaterialHeight> m_materialHeights;
     std::string m_materialHeightKey;
     bool ValidateGpuAo();
     void FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images, const std::string& fingerprint);
+    // Material Bake の High（ハイポリ）から法線とハイトを転写し、素材を焼いた画像に重ねる。mesh はローポリの描画用データ。
+    bool TransferHighDetail(const graph::Node& node, const graph::GeneratedRock& rock, const renderer::SceneMesh& mesh,
+                            const graph::MaterialBakeSettings& settings, std::array<LdrImage, 4>& images, std::string& error);
     struct BakeJob {
         graph::GraphId id = 0;
         uint64_t epoch = 0, revision = 0;

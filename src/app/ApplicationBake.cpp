@@ -4,11 +4,16 @@
 #include "core/PathUtf8.h"
 #include "renderer/MaterialBake.h"
 #include "renderer/RockMesh.h"
+#include "geometry/DetailTransfer.h"
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <cstring>
 namespace rock {
-std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const geometry::Mesh &input, graph::GraphId bakeNode) const {
+std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const geometry::Mesh &input, graph::GraphId bakeNode,
+                                         uint64_t detail) const {
     uint64_t hash = 14695981039346656037ull;
     const auto bytes = [&](const void *data, size_t size) {
         const auto *p = static_cast<const unsigned char *>(data);
@@ -21,6 +26,8 @@ std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const 
     if (const auto* node = m_graph.FindNode(bakeNode))
         if (const auto* settings = std::get_if<graph::MaterialBakeSettings>(&node->settings)) {
             add(settings->geometryAo); add(settings->aoDistance); add(settings->aoStrength); add(settings->aoSamples);
+            // ハイポリの転写。繋いでいないときは含めない（従来の指紋と変えない）。
+            if (detail) { add(detail); add(settings->cageDistance); }
         }
     const uint32_t version = 3;
     add(version);
@@ -230,10 +237,10 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
         // Rock Asset の LOD。焼いたときのメッシュの形で照らし、表示する形へ戻す。
         renderer::MeshData shown = std::move(mesh.geometry);
         mesh.geometry = *bakeGeometry;
-        fingerprint = BakeFingerprint(mesh, rock.bakeMesh ? *rock.bakeMesh : rock.mesh, rock.bakeSource);
+        fingerprint = BakeFingerprint(mesh, rock.bakeMesh ? *rock.bakeMesh : rock.mesh, rock.bakeSource, rock.bakeDetail);
         mesh.geometry = std::move(shown);
     } else if (bake) {
-        fingerprint = BakeFingerprint(mesh, rock.mesh, rock.bakeSource);
+        fingerprint = BakeFingerprint(mesh, rock.mesh, rock.bakeSource, rock.bakeDetail);
     }
     bool ready = bake && !bake->fingerprint.empty() && bake->fingerprint == fingerprint;
     const auto *baked = ready ? m_materialLibrary.Find(bake->bakedLayer.material) : nullptr;
@@ -277,7 +284,7 @@ void Application::ProcessPendingBake() {
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(result.rocks[0].mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
         ApplyRockMaterial(mesh, result.rocks[0], false);
-        if (BakeFingerprint(mesh, result.rocks[0].mesh, job.id) != job.fingerprint) {
+        if (BakeFingerprint(mesh, result.rocks[0].mesh, job.id, result.rocks[0].bakeDetail) != job.fingerprint) {
             discard("材質または設定が変更されたためベイクを中止しました"); return;
         }
         LdrImage ao;
@@ -314,7 +321,7 @@ void Application::ProcessPendingBake() {
         fail("ルートフォルダとSurface材質を指定してください");
         return;
     }
-    const auto fingerprint = BakeFingerprint(mesh, rock.mesh, rock.bakeSource);
+    const auto fingerprint = BakeFingerprint(mesh, rock.mesh, rock.bakeSource, rock.bakeDetail);
     std::array<LdrImage, 4> images;
     std::string error;
     if (!renderer::BakeMaterial(m_device, m_pipelineCache, mesh, m_textureLibrary, m_materialLibrary,
@@ -323,6 +330,13 @@ void Application::ProcessPendingBake() {
         return;
     }
     const auto& bakeSettings = std::get<graph::MaterialBakeSettings>(node->settings);
+    // High（ハイポリ）を繋いでいれば、法線とハイトをそこから転写して、素材の法線とハイトに重ねる。
+    if (rock.bakeDetail) {
+        if (!TransferHighDetail(*node, rock, mesh, bakeSettings, images, error)) {
+            fail(error);
+            return;
+        }
+    }
     if (bakeSettings.geometryAo) {
         auto& job = m_bakeJob.emplace();
         job.id = id; job.epoch = m_pieceEpoch; job.revision = m_graph.Revision();
@@ -334,6 +348,77 @@ void Application::ProcessPendingBake() {
         return;
     }
     FinishBake(id, images, fingerprint);
+}
+
+// ハイポリから転写した法線とハイトを、素材を焼いた画像（images[1] と images[3]）に重ねる。
+//   法線: ハイポリの法線（ローポリの接線空間）に、素材の法線を細部として重ねる（whiteout 合成）。
+//   ハイト: 素材のハイトに、ローポリの面からハイポリまでの距離を足す。距離はケージ距離の 2 倍を 1 とする
+//           （±ケージ距離が ±0.5）。
+// ハイポリに当たらなかった画素は、素材の値のまま残す。
+bool Application::TransferHighDetail(const graph::Node& node, const graph::GeneratedRock& rock, const renderer::SceneMesh& mesh,
+                                     const graph::MaterialBakeSettings& settings, std::array<LdrImage, 4>& images,
+                                     std::string& error) {
+    const auto* highNode = node.inputs.size() > 2 ? m_graph.FindUpstreamNodeForPin(node.inputs[2].id) : nullptr;
+    if (!highNode) {
+        error = "Highの接続が見つかりません";
+        return false;
+    }
+    const auto evaluated = graph::EvaluateRocks(m_graph, highNode->id, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod,
+                                                {}, nullptr, m_materialHeights.get());
+    if (!evaluated.error.empty()) {
+        error = evaluated.error;
+        return false;
+    }
+    // 複数のメッシュは 1 つにまとめて探す。
+    geometry::Mesh high;
+    for (const auto& part : evaluated.rocks) {
+        const auto offset = static_cast<uint32_t>(high.positions.size());
+        high.positions.insert(high.positions.end(), part.mesh.positions.begin(), part.mesh.positions.end());
+        for (auto face : part.mesh.triangles) {
+            for (auto& index : face) index += offset;
+            high.triangles.push_back(face);
+        }
+    }
+    // 描画と同じ法線・接線で接線空間を取る（MakeRockMeshData は面ごとに 3 頂点を順に並べる）。
+    if (mesh.geometry.vertices.size() != rock.mesh.triangles.size() * 3) {
+        error = "ローポリの法線を作れませんでした";
+        return false;
+    }
+    std::vector<std::array<geometry::CornerFrame, 3>> frames(rock.mesh.triangles.size());
+    for (size_t f = 0; f < frames.size(); ++f)
+        for (int k = 0; k < 3; ++k) {
+            const auto& v = mesh.geometry.vertices[f * 3 + k];
+            frames[f][k] = {{v.normal.x, v.normal.y, v.normal.z}, {v.tangent.x, v.tangent.y, v.tangent.z}, v.tangent.w};
+        }
+    const uint32_t width = images[1].width, height = images[1].height;
+    geometry::DetailTransferImage transfer;
+    const auto start = std::chrono::steady_clock::now();
+    if (!geometry::TransferDetail(rock.mesh, frames, high, settings.cageDistance, width, height, transfer, error)) return false;
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    for (size_t i = 0; i < transfer.hit.size(); ++i) {
+        if (!transfer.hit[i]) continue;
+        uint8_t* normal = &images[1].pixels[i * 4];
+        uint8_t* heightPixel = &images[3].pixels[i * 4];
+        if (!normal[3]) continue;  // 素材を焼いていない画素（島の外）
+        const float mx = normal[0] / 255.0f * 2 - 1, my = normal[1] / 255.0f * 2 - 1, mz = normal[2] / 255.0f * 2 - 1;
+        const auto& h = transfer.normals[i];
+        float rx = h.x + mx, ry = h.y + my, rz = h.z * mz;
+        const float length = std::sqrt(rx * rx + ry * ry + rz * rz);
+        if (length > 1e-6f) { rx /= length; ry /= length; rz /= length; } else { rx = h.x; ry = h.y; rz = h.z; }
+        const auto encode = [](float value) { return uint8_t(std::lround(std::clamp(value * 0.5f + 0.5f, 0.0f, 1.0f) * 255)); };
+        normal[0] = encode(rx); normal[1] = encode(ry); normal[2] = encode(rz);
+        const float offset = transfer.heights[i] / (2 * settings.cageDistance);
+        const uint8_t value = uint8_t(std::lround(std::clamp(heightPixel[0] / 255.0f + offset, 0.0f, 1.0f) * 255));
+        heightPixel[0] = heightPixel[1] = heightPixel[2] = value;
+    }
+    const size_t covered = transfer.CoveredCount(), hits = transfer.HitCount();
+    const double ratio = covered ? double(hits) / double(covered) : 0.0;
+    ROCK_LOG_INFO("Material Bake: ハイポリ（%zu 三角形）から法線とハイトを転写しました。当たった画素 %.1f%%、%.1f 秒",
+                  high.triangles.size(), ratio * 100.0, seconds);
+    if (covered && ratio < 0.95)
+        ROCK_LOG_WARN("Material Bake: ハイポリに当たらなかった画素が %.1f%% あります。ケージ距離を広げてください",
+                      (1.0 - ratio) * 100.0);
+    return true;
 }
 
 void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images, const std::string& fingerprint) {

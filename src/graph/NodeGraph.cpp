@@ -60,8 +60,10 @@ constexpr std::array<PinDefinition, 4> kVolumeCrackPins = {{{PinKind::Input, Val
     {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 2> kVolumeToMeshPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<PinDefinition, 3> kBakePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
-    {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+// Material Bake。High（任意）に高密度のメッシュを繋ぐと、法線とハイトをそこから転写する。
+constexpr std::array<PinDefinition, 4> kBakePins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Input, ValueType::Material, "Material"}, {PinKind::Input, ValueType::Mesh, "High"},
+    {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 1> kLayeredBoxesPins = {{{PinKind::Output, ValueType::Pieces, "Pieces"}}};
 constexpr std::array<PinDefinition, 2> kScatterPins = {{{PinKind::Input, ValueType::MeshOrPieces, "Geometry"}, {PinKind::Output, ValueType::Points, "Points"}}};
 constexpr std::array<PinDefinition, 3> kVoronoiPins = {{{PinKind::Input, ValueType::MeshOrPieces, "Geometry"}, {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};

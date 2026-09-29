@@ -2414,6 +2414,17 @@ void Application::DrawGraphPanel() {
         ui::HintText("UV付きのMeshを接続します。Apply Materialの素材を焼き付けます。MaterialにSurfaceを接続すると全面を置換します。");
         auto& bake = std::get<graph::MaterialBakeSettings>(selected->settings);
         bool changed = false;
+        const bool highConnected = selected->inputs.size() > 2 && m_graph.FindUpstreamNodeForPin(selected->inputs[2].id) != nullptr;
+        if (ui::BeginPropertyTable("highDetail")) {
+            changed |= ui::PropertyFloat("ケージ距離 (m)", &bake.cageDistance, 0.001f, 1.0f, 0.1f,
+                                         "High（ハイポリ）を探す距離です。ローポリの面から内外へこの距離までを探します。"
+                                         "ハイポリとのずれより大きく、岩の薄い所の厚みより小さくします。Ctrl + クリックで 100 まで入力できます。",
+                                         "%.3f");
+            ui::EndPropertyTable();
+        }
+        bake.cageDistance = std::clamp(bake.cageDistance, geometry::kMinCageDistance, geometry::kMaxCageDistance);
+        drawStatusLine(highConnected ? "High: 接続中。ベイク時に法線とハイトを転写します"
+                                     : "High: 未接続（高密度のメッシュを繋ぐと、法線とハイトを転写します）");
         if (ui::BeginPropertyTable("geometryAo")) {
             changed |= ui::PropertyBool("形状AOをベイク", &bake.geometryAo, false);
             if (bake.geometryAo) {
@@ -2425,6 +2436,8 @@ void Application::DrawGraphPanel() {
         }
         if (changed) { m_graph.MarkDirty(); MarkDocumentChanged(); }
         ui::HintText("形状AOはGPUで同じ入力メッシュの遮蔽を計算し、素材AOに乗算します。サンプル数と画像サイズが大きいほど時間がかかります。");
+        ui::HintText("HighにDecimate前の高密度のメッシュ（Subdivide / Displace の出力など）を繋ぐと、その細部を法線マップとハイトへ転写します"
+                     "（High → Low のベイク）。素材の法線は細部として重ね、ハイトはハイポリまでの距離を足します。形状AOは今のところローポリで計算します。");
         ImGui::BeginDisabled(m_pieceUpdating || m_bakeJob.has_value() || m_pendingBake != 0);
         if (ImGui::Button("ベイク実行")) m_pendingBake=selected->id;
         ImGui::EndDisabled();

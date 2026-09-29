@@ -39,6 +39,8 @@ struct GeneratedRock {
     // Rock Asset が形を減らす前のメッシュ（bakeSource があるときだけ）。LOD は形が違うので、
     // Material Bake の結果がまだ使えるかは、焼いたときのこのメッシュで照らす。
     std::shared_ptr<const geometry::Mesh> bakeMesh;
+    // Material Bake の High（ハイポリ）の内容のハッシュ。0 は未接続。変わったら焼き直しが要る。
+    uint64_t bakeDetail = 0;
 };
 struct RockEvaluation {
     std::shared_ptr<const geometry::StructurePlanes> planes;

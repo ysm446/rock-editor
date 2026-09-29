@@ -575,6 +575,31 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 result.rocks[0].bakeSource = id;
                 // 焼くのはこのメッシュそのもの。上流の Rock Asset が残した照合用のメッシュは使わない。
                 result.rocks[0].bakeMesh.reset();
+                // High（ハイポリ）。法線とハイトの転写に使う。内容が変わったら焼き直しが要るので、ハッシュを持つ。
+                result.rocks[0].bakeDetail = 0;
+                if (const auto* high = node->inputs.size() > 2 ? graph.FindUpstreamNodeForPin(node->inputs[2].id) : nullptr) {
+                    const auto detail = evaluate(high->id, depth + 1);
+                    if (!detail.error.empty()) return finish(detail);
+                    if (detail.hasModels || detail.rocks.empty())
+                        return finish(Failure(id, "Material Bake", "Highには生成メッシュを接続してください"));
+                    uint64_t hash = 14695981039346656037ull;
+                    const auto bytes = [&](const void* data, size_t size) {
+                        const auto* p = static_cast<const unsigned char*>(data);
+                        for (size_t i = 0; i < size; ++i) { hash ^= p[i]; hash *= 1099511628211ull; }
+                    };
+                    for (const auto& rock : detail.rocks)
+                        if (rock.volume) return finish(Failure(id, "Material Bake", "HighにはVolume to Meshの後のMeshを接続してください"));
+                    // 上流の設定と接続から決まるキーがあれば、それで足りる（メッシュを丸ごと読むより軽い）。
+                    if (const auto key = VolumeKey(graph, high->id, heightKeys)) {
+                        bytes(key->data(), key->size());
+                    } else {
+                        for (const auto& rock : detail.rocks) {
+                            bytes(rock.mesh.positions.data(), rock.mesh.positions.size() * sizeof(geometry::Vec3));
+                            bytes(rock.mesh.triangles.data(), rock.mesh.triangles.size() * sizeof(rock.mesh.triangles[0]));
+                        }
+                    }
+                    result.rocks[0].bakeDetail = hash | 1;
+                }
             }
         } else if (node->kind == NodeKind::RandomBoxes) {
             const auto* settings = std::get_if<geometry::BoxClusterSettings>(&node->settings);

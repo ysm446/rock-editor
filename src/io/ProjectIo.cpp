@@ -567,7 +567,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
             // 「ベイク済み」と判定されるので、材質を書けないときは指紋も書かない。
             // 旧版が Bakes/ へ保存した結果（一時でない材質）は、従来どおり書く。
             const bool keepBake = !writeMaterial(bake->bakedLayer.material).is_null();
-            item["materialBake"] = {{"geometryAo", bake->geometryAo}, {"aoDistance", bake->aoDistance}, {"aoStrength", bake->aoStrength}, {"aoSamples", bake->aoSamples}};
+            item["materialBake"] = {{"geometryAo", bake->geometryAo}, {"aoDistance", bake->aoDistance}, {"aoStrength", bake->aoStrength}, {"aoSamples", bake->aoSamples},
+                                    {"cageDistance", bake->cageDistance}};
             if (keepBake) {
                 item["materialBake"]["layer"] = WriteLayer(bake->bakedLayer, writeMaterial);
                 item["materialBake"]["fingerprint"] = bake->fingerprint;
@@ -939,6 +940,8 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.aoDistance = std::clamp(ReadFloat(*v, "aoDistance", .5f), .001f, 1000.f);
                     settings.aoStrength = std::clamp(ReadFloat(*v, "aoStrength", 1), 0.f, 1.f);
                     settings.aoSamples = std::clamp(ReadInt(*v, "aoSamples", 32), 8, 128);
+                    settings.cageDistance = std::clamp(ReadFloat(*v, "cageDistance", settings.cageDistance),
+                                                       geometry::kMinCageDistance, geometry::kMaxCageDistance);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeToMesh) {

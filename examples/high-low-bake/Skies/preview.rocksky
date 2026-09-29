@@ -1,0 +1,28 @@
+{
+  "format": "rock-editor.sky-asset",
+  "hdri": null,
+  "iblIntensity": 1.5,
+  "name": "preview",
+  "procedural": {
+    "groundColor": [
+      0.44999998807907104,
+      0.41999998688697815,
+      0.3799999952316284
+    ],
+    "horizonColor": [
+      0.699999988079071,
+      0.800000011920929,
+      0.949999988079071
+    ],
+    "intensity": 12000.0,
+    "zenithColor": [
+      0.20000000298023224,
+      0.36000001430511475,
+      0.7799999713897705
+    ]
+  },
+  "skyLuminance": 12000.0,
+  "source": "procedural",
+  "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}",
+  "version": 1
+}
