@@ -1,7 +1,7 @@
 # ドキュメント案内
 
 作成日時: 2026-09-20 22:04
-更新日時: 2026-09-27 03:52
+更新日時: 2026-09-30 06:08
 
 現在の入口は [Random Boxes → To Volume](reference/box-volume.md)。ランダムに重ねた直方体から単純な塊を作り、ボリュームへ変換する。
 
@@ -24,7 +24,7 @@ Rock Editor は、岩の形をノードで組み立てる Windows 向け岩生�
 - **ピース**: [Voronoi分割とピース操作の設計](reference/voronoi-pieces.md)、[薄板の積層とピースの欠け](reference/layered-pieces.md)、[隣接面積によるピースの侵食](reference/piece-erosion.md)
 - **メッシュ**: [Subdivide / Displace](reference/displace.md)、[Decimate](reference/decimate.md)、[Remesh](reference/remesh.md)
 - **表面と素材**: [素材の適用と形状AO](reference/material-application.md)、[岩用レイヤーマテリアル](reference/layer-material.md)、[生成メッシュへの材質とTriplanar](reference/triplanar.md)、[自動UV展開・UVビュー・材質ベイク](reference/uv-bake.md)、[Shape Mask](reference/shape-mask.md)、[Noise Mask](reference/noise-mask.md)、[Deposition Mask](reference/deposition-mask.md)、[Mask Combine](reference/mask-combine.md)、[Mask Filter](reference/mask-filter.md)
-- **設計メモ**: [岩らしい形と色のためのノード設計メモ](reference/rock-shaping-nodes.md)
+- **設計メモ**: [岩らしい形と色のためのノード設計メモ](reference/rock-shaping-nodes.md)、[岩アセットと山グラフ（計画）](reference/rock-asset-mountain-graph.md)
 
 要件の出発点は v2 原仕様。着手順と段階ごとの範囲は実装計画に整理する。設計資料の提案は実装済みの仕様ではない。原仕様内で段階の記述が異なる機能は計画に整理理由を記す。
 
