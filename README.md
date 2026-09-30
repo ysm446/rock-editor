@@ -10,7 +10,7 @@
 
 `Random Boxes → To Volume → Volume to Mesh → Mesh Output` で、重なる直方体の塊を作り、ボリュームへ変換して表示できる。
 右クリックメニューから追加し、個数・大きさ・ばらつき・回転・Seed と、ボリュームの解像度を調整する。
-[使い方と制限](docs/reference/box-volume.md) / [サンプルシーン](examples/random-boxes/random-boxes.rockscene)。
+[使い方と制限](docs/reference/box-volume.md) / [サンプルシーン](examples/random-boxes/random-boxes.rockgraph)。
 
 ## 現在の状態
 
@@ -69,7 +69,7 @@ $exe = Join-Path $PWD 'build/bin/Debug/rock_editor.exe'
 ## 保存形式
 
 プロジェクトはルートフォルダで管理する（「ファイル > ルートフォルダを開く…」）。
-ルート直下に目印の `project.reproj` ができ、シーンは `.rockscene`、
+ルート直下に目印の `project.reproj` ができ、シーンは `.rockgraph`、
 マテリアル / 天球 / モデルはルート内の `.rockmat` / `.rocksky` / `.model` として共有する。
 JSON の形式識別子は `rock-editor.*`。
 

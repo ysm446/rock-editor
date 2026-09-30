@@ -1,6 +1,6 @@
 # 直方体の塊とボリュームのサンプル
 
-アプリでこのフォルダをルートとして開き、`random-boxes.rockscene` を開く。
+アプリでこのフォルダをルートとして開き、`random-boxes.rockgraph` を開く。
 
 - Random Boxes：8個の直方体を、Seed 42・回転幅25度で重ねる。
 - To Volume：解像度48で一体のボリュームへ変換する。

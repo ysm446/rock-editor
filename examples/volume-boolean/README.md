@@ -1,6 +1,6 @@
 # ボリュームどうしのブーリアンのサンプル
 
-アプリでこのフォルダをルートとして開き、`volume-boolean.rockscene` を開く。
+アプリでこのフォルダをルートとして開き、`volume-boolean.rockgraph` を開く。
 
 - Random Boxes → To Volume（解像度64）：直方体の塊。Volume Boolean の A へ入れる。
 - Base Shape（Ellipsoid・弱いノイズ）→ To Volume（解像度48）→ Volume Transform：B にする形。Volume Transform で塊の肩へ寄せる。

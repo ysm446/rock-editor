@@ -1,6 +1,6 @@
 # 形状からマスクを作るサンプル
 
-アプリでこのフォルダをルートとして開き、`shape-mask.rockscene` を開く。`examples/volume-noise/` のグラフの後ろに、UV展開と素材3段を足したもの。UV展開があるので、開いてから表示まで20〜30秒かかる。
+アプリでこのフォルダをルートとして開き、`shape-mask.rockgraph` を開く。`examples/volume-noise/` のグラフの後ろに、UV展開と素材3段を足したもの。UV展開があるので、開いてから表示まで20〜30秒かかる。
 
 - Volume to Mesh → Decimate → **UV Unwrap**（1024）：Shape Mask はUV付きのメッシュを必要とする。
 - **Apply Material**（Surface「Weathered」、マスクなし）：全面を灰色の下地にする。

@@ -81,9 +81,9 @@ void RunRockScatterTests() {
                rockA = g.CreateNode(graph::NodeKind::Rock), rockB = g.CreateNode(graph::NodeKind::Rock),
                output = g.CreateNode(graph::NodeKind::MeshOutput);
     std::get<geometry::HeightmapSettings>(g.FindMutableNode(height)->settings).resolution = 32;
-    std::get<graph::RockNodeSettings>(g.FindMutableNode(rockA)->settings).scene = "C:/rocks/a.rockscene";
+    std::get<graph::RockNodeSettings>(g.FindMutableNode(rockA)->settings).scene = "C:/rocks/a.rockgraph";
     auto& b = std::get<graph::RockNodeSettings>(g.FindMutableNode(rockB)->settings);
-    b.scene = "C:/rocks/b.rockscene";
+    b.scene = "C:/rocks/b.rockgraph";
     b.scale = 2.0f;
     std::get<geometry::RockScatterSettings>(g.FindMutableNode(scatter)->settings).spacing = 10;
     const auto pin = [&](graph::GraphId node, size_t index) { return g.FindNode(node)->inputs[index].id; };
@@ -103,7 +103,7 @@ void RunRockScatterTests() {
     bool scaled = false;
     for (const auto& set : result.rockInstances) {
         total += set.instances.size();
-        if (set.scene == "C:/rocks/b.rockscene") scaled = set.scale == 2.0f;
+        if (set.scene == "C:/rocks/b.rockgraph") scaled = set.scale == 2.0f;
     }
     Check(result.error.empty() && result.rockInstances.size() == 2 && total > 100 && scaled && result.rocks.empty(),
           "撒いた岩を岩グラフごとにまとめる（Mesh Output へは地形を通さない。地形は別に出す）");

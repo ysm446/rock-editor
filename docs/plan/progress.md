@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-30 18:35
+更新日時: 2026-09-30 19:20
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,13 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-09-30 岩グラフ・山グラフの拡張子を変更
+
+- `.rockscene` → `.rockgraph`、`.rockmountain` → `.mountaingraph`（ユーザー判断。古い拡張子は読まない）。中身の形式（`rock-editor.scene`）は変えていない。コード・テスト・README・今の設計資料・サンプル（`git mv`）を置き換え、変更履歴と過去の進捗は当時のまま残した。
+- 手元の `data/Scenes/`（Git 管理外）も改名し、付属フォルダ（`rock_flat_2.rockgraph.bake`）、`data/project.reproj` の開始シーン、山グラフの中の参照も書き換えた。
+- Debug ビルド警告 0、全テスト成功。RelWithDebInfo で `examples/mountain/` の `boulder.rockgraph` を焼いて `mountain.mountaingraph` で撒けることを確認。
+- アプリ設定の「最近使ったシーン」に古い名前が残っていれば、開けないので履歴から消す必要がある。
 
 ### 2026-09-30 岩を撒く（M2）
 

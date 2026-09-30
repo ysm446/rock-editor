@@ -111,7 +111,7 @@ enum class NodeKind : uint32_t {
     RockAsset = 72,
     // 山グラフの地形。ハイトマップ（画像かノイズ）から UV 付きの格子のメッシュを作る。
     Heightmap = 73,
-    // 山グラフ。岩グラフ（.rockscene）を 1 つ選び、焼いた岩アセットを読む。出力は Rock。
+    // 山グラフ。岩グラフ（.rockgraph）を 1 つ選び、焼いた岩アセットを読む。出力は Rock。
     Rock = 74,
     // 山グラフ。地形（Mesh）とマスクを受け、つないだ Rock を間隔を空けて撒く。出力は Instances。
     RockScatter = 75,

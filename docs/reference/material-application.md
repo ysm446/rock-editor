@@ -70,4 +70,4 @@ BaseColorへ影は書き込まず、既存のRoughnessMetallicAO.pngのBへ合�
 
 ## サンプル
 
-[material-layers.rockscene](../../examples/material-layers/material-layers.rockscene) を同じフォルダをルートとして開く。茶色の下地に画像マスクで緑の素材を重ね、UVと形状AOを焼き付ける。素材は設定を見分けるための定数色であり、完成した岩素材ではない。
+[material-layers.rockgraph](../../examples/material-layers/material-layers.rockgraph) を同じフォルダをルートとして開く。茶色の下地に画像マスクで緑の素材を重ね、UVと形状AOを焼き付ける。素材は設定を見分けるための定数色であり、完成した岩素材ではない。

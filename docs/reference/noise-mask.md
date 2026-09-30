@@ -45,4 +45,4 @@ Shape MaskのUVラスタライズと余白埋めを共用する。各画素で�
 - マスクはCPUで生成する。UV展開・画素数が処理時間に影響する。キャンセルに対応。
 - このノードは形状を変位しない。形状に使う場合は素材のハイトとDisplaceを組み合わせる。
 
-サンプル: [noise-mask.rockscene](../../examples/noise-mask/noise-mask.rockscene)。Noise Maskで白黒、後段のApply Materialで灰色と茶色のムラを比較できる。
+サンプル: [noise-mask.rockgraph](../../examples/noise-mask/noise-mask.rockgraph)。Noise Maskで白黒、後段のApply Materialで灰色と茶色のムラを比較できる。

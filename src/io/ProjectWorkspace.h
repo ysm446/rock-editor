@@ -12,7 +12,7 @@ namespace rock::io {
 // プロジェクトのルートフォルダ、永続ID、共有アセットの入出力。GPU には依存しない。
 //
 // ルート直下の `project.reproj`（rock-editor.workspace 版1）がプロジェクトの目印。
-// シーン (.rockscene) はルート内の任意の場所に置き、マテリアル (.rockmat)・天球 (.rocksky)・モデル (.model) などは
+// シーン (.rockgraph) はルート内の任意の場所に置き、マテリアル (.rockmat)・天球 (.rocksky)・モデル (.model) などは
 // 個別ファイルとして共有する。参照は `{"uid", "path"}` で、走査した ID から現在のパスを引く。
 // 仕様は docs/design/project-workspace.md。
 class ProjectWorkspace {
@@ -58,9 +58,9 @@ private:
     std::unordered_map<std::string, std::string> m_knownUids;
 };
 
-// シーンのファイルか。岩グラフ（.rockscene）と山グラフ（.rockmountain）は中身が同じ形式で、拡張子だけが違う。
+// シーンのファイルか。岩グラフ（.rockgraph）と山グラフ（.mountaingraph）は中身が同じ形式で、拡張子だけが違う。
 bool IsSceneFile(const std::filesystem::path& path);
-// 山グラフ（.rockmountain）か。
+// 山グラフ（.mountaingraph）か。
 bool IsMountainFile(const std::filesystem::path& path);
 
 }  // namespace rock::io

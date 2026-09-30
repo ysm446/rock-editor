@@ -764,7 +764,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
         } else if (node->kind == NodeKind::Rock) {
             const auto* settings = std::get_if<RockNodeSettings>(&node->settings);
             if (!settings) return finish(Failure(id, "Rock", "設定がありません"));
-            if (settings->scene.empty()) return finish(Failure(id, "Rock", "岩グラフ（.rockscene）を選んでください"));
+            if (settings->scene.empty()) return finish(Failure(id, "Rock", "岩グラフ（.rockgraph）を選んでください"));
             result.rockReferences.push_back({id, settings->scene, settings->scale, settings->weight});
             // 選んで見るときは、原点に 1 つ置く（Rock Scatter はこの配置は使わず、参照だけを読む）。
             RockInstanceSet single;

@@ -26,4 +26,4 @@ examples/**/.rock-editor/
 # tools/ の Python スクリプトを実行すると作られる。
 __pycache__/
 # 焼いた岩アセット（岩グラフの付属フォルダ）はサンプルに含めない。サンプルを開いて焼く。
-examples/**/*.rockscene.bake/
+examples/**/*.rockgraph.bake/

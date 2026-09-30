@@ -37,7 +37,7 @@ std::string Extension(const fs::path& path) {
 bool AssetThumbnailCache::Supports(const fs::path& path) {
     const auto ext = Extension(path);
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" ||
-           ext == ".exr" || ext == ".hdr" || ext == ".rockmat" || ext == ".rocksky" || ext == ".rockscene" || ext == ".rockmountain" ||
+           ext == ".exr" || ext == ".hdr" || ext == ".rockmat" || ext == ".rocksky" || ext == ".rockgraph" || ext == ".mountaingraph" ||
            ext == ".tglayer" || ext == ".tgboundary" || ext == ".model" || ext == ".fbx";
 }
 
@@ -226,7 +226,7 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
     const auto extension = Extension(path);
     rhi::GpuTexture thumbnail;
     m_diskRecord = {};
-    if (extension == ".rockscene" || extension == ".rockmountain") {
+    if (extension == ".rockgraph" || extension == ".mountaingraph") {
         const auto preview = io::SceneThumbnailPath(workspace, path);
         std::error_code error;
         if (fs::is_regular_file(preview, error) && !BuildImage(device, preview, thumbnail))

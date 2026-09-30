@@ -37,11 +37,11 @@ void Application::RequestOpenProject() {
 }
 
 // saveAs が偽でも、まだ一度も保存していなければ保存先を聞く。
-// 保存先は常にルート内の .rockscene。
+// 保存先は常にルート内の .rockgraph。
 void Application::RequestSaveProject(bool saveAs) {
-    // 岩グラフは .rockscene、山グラフは .rockmountain。
+    // 岩グラフは .rockgraph、山グラフは .mountaingraph。
     const bool mountain = m_documentKind == DocumentKind::Mountain;
-    const wchar_t* extension = mountain ? L".rockmountain" : L".rockscene";
+    const wchar_t* extension = mountain ? L".mountaingraph" : L".rockgraph";
     const bool isScene = _wcsicmp(m_projectPath.extension().c_str(), extension) == 0;
     if (!saveAs && isScene && m_workspace.Contains(m_projectPath)) {
         m_pendingProjectSave = m_projectPath;
@@ -52,8 +52,8 @@ void Application::RequestSaveProject(bool saveAs) {
                 : m_workspace.Root() / L"Scenes" /
                       ((m_projectPath.empty() ? std::wstring(L"Untitled") : m_projectPath.stem().wstring()) + extension);
     std::filesystem::path path =
-        mountain ? ShowSaveFileDialog(L"山グラフを保存", {{L"Rock Editor 山グラフ", L"*.rockmountain"}}, L"rockmountain", initial)
-                 : ShowSaveFileDialog(L"シーンを保存", {{L"Rock Editor シーン", L"*.rockscene"}}, L"rockscene", initial);
+        mountain ? ShowSaveFileDialog(L"山グラフを保存", {{L"Rock Editor 山グラフ", L"*.mountaingraph"}}, L"mountaingraph", initial)
+                 : ShowSaveFileDialog(L"シーンを保存", {{L"Rock Editor シーン", L"*.rockgraph"}}, L"rockgraph", initial);
     if (path.empty()) {
         return;
     }
@@ -209,7 +209,7 @@ void Application::DrawFileMenu() {
     }
     if (ImGui::MenuItem("シーンを開く…")) {
         const std::filesystem::path path = ShowOpenFileDialog(
-            L"シーンを開く", {{L"シーン・山グラフ", L"*.rockscene;*.rockmountain"}});
+            L"シーンを開く", {{L"シーン・山グラフ", L"*.rockgraph;*.mountaingraph"}});
         if (!path.empty()) {
             m_pendingProjectOpen = path;
         }
@@ -237,7 +237,7 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         // 拡張子で行き先を決める。読み込み自体はどれも保留し、フレームの外で処理する。
-        if (extension == ".rockscene" || extension == ".rockmountain") {
+        if (extension == ".rockgraph" || extension == ".mountaingraph") {
             m_pendingProjectOpen = path;
         } else if (extension == ".rocksky" || extension == ".model") {
             m_pendingAssetOpen = path;
@@ -407,7 +407,7 @@ void Application::ProcessPendingFileWork() {
 
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                              m_renderer, m_graph, &m_models};
-        // .rockscene はルートの共有アセットを参照する。旧 .reproj は従来の埋め込み形式のまま読む。
+        // .rockgraph はルートの共有アセットを参照する。旧 .reproj は従来の埋め込み形式のまま読む。
         const bool isScene = io::IsSceneFile(path);
         // 岩アセットの一時の材質・テクスチャは、読み込みがライブラリを入れ替える前に捨てる。
         ReleaseRockAssets();

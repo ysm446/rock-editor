@@ -49,4 +49,4 @@ Shape Maskと同じUVラスタライズ・BVH・余白埋めを共用する。�
 
 水平面、裏面、垂直面、急斜面、近傍範囲より遠い天井、上に開いた入隅を単体テストで比較。距離・堆積量・反転・再現性・不正値・キャンセル、ノード登録、既存マスクとの合成、Apply Material、Subdivideへの伝播、キャッシュ無効化、Undo / Redoを確認。
 
-実アプリで積層岩の白黒プレビューと素材適用、保存後の設定を確認。サンプルは`examples/deposition-mask/deposition-mask.rockscene`。
+実アプリで積層岩の白黒プレビューと素材適用、保存後の設定を確認。サンプルは`examples/deposition-mask/deposition-mask.rockgraph`。

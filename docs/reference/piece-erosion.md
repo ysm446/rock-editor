@@ -11,7 +11,7 @@ Voronoi Fracture の Pieces を Piece Select へ接続し、**外周から順に
 
 Seed、中心保護、対象の側・層数・層番号、反転は「詳細設定」にまとめる。層別の集計も初期状態では折りたたむ。中心保護は、各板の側面隣接による連結部分で、露出面から最も遠い片を1つ残す。同距離なら体積、同体積ならIDで選ぶ。反転時は保護対象も選択する。
 
-プレビューは欠ける片をオレンジのワイヤーフレーム、次の候補を黄色、その他をグレーで表示する。「削除後」で残る形を確認できる。サンプルは [progressive-peel.rockscene](../../examples/layered-pieces/progressive-peel.rockscene)。
+プレビューは欠ける片をオレンジのワイヤーフレーム、次の候補を黄色、その他をグレーで表示する。「削除後」で残る形を確認できる。サンプルは [progressive-peel.rockgraph](../../examples/layered-pieces/progressive-peel.rockgraph)。
 
 ## 支持の記録
 

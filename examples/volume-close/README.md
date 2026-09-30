@@ -1,6 +1,6 @@
 # 割れ目の奥を埋めるサンプル
 
-アプリでこのフォルダをルートとして開き、`volume-close.rockscene` を開く。`examples/volume-noise/` のグラフの最後（Volume Noise の後ろ）に Volume Close を足したもの。
+アプリでこのフォルダをルートとして開き、`volume-close.rockgraph` を開く。`examples/volume-noise/` のグラフの最後（Volume Noise の後ろ）に Volume Close を足したもの。
 
 - Random Boxes → To Volume（解像度96）→ Plane Cuts → Volume Crack → Plane Cuts（局所）→ Volume Noise：`examples/volume-noise/` と同じ。
 - **Volume Close**：モード「遮蔽」、距離 0.2、しきい値 0.75、サンプル数 32。表面近くの外部の点から全方向へレイを飛ばし、7 割 5 分以上が形に当たる点を埋める。割れ目の奥や壁の陰だけが埋まり、入口の V と表面の浅いくぼみは残る。

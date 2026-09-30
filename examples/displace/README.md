@@ -1,6 +1,6 @@
 # Displaceサンプル
 
-このフォルダをルートとして `displace.rockscene` を開く。
+このフォルダをルートとして `displace.rockgraph` を開く。
 
 `Base Shape → Apply Material → Subdivide → Displace → UV Unwrap → Material Bake → Mesh Output`
 

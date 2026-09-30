@@ -311,7 +311,7 @@ void Application::ProcessPendingAssetBake() {
     if (!settings) return finish("Rock Asset が見つかりません", true);
     if (m_projectPath.empty() || !io::IsSceneFile(m_projectPath) || io::IsMountainFile(m_projectPath) ||
         !m_workspace.Contains(m_projectPath))
-        return finish("先にシーン（.rockscene）をルートの中へ保存してください", true);
+        return finish("先にシーン（.rockgraph）をルートの中へ保存してください", true);
     const auto evaluated = graph::EvaluateRocks(m_graph, id, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod, {},
                                                 nullptr, m_materialHeights.get());
     if (!evaluated.error.empty()) return finish(evaluated.error, true);

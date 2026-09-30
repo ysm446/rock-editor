@@ -1,6 +1,6 @@
 # Voronoi分割とピース操作
 
-`examples/voronoi-pieces` をルートとして開き、`voronoi-pieces.rockscene` を開く。
+`examples/voronoi-pieces` をルートとして開き、`voronoi-pieces.rockgraph` を開く。
 
 縦長のBoxを32分割し、X方向の外面に接する片を削除した後、残りから10片を抽出するサンプル。Base Shapeのノイズは0。Voronoi Fractureの伸長は `(1, 6, 1)`。
 

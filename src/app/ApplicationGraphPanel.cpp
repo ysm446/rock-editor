@@ -2098,7 +2098,7 @@ void Application::DrawGraphPanel() {
         auto edited = *rockNode;
         bool changed = false;
         if (ImGui::Button("岩グラフを選ぶ…")) {
-            const std::filesystem::path path = ShowOpenFileDialog(L"岩グラフを選ぶ", {{L"岩グラフ", L"*.rockscene"}});
+            const std::filesystem::path path = ShowOpenFileDialog(L"岩グラフを選ぶ", {{L"岩グラフ", L"*.rockgraph"}});
             if (!path.empty()) {
                 edited.scene = ToUtf8Portable(path);
                 changed = true;
@@ -2137,7 +2137,7 @@ void Application::DrawGraphPanel() {
                                          "Rock Scatter に複数の岩をつないだとき、この岩を選ぶ割合です。", "%.2f");
             ui::EndPropertyTable();
         }
-        ui::HintText("山グラフで撒く岩です。岩グラフ（.rockscene）を選び、その付属フォルダ（<岩グラフ>.bake）に焼いた岩アセットを読みます。"
+        ui::HintText("山グラフで撒く岩です。岩グラフ（.rockgraph）を選び、その付属フォルダ（<岩グラフ>.bake）に焼いた岩アセットを読みます。"
                      "Rock Scatter の Rock につなぎます。選んでいる間は、原点に 1 つ置いて見せます。");
         if (changed) {
             edited.scale = std::clamp(edited.scale, 0.001f, 1000.0f);
@@ -2178,8 +2178,8 @@ void Application::DrawGraphPanel() {
         }
         ui::HintText("Terrain（地形）の表面に、Rock につないだ岩を間隔を空けて撒きます。Mask（Shape Mask の上向き度など）をつなぐと、"
                      "その値を置く確率にします。複数の Rock をつなぐと、Rock の重みで選びます。");
-        ui::HintText("岩は段（LOD）を持ち、カメラから見た大きさで段を選んで描きます（表示モードの「LOD（色分け）」では段の色になりません。"
-                     "描画の数は上の行で確かめられます）。大・中・小の岩は Rock Scatter を分けて撒きます。");
+        ui::HintText("岩は段（LOD）を持ち、カメラから見た大きさで段を選んで描きます。表示モードの「LOD（色分け）」で段の色になり、"
+                     "段ごとの数は上の行で確かめられます。大・中・小の岩は Rock Scatter を分けて撒きます。");
         if (changed) {
             edited.spacing = std::clamp(edited.spacing, geometry::kMinScatterSpacing, 10000.0f);
             edited.maxCount = std::clamp(edited.maxCount, 1, geometry::kMaxScatterCount);

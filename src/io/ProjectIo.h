@@ -36,7 +36,7 @@ struct ProjectRefs {
 //
 // 読み込みは GPU 待機を伴うため、**フレームの外で呼ぶこと。**
 
-// workspace を渡すとシーン (.rockscene) として扱う。マテリアルと天球は共有アセット
+// workspace を渡すとシーン (.rockgraph) として扱う。マテリアルと天球は共有アセット
 // （`.rockmat` / `.rocksky`）へ分離し、画像はルート内へ取り込んで ID で参照する。
 // 渡さなければ従来の `.reproj`（埋め込み・相対パス）をそのまま読み書きする。
 bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,

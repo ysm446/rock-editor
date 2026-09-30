@@ -10,7 +10,7 @@ void RunVolumeTests() {
     using namespace rock;
     using tests::Check;
     tests::Section("直方体の塊とボリューム");
-    // sample.rockscene: 232分割から外面に触れない79片を抽出。
+    // sample.rockgraph: 232分割から外面に触れない79片を抽出。
     // 曖昧なセル面の2本の輪郭を1辺に潰すと、4面が接続して閉包検証で失敗する。
     {
         using namespace geometry;

@@ -1,6 +1,6 @@
 # ハイポリからの転写（High → Low）
 
-このフォルダをルートとして開き、`high-low-bake.rockscene` を読み込む。
+このフォルダをルートとして開き、`high-low-bake.rockgraph` を読み込む。
 
 ```text
 Random Boxes → To Volume → Volume Noise → Volume to Mesh ─┬───────────────────────────┐ High

@@ -99,7 +99,7 @@ void TestWorkspace() {
     const fs::path outside = FreshDirectory("outside") / "external.png";
     Touch(outside);
     const fs::path missing = root / "gone.png";
-    const fs::path scene = workspace.UniquePath(root / "Scenes", "scene", ".rockscene");
+    const fs::path scene = workspace.UniquePath(root / "Scenes", "scene", ".rockgraph");
     json legacy = {{"version", 26},
                    {"textures", json::array({{{"id", 1}, {"name", "a"}, {"path", rock::ToUtf8Portable(movedImage)}},
                                              {{"id", 2}, {"name", "b"}, {"path", rock::ToUtf8Portable(outside)}},
@@ -122,20 +122,20 @@ void TestWorkspace() {
     Check(loaded["materials"][0]["mapUvSets"]["ambientOcclusion"] == 2, "マップごとの UV が分離保存と展開で残る");
     Check(workspace.StartupScene() == scene, "開始シーンを覚える");
     json resaved = legacyCopy;
-    Check(workspace.SaveScene(workspace.UniquePath(root / "Scenes", "resaved", ".rockscene"), resaved), "同じ旧文書をもう一度シーンへ保存する");
+    Check(workspace.SaveScene(workspace.UniquePath(root / "Scenes", "resaved", ".rockgraph"), resaved), "同じ旧文書をもう一度シーンへ保存する");
     Check(!fs::exists(root / "Materials" / "embedded_1.rockmat") && !fs::exists(root / "Skies" / "sky_1.rocksky"),
           "同じ中身の埋め込みは連番の複製を作らない");
     Check(resaved["materials"][0]["asset"]["uid"] == legacy["materials"][0]["asset"]["uid"], "既存のマテリアルの ID を指す");
     json edited = legacyCopy;
     edited["materials"][0]["roughness"] = 0.5;
-    Check(workspace.SaveScene(workspace.UniquePath(root / "Scenes", "edited", ".rockscene"), edited) &&
+    Check(workspace.SaveScene(workspace.UniquePath(root / "Scenes", "edited", ".rockgraph"), edited) &&
               fs::exists(root / "Materials" / "embedded_1.rockmat"),
           "中身が違えば別のアセットにする");
     const std::string uid = loaded["sceneUid"];
     json again = loaded;
     Check(workspace.SaveScene(scene, again) && again["sceneUid"] == uid, "同じ保存先はシーン ID を保つ");
     json other = loaded;
-    Check(workspace.SaveScene(root / "Scenes" / "copy.rockscene", other) && other["sceneUid"] != uid, "名前を付けて保存は別 ID");
+    Check(workspace.SaveScene(root / "Scenes" / "copy.rockgraph", other) && other["sceneUid"] != uid, "名前を付けて保存は別 ID");
 
     Section("ProjectWorkspace: モデル（.model）の分離保存と展開");
     const fs::path fbx = workspace.UniquePath(root / "Models", "plane", ".fbx");
@@ -149,7 +149,7 @@ void TestWorkspace() {
                                                {"path", rock::ToUtf8Portable(fbx.lexically_relative(root / "Scenes"))},
                                                {"scale", 100.0},
                                                {"materials", json::array({1, nullptr})}}})}};
-    const fs::path modelScene = workspace.UniquePath(root / "Scenes", "model", ".rockscene");
+    const fs::path modelScene = workspace.UniquePath(root / "Scenes", "model", ".rockgraph");
     Check(workspace.SaveScene(modelScene, withModel), "モデルを含むシーンを保存する");
     json modelBody;
     Check(workspace.ReadAsset(root / "Models" / "plane.model", "model-asset", modelBody) &&
@@ -163,7 +163,7 @@ void TestWorkspace() {
               modelLoaded["models"][0]["materials"][1].is_null(),
           "モデルを展開し、FBX を絶対パス・スロットをシーンの番号へ戻す");
     // 以降のルート移動の確認は画像を持つシーンで行うので、開始シーンを戻しておく。
-    workspace.SetStartupScene(root / "Scenes" / "copy.rockscene");
+    workspace.SetStartupScene(root / "Scenes" / "copy.rockgraph");
 
     json broken = {{"materials", json::array({{{"id", 1}, {"asset", {{"uid", "missing"}, {"path", "Moved/renamed.rockmat"}}}}})}};
     // 無いマテリアルはシーン全体を失敗にせず、その項目だけ外す（同名のファイルへ勝手に付け替えない）。
@@ -207,13 +207,13 @@ void TestHistoryAndThumbnails() {
     rock::io::RecentFiles history;
     const fs::path storage = directory / "recent.json", a = directory / "A", b = directory / "B";
     history.Load(storage);
-    history.Add(a, a / "same.rockscene");
-    history.Add(b, b / "same.rockscene");
+    history.Add(a, a / "same.rockgraph");
+    history.Add(b, b / "same.rockgraph");
     Check(history.Entries(a).size() == 1 && history.Entries(b).size() == 1, "ルートごとに分かれる");
-    history.Add(a, a / "SAME.rockscene");
+    history.Add(a, a / "SAME.rockgraph");
     Check(history.Entries(a).size() == 1 && history.Roots().front().path == a, "大文字小文字を同一視し、ルートが先頭へ来る");
-    for (int i = 0; i < 12; ++i) history.Add(a, a / (std::to_string(i) + ".rockscene"));
-    Check(history.Entries(a).size() == 10 && history.Entries(a).front().filename() == "11.rockscene", "上限 10 件、新しい順");
+    for (int i = 0; i < 12; ++i) history.Add(a, a / (std::to_string(i) + ".rockgraph"));
+    Check(history.Entries(a).size() == 10 && history.Entries(a).front().filename() == "11.rockgraph", "上限 10 件、新しい順");
     rock::io::RecentFiles loaded;
     loaded.Load(storage);
     Check(loaded.Entries(a) == history.Entries(a) && loaded.Entries(b).size() == 1, "保存と読み込み");
@@ -235,7 +235,7 @@ void TestHistoryAndThumbnails() {
     ProjectWorkspace workspace;
     fs::create_directories(a, error);
     Check(workspace.Open(a), "履歴用のルートを開く");
-    ProjectWorkspace::WriteJson(storage, {{"format", "rock-editor.recent"}, {"projects", {rock::ToUtf8Portable(a / "nested.rockscene")}}});
+    ProjectWorkspace::WriteJson(storage, {{"format", "rock-editor.recent"}, {"projects", {rock::ToUtf8Portable(a / "nested.rockgraph")}}});
     loaded.Load(storage);
     loaded.AddRoot(directory);
     Check(loaded.Entries(directory).empty(), "入れ子のルートの履歴を親へ取り込まない");
@@ -259,12 +259,12 @@ void TestHistoryAndThumbnails() {
     Check(original.image == changed.image && !rock::io::ThumbnailIsCurrent(changed), "参照先の画像が変わると同じ枠が無効になる");
     fs::remove(image, error);
     Check(changed.stamp != rock::io::AssetThumbnailRecord(workspace, material).stamp, "参照先が消えても無効になる");
-    const fs::path scene = a / "scene.rockscene";
+    const fs::path scene = a / "scene.rockgraph";
     json sceneDocument = {{"textures", json::array()}, {"materials", json::array()}, {"skies", json::array()}};
     Check(workspace.SaveScene(scene, sceneDocument), "シーン ID 付きで保存する");
     const auto thumbnail = rock::io::SceneThumbnailPath(workspace, scene);
     Check(thumbnail.parent_path() == a / ".rock-editor" / "scene-thumbnails", "シーンの画像はルート内の一か所へ");
-    const fs::path renamedScene = a / "renamed.rockscene";
+    const fs::path renamedScene = a / "renamed.rockgraph";
     fs::rename(scene, renamedScene, error);
     Check(rock::io::SceneThumbnailPath(workspace, renamedScene) == thumbnail, "改名しても同じ画像を指す");
 
@@ -328,7 +328,7 @@ void TestSurfaceAssets() {
                   {"surfaceLayouts", {{"version", 6}, {"layerMaterials", json::array({layer})},
                                       {"boundaryMaterials", json::array({boundary})}}}};
     const json original = scene;
-    const fs::path scenePath = root / "Scenes" / "a.rockscene";
+    const fs::path scenePath = root / "Scenes" / "a.rockgraph";
     const fs::path layerPath = root / "LayerMaterials" / "gravel.tglayer";
     const fs::path boundaryPath = root / "BoundaryMaterials" / "edge.tgboundary";
     Check(workspace.SaveScene(scenePath, scene), "レイヤー・境界を含むシーンを保存する");
@@ -359,7 +359,7 @@ void TestSurfaceAssets() {
           "境界の画像参照をシーンの番号へ戻す");
 
     json resaved = original;
-    Check(workspace.SaveScene(root / "Scenes" / "b.rockscene", resaved) &&
+    Check(workspace.SaveScene(root / "Scenes" / "b.rockgraph", resaved) &&
               !fs::exists(root / "LayerMaterials" / "gravel_1.tglayer") &&
               !fs::exists(root / "BoundaryMaterials" / "edge_1.tgboundary") &&
               resaved["surfaceLayouts"]["layerMaterials"][0]["asset"]["uid"] == savedLayer["asset"]["uid"],

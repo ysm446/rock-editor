@@ -77,7 +77,7 @@ Shape Mask を選ぶと、入力メッシュにマスクを白黒のテクスチ
 
 ## サンプル
 
-[shape-mask.rockscene](../../examples/shape-mask/shape-mask.rockscene) を同じフォルダをルートとして開く。`examples/volume-noise/` の形を Decimate → UV Unwrap し、灰色の下地、オクルージョンで割れ目に載せた錆色、上向き度で上面に載せた明るい埃色を重ねている。素材は働きを見分けるための定数色で、完成した岩素材ではない。
+[shape-mask.rockgraph](../../examples/shape-mask/shape-mask.rockgraph) を同じフォルダをルートとして開く。`examples/volume-noise/` の形を Decimate → UV Unwrap し、灰色の下地、オクルージョンで割れ目に載せた錆色、上向き度で上面に載せた明るい埃色を重ねている。素材は働きを見分けるための定数色で、完成した岩素材ではない。
 
 ## 曲率の検証
 

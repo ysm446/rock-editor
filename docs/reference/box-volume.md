@@ -22,7 +22,7 @@ To Volume [Volume] → [Volume] Volume Transform [Volume] → [Volume] Volume to
 
 Random Boxes の出力ピンをクリックすると変換前の直方体集合を見られる。To Volume の出力ピンでは変換後の表面を確認できる。Random Boxes を直接 Mesh Output へつないでも表示できる。
 
-サンプルは [random-boxes.rockscene](../../examples/random-boxes/random-boxes.rockscene) と [volume-transform.rockscene](../../examples/volume-transform/volume-transform.rockscene)。アプリでそれぞれのフォルダをルートとして開き、そのシーンを開く。サンプル用の空アセットも同じフォルダに含む。
+サンプルは [random-boxes.rockgraph](../../examples/random-boxes/random-boxes.rockgraph) と [volume-transform.rockgraph](../../examples/volume-transform/volume-transform.rockgraph)。アプリでそれぞれのフォルダをルートとして開き、そのシーンを開く。サンプル用の空アセットも同じフォルダに含む。
 
 ## Random Boxes
 

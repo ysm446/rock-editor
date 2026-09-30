@@ -8,8 +8,8 @@
 
 // 岩アセット（Rock Asset ノードが焼いたもの）の保存と読み込み。
 //
-// 岩アセットは岩グラフに含まれる。設定はシーン（.rockscene）に、焼いた結果は同名の付属フォルダ
-// （`Foo.rockscene` の横の `Foo.rockscene.bake/`）に置く。フォルダの中身:
+// 岩アセットは岩グラフに含まれる。設定はシーン（.rockgraph）に、焼いた結果は同名の付属フォルダ
+// （`Foo.rockgraph` の横の `Foo.rockgraph.bake/`）に置く。フォルダの中身:
 //   asset.json                 目録（形式・段ごとのメッシュと切り替えの大きさ・範囲・内容のハッシュ）
 //   lod0.rockmesh, lod1…       段ごとのメッシュ（独自のバイナリ。geometry::Mesh をそのまま書く）
 //   BaseColor.png など 4 枚    Material Bake の結果（ベイクしていれば）。全ての段で共有する

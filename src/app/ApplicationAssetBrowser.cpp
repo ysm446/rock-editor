@@ -4,7 +4,7 @@
 //
 // 一覧はファイルそのもの。**シーンへ読み込んでいないものも見える。** ダブルクリックで
 // 読み込み（画像 → テクスチャ、.rockmat → マテリアル、.rocksky → 天球、.model → モデル、
-// .fbx → モデルを作る、.rockscene → シーン）。
+// .fbx → モデルを作る、.rockgraph → シーン）。
 // 読み込み済みのものはライブラリのサムネイルとドラッグ元（ROCK_TEXTURE / ROCK_MATERIAL）を使い、
 // 未読み込みのものは AssetThumbnailCache が
 // 別領域で作ったサムネイルを出す。クリック / Ctrl / Shift で複数選択し、フォルダへドラッグで移動、
@@ -353,7 +353,7 @@ void Application::RefreshAssetBrowser() {
         if (entry.is_symlink(error) || entry.path().filename().wstring().starts_with(L".")) continue;
         const auto ext = Extension(entry.path());
         if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".rockmat" && ext != ".tglayer" && ext != ".rocksky" &&
-            ext != ".model" && ext != ".fbx" && ext != ".rockscene" && ext != ".rockmountain") continue;
+            ext != ".model" && ext != ".fbx" && ext != ".rockgraph" && ext != ".mountaingraph") continue;
         m_assetEntries.push_back(entry);
     }
     std::sort(m_assetEntries.begin(), m_assetEntries.end(), [](const auto& a, const auto& b) {
@@ -769,7 +769,7 @@ void Application::DrawAssetBrowser() {
             if (folder) {
                 DrawFolderIcon(thumb.min, thumb.max);
             } else if (!handle) {
-                const char* type = ext == ".rockscene" ? "シーン" : ext == ".rockmountain" ? "山グラフ" : (ext == ".rockmat" || ext == ".tglayer") ? "マテリアル" :
+                const char* type = ext == ".rockgraph" ? "シーン" : ext == ".mountaingraph" ? "山グラフ" : (ext == ".rockmat" || ext == ".tglayer") ? "マテリアル" :
                     ext == ".rocksky" ? "天球" :
                     (ext == ".model" || ext == ".fbx") ? "モデル" :
                     IsImage(ext) || ext == ".hdr" ? "画像" : "ファイル";
@@ -950,8 +950,8 @@ void Application::DrawAssetBrowser() {
                 m_pendingNewKind = kind;
                 m_pendingNewPath = m_workspace.UniquePath(m_assetDirectory, name, extension);
             };
-            if (ImGui::MenuItem("岩グラフを作成")) createDocument(DocumentKind::Rock, "新規岩グラフ", ".rockscene");
-            if (ImGui::MenuItem("山グラフを作成")) createDocument(DocumentKind::Mountain, "新規山グラフ", ".rockmountain");
+            if (ImGui::MenuItem("岩グラフを作成")) createDocument(DocumentKind::Rock, "新規岩グラフ", ".rockgraph");
+            if (ImGui::MenuItem("山グラフを作成")) createDocument(DocumentKind::Mountain, "新規山グラフ", ".mountaingraph");
             if (ImGui::MenuItem("天球を作成")) {
                 const auto id = m_skyLibrary.Add("新規天球");
                 auto* asset = m_skyLibrary.FindMutable(id);

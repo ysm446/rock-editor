@@ -1,6 +1,6 @@
 # 層状の段と、上面だけをなまらせるサンプル
 
-アプリでこのフォルダをルートとして開き、`volume-smooth-terrace.rockscene` を開く。`examples/volume-noise/` のグラフの後ろに Volume Terrace と Volume Smooth を足したもの。
+アプリでこのフォルダをルートとして開き、`volume-smooth-terrace.rockgraph` を開く。`examples/volume-noise/` のグラフの後ろに Volume Terrace と Volume Smooth を足したもの。
 
 - Random Boxes → To Volume（解像度96）→ Plane Cuts → Volume Crack → Plane Cuts（局所）→ Volume Noise：`examples/volume-noise/` と同じ。
 - **Volume Terrace**：段の間隔 0.12、深さ 0.025、へこむ割合 0.45、なだらかさ 0.08、ばらつき 0.5、ゆらぎ 0.3、向き (12, 0, 8) 度。少し傾いた層が交互に突き出し、堆積岩のような棚になる。

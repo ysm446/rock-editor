@@ -1,6 +1,6 @@
 # ボリュームを動かすサンプル
 
-アプリでこのフォルダをルートとして開き、`volume-transform.rockscene` を開く。
+アプリでこのフォルダをルートとして開き、`volume-transform.rockgraph` を開く。
 
 - Random Boxes：8個の直方体を、Seed 42・回転幅25度で重ねる。
 - To Volume：解像度48で一体のボリュームへ変換する。

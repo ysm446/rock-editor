@@ -1,6 +1,6 @@
 # マスクを合成するサンプル
 
-アプリでこのフォルダをルートとして開き、`mask-combine.rockscene` を開く。`examples/shape-mask/` のグラフの錆のマスクを、**Mask Combine** で「オクルージョン − 上向き度」にしたもの。UV展開があるので、開いてから表示まで20〜30秒かかる。
+アプリでこのフォルダをルートとして開き、`mask-combine.rockgraph` を開く。`examples/shape-mask/` のグラフの錆のマスクを、**Mask Combine** で「オクルージョン − 上向き度」にしたもの。UV展開があるので、開いてから表示まで20〜30秒かかる。
 
 - **Apply Material**（Surface「Weathered」、マスクなし）：全面を灰色の下地にする。
 - **Apply Material**（Surface「Rust」、Mask に **Mask Combine**・演算「差（A − B）」）：A に Shape Mask「オクルージョン」、B に Shape Mask「上向き度」。割れ目と入隅のうち、上を向いた面を除いた所に錆色を載せる。

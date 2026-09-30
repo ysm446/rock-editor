@@ -1,6 +1,6 @@
 # Apply Materialと形状AOのサンプル
 
-`examples/material-layers`をルートとして開き、`material-layers.rockscene`を開きます。
+`examples/material-layers`をルートとして開き、`material-layers.rockgraph`を開きます。
 
 - 2つのApply Materialで茶色の下地と緑の素材を重ねます。
 - Material Maskの画像を外すと定数マスクになり、値0で下地、1で上の素材を確認できます。

@@ -18,9 +18,9 @@ void RunRockAssetIoTests() {
     const fs::path root = fs::path(ROCK_DATA_DIR) / "test" / ("rock-asset-io-" + std::to_string(stamp));
     std::error_code error;
     fs::create_directories(root / "Scenes", error);
-    const fs::path scene = root / "Scenes" / "boulder.rockscene";
+    const fs::path scene = root / "Scenes" / "boulder.rockgraph";
     std::ofstream(scene) << "{}";
-    Check(io::RockAssetFolder(scene).filename() == L"boulder.rockscene.bake", "付属フォルダは <シーン>.bake");
+    Check(io::RockAssetFolder(scene).filename() == L"boulder.rockgraph.bake", "付属フォルダは <シーン>.bake");
 
     // 段の違う 2 つのメッシュ（UV は持たない）。
     geometry::BaseRockSettings settings;
@@ -64,13 +64,13 @@ void RunRockAssetIoTests() {
     // 壊れたメッシュは読まない。
     std::ofstream(io::RockAssetFolder(scene) / "lod0.rockmesh", std::ios::binary | std::ios::trunc) << "RKMESH01broken";
     Check(!io::LoadRockAsset(scene, loaded, message) && !message.empty(), "壊れたメッシュは読まない（未焼成として扱う）");
-    Check(!io::LoadRockAsset(root / "Scenes" / "none.rockscene", loaded, message), "付属フォルダが無ければ未焼成");
+    Check(!io::LoadRockAsset(root / "Scenes" / "none.rockgraph", loaded, message), "付属フォルダが無ければ未焼成");
 
     Section("岩アセットの付属フォルダの改名・移動");
     io::ProjectWorkspace workspace;
     Check(workspace.Open(root), "ルートを開く");
     Check(io::SaveRockAsset(scene, {{{coarse, 1.0f}}, false, "h", {}, {}}, message), "焼き直す");
-    const auto renamed = io::RenameAsset(workspace, scene, "cliff.rockscene");
+    const auto renamed = io::RenameAsset(workspace, scene, "cliff.rockgraph");
     Check(!renamed.empty() && fs::is_directory(io::RockAssetFolder(renamed)) && !fs::exists(io::RockAssetFolder(scene)),
           "シーンの名前を変えると付属フォルダも揃う");
     fs::create_directories(root / "Moved", error);

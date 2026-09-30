@@ -1,6 +1,6 @@
 # 三角形を一様に作り直すサンプル
 
-アプリでこのフォルダをルートとして開き、`remesh.rockscene` を開く。`examples/volume-noise/` のグラフの Volume to Mesh と Mesh Output の間に Remesh を足したもの。
+アプリでこのフォルダをルートとして開き、`remesh.rockgraph` を開く。`examples/volume-noise/` のグラフの Volume to Mesh と Mesh Output の間に Remesh を足したもの。
 
 - Random Boxes → To Volume（解像度96）→ Plane Cuts → Volume Crack → Plane Cuts（局所）→ Volume Noise → Volume to Mesh（Dual Contouring）：`examples/volume-noise/` と同じ。
 - **Remesh**：辺の長さ 0.015（形の最長辺の 1.5%）、繰り返し 5、特徴辺の角度 40 度。Dual Contouring の大きさのばらつく三角形を、一様な正三角形に近い形へ作り直す。

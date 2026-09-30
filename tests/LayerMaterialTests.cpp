@@ -95,7 +95,7 @@ void RunLayerMaterialTests() {
     check(workspace.Expand(document), "UID survives source rename");
     // 新しい数値IDから保存し直しても依存が通常素材として残る。
     document["textures"] = json::array(); document["models"] = json::array(); document["skies"] = json::array();
-    auto scene = workspace.UniquePath(root, "scene", ".rockscene");
+    auto scene = workspace.UniquePath(root, "scene", ".rockgraph");
     check(workspace.SaveScene(scene, document), "scene save with layer before source");
     check(workspace.ReadScene(scene, document), "scene reload");
     check(document["materials"][0]["materials"][0]["material"] == 2, "scene reference preserved");

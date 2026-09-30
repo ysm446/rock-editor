@@ -63,11 +63,11 @@ Rock Asset を選ぶと、ビューポートにその出力を出す（選択を
 - `--rock-asset-lod <n>`: LOD の出し方。-1 で自動、0 以上でその段に固定。
 - `--view <番号>`: 表示モード（`renderer::DebugView` の数値。10 がクレイ、11 が LOD の色分け）。
 
-例: `rock_editor.exe --root examples/rock-asset --project examples/rock-asset/rock-asset.rockscene --select-node 80 --rock-asset-lod 3 --view 11 --screenshot-ui out.png`
+例: `rock_editor.exe --root examples/rock-asset --project examples/rock-asset/rock-asset.rockgraph --select-node 80 --rock-asset-lod 3 --view 11 --screenshot-ui out.png`
 
 ## 岩アセットを焼く（2026-09-30）
 
-設定欄の「岩アセットを焼く」で、シーンの付属フォルダ `<シーンのファイル名>.bake/`（`Boulder.rockscene` なら `Boulder.rockscene.bake/`）へ書く。シーンをルートの中へ保存してから使う（未保存ならボタンが押せない）。
+設定欄の「岩アセットを焼く」で、シーンの付属フォルダ `<シーンのファイル名>.bake/`（`Boulder.rockgraph` なら `Boulder.rockgraph.bake/`）へ書く。シーンをルートの中へ保存してから使う（未保存ならボタンが押せない）。
 
 | ファイル | 内容 |
 | --- | --- |
@@ -86,7 +86,7 @@ Rock Asset を選ぶと、ビューポートにその出力を出す（選択を
 
 ### 見送ったこと
 
-計画では「既存の Model ノードで `.rockscene` を選んで置けるようにする」としていた。`.model` は元のファイルをワークスペースの ID で参照する仕組みで、ここへ岩アセットを差し込むと改修が大きいので見送った。山グラフでは M2 の Rock ノードが付属フォルダを直接読む。
+計画では「既存の Model ノードで `.rockgraph` を選んで置けるようにする」としていた。`.model` は元のファイルをワークスペースの ID で参照する仕組みで、ここへ岩アセットを差し込むと改修が大きいので見送った。山グラフでは M2 の Rock ノードが付属フォルダを直接読む。
 
 ## 制限
 

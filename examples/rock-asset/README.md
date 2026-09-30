@@ -1,6 +1,6 @@
 # Rock Asset（LOD）
 
-このフォルダをルートとして開き、`rock-asset.rockscene` を読み込む。[uv-bake](../uv-bake/README.md) のサンプルの Material Bake と Mesh Output の間に Rock Asset を挟んだもの。
+このフォルダをルートとして開き、`rock-asset.rockgraph` を読み込む。[uv-bake](../uv-bake/README.md) のサンプルの Material Bake と Mesh Output の間に Rock Asset を挟んだもの。
 
 ```text
 Random Boxes → To Volume → Volume to Mesh → UV Unwrap → Material Bake → Rock Asset → Mesh Output

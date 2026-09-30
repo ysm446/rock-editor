@@ -335,11 +335,11 @@ bool ProjectWorkspace::ReadAsset(const fs::path& path, const char* kind, json& b
 }
 
 bool IsMountainFile(const fs::path& path) {
-    return _wcsicmp(path.extension().c_str(), L".rockmountain") == 0;
+    return _wcsicmp(path.extension().c_str(), L".mountaingraph") == 0;
 }
 
 bool IsSceneFile(const fs::path& path) {
-    return _wcsicmp(path.extension().c_str(), L".rockscene") == 0 || IsMountainFile(path);
+    return _wcsicmp(path.extension().c_str(), L".rockgraph") == 0 || IsMountainFile(path);
 }
 
 bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {

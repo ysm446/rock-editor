@@ -11,8 +11,8 @@
 Heightmap ─┬→ Mesh Output ← Material ← Surface          （地形）
            ├→ Shape Mask（上向き度・反転）──┐ Mask
            └──────────────────────────────┤ Terrain
-[Rock: boulder.rockscene] ─────────────────┤ Rock 1
-[Rock: cliff.rockscene] ───────────────────┤ Rock 2 …
+[Rock: boulder.rockgraph] ─────────────────┤ Rock 1
+[Rock: cliff.rockgraph] ───────────────────┤ Rock 2 …
                                            └→ Rock Scatter → Mesh Output （岩）
 ```
 
@@ -26,7 +26,7 @@ Heightmap ─┬→ Mesh Output ← Material ← Surface          （地形）
 
 | 項目 | 内容 |
 | --- | --- |
-| 岩グラフ | 「岩グラフを選ぶ…」で `.rockscene` を選ぶ。シーンからの相対パスで保存する |
+| 岩グラフ | 「岩グラフを選ぶ…」で `.rockgraph` を選ぶ。シーンからの相対パスで保存する |
 | 倍率 | 岩アセットに掛ける（0.01〜10、既定 1） |
 | 重み | Rock Scatter に複数の Rock をつないだとき、この岩を選ぶ割合（既定 1） |
 
@@ -78,4 +78,4 @@ Heightmap ─┬→ Mesh Output ← Material ← Surface          （地形）
 
 `tests/RockScatterTests.cpp`。平らな地形で間隔の保証、地形の上・上向き・倍率の範囲、再現性、上限、マスクと反転、重み（0 は選ばない）、重みの合計 0 の診断、沈める量、グラフ（ピン、Rock の空きが増える、Mesh Output へつながる、Rock は直接つながらない、岩グラフごとのまとめ、選んだときの地形と Rock の 1 つ置き、未選択の診断）を確認する。
 
-実アプリ（RelWithDebInfo）では、2 つの岩グラフを焼き、傾斜のマスクで 365 個を撒いた山を確認した。描画は 8 ドローコール・120 FPS。遠景（330 m）は全て LOD3、中景では LOD1〜3 が距離で混ざり、近くは LOD0 になることを「LOD（色分け）」で確認した。`examples/mountain/` でも、`boulder.rockscene` を焼いてから山グラフを開くと岩が撒かれることを確認した（`build/rock-asset-validation/`）。「岩グラフを選ぶ…」のダイアログと、Rock Scatter の設定を変える操作は実マウスで未確認。
+実アプリ（RelWithDebInfo）では、2 つの岩グラフを焼き、傾斜のマスクで 365 個を撒いた山を確認した。描画は 8 ドローコール・120 FPS。遠景（330 m）は全て LOD3、中景では LOD1〜3 が距離で混ざり、近くは LOD0 になることを「LOD（色分け）」で確認した。`examples/mountain/` でも、`boulder.rockgraph` を焼いてから山グラフを開くと岩が撒かれることを確認した（`build/rock-asset-validation/`）。「岩グラフを選ぶ…」のダイアログと、Rock Scatter の設定を変える操作は実マウスで未確認。

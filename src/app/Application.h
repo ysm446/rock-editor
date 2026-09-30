@@ -58,7 +58,7 @@ struct StartupOptions {
     std::filesystem::path hdriPath;
     // 起動時にテクスチャライブラリへ読み込む画像。--texture を繰り返し指定できる。
     std::vector<std::filesystem::path> texturePaths;
-    // 起動時に開くシーン (.rockscene) または旧プロジェクト (.reproj)。ルートのフォルダや
+    // 起動時に開くシーン (.rockgraph) または旧プロジェクト (.reproj)。ルートのフォルダや
     // project.reproj を渡すとルートだけを開く。空なら新規シーンで始める。
     std::filesystem::path projectPath;
     // プロジェクトのルートフォルダ（--root）。空なら最近使ったルート、無ければ data/。
@@ -897,7 +897,7 @@ private:
     bool m_showTextureList = false;
     bool m_showMaterialList = false;
     bool m_showSkyList = false;
-    std::filesystem::path m_projectPath;  // 現在のシーン (.rockscene)。未保存なら空
+    std::filesystem::path m_projectPath;  // 現在のシーン (.rockgraph)。未保存なら空
     io::RecentFiles m_recentProjects;
     io::AppSettings m_settings;
     // 設定ウィンドウを出しているか。ドックへは収めない補助ウィンドウ。
@@ -940,7 +940,7 @@ private:
     compositor::TextureId m_textureRemoveCandidate = compositor::kNoTexture;
     std::vector<std::string> m_textureRemoveUsers;
     bool m_pendingProjectNew = false;
-    // 開いている文書の種類。拡張子（.rockscene / .rockmountain）で決まり、右クリックメニューと保存先に効く。
+    // 開いている文書の種類。拡張子（.rockgraph / .mountaingraph）で決まり、右クリックメニューと保存先に効く。
     enum class DocumentKind { Rock, Mountain };
     DocumentKind m_documentKind = DocumentKind::Rock;
     // 新規作成で作る文書の種類（m_pendingProjectNew と一緒に使う）。

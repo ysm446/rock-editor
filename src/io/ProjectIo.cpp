@@ -1639,7 +1639,7 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
     // ここで失敗したら文書には触らない（片方だけ新しい状態を作らない）。
     if (workspace != nullptr) {
         if (!IsSceneFile(savePath) || !workspace->Contains(savePath)) {
-            ROCK_LOG_ERROR("シーンはプロジェクトルート内の .rockscene / .rockmountain へ保存してください: %s",
+            ROCK_LOG_ERROR("シーンはプロジェクトルート内の .rockgraph / .mountaingraph へ保存してください: %s",
                          ToUtf8Display(savePath).c_str());
             return false;
         }

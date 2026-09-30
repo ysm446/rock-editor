@@ -1,6 +1,6 @@
 # UVのないSDFメッシュへの材質適用
 
-このフォルダをルートとして開き、`triplanar.rockscene` を読み込む。
+このフォルダをルートとして開き、`triplanar.rockgraph` を読み込む。
 
 1. `Surface` の `Result` が `Mesh Output` の `Material` に接続されている。
 2. Surfaceの「マッピング → 方式」はTriplanar。反復サイズ・位置・回転・混合の鋭さを変更できる。

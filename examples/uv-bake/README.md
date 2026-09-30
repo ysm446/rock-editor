@@ -1,6 +1,6 @@
 # 自動UV展開と材質ベイク
 
-このフォルダをルートとして開き、`uv-bake.rockscene` を読み込む。
+このフォルダをルートとして開き、`uv-bake.rockgraph` を読み込む。
 
 ```text
 Random Boxes → To Volume → Volume to Mesh → UV Unwrap → Material Bake → Mesh Output

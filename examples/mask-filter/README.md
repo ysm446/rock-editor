@@ -3,7 +3,7 @@
 作成日時: 2026-09-26 20:29
 更新日時: 2026-09-26 20:29
 
-アプリでこのフォルダをルートとして開き、`mask-filter.rockscene` を開く。[Mask Combine のサンプル](../mask-combine/README.md) の錆のマスク（オクルージョン − 上向き度）を、**Mask Filter**（種類「ぼかし」、半径 0.08 m）でぼかしてから Apply Material へ渡したもの。UV展開があるので、開いてから表示まで20〜30秒かかる。
+アプリでこのフォルダをルートとして開き、`mask-filter.rockgraph` を開く。[Mask Combine のサンプル](../mask-combine/README.md) の錆のマスク（オクルージョン − 上向き度）を、**Mask Filter**（種類「ぼかし」、半径 0.08 m）でぼかしてから Apply Material へ渡したもの。UV展開があるので、開いてから表示まで20〜30秒かかる。
 
 Mask Filter のノードを選ぶと、ぼかしたマスクを白黒で貼った状態でプレビューされる。UVの継ぎ目をまたいでもつながってぼける。
 

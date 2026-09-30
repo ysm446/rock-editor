@@ -2,8 +2,8 @@
 
 このフォルダをアプリのルートとして開く。
 
-- `marching-tetrahedra.rockscene`：従来方式。
-- `dual-contouring.rockscene`：Dual Contouring。
+- `marching-tetrahedra.rockgraph`：従来方式。
+- `dual-contouring.rockgraph`：Dual Contouring。
 
 どちらも同じ8個の直方体・Seed 42・解像度48・カメラ設定を使う。`Volume to Mesh` を選択し「変換方式」を切り替えても比較できる。
 

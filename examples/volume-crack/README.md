@@ -1,6 +1,6 @@
 # 割れ目を彫るサンプル
 
-アプリでこのフォルダをルートとして開き、`volume-crack.rockscene` を開く。[設計メモ](../../docs/reference/rock-shaping-nodes.md) の想定グラフのうち、形を作る前半をつないだもの。
+アプリでこのフォルダをルートとして開き、`volume-crack.rockgraph` を開く。[設計メモ](../../docs/reference/rock-shaping-nodes.md) の想定グラフのうち、形を作る前半をつないだもの。
 
 - Random Boxes → To Volume（解像度96）：6個の直方体を重ねた塊。
 - Plane Cuts（全体・5枚）：塊の外側を大きく面取りする。
