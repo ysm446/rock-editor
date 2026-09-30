@@ -95,6 +95,21 @@ rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
 `--test-copy-to` は先頭以外のノードをコピーして指定シーンへ貼る（`--save-project` と併用）。
 検証素材・プロジェクト・スクリーンショットは Git 対象外の `data/` に置く。
 
+### rock_cli（UI なしでグラフを評価する）
+
+LLM などアプリの外で動く道具が、岩グラフを書いて結果を確かめるためのコンソールの実行ファイル（GPU・ウィンドウは使わない）。
+
+```text
+rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--pretty]
+rock_cli catalog [--pretty]
+```
+
+`eval` はグラフを評価し、標準出力へ JSON を書く（成否、エラーのノード、読み込みで捨てたノード・リンク、メッシュの三角形数・寸法・閉じているか・塊と空洞の数と体積）。
+`--node` で途中のノードを評価する。GPU が要るノード（Displace など）の下流は評価できないので、その手前を指定する。
+`catalog` は全ノードの保存名・ピン・既定の設定を出す。
+終了コードは 0 = 成功、1 = 評価エラーか読み込みで捨てたものがある、2 = 読み込めない・引数の誤り。
+仕様は [LLM による岩グラフの作成](docs/reference/ai-authoring.md)。
+
 ## ドキュメント
 
 - [ドキュメント案内・設計と検証資料](docs/README.md)

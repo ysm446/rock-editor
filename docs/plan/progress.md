@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-30 19:11
+更新日時: 2026-10-01 03:25
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,20 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-10-01 LLM による岩グラフの作成（L1 評価 CLI）
+
+- LLM（Claude Code）が `rock_flat_2` を参考に、片理っぽい岩 `data/Rock-Models/rock_schist.rockgraph` をノードで組んだ（Layered Boxes → Voronoi（片理の向きに伸ばす）→ Peel → ボリューム → Parallel Planes の細溝と交差節理 → Volume Close → Edge Wear → rock_flat_2 と同じ仕上げ）。確認は GPU アプリの撮影で1回約1分かかり、評価エラーも UI にしか出なかった。引っかかった点は [設計資料](../reference/ai-authoring.md) の表にまとめた。
+- ユーザー判断で案 A（外部の LLM がファイルを書き、CLI で検証する）を採り、L1 を実装した。
+  - `io/ProjectIo.cpp` からグラフの読み書きを `io/GraphIo.{h,cpp}`、JSON の小道具を `io/JsonUtil.h` へ移した（保存形式は不変）。`ReadGraph` は捨てたノード・リンクを理由つきで返せる（知らない種類、無いピン、向き・型・循環・入力の重複）。
+  - `rock_cli`（コンソール、GPU なし）。`eval` はアプリと同じ評価器で評価し JSON を出す。メッシュは三角形数・寸法・閉包・体積に加え、連結成分を「塊（外向きの殻）」と「空洞（内向きの殻）」に分けて数える。`catalog` は全ノードの保存名・ピン・既定の設定。
+  - `rock_schist` の形（Volume to Mesh まで）は 0.75 秒で評価できる（撮影は約1分）。
+- CLI で分かったこと:
+  - 最初「Crack の直後に Edge Wear を繋ぐと板状に埋まる不具合」と見ていたものは、片理の細溝が板の境目を割り切って岩が16個の塊に分かれ（最大の塊で全体の30%）、Edge Wear（と Volume Noise など）が仕様どおり最大の塊だけを残した結果だった。Volume Close が塊を繋ぎ直すので、`rock_schist` は Close を挟んで成立している。入力の時点で分かれている大きな塊まで黙って捨てるのは、作る側から見て落とし穴（改善の候補。未着手）。
+  - メッシュの連結成分数（`InspectMesh` の components）は閉じた空洞も数える。To Volume 直後の `rock_schist` は塊1・空洞2,677 だった。
+- 既知の問題: **Debug ビルドの Remesh がスタックオーバーフロー（0xC00000FD）で落ちる**（`rock_flat_2` の Remesh #249。Release は正常）。今回の変更の前からある問題とみている（Remesh は未変更）。Debug のアプリで `rock_flat_2` を開くと落ちる。未調査。
+- 検証: 全テスト成功（GraphIo のテストを追加）。Release の `rock_cli` / テスト、Debug のアプリ・`rock_cli` をビルド（警告 0）。Debug のアプリで保存往復し、グラフが float32 の丸め以外同一であることを確認。Release のアプリは起動中で再リンクできず未確認。
+- 次: L2（範囲・単位・列挙の候補をカタログへ）、L3（列挙名・ピン名での接続・省略時の既定値）。
 
 ### 2026-09-30 Rock Asset の作り直す段の UV が収まらない
 

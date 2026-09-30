@@ -149,6 +149,9 @@ set(rock_sources
     src/io/AssetRelations.h
     src/io/ProjectIo.cpp
     src/io/ProjectIo.h
+    src/io/GraphIo.cpp
+    src/io/GraphIo.h
+    src/io/JsonUtil.h
     src/io/ProjectWorkspace.cpp
     src/io/ProjectWorkspace.h
     src/io/RecentFiles.cpp
@@ -333,11 +336,14 @@ add_executable(rock_editor_tests
     tests/TestSupport.h
     tests/FrameLimiterTests.cpp
     tests/NodeGraphTests.cpp
+    tests/GraphIoTests.cpp
     tests/UiInteractionTests.cpp
     tests/UndoHistoryTests.cpp
     tests/ProjectWorkspaceTests.cpp
     src/io/ProjectWorkspace.cpp
     src/io/ProjectWorkspace.h
+    src/io/GraphIo.cpp
+    src/io/GraphIo.h
     src/io/ThumbnailStore.cpp
     src/io/ThumbnailStore.h
     src/io/AssetRelations.cpp
@@ -376,6 +382,51 @@ target_compile_options(rock_editor_tests PRIVATE /W4 /permissive- /utf-8 /Zc:pre
 target_link_libraries(rock_editor_tests PRIVATE imgui::imgui nlohmann_json::nlohmann_json ufbx::ufbx ole32)
 
 add_test(NAME ui-interaction COMMAND rock_editor_tests)
+
+# --- rock_cli --------------------------------------------------------------
+# GPU とウィンドウを使わずに岩グラフを評価するコンソールの道具。LLM がグラフを書いて
+# 確かめるための入口（docs/reference/ai-authoring.md）。アプリと同じ評価器と読み込みを使う。
+add_executable(rock_cli
+    src/cli/Main.cpp
+    src/core/Log.cpp
+    src/core/ImageIo.cpp
+    src/compositor/MaterialStack.cpp
+    src/geometry/Mesh.cpp
+    src/geometry/BaseRock.cpp
+    src/geometry/BoxCluster.cpp
+    src/geometry/Volume.cpp
+    src/geometry/DualContouring.cpp
+    src/geometry/UvUnwrap.cpp
+    src/geometry/Pieces.cpp
+    src/geometry/PieceErosion.cpp
+    src/geometry/PieceLayerSupport.cpp
+    src/geometry/MeshVolume.cpp
+    src/geometry/RockScatter.cpp
+    src/geometry/Terrain.cpp
+    src/geometry/DetailTransfer.cpp
+    src/geometry/BakeOcclusion.cpp
+    src/geometry/MaskCombine.cpp
+    src/geometry/MaskFilter.cpp
+    src/geometry/Decimate.cpp
+    src/geometry/Remesh.cpp
+    src/geometry/Displace.cpp
+    src/graph/NodeGraph.cpp
+    src/graph/RockEvaluator.cpp
+    src/graph/PieceEvaluator.cpp
+    src/graph/MaterialHeight.cpp
+    src/graph/SurfacePresetGraph.cpp
+    src/io/GraphIo.cpp
+    src/io/LayerMaterialIo.cpp
+    src/io/RockAssetIo.cpp
+    src/renderer/RockMesh.cpp
+    src/renderer/MeshData.cpp
+    src/renderer/ModelAsset.cpp
+    src/renderer/BakePadding.cpp
+)
+target_include_directories(rock_cli PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${Stb_INCLUDE_DIR}")
+target_compile_definitions(rock_cli PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(rock_cli PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)
+target_link_libraries(rock_cli PRIVATE rock_xatlas nlohmann_json::nlohmann_json unofficial::tinyexr::tinyexr ufbx::ufbx ole32)
 
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT rock_editor)
 set_target_properties(rock_editor PROPERTIES

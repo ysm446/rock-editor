@@ -34,6 +34,7 @@ void RunShadowCascadeTests();
 void RunMeshSceneTests();
 void RunFrameLimiterTests();
 void RunNodeGraphTests();
+void RunGraphIoTests();
 void RunUiInteractionTests();
 void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
@@ -87,6 +88,7 @@ int main(int argc, char** argv) {
     RunProjectWorkspaceTests();
     RunFrameLimiterTests();
     RunNodeGraphTests();
+    RunGraphIoTests();
 
     std::printf("\n%s\n", (rock::tests::g_failures == 0) ? "すべて成功" : "失敗あり");
     return (rock::tests::g_failures == 0) ? 0 : 1;
