@@ -70,6 +70,8 @@ rock::StartupOptions ParseCommandLine() {
             options.selectNode = ::_wtoi(argv[++i]);
         } else if (argument == L"--rock-asset-lod" && (i + 1) < argc) {
             options.rockAssetLod = ::_wtoi(argv[++i]);
+        } else if (argument == L"--test-lod-switch") {
+            options.testLodSwitch = true;
         } else if (argument == L"--bake-asset" && (i + 1) < argc) {
             options.bakeAssetNode = ::_wtoi(argv[++i]);
         } else if (argument == L"--view" && (i + 1) < argc) {

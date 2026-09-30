@@ -298,6 +298,8 @@ public:
     // drawSceneExtras が描くものを包む球の半径（原点中心、m）。影の範囲とカメラの距離に使う。0 なら何も無い。
     // **毎フレーム渡してよい。**
     void SetExtraSceneRadius(float radius) { m_extraSceneRadius = radius; }
+    // LOD を持つメッシュ（SceneMesh::lodGeometries）で描く段。持たないメッシュには効かない。
+    void SetMeshSceneLod(int lod) { m_meshSceneLod = lod < 0 ? 0 : lod; }
     // 重ねる線。**毎フレーム渡す**（渡さなければ前のフレームのまま）。
     void SetOverlayLines(std::vector<OverlayLineSet> lines) { m_overlayLines = std::move(lines); }
     // メッシュの描画（影を含む）を止め、オーバーレイの線や点だけを見せる。シーンは保持する。
@@ -383,6 +385,10 @@ private:
     bool UploadMeshScene(rhi::Device& device, const MeshScene& scene);
     MeshScene m_meshScene;
     std::vector<Mesh> m_sceneMeshes;
+    // m_sceneMeshes と同じ並びの、LOD1 以降の GPU メッシュ（SceneMesh::lodGeometries）。
+    std::vector<std::vector<Mesh>> m_sceneLodMeshes;
+    // LOD を持つメッシュで描く段（SetMeshSceneLod）。
+    int m_meshSceneLod = 0;
     struct SceneMaterial {
         compositor::MaterialStack stack;
         std::unique_ptr<compositor::MaterialEvaluator> evaluator;

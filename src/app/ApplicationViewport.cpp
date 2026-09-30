@@ -210,6 +210,22 @@ int Application::RockAssetWantedLod(graph::GraphId previewNode) const {
     return lod;
 }
 
+void Application::ShowRockAssetLod(int lod) {
+    if (!m_rockAssetEvaluation || m_rockAssetView.triangles.empty()) return;
+    lod = std::clamp(lod, 0, static_cast<int>(m_rockAssetView.triangles.size()) - 1);
+    m_rockAssetView.shown = lod;
+    m_renderer.SetMeshSceneLod(lod);
+    // シーンのメッシュは評価結果の岩と同じ並び（Rock Asset を出しているときは片を省かない）。
+    const auto& rocks = m_rockAssetEvaluation->rocks;
+    for (size_t i = 0; i < rocks.size() && i < m_rockTriangleCounts.size() && i < m_rockPreviewSurfaces.size(); ++i) {
+        if (!rocks[i].lods || rocks[i].lods->empty()) continue;
+        const auto& mesh = (*rocks[i].lods)[std::min<size_t>(size_t(lod), rocks[i].lods->size() - 1)];
+        m_rockTriangleCounts[i] = mesh.triangles.size();
+        m_rockPreviewSurfaces[i] = {mesh.positions, mesh.triangles};
+    }
+    ++m_rockPreviewStamp;
+}
+
 // 表示モードのボタンの右に「LOD 自動 0 1 2 3」と、いま出している段を並べる。
 // 段の切り替えは評価し直さず、SyncMeshGraph が直近の結果からメッシュだけを差し替える。
 void Application::DrawRockAssetLodControls() {

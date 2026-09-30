@@ -345,7 +345,17 @@ int Application::Run() {
         // 他の保留処理より先に行う（読み込みが中身を丸ごと入れ替えるため）。
         ProcessPendingFileWork();
         // メッシュの生成と転送も GPU 待機を伴うため、フレームの外で。
-        SyncMeshGraph();
+        if (m_options.testLodSwitch && m_rockAssetView.node && !m_rockAssetView.triangles.empty())
+            m_rockAssetLodMode = static_cast<int>(m_frameCounter % m_rockAssetView.triangles.size());
+        {
+            const int shownBefore = m_rockAssetView.shown;
+            const auto start = std::chrono::steady_clock::now();
+            SyncMeshGraph();
+            if (m_options.testLodSwitch && m_rockAssetView.node && shownBefore != m_rockAssetView.shown) {
+                const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                ROCK_LOG_INFO("LOD の切り替え: LOD%d → LOD%d、SyncMeshGraph %.3f ms", shownBefore, m_rockAssetView.shown, ms);
+            }
+        }
         if (m_options.bakeNode && m_frameCounter >= 2) { m_pendingBake=m_options.bakeNode; m_options.bakeNode=0; }
         if (!m_options.exportBakeDirectory.empty() && m_bakeImages.contains(m_options.exportBakeNode)) {
             ExportBakedTextures(m_options.exportBakeNode, m_options.exportBakeDirectory);

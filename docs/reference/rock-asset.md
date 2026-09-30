@@ -1,7 +1,7 @@
 # Rock Asset
 
 作成日時: 2026-09-30 08:40
-更新日時: 2026-09-30 15:50
+更新日時: 2026-09-30 20:10
 
 ## 位置付け
 
@@ -49,7 +49,7 @@ Rock Asset を選ぶと、ビューポートにその出力を出す（選択を
 
 - **0〜n**: その段に固定する。
 - **LOD 自動**: カメラから見た大きさ（上の「画面」の値）と「LODnの切替」で段を選ぶ。フライ操作（右ボタン + WASD）で近づいたり離れたりして、切り替わる所を確かめられる。
-- 段を変えても評価し直さない。直近の評価結果からメッシュだけを差し替える。
+- 段を変えても評価し直さず、シーンも作り直さない。全ての段の GPU メッシュをシーンを作るときに送っておき（`SceneMesh::lodGeometries`）、描く段だけを変える（`PreviewRenderer::SetMeshSceneLod`）。以前は段を変えるたびにシーンを作り直していて、材質の評価と GPU への転送で引っかかっていた（2026-09-30 に直した。切り替えは 1 回 0.02 ms 以下）。
 - ビューポートの統計の「メッシュ三角形」は、いま出している段の数になる。
 
 ### LOD の色分け
@@ -62,6 +62,7 @@ Rock Asset を選ぶと、ビューポートにその出力を出す（選択を
 
 - `--rock-asset-lod <n>`: LOD の出し方。-1 で自動、0 以上でその段に固定。
 - `--view <番号>`: 表示モード（`renderer::DebugView` の数値。10 がクレイ、11 が LOD の色分け）。
+- `--test-lod-switch`: 選んでいる Rock Asset の段をフレームごとに切り替え、そのフレームの `SyncMeshGraph` の時間をログへ出す。
 
 例: `rock_editor.exe --root examples/rock-asset --project examples/rock-asset/rock-asset.rockgraph --select-node 80 --rock-asset-lod 3 --view 11 --screenshot-ui out.png`
 

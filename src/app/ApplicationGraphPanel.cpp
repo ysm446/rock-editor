@@ -452,18 +452,21 @@ void Application::SyncMeshGraph() {
         m_meshGraphSmoothShading == m_settings.Display().smoothShading &&
         m_meshGraphSmoothShadingAngle == m_settings.Display().smoothShadingAngle &&
         m_meshGraphSdfPreviewMethod == m_settings.Display().sdfPreviewMethod;
-    // Rock Asset の LOD だけが変わったとき（切り替えやカメラの移動）は、評価し直さず直近の結果から作り直す。
-    const bool lodOnly = upToDate && m_rockAssetEvaluation && m_rockAssetView.node == previewMeshNode &&
-                         RockAssetWantedLod(previewMeshNode) != m_rockAssetView.shown;
-    if (upToDate && !lodOnly)
+    // Rock Asset の LOD だけが変わったとき（切り替えやカメラの移動）は、シーンを作り直さない。
+    // 全ての段の GPU メッシュはシーンを作ったときに送ってあるので、描く段を変えるだけにする
+    // （作り直すと材質の評価と GPU への転送が走り、切り替えのたびに引っかかる）。
+    if (upToDate) {
+        if (m_rockAssetEvaluation && m_rockAssetView.node == previewMeshNode) {
+            const int wanted = RockAssetWantedLod(previewMeshNode);
+            if (wanted != m_rockAssetView.shown) ShowRockAssetLod(wanted);
+        }
         return;
+    }
     m_meshGraphSmoothShading = m_settings.Display().smoothShading;
     m_meshGraphSmoothShadingAngle = m_settings.Display().smoothShadingAngle;
     m_meshGraphSdfPreviewMethod = m_settings.Display().sdfPreviewMethod;
     graph::RockEvaluation evaluated;
-    if (lodOnly) {
-        evaluated = *m_rockAssetEvaluation;
-    } else if (hasPieces) {
+    if (hasPieces) {
         m_pieceUpdating = true;
         if (m_pieceTask.valid()) {
             // 選択を変えただけなら実行中の重い評価を止めない。完了後にそのキャッシュを引き継ぎ、
@@ -522,13 +525,13 @@ void Application::SyncMeshGraph() {
     m_piecePreview = evaluated.pieces;
     m_pointPreview = evaluated.points;
     // 山グラフの撒いた岩。使う岩アセットを読む（GPU への転送を伴うので、ここ＝フレームの外で）。
-    if (!lodOnly) SyncRockInstances(evaluated.rockInstances);
+    SyncRockInstances(evaluated.rockInstances);
     // Rock Asset を出しているときは LOD の段を選んで出す。LOD だけの切り替えに備えて結果を持っておく。
     const auto* assetNode = m_graph.FindNode(previewMeshNode);
     const bool assetView = assetNode && assetNode->kind == graph::NodeKind::RockAsset && evaluated.error.empty() &&
         std::any_of(evaluated.rocks.begin(), evaluated.rocks.end(), [](const auto& rock) { return rock.lods != nullptr; });
     if (assetView) {
-        if (!lodOnly) m_rockAssetEvaluation = evaluated;
+        m_rockAssetEvaluation = evaluated;
         m_rockAssetView.node = previewMeshNode;
         m_rockAssetView.triangles.clear();
         DirectX::XMFLOAT3 low{FLT_MAX, FLT_MAX, FLT_MAX}, high{-FLT_MAX, -FLT_MAX, -FLT_MAX};
@@ -551,8 +554,7 @@ void Application::SyncMeshGraph() {
                     m_rockAssetView.radius = std::max(m_rockAssetView.radius, std::sqrt(dx * dx + dy * dy + dz * dz));
                 }
         m_rockAssetView.shown = RockAssetWantedLod(previewMeshNode);
-        // ハッシュは段に依らないので、段だけを切り替えたときは求め直さない。
-        if (!lodOnly) m_rockAssetView.hash.clear();
+        m_rockAssetView.hash.clear();
     } else {
         m_rockAssetEvaluation.reset();
         m_rockAssetView = {};
@@ -608,13 +610,18 @@ void Application::SyncMeshGraph() {
             // 手動編集時だけ面を残し、選択済みの片もクリックで解除できるようにする。
             if (rock.pieceSelected && !m_pieceSelectionEditing) continue;
         }
-        // Rock Asset を出しているときは選んだ段、それ以外は LOD0（rock.mesh）。
+        // Rock Asset を出しているときは全ての段を送り、描く段はレンダラで選ぶ（ShowRockAssetLod）。
+        // 統計と当たり判定は出している段、それ以外は LOD0（rock.mesh）。
         const size_t level = assetView && rock.lods ? std::min<size_t>(size_t(m_rockAssetView.shown), rock.lods->size() - 1) : 0;
         const geometry::Mesh& shownMesh = assetView && rock.lods ? (*rock.lods)[level] : rock.mesh;
         if (geometry::HasValidUvs(shownMesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = shownMesh;
         renderer::SceneMesh mesh;
-        mesh.geometry = renderer::MakeRockMeshData(shownMesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
-        mesh.lod = rock.lods ? int(level) : -1;
+        mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
+        if (assetView && rock.lods)
+            for (size_t lod = 1; lod < rock.lods->size(); ++lod)
+                mesh.lodGeometries.push_back(renderer::MakeRockMeshData((*rock.lods)[lod], m_settings.Display().smoothShading,
+                                                                        m_settings.Display().smoothShadingAngle));
+        mesh.lod = rock.lods ? 0 : -1;
         mesh.material.baseColor = DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
         if (rock.pieceId >= 0) {
             float r,g,b;
@@ -648,7 +655,7 @@ void Application::SyncMeshGraph() {
         scene.meshes.push_back(std::move(mesh));
     }
     // 焼いたときと同じ手順でハッシュを求め、焼いた岩アセットの目録と比べられるようにする。
-    if (assetView && assetNode && !lodOnly) {
+    if (assetView && assetNode) {
         const auto& settings = std::get<graph::RockAssetSettings>(assetNode->settings);
         m_rockAssetView.hash = io::RockAssetHash(MergeRockAssetLods(evaluated, settings), assetFingerprint);
     }
@@ -660,6 +667,7 @@ void Application::SyncMeshGraph() {
         m_meshGraphActive = false;
     } else {
         m_meshGraphActive = m_renderer.SetGeneratedMeshScene(m_device, scene);
+        m_renderer.SetMeshSceneLod(assetView ? m_rockAssetView.shown : 0);
         if (!m_meshGraphActive) {
             m_renderer.ClearMeshScene(m_device);
             m_meshGraphError = "岩メッシュを描画へ転送できませんでした";

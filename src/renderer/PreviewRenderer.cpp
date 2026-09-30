@@ -616,12 +616,24 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& inpu
     }
     if (!ValidateMeshScene(scene)) return false;
     std::vector<Mesh> uploaded(scene.meshes.size());
+    std::vector<std::vector<Mesh>> uploadedLods(scene.meshes.size());
+    const auto releaseUploaded = [&] {
+        for (auto& mesh : uploaded) mesh.Release(device);
+        for (auto& level : uploadedLods)
+            for (auto& mesh : level) mesh.Release(device);
+    };
     for (size_t i = 0; i < uploaded.size(); ++i) {
         if (scene.meshes[i].materialOnly) continue;
         if (!uploaded[i].Create(device, scene.meshes[i].geometry, L"SceneMesh")) {
-            for (auto& mesh : uploaded) mesh.Release(device);
+            releaseUploaded();
             return false;
         }
+        uploadedLods[i].resize(scene.meshes[i].lodGeometries.size());
+        for (size_t lod = 0; lod < uploadedLods[i].size(); ++lod)
+            if (!uploadedLods[i][lod].Create(device, scene.meshes[i].lodGeometries[lod], L"SceneMeshLod")) {
+                releaseUploaded();
+                return false;
+            }
     }
     // 必要な評価器（スロット 1〜4）と道路マスクを先に確保し、失敗時は現在のシーンを保つ。
     struct Created {
@@ -638,7 +650,7 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& inpu
             if (entry.roadMask.IsValid()) device.DeferRelease(entry.roadMask);
             if (entry.boundaryControl.IsValid()) device.DeferRelease(entry.boundaryControl);
         }
-        for (auto& mesh : uploaded) mesh.Release(device);
+        releaseUploaded();
         return false;
     };
     const auto ensure = [&](std::unique_ptr<compositor::MaterialEvaluator>& slot) {
@@ -710,6 +722,9 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& inpu
     }
     for (auto& mesh : m_sceneMeshes) mesh.Release(device);
     m_sceneMeshes = std::move(uploaded);
+    for (auto& level : m_sceneLodMeshes)
+        for (auto& mesh : level) mesh.Release(device);
+    m_sceneLodMeshes = std::move(uploadedLods);
     // 全頂点を含むので複製しない。
     m_meshSceneRadius = MeshSceneRadius(scene);
     m_meshScene = std::move(scene);
@@ -739,6 +754,9 @@ void PreviewRenderer::ClearMeshScene(rhi::Device& device) {
     m_diagnostics.ResetScene(device);
     for (auto& mesh : m_sceneMeshes) mesh.Release(device);
     m_sceneMeshes.clear();
+    for (auto& level : m_sceneLodMeshes)
+        for (auto& mesh : level) mesh.Release(device);
+    m_sceneLodMeshes.clear();
     for (auto& material : m_sceneMaterials) {
         if (material.evaluator) material.evaluator->Destroy(device);
         for (auto& layer : material.layerEvaluators) if (layer) layer->Destroy(device);
@@ -1166,7 +1184,11 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
             if (outlineMesh >= 0 && i != static_cast<size_t>(outlineMesh)) continue;
             if (m_meshScene.meshes[i].materialOnly) continue;
             MeshConstants drawConstants = passConstants;
-            const Mesh& drawMesh = m_sceneMeshes[i];
+            // LOD を持つメッシュは、選んだ段の GPU メッシュを描く（段 0 は m_sceneMeshes）。
+            const int shownLod = i < m_sceneLodMeshes.size() && !m_sceneLodMeshes[i].empty()
+                                     ? std::min(m_meshSceneLod, static_cast<int>(m_sceneLodMeshes[i].size()))
+                                     : 0;
+            const Mesh& drawMesh = shownLod > 0 ? m_sceneLodMeshes[i][size_t(shownLod) - 1] : m_sceneMeshes[i];
             const compositor::BlendMode blendMode = blendModeOf(i);
             if ((passOf(i) & passMask) == 0u) continue;
             if (blendMode != compositor::BlendMode::Opaque) {
@@ -1302,8 +1324,10 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
             const auto& material = m_meshScene.meshes[i].material;
             drawConstants.baseColor = material.baseColor;
             // LOD の色分け。陰影はクレイと同じ（シェーダ側）で、ベースカラーだけ段の色にする。
-            if (displayView == DebugView::Lod && m_meshScene.meshes[i].lod >= 0)
-                drawConstants.baseColor = kLodDebugColors[std::min<size_t>(size_t(m_meshScene.meshes[i].lod), std::size(kLodDebugColors) - 1)];
+            if (displayView == DebugView::Lod && m_meshScene.meshes[i].lod >= 0) {
+                const size_t level = m_sceneLodMeshes[i].empty() ? size_t(m_meshScene.meshes[i].lod) : size_t(shownLod);
+                drawConstants.baseColor = kLodDebugColors[std::min<size_t>(level, std::size(kLodDebugColors) - 1)];
+            }
             drawConstants.roughness = material.roughness;
             drawConstants.metallic = material.metallic;
             const auto& mapping = m_meshScene.meshes[i].mapping;

@@ -107,6 +107,8 @@ struct StartupOptions {
     int debugView = -1;
     // 読み込み後にこの Rock Asset を焼く（--bake-asset <node>）。検証用。
     graph::GraphId bakeAssetNode = 0;
+    // Rock Asset の段をフレームごとに切り替え、SyncMeshGraph にかかった時間をログへ出す（--test-lod-switch）。検証用。
+    bool testLodSwitch = false;
     bool testDrag = false;
     bool testLayerThumbnailCache = false;
     bool testDragShift = false;
@@ -298,6 +300,8 @@ private:
     int RockAssetWantedLod(graph::GraphId previewNode) const;
     // ビューポート左上の LOD の切り替え（Rock Asset を出しているときだけ）。
     void DrawRockAssetLodControls();
+    // Rock Asset の出している段だけを変える（シーンは作り直さない）。統計と当たり判定の形も揃える。
+    void ShowRockAssetLod(int lod);
     // 選択中のノードを控える / 貼り付ける（Ctrl+C / Ctrl+V）。
     void CopySelectedGraphNodes();
     // 控えたノードを貼る。viewCenter は今のキャンバスの中央（キャンバス座標）で、

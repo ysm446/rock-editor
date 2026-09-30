@@ -74,6 +74,9 @@ struct SceneMesh {
     MaterialSettings material;
     // Rock Asset の LOD の段（色分け表示に使う）。LOD でないメッシュは -1。
     int lod = -1;
+    // Rock Asset の LOD1 以降の形（geometry が LOD0）。どの段を描くかは PreviewRenderer::SetMeshSceneLod で選ぶ。
+    // 全ての段を最初に GPU へ送っておくので、段の切り替えではシーンを作り直さない（材質の評価も転送もしない）。
+    std::vector<MeshData> lodGeometries;
     compositor::MaterialMapping mapping;
     // 道路の表示用メタデータ。0は道路以外。生成時に再構築する。
     float roadMetersPerUv = 0.0f;
