@@ -140,4 +140,30 @@ void RunVolumeSmoothTests() {
     Check(changed.error.empty() && changed.rocks[0].volume != first.rocks[0].volume, "設定の変更で作り直す");
     std::get<geometry::VolumeSmoothSettings>(g.FindMutableNode(node)->settings).radius = 5;
     Check(!graph::EvaluateRocks(g, node, &cache).error.empty(), "不正な設定はノードで診断する");
+
+    // 集中する向き: -X に向けると -X 側の角だけが丸まり、+X 側の角は変わらない（羊背岩・風食）。
+    {
+        std::string focusError;
+        const auto cube = geometry::MeshToVolume(geometry::MakeBox({2, 2, 2}), {48}, focusError);
+        geometry::VolumeSmoothSettings sideways;
+        sideways.radius = .06f;
+        sideways.upwardFocus = 1;
+        sideways.focusDirection = {-1, 0, 0};
+        const auto smoothed = geometry::SmoothVolume(cube, sideways, focusError);
+        const auto sample = [](const geometry::VolumeGrid& grid, float x, float y, float z) {
+            const uint32_t ix = uint32_t(std::lround((x - grid.origin.x) / grid.spacing)),
+                           iy = uint32_t(std::lround((y - grid.origin.y) / grid.spacing)),
+                           iz = uint32_t(std::lround((z - grid.origin.z) / grid.spacing));
+            return grid.values[grid.Index(ix, iy, iz)];
+        };
+        Check(focusError.empty() && sample(smoothed, -.97f, .97f, 0) > sample(cube, -.97f, .97f, 0) + 1e-3f,
+              "向き -X: -X 側の稜線が丸まる");
+        Check(std::abs(sample(smoothed, .97f, .97f, 0) - sample(cube, .97f, .97f, 0)) < 1e-4f, "向き -X: +X 側の稜線は変わらない");
+        geometry::VolumeSmoothSettings up = sideways;
+        up.focusDirection = {0, 1, 0};
+        geometry::VolumeSmoothSettings zero = sideways;
+        zero.focusDirection = {0, 0, 0};
+        Check(geometry::SmoothVolume(cube, zero, focusError).values == geometry::SmoothVolume(cube, up, focusError).values,
+              "向きが長さ 0 なら上（既定）と同じ");
+    }
 }

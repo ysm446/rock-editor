@@ -170,8 +170,11 @@ struct VolumeSmoothSettings {
     float radius = .03f;
     // 効かせる量。なめらかは入力とぼかしの混合比（0～1）、シャープは差を足す倍率（0～1 を 0～2 倍に使う）。
     float amount = 1;
-    // 上向きの面への集中。0 で全面に同じ量、1 で上（+Y）を向いた面だけに効き、垂直な面と下面には効かない。0～1。
+    // 向きへの集中。0 で全面に同じ量、1 で focusDirection を向いた面だけに効き、それと直角な面と反対の面には効かない。0～1。
+    // 保存名は歴史的に upwardFocus（既定の向きが上）。
     float upwardFocus = 0;
+    // 集中する向き（正規化しなくてよい）。既定は上（+Y）。風上・氷河の流れてきた側など。長さ 0 なら上。
+    std::array<float, 3> focusDirection{0, 1, 0};
 };
 // Volume Edge Wear。凸な稜線と角だけを削り、面と谷は残す（角の摩耗）。
 // 稜線はぼかした距離場と元の差で見つけ、最も近い表面の点で評価する。削る方向にだけ効き、形は広がらない。
@@ -183,8 +186,9 @@ struct VolumeEdgeWearSettings {
     // 稜線に沿った削れ方のばらつき。0 で一様、1 ではノイズの低い所が削れない。0～1。
     float noise = .5f;
     float noiseScale = 4;  // 最長辺あたりのノイズの山の数。0.5～16。
-    // 上向きの面への集中。0 で全ての稜線、1 で上（+Y）を向いた稜線だけ。0～1。
+    // 向きへの集中。0 で全ての稜線、1 で focusDirection を向いた稜線だけ。0～1。保存名は upwardFocus。
     float upwardFocus = 0;
+    std::array<float, 3> focusDirection{0, 1, 0};  // 既定は上（+Y）。長さ 0 なら上
     int seed = 1;
 };
 // Volume Terrace。ある方向に層をなす段（棚）を作る。層状の剥離。

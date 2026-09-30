@@ -1324,7 +1324,14 @@ std::vector<float> BlurGrid(const VolumeGrid& g, float sigmaCells) {
     return b;
 }
 // 入力の勾配から面の外向きの法線を求め、その上向き成分（0～1）を返す。勾配が無い所は 0。
-float Upwardness(const VolumeGrid& g, uint32_t x, uint32_t y, uint32_t z) {
+// 集中する向きを正規化する。長さ 0 や非有限なら上（+Y）。
+Vec3 FocusDirection(const std::array<float, 3>& d) {
+    const float length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (!std::isfinite(length) || length <= 1e-6f) return {0, 1, 0};
+    return {d[0] / length, d[1] / length, d[2] / length};
+}
+// 表面の外向きの法線が向き direction をどれだけ向いているか（0～1）。
+float Upwardness(const VolumeGrid& g, uint32_t x, uint32_t y, uint32_t z, const Vec3& direction) {
     const auto at = [&](int ix, int iy, int iz) {
         return g.values[g.Index(uint32_t(std::clamp(ix, 0, int(g.dimensions[0]) - 1)),
                                 uint32_t(std::clamp(iy, 0, int(g.dimensions[1]) - 1)),
@@ -1334,11 +1341,12 @@ float Upwardness(const VolumeGrid& g, uint32_t x, uint32_t y, uint32_t z) {
     const float gx = at(ix + 1, iy, iz) - at(ix - 1, iy, iz), gy = at(ix, iy + 1, iz) - at(ix, iy - 1, iz),
                 gz = at(ix, iy, iz + 1) - at(ix, iy, iz - 1);
     const float length = std::sqrt(gx * gx + gy * gy + gz * gz);
-    return length > 0 ? std::clamp(gy / length, 0.f, 1.f) : 0.f;
+    return length > 0 ? std::clamp((gx * direction.x + gy * direction.y + gz * direction.z) / length, 0.f, 1.f) : 0.f;
 }
 }  // namespace
 VolumeGrid SmoothVolume(const VolumeGrid& g, const VolumeSmoothSettings& s, std::string& error) {
     error.clear();
+    const Vec3 focus = FocusDirection(s.focusDirection);
     if (!ValidGrid(g)) {
         error = "ボリュームの格子が不正です";
         return {};
@@ -1373,7 +1381,7 @@ VolumeGrid SmoothVolume(const VolumeGrid& g, const VolumeSmoothSettings& s, std:
         if (x == 0 || y == 0 || z == 0 || x + 1 == g.dimensions[0] || y + 1 == g.dimensions[1] || z + 1 == g.dimensions[2])
             return value < 0;
         float weight = s.amount;
-        if (s.upwardFocus > 0) weight *= 1 - s.upwardFocus * (1 - Upwardness(g, x, y, z));
+        if (s.upwardFocus > 0) weight *= 1 - s.upwardFocus * (1 - Upwardness(g, x, y, z, focus));
         float result = sharpen ? value + 2 * weight * (value - blurred[index]) : value + weight * (blurred[index] - value);
         if (std::abs(result) < threshold) result = threshold;
         out.values[index] = result;
@@ -1407,6 +1415,7 @@ float SampleGridValues(const VolumeGrid& g, const std::vector<float>& values, Ve
 }  // namespace
 VolumeGrid EdgeWearVolume(const VolumeGrid& g, const VolumeEdgeWearSettings& s, std::string& error) {
     error.clear();
+    const Vec3 focus = FocusDirection(s.focusDirection);
     if (!ValidGrid(g)) {
         error = "ボリュームの格子が不正です";
         return {};
@@ -1476,7 +1485,8 @@ VolumeGrid EdgeWearVolume(const VolumeGrid& g, const VolumeEdgeWearSettings& s, 
         const Vec3 p = g.Position(x, y, z);
         const Vec3 surface{p.x - value * gx, p.y - value * gy, p.z - value * gz};
         float weight = SampleGridValues(g, edge, surface) * s.amount;
-        if (s.upwardFocus > 0) weight *= 1 - s.upwardFocus * (1 - std::clamp(gy, 0.f, 1.f));
+        if (s.upwardFocus > 0)
+            weight *= 1 - s.upwardFocus * (1 - std::clamp(gx * focus.x + gy * focus.y + gz * focus.z, 0.f, 1.f));
         if (s.noise > 0) {
             const float n = ValueNoise(surface.x * frequency, surface.y * frequency, surface.z * frequency, seed);
             weight *= std::clamp(1 - s.noise * (1 - n) * 2, 0.f, 1.f);

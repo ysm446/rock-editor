@@ -1717,8 +1717,13 @@ void Application::DrawGraphPanel() {
                                          "ぼかしの半径。形の最長辺に対する比です。これより小さい凹凸が消えます（なめらか）／立ちます（シャープ）。");
             changed |= ui::PropertyFloat("量", &edited.amount, 0, 1, 1,
                                          "なめらか：入力とぼかしの混合比。シャープ：ぼかしとの差を足す強さ。");
-            changed |= ui::PropertyFloat("上向きに集中", &edited.upwardFocus, 0, 1, 0,
-                                         "0 で全面に同じ量。1 で上を向いた面だけに効き、垂直な面と下面には効きません。");
+            changed |= ui::PropertyFloat("向きに集中", &edited.upwardFocus, 0, 1, 0,
+                                         "0 で全面に同じ量。1 で「集中する向き」を向いた面だけに効き、直角な面と反対の面には効きません。");
+            {
+                const float up[3] = {0, 1, 0};
+                changed |= ui::PropertyFloat3Input("集中する向き", edited.focusDirection.data(), up,
+                                                   "既定は上 (0, 1, 0)。風上や氷河の流れてきた側を向けると、その側だけが丸く研磨されます。") != 0;
+            }
             ui::EndPropertyTable();
         }
         ui::HintText("なめらか：ガウスぼかしで凸な角を削り、凹な隅を埋めます。シャープ：ぼかしとの差を足して稜線と割れ目を立てます。"
@@ -1743,8 +1748,13 @@ void Application::DrawGraphPanel() {
                                          "稜線に沿った削れ方のばらつき。0 で一様。1 ではノイズの低い所が削れず、欠けた角のようになります。");
             changed |= ui::PropertyFloat("ばらつきの細かさ", &edited.noiseScale, .5f, 16, 4,
                                          "最長辺あたりのノイズの山の数。");
-            changed |= ui::PropertyFloat("上向きに集中", &edited.upwardFocus, 0, 1, 0,
-                                         "0 で全ての稜線。1 で上を向いた面の稜線だけに効き、下側の角は鋭いまま残ります。");
+            changed |= ui::PropertyFloat("向きに集中", &edited.upwardFocus, 0, 1, 0,
+                                         "0 で全ての稜線。1 で「集中する向き」を向いた面の稜線だけに効き、反対側の角は鋭いまま残ります。");
+            {
+                const float up[3] = {0, 1, 0};
+                changed |= ui::PropertyFloat3Input("集中する向き", edited.focusDirection.data(), up,
+                                                   "既定は上 (0, 1, 0)。") != 0;
+            }
             changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1, "ばらつきの乱数。");
             ui::EndPropertyTable();
         }

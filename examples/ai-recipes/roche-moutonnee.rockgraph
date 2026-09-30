@@ -1,0 +1,20 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 8, "size": [3.2, 1.6, 2.0], "sizeVariation": 0.4, "spread": 0.6, "rotation": 15, "seed": 12}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 120}},
+      {"id": 3, "kind": "planeCuts", "note": "引き剥がされた角張った面（下流側に残る）", "planeCuts": {"count": 16, "depthMin": 0.06, "depthMax": 0.22, "seed": 5}},
+      {"id": 4, "kind": "volumeSmooth", "note": "上流側（-X と上）だけを大きく丸める", "volumeSmooth": {"radius": 0.07, "amount": 1, "upwardFocus": 0.75, "focusDirection": [-1, 0.5, 0]}},
+      {"id": 5, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.05, "radius": 0.03, "upwardFocus": 0.75, "focusDirection": [-1, 0.5, 0]}},
+      {"id": 6, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 7, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 8, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8:Geometry"}
+    ]
+  }
+}

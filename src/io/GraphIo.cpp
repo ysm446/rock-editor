@@ -297,10 +297,11 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             item["volumeSmooth"] = {{"mode", geometry::VolumeSmoothModeName(smooth->mode)},
                                     {"radius", smooth->radius},
                                     {"amount", smooth->amount},
-                                    {"upwardFocus", smooth->upwardFocus}};
+                                    {"upwardFocus", smooth->upwardFocus}, {"focusDirection", smooth->focusDirection}};
         } else if (const auto* wear = std::get_if<geometry::VolumeEdgeWearSettings>(&node.settings)) {
             item["volumeEdgeWear"] = {{"radius", wear->radius}, {"amount", wear->amount}, {"noise", wear->noise},
-                                      {"noiseScale", wear->noiseScale}, {"upwardFocus", wear->upwardFocus}, {"seed", wear->seed}};
+                                      {"noiseScale", wear->noiseScale}, {"upwardFocus", wear->upwardFocus}, {"seed", wear->seed},
+                                      {"focusDirection", wear->focusDirection}};
         } else if (const auto* clip = std::get_if<geometry::VolumeClipSettings>(&node.settings)) {
             item["volumeClip"] = {{"mode", geometry::VolumeClipModeName(clip->mode)}, {"height", clip->height},
                                   {"invert", clip->invert}, {"embed", clip->embed}};
@@ -933,6 +934,8 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.radius = ReadFloat(*v, "radius", settings.radius);
                     settings.amount = ReadFloat(*v, "amount", settings.amount);
                     settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
+                    const auto focus = ReadFloat3(*v, "focusDirection", {0, 1, 0});
+                    settings.focusDirection = {focus.x, focus.y, focus.z};
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeEdgeWear) {
@@ -943,6 +946,8 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.noise = ReadFloat(*v, "noise", settings.noise);
                     settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
                     settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
+                    const auto focus = ReadFloat3(*v, "focusDirection", {0, 1, 0});
+                    settings.focusDirection = {focus.x, focus.y, focus.z};
                     settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;

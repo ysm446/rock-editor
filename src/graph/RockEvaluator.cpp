@@ -67,11 +67,12 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (node->kind == NodeKind::VolumeSmooth) {
         const auto* s = std::get_if<geometry::VolumeSmoothSettings>(&node->settings);
         if (!s) return std::nullopt;
-        add(s->mode); add(s->radius); add(s->amount); add(s->upwardFocus);
+        add(s->mode); add(s->radius); add(s->amount); add(s->upwardFocus); add(s->focusDirection);
     } else if (node->kind == NodeKind::VolumeEdgeWear) {
         const auto* s = std::get_if<geometry::VolumeEdgeWearSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->radius); add(s->amount); add(s->noise); add(s->noiseScale); add(s->upwardFocus); add(s->seed);
+        add(s->focusDirection);
     } else if (node->kind == NodeKind::VolumeClip) {
         const auto* s = std::get_if<geometry::VolumeClipSettings>(&node->settings);
         if (!s) return std::nullopt;

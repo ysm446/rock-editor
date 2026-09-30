@@ -1,10 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-01 11:42
+更新日時: 2026-10-01 12:20
 
 ## 未リリース
 
+- Volume Smooth と Volume Edge Wear の「上向きに集中」を、任意の向きで指定できるようにした（「集中する向き」、保存名 `focusDirection`、既定は上）。風上や氷河の流れてきた側だけを丸められる（羊背岩・風食）。既存のグラフの結果は変わらない。レシピ `roche-moutonnee` を追加。
 - Volume Undercut ノードを追加。形の高さの帯を内側へ削ってくびれを作る（きのこ岩・フードゥー）。帯の高さ・幅・深さ・繰り返しの数と間隔を選べる。削りすぎて形が上下に切り離されたり、底が削り切られて浮いたりした場合はエラーにする。仕様は [Volume Undercut](reference/volume-undercut.md)。レシピ `mushroom-rock` / `hoodoo` を追加。
 - Volume Crack に割り方「表面に沿う殻」を追加。Points・Planes を繋がずに、形の表面に平行な殻（板）で割り、外側の板がまだらに剥がれ落ちた段を作る（花崗岩のシーティング・玉ねぎ状の風化）。殻の間隔・枚数・剥がれる割合・なめらかさを選べる。レシピ `granite-sheeting` を追加。
 - Volume Scatter ノードを追加。表面の近くに小さな形（球・楕円体・箱）を散らし、和で足す（礫岩・角礫岩の埋まった礫）か差で抜く（多孔質の溶岩の気泡の穴）。数・半径・中心の深さ（表面からの深さを半径に対する比で）・細長さ・なじませる幅を選べる。浮いた形は除く。仕様は [Volume Scatter](reference/volume-scatter.md)。レシピ `conglomerate` / `breccia` / `vesicular-basalt` を追加。
