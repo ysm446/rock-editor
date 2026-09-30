@@ -93,7 +93,7 @@ constexpr std::array<PinDefinition, 1> kRockPins = {{{PinKind::Output, ValueType
 constexpr std::array<PinDefinition, 4> kRockScatterPins = {{{PinKind::Input, ValueType::Mesh, "Terrain"},
     {PinKind::Input, ValueType::Mask, "Mask"}, {PinKind::Input, ValueType::Rock, "Rock 1"},
     {PinKind::Output, ValueType::Instances, "Instances"}}};
-constexpr std::array<NodeDefinition, 45> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 46> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -132,6 +132,7 @@ constexpr std::array<NodeDefinition, 45> kNodeDefinitions = {{
     {NodeKind::VolumeEdgeWear, "volumeEdgeWear", "Volume Edge Wear", kVolumeTransformPins},
     {NodeKind::VolumeClip, "volumeClip", "Volume Clip", kVolumeTransformPins},
     {NodeKind::VolumeScatter, "volumeScatter", "Volume Scatter", kVolumeTransformPins},
+    {NodeKind::VolumeUndercut, "volumeUndercut", "Volume Undercut", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::BaseRock, "baseRock", "Base Shape", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
@@ -175,7 +176,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::PlaneCuts || kind == NodeKind::VolumeCrack ||
            kind == NodeKind::VolumeNoise || kind == NodeKind::VolumeSmooth || kind == NodeKind::VolumeTerrace ||
            kind == NodeKind::VolumeClose || kind == NodeKind::VolumeEdgeWear || kind == NodeKind::VolumeClip ||
-           kind == NodeKind::VolumeScatter ||
+           kind == NodeKind::VolumeScatter || kind == NodeKind::VolumeUndercut ||
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
@@ -545,6 +546,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeClipSettings{};
     } else if (kind == NodeKind::VolumeScatter) {
         node.settings = geometry::VolumeScatterSettings{};
+    } else if (kind == NodeKind::VolumeUndercut) {
+        node.settings = geometry::VolumeUndercutSettings{};
     } else if (kind == NodeKind::LayeredBoxes) {
         node.settings = geometry::LayeredBoxesSettings{};
     } else if (kind == NodeKind::ScatterPoints) {

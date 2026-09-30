@@ -21,6 +21,7 @@ void RunVolumeSmoothTests();
 void RunVolumeEdgeWearTests();
 void RunVolumeClipTests();
 void RunVolumeScatterTests();
+void RunVolumeUndercutTests();
 void RunVolumeTerraceTests();
 void RunVolumeCloseTests();
 void RunDecimateTests();
@@ -78,6 +79,7 @@ int main(int argc, char** argv) {
     RunVolumeEdgeWearTests();
     RunVolumeClipTests();
     RunVolumeScatterTests();
+    RunVolumeUndercutTests();
     RunVolumeTerraceTests();
     RunVolumeCloseTests();
     RunDecimateTests();

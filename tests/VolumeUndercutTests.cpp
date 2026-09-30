@@ -1,0 +1,88 @@
+#include "TestSupport.h"
+#include "geometry/Volume.h"
+#include "graph/RockEvaluator.h"
+
+#include <cmath>
+#include <string>
+
+using namespace rock::tests;
+using namespace rock;
+
+namespace {
+bool Measure(const geometry::VolumeGrid& grid, geometry::MeshInfo& info,
+             geometry::VolumeMeshingMethod method = geometry::VolumeMeshingMethod::MarchingTetrahedra) {
+    std::string error;
+    const geometry::Mesh mesh = geometry::VolumeSurface(grid, error, method);
+    return error.empty() && geometry::InspectMesh(mesh, info) && info.closed;
+}
+}  // namespace
+
+void RunVolumeUndercutTests() {
+    Section("Volume Undercut");
+    std::string error;
+    // 2 m の立方体（Y は -1〜1）。帯の中心は高さ 0.5（Y = 0）。
+    const auto box = geometry::MeshToVolume(geometry::MakeBox({2, 2, 2}), {64}, error);
+    geometry::MeshInfo boxInfo;
+    Check(error.empty() && Measure(box, boxInfo), "立方体のボリューム");
+
+    geometry::VolumeUndercutSettings band;
+    band.height = .5f;
+    band.width = .2f;
+    band.depth = .1f;
+    band.noise = 0;
+    const auto notched = geometry::UndercutVolume(box, band, error);
+    geometry::MeshInfo info, dual;
+    Check(error.empty() && Measure(notched, info) && info.components == 1 && info.volume < boxInfo.volume,
+          "帯を削って体積が減り、1つの塊のまま");
+    Check(Measure(notched, dual, geometry::VolumeMeshingMethod::DualContouring), "Dual Contouring でも閉じた表面にできる");
+    bool outsideKept = true, insideCarved = false;
+    for (uint32_t z = 0; z < box.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < box.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < box.dimensions[0]; ++x) {
+                const size_t i = box.Index(x, y, z);
+                const float h = box.Position(x, y, z).y;
+                if (std::abs(h) > .45f) outsideKept &= notched.values[i] == box.values[i];
+                if (std::abs(h) < .05f) insideCarved |= notched.values[i] > box.values[i] + .15f;
+            }
+    Check(outsideKept, "帯の外（高さ ±0.45 m より外）は変わらない");
+    Check(insideCarved, "帯の中心で深さ（0.1 × 2 m = 0.2 m）ほど削る");
+
+    geometry::VolumeUndercutSettings stacked = band;
+    stacked.height = .2f;
+    stacked.width = .08f;
+    stacked.count = 3;
+    stacked.spacing = .3f;
+    geometry::MeshInfo stackedInfo;
+    Check(geometry::UndercutVolume(box, stacked, error).values.size() == box.values.size() && error.empty(), "帯を重ねられる");
+
+    // 厚さ 1 m の板（最長辺 2 m）を中央で 0.8 m 削ると、半分の厚さ 0.5 m を超えて上下に切り離される。
+    const auto slab = geometry::MeshToVolume(geometry::MakeBox({2, 2, 1}), {64}, error);
+    geometry::VolumeUndercutSettings sever = band;
+    sever.depth = .4f;
+    sever.width = .1f;
+    geometry::UndercutVolume(slab, sever, error);
+    Check(!error.empty(), "上下に切り離すほど削ると診断する");
+    geometry::VolumeUndercutSettings floating = band;
+    floating.height = 0;
+    floating.width = .1f;
+    floating.depth = .4f;
+    geometry::UndercutVolume(box, floating, error);
+    Check(!error.empty(), "底を断面ごと削り切って浮くと診断する");
+    geometry::VolumeUndercutSettings bad = band;
+    bad.count = 0;
+    geometry::UndercutVolume(box, bad, error);
+    Check(!error.empty(), "帯の数が範囲外なら診断する");
+
+    graph::NodeGraph g;
+    const auto shape = g.CreateNode(graph::NodeKind::BaseRock), volume = g.CreateNode(graph::NodeKind::ToVolume),
+               node = g.CreateNode(graph::NodeKind::VolumeUndercut);
+    std::get<geometry::VolumeSettings>(g.FindMutableNode(volume)->settings).resolution = 40;
+    g.CreateLink(g.FindNode(shape)->outputs[0].id, g.FindNode(volume)->inputs[0].id);
+    Check(!graph::EvaluateRocks(g, node).error.empty(), "未接続なら診断する");
+    g.CreateLink(g.FindNode(volume)->outputs[0].id, g.FindNode(node)->inputs[0].id);
+    graph::RockEvaluationCache cache;
+    const auto first = graph::EvaluateRocks(g, node, &cache);
+    Check(first.error.empty() && first.rocks.size() == 1 && first.rocks[0].volume, "グラフで評価できる");
+    std::get<geometry::VolumeUndercutSettings>(g.FindMutableNode(node)->settings).seed = 4;
+    Check(graph::EvaluateRocks(g, node, &cache).rocks[0].volume != first.rocks[0].volume, "設定の変更で作り直す");
+}

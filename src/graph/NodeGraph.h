@@ -109,6 +109,8 @@ enum class NodeKind : uint32_t {
     VolumeClip = 71,
     // Volume の表面の近くに小さな形（球・楕円体・箱）を散らし、和（埋まった礫）か差（穴・気泡）で合成する。
     VolumeScatter = 76,
+    // Volume の高さの帯を内側へ削り、くびれを作る（きのこ岩・フードゥー・波食ノッチ）。
+    VolumeUndercut = 77,
     // 岩グラフの最終段。入力のメッシュから段階的な LOD を作り、この岩グラフの岩アセットにする。
     // 出力は LOD0（Mesh Output へ繋いで表示できる）。選ぶとビューポートで LOD を切り替えて見られる。
     RockAsset = 72,
@@ -271,7 +273,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::LayeredBoxesSettings, geometry::ParallelPlanesSettings, geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings, geometry::VolumeCloseSettings,
-                                  geometry::VolumeEdgeWearSettings, geometry::VolumeClipSettings, geometry::VolumeScatterSettings,
+                                  geometry::VolumeEdgeWearSettings, geometry::VolumeClipSettings, geometry::VolumeScatterSettings, geometry::VolumeUndercutSettings,
                                   geometry::DecimateSettings, geometry::RemeshSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,

@@ -101,7 +101,7 @@ std::optional<Host> MakeHost(graph::NodeKind kind, bool bareCrack = false) {
         Connect(g, SmallBox(g), host.target, 0);
         return host;
     case K::VolumeTransform: case K::PlaneCuts: case K::VolumeNoise: case K::VolumeSmooth: case K::VolumeTerrace:
-    case K::VolumeClose: case K::VolumeEdgeWear: case K::VolumeClip: case K::VolumeToMesh: case K::VolumeScatter:
+    case K::VolumeClose: case K::VolumeEdgeWear: case K::VolumeClip: case K::VolumeToMesh: case K::VolumeScatter: case K::VolumeUndercut:
         host.target = host.evaluate = Add(g, kind);
         Connect(g, SmallVolume(g), host.target, 0);
         return host;
@@ -167,6 +167,7 @@ const std::vector<EdgeRule>& EdgeRules() {
         {"pieceSelect:pieces.minVolume", {{"pieces.mode", 3}}},
         {"pieceSelect:pieces.maxVolume", {{"pieces.mode", 3}, {"pieces.minVolume", 0}}},
         {"volumeClose:volumeClose.width", {{"volumeClose.mode", "width"}}},
+        {"volumeUndercut:volumeUndercut.depth", json::object(), false, true, "小さな形では削り切って上下に切り離される"},
         {"volumeCrack:volumeCrack.shellSpacing", {{"volumeCrack.source", "shells"}}, false, false, "", true},
         {"volumeCrack:volumeCrack.shellCount", {{"volumeCrack.source", "shells"}}, false, false, "", true},
         {"volumeCrack:volumeCrack.shellSmoothing", {{"volumeCrack.source", "shells"}}, false, false, "", true},

@@ -234,6 +234,18 @@ struct VolumeScatterSettings {
     uint32_t seed = 1;
 };
 
+// Volume Undercut。形の高さの帯を内側へ削り、くびれを作る（きのこ岩・フードゥー・波食ノッチ）。
+struct VolumeUndercutSettings {
+    float height = .2f;     // 最初の帯の中心。形の高さ（内部の格子点の範囲）に対する位置。底 0、上 1。0～1
+    float width = .15f;     // 帯の半分の高さ。形の高さに対する比。0.02～1
+    float depth = .08f;     // 帯の中心で削る深さ。形の最長辺に対する比。0～0.4
+    int count = 1;          // 帯の数（上へ繰り返す）。1～8
+    float spacing = .25f;   // 帯の間隔。形の高さに対する比。0.05～1
+    float noise = .3f;      // 削る深さを水平方向にばらつかせる量。0～1
+    float noiseScale = 3;   // ばらつきの細かさ。最長辺あたりの山の数。0.5～16
+    int seed = 1;
+};
+
 enum class VolumeCloseMode { Width, Occlusion };
 const char* VolumeCloseModeName(VolumeCloseMode mode);
 // 不明な名前は Occlusion として読む。
@@ -313,6 +325,8 @@ VolumeGrid TerraceVolume(const VolumeGrid& grid, const VolumeTerraceSettings& se
 VolumeGrid CloseVolume(const VolumeGrid& grid, const VolumeCloseSettings& settings, std::string& error);
 // 格子（範囲・セル間隔）は入力のまま。切り口は平らな面になる。切り離された塊もそのまま残す。
 VolumeGrid ClipVolume(const VolumeGrid& grid, const VolumeClipSettings& settings, std::string& error);
+// 格子（範囲・セル間隔）は入力のまま。帯の中の距離場を内側へずらして削る。削り落とされた小片と閉じた空洞は除く。
+VolumeGrid UndercutVolume(const VolumeGrid& grid, const VolumeUndercutSettings& settings, std::string& error);
 // 表面の近くに小さな形を散らし、和（埋まった礫）か差（穴・気泡）で合成する。和では突き出す分だけ格子を広げる。
 // 形の外に浮いた形（入力の塊と重ならない塊）と、加工でできた閉じた空洞は除く。
 VolumeGrid ScatterVolume(const VolumeGrid& grid, const VolumeScatterSettings& settings, std::string& error);

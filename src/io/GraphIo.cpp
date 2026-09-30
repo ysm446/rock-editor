@@ -310,6 +310,10 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                      {"count", spread->count}, {"radiusMin", spread->radiusMin}, {"radiusMax", spread->radiusMax},
                                      {"depthMin", spread->depthMin}, {"depthMax", spread->depthMax},
                                      {"elongation", spread->elongation}, {"blend", spread->blend}, {"seed", spread->seed}};
+        } else if (const auto* undercut = std::get_if<geometry::VolumeUndercutSettings>(&node.settings)) {
+            item["volumeUndercut"] = {{"height", undercut->height}, {"width", undercut->width}, {"depth", undercut->depth},
+                                      {"count", undercut->count}, {"spacing", undercut->spacing}, {"noise", undercut->noise},
+                                      {"noiseScale", undercut->noiseScale}, {"seed", undercut->seed}};
         } else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node.settings)) {
             item["volumeClose"] = {{"mode", geometry::VolumeCloseModeName(close->mode)}, {"width", close->width},
                                    {"distance", close->distance}, {"threshold", close->threshold},
@@ -964,6 +968,19 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.elongation = ReadFloat(*v, "elongation", settings.elongation);
                     settings.blend = ReadFloat(*v, "blend", settings.blend);
                     settings.seed = ReadUInt(*v, "seed", settings.seed);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeUndercut) {
+                geometry::VolumeUndercutSettings settings;
+                if (const json* v = FindMember(item, "volumeUndercut"); v && v->is_object()) {
+                    settings.height = ReadFloat(*v, "height", settings.height);
+                    settings.width = ReadFloat(*v, "width", settings.width);
+                    settings.depth = ReadFloat(*v, "depth", settings.depth);
+                    settings.count = ReadInt(*v, "count", settings.count);
+                    settings.spacing = ReadFloat(*v, "spacing", settings.spacing);
+                    settings.noise = ReadFloat(*v, "noise", settings.noise);
+                    settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeClose) {

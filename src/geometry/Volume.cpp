@@ -1764,6 +1764,96 @@ VolumeGrid ScatterVolume(const VolumeGrid& g, const VolumeScatterSettings& s, st
     FillNewVoids(out, before);
     return out;
 }
+VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (!range(s.height, 0, 1) || !range(s.width, .02f, 1) || !range(s.spacing, .05f, 1)) {
+        error = "高さは 0～1、帯の幅は 0.02～1、間隔は 0.05～1 にしてください";
+        return {};
+    }
+    if (!range(s.depth, 0, .4f)) {
+        error = "深さは 0～0.4 にしてください";
+        return {};
+    }
+    if (s.count < 1 || s.count > 8) {
+        error = "帯の数は 1～8 にしてください";
+        return {};
+    }
+    if (!range(s.noise, 0, 1) || !range(s.noiseScale, .5f, 16)) {
+        error = "ばらつきは 0～1、ばらつきの細かさは 0.5～16 にしてください";
+        return {};
+    }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    uint32_t lowest = g.dimensions[1], highest = 0;
+    for (uint32_t z = 0; z < g.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < g.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < g.dimensions[0]; ++x)
+                if (g.values[g.Index(x, y, z)] < 0) {
+                    lowest = std::min(lowest, y);
+                    highest = std::max(highest, y);
+                }
+    const float bottom = g.Position(0, lowest, 0).y, tall = std::max(g.Position(0, highest, 0).y - bottom, g.spacing);
+    const float depth = s.depth * longest, frequency = s.noiseScale / longest;
+    const uint64_t seed = uint64_t(uint32_t(s.seed)) << 40;
+    VolumeGrid out = g;
+    const float threshold = out.spacing * 1e-4f;
+    const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+        const size_t index = out.Index(x, y, z);
+        float value = g.values[index];
+        const auto p = out.Position(x, y, z);
+        const float h = (p.y - bottom) / tall;
+        float inset = 0;
+        for (int i = 0; i < s.count; ++i) {
+            const float t = (h - (s.height + s.spacing * float(i))) / s.width;
+            // 帯の断面はなめらかな山（cos の窓）。中心で 1、帯の端（±幅）で 0。
+            if (std::abs(t) < 1) inset = std::max(inset, .5f + .5f * std::cos(std::numbers::pi_v<float> * t));
+        }
+        if (inset > 0 && depth > 0) {
+            float amount = depth * inset;
+            if (s.noise > 0) {
+                const float n = ValueNoise(p.x * frequency, p.y * frequency * .5f, p.z * frequency, seed);
+                amount *= std::clamp(1 - s.noise * (1 - 2 * n), 0.f, 2.f);
+            }
+            value += amount;
+        }
+        out.values[index] = std::abs(value) < threshold ? threshold : value;
+        return value < 0;
+    });
+    if (!inside) {
+        error = "削った結果に内部が残りません。深さを減らしてください";
+        return {};
+    }
+    // 帯で形が上下に切り離されると、小さい方（台座など）が小片として捨てられ、残りが宙に浮く。黙って浮かせず診断する。
+    const auto interior = [](const std::vector<float>& values) {
+        return size_t(std::count_if(values.begin(), values.end(), [](float v) { return v < 0; }));
+    };
+    const size_t carved = interior(out.values);
+    KeepLargestComponents(out, g.values);
+    if (interior(out.values) * 100 < carved * 99) {
+        error = "帯で形が上下に切り離されました（大きな部分が離れて捨てられます）。深さを減らすか、帯の幅を狭めてください";
+        return {};
+    }
+    // 底の帯が断面ごと削り切られると、形が浮く（底が上がる）。これも黙って浮かせず診断する。
+    uint32_t newLowest = out.dimensions[1];
+    for (uint32_t z = 0; z < out.dimensions[2] && newLowest > lowest; ++z)
+        for (uint32_t y = 0; y < out.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < out.dimensions[0]; ++x)
+                if (out.values[out.Index(x, y, z)] < 0) newLowest = std::min(newLowest, y);
+    if (newLowest > lowest + 2) {
+        error = "底の近くを断面ごと削り切り、形が浮きました。深さを減らすか、帯を上げてください";
+        return {};
+    }
+    FillNewVoids(out, g.values);
+    return out;
+}
 VolumeGrid TerraceVolume(const VolumeGrid& g, const VolumeTerraceSettings& s, std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {

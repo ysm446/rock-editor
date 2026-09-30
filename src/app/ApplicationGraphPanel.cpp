@@ -1430,6 +1430,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
         addNodeMenuItem(graph::NodeKind::VolumeClip, "Volume Clip — 水平な平面で切り、下（または上）を捨てる");
+        addNodeMenuItem(graph::NodeKind::VolumeUndercut, "Volume Undercut — 高さの帯を内側へ削り、くびれを作る（きのこ岩・フードゥー）");
         addNodeMenuItem(graph::NodeKind::VolumeScatter, "Volume Scatter — 表面の近くに小さな形を散らし、礫を足す / 穴を抜く");
         addNodeMenuItem(graph::NodeKind::ParallelPlanes, "Parallel Planes — 向きと間隔から平行な構造面を定義");
         addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 構造面や点群の境界に沿って割れ目を彫る");
@@ -1756,6 +1757,34 @@ void Application::DrawGraphPanel() {
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *wear = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* undercut = std::get_if<geometry::VolumeUndercutSettings>(&selected->settings)) {
+        auto edited = *undercut;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeUndercutRows")) {
+            changed |= ui::PropertyFloat("高さ", &edited.height, 0, 1, .2f, "最初の帯の中心。形の高さに対する位置（底 0、上 1）です。");
+            changed |= ui::PropertyFloat("帯の幅", &edited.width, .02f, 1, .15f, "帯の半分の高さ。形の高さに対する比です。");
+            changed |= ui::PropertyFloat("深さ", &edited.depth, 0, .4f, .08f, "帯の中心で削る深さ。形の最長辺に対する比です。");
+            changed |= ui::PropertyInt("帯の数", &edited.count, 1, 8, 1, "帯を上へ繰り返す数です（フードゥーの段）。");
+            changed |= ui::PropertyFloat("間隔", &edited.spacing, .05f, 1, .25f, "帯の間隔。形の高さに対する比です。");
+            changed |= ui::PropertyFloat("ばらつき", &edited.noise, 0, 1, .3f, "削る深さを水平方向にばらつかせます。");
+            changed |= ui::PropertyFloat("ばらつきの細かさ", &edited.noiseScale, .5f, 16, 3);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("形の高さの帯を内側へ削ってくびれを作ります。底の近くを深く削るときのこ岩、帯を重ねるとフードゥーになります。"
+                     "削り落とされた小片は捨てます。");
+        if (changed) {
+            edited.height = std::clamp(edited.height, 0.0f, 1.0f);
+            edited.width = std::clamp(edited.width, .02f, 1.0f);
+            edited.depth = std::clamp(edited.depth, 0.0f, .4f);
+            edited.count = std::clamp(edited.count, 1, 8);
+            edited.spacing = std::clamp(edited.spacing, .05f, 1.0f);
+            edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
+            edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
+            *undercut = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }
