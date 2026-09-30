@@ -900,7 +900,9 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                         continue;
                     }
                     // 自分の UV を持つ段。UV を捨てて減らし（継ぎ目に縛られない）、この段だけで展開し直す。
-                    // アトラスは LOD0 を段ごとに半分にした大きさ（最小 128）。
+                    // アトラスは LOD0 を段ごとに半分にした大きさ（最小 128）。割れの多い岩は数百の島になり、
+                    // 小さいアトラスでは島ごとの余白で埋まる。収まらなければ余白を 4→2→1 px と詰め、
+                    // それでも収まらなければ解像度を倍にする（LOD0 のアトラスまで）。
                     geometry::Mesh plain = lods.back();
                     plain.cornerUvs.clear();
                     plain.uvCharts.clear();
@@ -911,8 +913,17 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                     }
                     geometry::UvUnwrapSettings unwrap;
                     const int atlas = int(std::max(lods[0].uvWidth, lods[0].uvHeight));
-                    unwrap.resolution = geometry::NormalizeUvResolution(std::max(kMinRockAssetUvResolution, atlas >> level));
-                    auto unwrapped = geometry::UnwrapMesh(plain, unwrap, error, stop);
+                    const int largest = geometry::NormalizeUvResolution(std::max(kMinRockAssetUvResolution, atlas));
+                    geometry::Mesh unwrapped;
+                    for (unwrap.resolution = geometry::NormalizeUvResolution(std::max(kMinRockAssetUvResolution, atlas >> level));;
+                         unwrap.resolution *= 2) {
+                        for (const int padding : {4, 2, 1}) {
+                            unwrap.padding = padding;
+                            unwrapped = geometry::UnwrapMesh(plain, unwrap, error, stop);
+                            if (error.empty() || stop.stop_requested()) break;
+                        }
+                        if (error.empty() || stop.stop_requested() || unwrap.resolution >= largest) break;
+                    }
                     if (!error.empty()) return finish(Failure(id, "Rock Asset", label + error));
                     lods.push_back(std::move(unwrapped));
                 }
