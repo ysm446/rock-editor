@@ -35,7 +35,7 @@ void RunVolumeNoiseTests() {
           "量も歪みも 0 なら入力と完全に同じ結果になる");
 
     for (const auto type : {geometry::VolumeNoiseType::Smooth, geometry::VolumeNoiseType::Cellular,
-                            geometry::VolumeNoiseType::Facet}) {
+                            geometry::VolumeNoiseType::Facet, geometry::VolumeNoiseType::Pits}) {
         geometry::VolumeNoiseSettings s;
         s.type = type;
         s.amount = .05f;
@@ -140,6 +140,8 @@ void RunVolumeNoiseTests() {
                   geometry::VolumeNoiseType::Cellular &&
               geometry::ParseVolumeNoiseType(geometry::VolumeNoiseTypeName(geometry::VolumeNoiseType::Facet)) ==
                   geometry::VolumeNoiseType::Facet &&
+              geometry::ParseVolumeNoiseType(geometry::VolumeNoiseTypeName(geometry::VolumeNoiseType::Pits)) ==
+                  geometry::VolumeNoiseType::Pits &&
               geometry::ParseVolumeNoiseType("?") == geometry::VolumeNoiseType::Smooth,
           "種類の保存名を往復でき、不明な名前はなめらかとして読む");
 

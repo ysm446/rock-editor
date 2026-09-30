@@ -1670,9 +1670,9 @@ void Application::DrawGraphPanel() {
         auto edited = *noise;
         bool changed = false;
         if (ui::BeginPropertyTable("volumeNoiseRows")) {
-            const char* types[] = {"なめらか", "セル状（丸い盛り上がり）", "小面（割れ肌）"};
-            int type = std::clamp(static_cast<int>(edited.type), 0, 4);
-            if (ui::PropertyCombo("種類", &type, types, 3, 2)) {
+            const char* types[] = {"なめらか", "セル状（丸い盛り上がり）", "小面（割れ肌）", "くぼみ（蜂の巣状）"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 3);
+            if (ui::PropertyCombo("種類", &type, types, 4, 2)) {
                 edited.type = static_cast<geometry::VolumeNoiseType>(type);
                 changed = true;
             }

@@ -14,6 +14,7 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `columnar.rockgraph` | 柱状節理（玄武岩） | 縦に 16 倍伸ばした Voronoi で多角柱に割り、外周の片を除き、柱を細らせて隙間を作り、一部の柱を下げる。柱は別々の塊のまま | 約 0.5 秒 |
 | `slate.rockgraph` | スレート・頁岩 | 水平に近い薄い Layered Boxes を Peel で欠き、Volume Close で繋ぐ | 約 0.5 秒 |
 | `talus-fragment.rockgraph` | 崖錐の角張った岩片 | 箱を大きな平面で強く切り、局所の欠けを多数 | 約 0.1 秒 |
+| `honeycomb.rockgraph` | 蜂の巣状の風化（タフォニ）・多孔質 | 丸めた塊に Volume Noise の「くぼみ」を粗・細の 2 段で掛ける | 約 0.2 秒 |
 | `river-pebble.rockgraph` | 河原の丸石 | 平たい楕円体を弱いノイズで歪ませ、Marching Tetrahedra でなめらかに | 約 0.1 秒 |
 
 作れる岩・作れない岩の一覧と足りないノードは [岩の種類の網羅](../../docs/reference/rock-catalog.md)。

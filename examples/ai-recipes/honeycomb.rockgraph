@@ -1,0 +1,21 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 6, "size": [2.2, 1.6, 1.8], "sizeVariation": 0.4, "spread": 0.6, "rotation": 20, "seed": 13}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 3, "kind": "planeCuts", "note": "丸める前に大きな面を少し作る", "planeCuts": {"count": 8, "depthMin": 0.04, "depthMax": 0.16, "seed": 4}},
+      {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.03, "amount": 1}},
+      {"id": 5, "kind": "volumeNoise", "note": "くぼみ（pits）: セルの内側を削り、境を薄い壁に残す。細かさ 11 で大きな穴", "volumeNoise": {"type": "pits", "amount": 0.05, "scale": 11, "octaves": 1, "seed": 2}},
+      {"id": 6, "kind": "volumeNoise", "note": "細かい穴をもう一段重ねる", "volumeNoise": {"type": "pits", "amount": 0.015, "scale": 30, "octaves": 1, "seed": 5}},
+      {"id": 7, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 8, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 9, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9:Geometry"}
+    ]
+  }
+}

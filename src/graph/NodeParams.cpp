@@ -32,7 +32,9 @@ constexpr ParamOption kBooleanOps[] = {{"union", 0, "和"}, {"intersection", 1, 
 constexpr ParamOption kCutScopes[] = {{"global", 0, "形全体を平面で切る"}, {"local", 1, "局所的に欠く（radius の範囲）"}};
 constexpr ParamOption kCutDistributions[] = {{"isotropic", 0, "向きをばらばらに"},
                                              {"directional", 1, "rotation の主方向（systems 系統）の周りに"}};
-constexpr ParamOption kNoiseTypes[] = {{"smooth", 0, "なめらか"}, {"cellular", 1, "セル状"}, {"facet", 2, "小面（岩の割れ面らしい）"}};
+constexpr ParamOption kNoiseTypes[] = {{"smooth", 0, "なめらか"}, {"cellular", 1, "セル状（丸い盛り上がり）"},
+                                      {"facet", 2, "小面（岩の割れ面らしい）"},
+                                      {"pits", 3, "くぼみ（セルの内側を削り境を壁に残す。蜂の巣状の風化・タフォニ）"}};
 constexpr ParamOption kSmoothModes[] = {{"smooth", 0, "なめらかにする"}, {"sharpen", 1, "角を立てる"}};
 constexpr ParamOption kCloseModes[] = {{"width", 0, "幅より狭い隙間を埋める"}, {"occlusion", 1, "奥まった（遮蔽の強い）所を埋める"}};
 constexpr ParamOption kShapeMaskTypes[] = {{"occlusion", 0, "遮蔽（窪み）"}, {"direction", 1, "上向き度"}, {"height", 2, "高さ"},

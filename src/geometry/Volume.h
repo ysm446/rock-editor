@@ -127,7 +127,8 @@ struct VolumeCrackSettings {
     int seed = 1;
 };
 // Volume Noise。表面をノイズで削り、サンプル位置をずらして直線的な面や割れ目を崩す。
-enum class VolumeNoiseType { Smooth, Cellular, Facet };
+// Pits はセルの内側を削り、セルの境を薄い壁として残す（蜂の巣状の風化・タフォニ）。
+enum class VolumeNoiseType { Smooth, Cellular, Facet, Pits };
 const char* VolumeNoiseTypeName(VolumeNoiseType type);
 // 不明な名前は Smooth として読む。
 VolumeNoiseType ParseVolumeNoiseType(std::string_view name);

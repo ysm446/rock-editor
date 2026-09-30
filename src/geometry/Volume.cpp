@@ -1051,21 +1051,26 @@ const char* VolumeNoiseTypeName(VolumeNoiseType type) {
     switch (type) {
         case VolumeNoiseType::Cellular: return "cellular";
         case VolumeNoiseType::Facet: return "facet";
+        case VolumeNoiseType::Pits: return "pits";
         default: return "smooth";
     }
 }
 VolumeNoiseType ParseVolumeNoiseType(std::string_view name) {
     if (name == "cellular") return VolumeNoiseType::Cellular;
     if (name == "facet") return VolumeNoiseType::Facet;
+    if (name == "pits") return VolumeNoiseType::Pits;
     return VolumeNoiseType::Smooth;
 }
 namespace {
 // セル状のノイズ。各格子セルに特徴点を1つ置き、最も近い特徴点から値を作る。どちらも 0～1。
 // Cellular は特徴点までの距離（丸い盛り上がりと、その間の谷）。
 // Facet は特徴点ごとのランダムな平面（平らな小面と、セルの境での段差）。
-float CellNoise(float x, float y, float z, uint64_t seed, bool facet) {
+// Pits は 2 番目に近い特徴点との距離の差（セルの境で 0、セルの内側ほど大きい）。内側を丸いお椀状に削り、
+// 境を薄い壁として残す。
+float CellNoise(float x, float y, float z, uint64_t seed, VolumeNoiseType type) {
+    const bool facet = type == VolumeNoiseType::Facet;
     const float fx = std::floor(x), fy = std::floor(y), fz = std::floor(z);
-    float best = std::numeric_limits<float>::max(), bx = 0, by = 0, bz = 0;
+    float best = std::numeric_limits<float>::max(), second = best, bx = 0, by = 0, bz = 0;
     uint64_t bestKey = 0;
     for (int dz = -1; dz <= 1; ++dz)
         for (int dy = -1; dy <= 1; ++dy)
@@ -1077,13 +1082,22 @@ float CellNoise(float x, float y, float z, uint64_t seed, bool facet) {
                             pz = float(iz) + float(HashUnit(key ^ 0xA3ull));
                 const float d = (x - px) * (x - px) + (y - py) * (y - py) + (z - pz) * (z - pz);
                 if (d < best) {
+                    second = best;
                     best = d;
                     bestKey = key;
                     bx = px;
                     by = py;
                     bz = pz;
+                } else if (d < second) {
+                    second = d;
                 }
             }
+    if (type == VolumeNoiseType::Pits) {
+        // 境からの距離（セルの間隔を 1 とする）をなめらかに 0〜1 へ写し、お椀の断面にする。壁の厚さはセルの約 1 割。
+        // 壁の頂を尖らせると Dual Contouring で閉じない薄い稜線になるので、S 字で丸める。
+        const float wall = std::clamp((std::sqrt(second) - std::sqrt(best)) * 2.2f - .1f, 0.f, 1.f);
+        return wall * wall * (3 - 2 * wall);
+    }
     if (!facet) return std::min(std::sqrt(best), 1.f);
     const float h = 1 - 2 * float(HashUnit(bestKey ^ 0x1F3ull)), r = std::sqrt(std::max(0.f, 1 - h * h)),
                 phi = 2 * std::numbers::pi_v<float> * float(HashUnit(bestKey ^ 0x2E7ull));
@@ -1098,7 +1112,8 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
         return {};
     }
     const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
-    if (s.type != VolumeNoiseType::Smooth && s.type != VolumeNoiseType::Cellular && s.type != VolumeNoiseType::Facet) {
+    if (s.type != VolumeNoiseType::Smooth && s.type != VolumeNoiseType::Cellular && s.type != VolumeNoiseType::Facet &&
+        s.type != VolumeNoiseType::Pits) {
         error = "不明なノイズの種類です";
         return {};
     }
@@ -1161,8 +1176,7 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
                     const uint64_t octaveSeed = seed ^ (uint64_t(octave + 1) * 0x9E37ull);
                     const float n = s.type == VolumeNoiseType::Smooth
                                         ? ValueNoise(p.x * f, p.y * f, p.z * f, octaveSeed)
-                                        : CellNoise(p.x * f, p.y * f, p.z * f, octaveSeed,
-                                                    s.type == VolumeNoiseType::Facet);
+                                        : CellNoise(p.x * f, p.y * f, p.z * f, octaveSeed, s.type);
                     noise += n * gain;
                     weight += gain;
                 }
