@@ -1946,7 +1946,27 @@ void Application::DrawGraphPanel() {
     } else if (auto* crack = std::get_if<geometry::VolumeCrackSettings>(&selected->settings)) {
         auto edited = *crack;
         bool changed = false;
+        const bool shells = edited.source == geometry::VolumeCrackSource::Shells;
         if (ui::BeginPropertyTable("volumeCrackRows")) {
+            const char* sources[] = {"入力（点・構造面）", "表面に沿う殻"};
+            int source = std::clamp(static_cast<int>(edited.source), 0, 1);
+            if (ui::PropertyCombo("割り方", &source, sources, 2, 0,
+                                  "入力は Points（Voronoi 境界）か Planes（構造面）に沿って割ります。"
+                                  "表面に沿う殻は、形をなめらかにした殻に沿って割ります（花崗岩のシーティング、玉ねぎ状の風化）。"
+                                  "殻のときは Points と Planes を外します。")) {
+                edited.source = static_cast<geometry::VolumeCrackSource>(source);
+                changed = true;
+            }
+            if (shells) {
+                changed |= ui::PropertyFloat("殻の間隔", &edited.shellSpacing, .01f, .5f, .05f,
+                                             "殻（剥がれる板）の厚さ。形の最長辺に対する比です。");
+                changed |= ui::PropertyInt("殻の枚数", &edited.shellCount, 1, 32, 4, "表面から何枚目の殻まで割るかです。");
+                changed |= ui::PropertyFloat("剥がれ", &edited.shellPeel, 0, 1, .5f,
+                                             "一番外の板が剥がれ落ちている割合。内側の板ほど剥がれにくくなります。"
+                                             "まだらの大きさは「ゆらぎの細かさ」で変わります。0 なら剥がれず、殻は表面に出ません。");
+                changed |= ui::PropertyFloat("なめらかさ", &edited.shellSmoothing, 0, .3f, .02f,
+                                             "殻の形を表面の細かな凹凸からならす半径。形の最長辺に対する比です。");
+            }
             changed |= ui::PropertyFloat("幅", &edited.width, 0, .2f, .03f,
                                          "表面での割れ目の幅。形の最長辺に対する比です。セル間隔より細い割れ目は格子で潰れます。");
             changed |= ui::PropertyFloat("深さ", &edited.depth, .01f, 1, .15f,
@@ -1969,6 +1989,10 @@ void Application::DrawGraphPanel() {
             edited.variation = std::clamp(edited.variation, 0.0f, 1.0f);
             edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
             edited.noiseScale = std::clamp(edited.noiseScale, 0.5f, 16.0f);
+            edited.shellSpacing = std::clamp(edited.shellSpacing, .01f, .5f);
+            edited.shellCount = std::clamp(edited.shellCount, 1, 32);
+            edited.shellSmoothing = std::clamp(edited.shellSmoothing, 0.0f, .3f);
+            edited.shellPeel = std::clamp(edited.shellPeel, 0.0f, 1.0f);
             *crack = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

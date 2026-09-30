@@ -114,7 +114,22 @@ std::vector<CutFaceFrame> ParallelPlaneFrames(const StructurePlanes&, Vec3 minim
                                              std::string& error);
 inline constexpr int MaxCrackPoints = 512;
 // Volume Crack。構造面または Voronoi 境界に沿って、表面から割れ目を彫る。
+// 割れ目の面をどこから取るか。Inputs は Points（Voronoi 境界）か Planes（構造面）の入力。
+// Shells は入力の形の表面に平行な殻（深さ = 間隔 × k）。外側の殻の板がまだらに剥がれ落ちた段と、殻に沿う割れ目を作る
+// （花崗岩のシーティング・玉ねぎ状の風化・剥離ドーム）。凸な形では殻が表面と交わらないので、剥がれがないと見えない。
+enum class VolumeCrackSource { Inputs, Shells };
+const char* VolumeCrackSourceName(VolumeCrackSource source);
+// 知らない名前は Inputs。
+VolumeCrackSource ParseVolumeCrackSource(std::string_view name);
 struct VolumeCrackSettings {
+    VolumeCrackSource source = VolumeCrackSource::Inputs;
+    // Shells: 殻の間隔（板の厚さ。最長辺に対する比。0.01～0.5）、表面から何枚目まで（1～32）、
+    // 殻の形を表面の細かな凹凸からならす半径（最長辺に対する比。0～0.3）、
+    // 一番外の板が剥がれている割合（0～1。内側の板ほど剥がれにくい）。剥がれのまだらの大きさは noiseScale。
+    float shellSpacing = .05f;
+    int shellCount = 4;
+    float shellSmoothing = .02f;
+    float shellPeel = .5f;
     // 表面での割れ目の幅と、届く深さ。どちらも形の最長辺に対する比。
     // 断面は V 字で、深さに達すると幅が 0 になる。深さ 1 なら形を貫く。
     float width = .03f;  // 0～0.2。
@@ -279,6 +294,8 @@ VolumeGrid CrackVolume(const VolumeGrid& grid, const std::vector<Vec3>& points,
                        const VolumeCrackSettings& settings, std::string& error);
 VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& grid, const StructurePlanes& planes,
                        const VolumeCrackSettings& settings, std::string& error);
+// settings.source が Shells のときの割れ目。面は入力の形から作る（点・構造面は使わない）。
+VolumeGrid CrackVolumeWithShells(const VolumeGrid& grid, const VolumeCrackSettings& settings, std::string& error);
 // 歪みが 0 なら格子は入力のまま。歪みがあると、表面が動く量だけ外側へ広げる。
 // 加工でできた浮いた小片と閉じた空洞は除く。
 VolumeGrid NoiseVolume(const VolumeGrid& grid, const VolumeNoiseSettings& settings, std::string& error);

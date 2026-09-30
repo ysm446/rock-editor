@@ -1,0 +1,23 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 6, "size": [2.4, 1.8, 2.0], "sizeVariation": 0.4, "spread": 0.6, "rotation": 20, "seed": 23}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 120}},
+      {"id": 3, "kind": "planeCuts", "note": "殻の段が見える平らな面を残すため、丸めずに面を作る", "planeCuts": {"count": 12, "depthMin": 0.06, "depthMax": 0.25, "seed": 7}},
+      {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.02, "amount": 1}},
+      {"id": 5, "kind": "volumeNoise", "volumeNoise": {"type": "smooth", "amount": 0.015, "scale": 5, "octaves": 2, "seed": 4}},
+      {"id": 6, "kind": "volumeCrack", "note": "表面に沿う殻: 外側の板がまだらに剥がれた段（シーティング）。Points・Planes は繋がない", "volumeCrack": {"source": "shells", "shellSpacing": 0.05, "shellCount": 4, "shellSmoothing": 0.02, "shellPeel": 0.6, "width": 0.015, "depth": 0.1, "variation": 0.3, "noise": 0, "noiseScale": 2.5, "seed": 3}},
+      {"id": 7, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.04, "radius": 0.02}},
+      {"id": 8, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 9, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 10, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6:Volume"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9"},
+      {"from": "9", "to": "10:Geometry"}
+    ]
+  }
+}

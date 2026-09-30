@@ -338,7 +338,10 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
         } else if (const auto* crack = std::get_if<geometry::VolumeCrackSettings>(&node.settings)) {
             item["volumeCrack"] = {{"width", crack->width},       {"depth", crack->depth},
                                    {"variation", crack->variation}, {"noise", crack->noise},
-                                   {"noiseScale", crack->noiseScale}, {"seed", crack->seed}};
+                                   {"noiseScale", crack->noiseScale}, {"seed", crack->seed},
+                                   {"source", geometry::VolumeCrackSourceName(crack->source)},
+                                   {"shellSpacing", crack->shellSpacing}, {"shellCount", crack->shellCount},
+                                   {"shellSmoothing", crack->shellSmoothing}, {"shellPeel", crack->shellPeel}};
         } else if (const auto* cuts = std::get_if<geometry::PlaneCutsSettings>(&node.settings)) {
             item["planeCuts"] = {{"count", cuts->count},
                                  {"scope", geometry::PlaneCutsScopeName(cuts->scope)},
@@ -1021,6 +1024,11 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.noise = ReadFloat(*v, "noise", settings.noise);
                     settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
                     settings.seed = ReadInt(*v, "seed", settings.seed);
+                    settings.source = geometry::ParseVolumeCrackSource(ReadString(*v, "source", "inputs"));
+                    settings.shellSpacing = ReadFloat(*v, "shellSpacing", settings.shellSpacing);
+                    settings.shellCount = ReadInt(*v, "shellCount", settings.shellCount);
+                    settings.shellSmoothing = ReadFloat(*v, "shellSmoothing", settings.shellSmoothing);
+                    settings.shellPeel = ReadFloat(*v, "shellPeel", settings.shellPeel);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::PlaneCuts) {

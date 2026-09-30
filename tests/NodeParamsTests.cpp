@@ -88,7 +88,7 @@ graph::GraphId SmallVolume(graph::NodeGraph& graph) {
     return volume;
 }
 
-std::optional<Host> MakeHost(graph::NodeKind kind) {
+std::optional<Host> MakeHost(graph::NodeKind kind, bool bareCrack = false) {
     using K = graph::NodeKind;
     Host host;
     auto& g = host.graph;
@@ -114,7 +114,7 @@ std::optional<Host> MakeHost(graph::NodeKind kind) {
         const auto crack = Add(g, K::VolumeCrack);
         const auto planes = Add(g, K::ParallelPlanes);
         Connect(g, SmallVolume(g), crack, 0);
-        Connect(g, planes, crack, 2);
+        if (!bareCrack) Connect(g, planes, crack, 2);
         host.target = kind == K::VolumeCrack ? crack : planes;
         host.evaluate = crack;
         return host;
@@ -156,6 +156,7 @@ struct EdgeRule {
     json extras;        // 同じノードに先に書く値（パス → 値）
     bool skipMinimum = false, skipMaximum = false;
     const char* reason = "";
+    bool bareCrack = false;  // Volume Crack に Planes を繋がない（割り方が「殻」のとき）
 };
 const std::vector<EdgeRule>& EdgeRules() {
     static const std::vector<EdgeRule> rules = {
@@ -166,6 +167,10 @@ const std::vector<EdgeRule>& EdgeRules() {
         {"pieceSelect:pieces.minVolume", {{"pieces.mode", 3}}},
         {"pieceSelect:pieces.maxVolume", {{"pieces.mode", 3}, {"pieces.minVolume", 0}}},
         {"volumeClose:volumeClose.width", {{"volumeClose.mode", "width"}}},
+        {"volumeCrack:volumeCrack.shellSpacing", {{"volumeCrack.source", "shells"}}, false, false, "", true},
+        {"volumeCrack:volumeCrack.shellCount", {{"volumeCrack.source", "shells"}}, false, false, "", true},
+        {"volumeCrack:volumeCrack.shellSmoothing", {{"volumeCrack.source", "shells"}}, false, false, "", true},
+        {"volumeCrack:volumeCrack.shellPeel", {{"volumeCrack.source", "shells"}}, false, false, "", true},
         {"planeCuts:planeCuts.blend", json::object(), false, true, "大きいと小さな形では中身が残らない"},
         {"volumeClip:volumeClip.height", json::object(), false, true, "形より上で切ると中身が残らない"},
         {"planeCuts:planeCuts.depthMin", {{"planeCuts.depthMax", 0.45}}},
@@ -290,11 +295,11 @@ void RunNodeParamsTests() {
     for (const graph::ParamDefinition& param : graph::NodeParams()) {
         if (param.check != graph::ParamCheck::Error || param.internal) continue;
         if (param.type != graph::ParamType::Float && param.type != graph::ParamType::Int) continue;
-        const auto host = MakeHost(param.kind);
-        if (!host) continue;
         const std::string name = std::string(graph::FindNodeDefinition(param.kind)->name) + ":" + param.path;
-        const auto number = [&](double v) { return param.type == graph::ParamType::Int ? json(int64_t(std::llround(v))) : json(v); };
         const EdgeRule* rule = FindEdgeRule(name);
+        const auto host = MakeHost(param.kind, rule && rule->bareCrack);
+        if (!host) continue;
+        const auto number = [&](double v) { return param.type == graph::ParamType::Int ? json(int64_t(std::llround(v))) : json(v); };
         const json extras = rule ? rule->extras : json::object();
         for (const bool atMinimum : {true, false}) {
             const double edge = atMinimum ? param.minimum : param.maximum;

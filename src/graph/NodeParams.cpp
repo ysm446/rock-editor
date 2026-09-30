@@ -44,6 +44,8 @@ constexpr ParamOption kCombineOps[] = {{"multiply", 0, "積"}, {"maximum", 1, "�
 constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"}};
 constexpr ParamOption kClipModes[] = {{"world", 0, "指定した高さで切る"},
                                      {"ground", 1, "形の底から embed の位置で切り、切り口を height（地面）に置く"}};
+constexpr ParamOption kCrackSources[] = {{"inputs", 0, "Points（Voronoi 境界）か Planes（構造面）の入力に沿う"},
+                                        {"shells", 1, "表面に沿う殻（シーティング・玉ねぎ状の風化）"}};
 constexpr ParamOption kScatterShapes[] = {{"sphere", 0, "球"}, {"ellipsoid", 1, "楕円体（丸い礫・気泡）"},
                                          {"box", 2, "箱（角張った礫・角礫岩）"}};
 constexpr ParamOption kScatterOperations[] = {{"union", 0, "和: 形を足す（埋まった礫）"}, {"difference", 1, "差: 形を抜く（気泡の穴）"}};
@@ -160,6 +162,15 @@ constexpr ParamDefinition kParams[] = {
     {K::VolumeCrack, "volumeCrack.noise", T::Float, 0, 1, "比", "ゆらぎ", "割れ目に沿った幅のゆらぎ", C::Error},
     {K::VolumeCrack, "volumeCrack.noiseScale", T::Float, 0.5, 16, "最長辺あたりの山の数", "ゆらぎの細かさ", "", C::Error},
     {K::VolumeCrack, "volumeCrack.seed", T::Int, 0, N, "", "Seed", "", C::None},
+    {K::VolumeCrack, "volumeCrack.source", T::Enum, N, N, "", "割り方",
+     "inputs は Points か Planes の入力に沿って割る。shells は形をなめらかにした殻に沿って割る（Points・Planes は外す）",
+     C::Clamp, kCrackSources},
+    {K::VolumeCrack, "volumeCrack.shellSpacing", T::Float, 0.01, 0.5, kLongest, "殻の間隔", "shells 用。剥がれる板の厚さ", C::Error},
+    {K::VolumeCrack, "volumeCrack.shellCount", T::Int, 1, 32, "枚", "殻の枚数", "shells 用。表面から何枚目まで割るか", C::Error},
+    {K::VolumeCrack, "volumeCrack.shellSmoothing", T::Float, 0, 0.3, kLongest, "なめらかさ",
+     "shells 用。殻の形を表面の細かな凹凸からならす半径", C::Error},
+    {K::VolumeCrack, "volumeCrack.shellPeel", T::Float, 0, 1, "比", "剥がれ",
+     "shells 用。一番外の板が剥がれ落ちている割合（内側ほど剥がれにくい）。まだらの大きさは noiseScale。0 だと殻は表面に出ず見えない", C::Error},
     {K::VolumeNoise, "volumeNoise.type", T::Enum, N, N, "", "種類", "", C::Clamp, kNoiseTypes},
     {K::VolumeNoise, "volumeNoise.amount", T::Float, 0, 0.2, kLongest, "量", "削る深さの最大。内側へだけ削る", C::Error},
     {K::VolumeNoise, "volumeNoise.scale", T::Float, 0.5, 64, "最長辺あたりの山の数", "細かさ", "", C::Error},
@@ -360,8 +371,8 @@ constexpr NodeSummary kSummaries[] = {
     {K::MaterialMask, "画像か一定値のマスク", ""},
     {K::VolumeBoolean, "2 つのボリュームの和・交差・差", "A の格子が基準"},
     {K::PlaneCuts, "平面の群でボリュームを切り落とし、角張った面を作る", kKeepsLargest},
-    {K::VolumeCrack, "構造面（Planes）か点の Voronoi 境界（Points）に沿って表面から割れ目を彫る",
-     "Points と Planes のどちらか一方だけを繋ぐ。深い割れ目や外面に近い面は岩を複数の塊に分ける（塊は残す）"},
+    {K::VolumeCrack, "構造面（Planes）か点の Voronoi 境界（Points）、または表面に沿う殻に沿って、表面から割れ目を彫る",
+     "Points と Planes のどちらか一方だけを繋ぐ（source: shells なら両方外す）。深い割れ目や外面に近い面は岩を複数の塊に分ける（塊は残す）"},
     {K::VolumeNoise, "ボリュームの表面をノイズで削る", kKeepsLargest},
     {K::Decimate, "形を保って三角形を減らす", "UV Unwrap の前に置く"},
     {K::Subdivide, "三角形を細分化する（Displace の前）", ""},

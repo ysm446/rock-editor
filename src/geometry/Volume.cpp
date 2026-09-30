@@ -904,6 +904,41 @@ std::vector<CutFaceFrame> ParallelPlaneFrames(const StructurePlanes& s, Vec3 min
     return frames;
 }
 
+const char* VolumeCrackSourceName(VolumeCrackSource source) {
+    return source == VolumeCrackSource::Shells ? "shells" : "inputs";
+}
+VolumeCrackSource ParseVolumeCrackSource(std::string_view name) {
+    return name == "shells" ? VolumeCrackSource::Shells : VolumeCrackSource::Inputs;
+}
+// 軸ごとの箱ぼかしを 3 回重ねたガウスの近似。格子の外は、端の値に外へ出た距離を足す（距離場として延ばす）。
+// 端の値をそのまま延ばすと外側の距離が小さく見積もられ、表面の近くの場が一様に内側へずれる。
+static std::vector<float> BlurField(const VolumeGrid& g, float radius) {
+    std::vector<float> field = g.values, scratch(field.size());
+    const int r = int(std::round(radius / g.spacing / std::sqrt(3.f)));
+    if (r < 1) return field;
+    const size_t stride[3] = {1, g.dimensions[0], size_t(g.dimensions[0]) * g.dimensions[1]};
+    for (int pass = 0; pass < 3; ++pass)
+        for (int axis = 0; axis < 3; ++axis) {
+            const int n = int(g.dimensions[axis]);
+            const int a = (axis + 1) % 3, b = (axis + 2) % 3;
+            for (uint32_t j = 0; j < g.dimensions[b]; ++j)
+                for (uint32_t i = 0; i < g.dimensions[a]; ++i) {
+                    const size_t base = i * stride[a] + j * stride[b];
+                    const auto at = [&](int k) {
+                        const int c = std::clamp(k, 0, n - 1);
+                        return field[base + size_t(c) * stride[axis]] + float(std::abs(k - c)) * g.spacing;
+                    };
+                    double sum = 0;
+                    for (int k = -r; k <= r; ++k) sum += at(k);
+                    for (int k = 0; k < n; ++k) {
+                        scratch[base + size_t(k) * stride[axis]] = float(sum / (2 * r + 1));
+                        sum += at(k + r + 1) - at(k - r);
+                    }
+                }
+            std::swap(field, scratch);
+        }
+    return field;
+}
 static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& points,
                                   const StructurePlanes* planes, const VolumeCrackSettings& s,
                                   std::string& error) {
@@ -913,7 +948,13 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
         return {};
     }
     const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
-    if (!planes && (points.size() < 2 || points.size() > size_t(MaxCrackPoints))) {
+    const bool shells = s.source == VolumeCrackSource::Shells;
+    if (shells && (!range(s.shellSpacing, .01f, .5f) || s.shellCount < 1 || s.shellCount > 32 ||
+                   !range(s.shellSmoothing, 0, .3f) || !range(s.shellPeel, 0, 1))) {
+        error = "殻の間隔は 0.01～0.5、枚数は 1～32、なめらかさは 0～0.3、剥がれは 0～1 にしてください";
+        return {};
+    }
+    if (!shells && !planes && (points.size() < 2 || points.size() > size_t(MaxCrackPoints))) {
         error = "割れ目には2～512個の点が必要です";
         return {};
     }
@@ -970,6 +1011,14 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
     const float frequency = s.noiseScale / longest;
     std::vector<StructurePlane> expanded;
     std::vector<float> planeFactors;
+    // 殻: なめらかにした距離場の等値面（深さ = 間隔 × k）。殻ごとの幅の倍率は k で決める。
+    std::vector<float> smoothed, shellFactors;
+    const float shellSpacing = s.shellSpacing * longest;
+    if (shells) {
+        smoothed = BlurField(g, s.shellSmoothing * longest);
+        for (int k = 1; k <= s.shellCount; ++k)
+            shellFactors.push_back(std::clamp(1 - s.variation * 2 * float(HashUnit(seed ^ (uint64_t(k) * 0x51Dull))), 0.f, 1.f));
+    }
     if (planes) {
         const auto last = g.Position(g.dimensions[0]-1, g.dimensions[1]-1, g.dimensions[2]-1);
         expanded = ExpandParallelPlanes(*planes,
@@ -994,7 +1043,15 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
                 // ゆらぎ 1 なら、ノイズの低いところで割れ目が途切れる。
                 reach *= std::clamp(1 - s.noise * 2 * (1 - n), 0.f, 1.f);
             }
-            if (planes) {
+            if (shells) {
+                // 殻 k は深さ（ならした距離場）が 間隔 × k の面。殻に沿う割れ目（V 字の断面は表面からの深さで狭める）。
+                const float depthAlong = -smoothed[index];
+                const int k0 = int(std::round(depthAlong / shellSpacing));
+                if (k0 >= 1 && k0 <= s.shellCount) {
+                    const float width = reach * shellFactors[size_t(k0 - 1)];
+                    if (width > 0) value = std::max(value, width - std::abs(depthAlong - float(k0) * shellSpacing));
+                }
+            } else if (planes) {
                 const float projected = Dot(planes->normal, p);
                 for (size_t i = 0; i < expanded.size(); ++i) {
                     const float width = reach * planeFactors[i];
@@ -1026,6 +1083,21 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
                 value = std::max(value, carve);
             }
         }
+        if (shells && s.shellPeel > 0) {
+            // 剥がれ: 殻 k より外の板がまだらに剥がれ落ちた所を外部にする。剥がれた跡の底は殻 k、縁は段の壁になる。
+            // まだらはノイズのしきい値で決め、内側の殻ほど剥がれにくくする。
+            const float depthAlong = -smoothed[index];
+            if (depthAlong > -shellSpacing && depthAlong < shellSpacing * float(s.shellCount)) {
+                const auto p = out.Position(x, y, z);
+                const float wall = .35f / frequency;  // ノイズの差を距離へ直す目安（まだら 1 つの大きさの 3 割）
+                for (int k = 1; k <= s.shellCount && depthAlong < shellSpacing * float(k); ++k) {
+                    const float n = ValueNoise(p.x * frequency, p.y * frequency, p.z * frequency, seed ^ (uint64_t(k) * 0xA5A5ull));
+                    const float limit = s.shellPeel * std::pow(.6f, float(k - 1));
+                    const float carve = std::min(shellSpacing * float(k) - depthAlong, (limit - n) * wall);
+                    value = std::max(value, carve);
+                }
+            }
+        }
         // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
         out.values[index] = std::abs(value) < threshold ? threshold : value;
         return value < 0;
@@ -1046,6 +1118,11 @@ VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points,
 VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& g, const StructurePlanes& planes,
                        const VolumeCrackSettings& s, std::string& error) {
     return CrackVolumeImpl(g, {}, &planes, s, error);
+}
+VolumeGrid CrackVolumeWithShells(const VolumeGrid& g, const VolumeCrackSettings& s, std::string& error) {
+    VolumeCrackSettings shells = s;
+    shells.source = VolumeCrackSource::Shells;
+    return CrackVolumeImpl(g, {}, nullptr, shells, error);
 }
 const char* VolumeNoiseTypeName(VolumeNoiseType type) {
     switch (type) {

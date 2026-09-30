@@ -98,6 +98,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         const auto* s = std::get_if<geometry::VolumeCrackSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->width); add(s->depth); add(s->variation); add(s->noise); add(s->noiseScale); add(s->seed);
+        add(int(s->source)); add(s->shellSpacing); add(s->shellCount); add(s->shellSmoothing); add(s->shellPeel);
     } else if (node->kind == NodeKind::PlaneCuts) {
         const auto* s = std::get_if<geometry::PlaneCutsSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -998,8 +999,25 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             const auto* upstream = wired ? graph.FindUpstreamNodeForPin(node->inputs[0].id) : nullptr;
             const auto* scatter = wired ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
             const auto* planes = node->inputs.size() > 2 ? graph.FindUpstreamNodeForPin(node->inputs[2].id) : nullptr;
+            const bool shells = settings && settings->source == geometry::VolumeCrackSource::Shells;
+            if (shells && (scatter || planes))
+                return finish(Failure(id, "Volume Crack", "割り方が「表面に沿う殻」のときは Points と Planes を外してください"));
+            if (shells && upstream) {
+                const auto input = evaluate(upstream->id, depth + 1);
+                if (!input.error.empty()) return finish(input);
+                if (input.rocks.size() != 1 || !input.rocks[0].volume)
+                    return finish(Failure(id, "Volume Crack", "ボリュームが必要です"));
+                std::string error;
+                auto cracked = geometry::CrackVolumeWithShells(*input.rocks[0].volume, *settings, error);
+                if (!error.empty()) return finish(Failure(id, "Volume Crack", error));
+                GeneratedRock rock;
+                rock.source = id;
+                rock.volume = std::make_shared<const geometry::VolumeGrid>(std::move(cracked));
+                result.rocks.push_back(std::move(rock));
+                return finish(std::move(result));
+            }
             if (!settings || !upstream || (!scatter && !planes))
-                return finish(Failure(id, "Volume Crack", "Volume と、Points または Planes の一方を接続してください"));
+                return finish(Failure(id, "Volume Crack", "Volume と、Points または Planes の一方を接続してください（割り方が「表面に沿う殻」なら Volume だけ）"));
             if (scatter && planes)
                 return finish(Failure(id, "Volume Crack", "Points と Planes は同時に接続できません。一方を外してください"));
             const auto input = evaluate(upstream->id, depth + 1);

@@ -11,6 +11,7 @@ using namespace rock;
 
 namespace {
 void TestParallelPlanes();
+void TestShells();
 bool Measure(const geometry::VolumeGrid& grid, geometry::MeshInfo& info,
              geometry::VolumeMeshingMethod method = geometry::VolumeMeshingMethod::MarchingTetrahedra) {
     std::string error;
@@ -219,9 +220,67 @@ void RunVolumeCrackTests() {
     const auto deeper = graph::EvaluateRocks(g, crack, &cache);
     Check(deeper.error.empty() && deeper.rocks[0].volume != rescattered.rocks[0].volume, "設定の変更で作り直す");
     TestParallelPlanes();
+    TestShells();
 }
 
 namespace {
+// 表面に沿う殻（シーティング・玉ねぎ状の風化）。外側の板がまだらに剥がれ落ちた段と、殻に沿う割れ目。
+void TestShells() {
+    Section("Volume Crack: 表面に沿う殻");
+    std::string error;
+    const auto box = geometry::MeshToVolume(geometry::MakeBox({2, 2, 2}), {64}, error);
+    geometry::MeshInfo boxInfo;
+    Measure(box, boxInfo);
+    geometry::VolumeCrackSettings shells;
+    shells.source = geometry::VolumeCrackSource::Shells;
+    shells.shellSpacing = .05f;
+    shells.shellCount = 3;
+    shells.shellPeel = .6f;
+    shells.noiseScale = 3;
+    const auto peeled = geometry::CrackVolumeWithShells(box, shells, error);
+    geometry::MeshInfo info, dual;
+    Check(error.empty() && Measure(peeled, info) && info.volume < boxInfo.volume * .97, "外側の板が剥がれて体積が減る");
+    Check(Measure(peeled, dual, geometry::VolumeMeshingMethod::DualContouring), "Dual Contouring でも閉じた表面にできる");
+    Check(peeled.dimensions == box.dimensions, "格子は入力のまま");
+    // 剥がれるのは殻の枚数 × 間隔の深さまで（0.05 × 2 m × 3 枚 = 0.3 m）。それより内側は変わらない。
+    bool deepKept = true;
+    for (uint32_t z = 0; z < box.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < box.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < box.dimensions[0]; ++x) {
+                const size_t i = box.Index(x, y, z);
+                if (box.values[i] < -.4f) deepKept &= peeled.values[i] == box.values[i];
+            }
+    Check(deepKept, "殻より深い内部は変わらない");
+    geometry::VolumeCrackSettings none = shells;
+    none.shellPeel = 0;
+    none.width = 0;
+    const auto kept = geometry::CrackVolumeWithShells(box, none, error);
+    geometry::MeshInfo keptInfo;
+    Check(error.empty() && Measure(kept, keptInfo) && std::abs(keptInfo.volume - boxInfo.volume) < boxInfo.volume * .01,
+          "剥がれも幅も 0 なら形は変わらない（凸な形では殻が表面に出ない）");
+    geometry::VolumeCrackSettings other = shells;
+    other.seed = 5;
+    Check(geometry::CrackVolumeWithShells(box, other, error).values != peeled.values, "Seed を変えると剥がれ方が変わる");
+    geometry::VolumeCrackSettings bad = shells;
+    bad.shellCount = 0;
+    geometry::CrackVolumeWithShells(box, bad, error);
+    Check(!error.empty(), "殻の枚数が範囲外なら診断する");
+    Check(geometry::ParseVolumeCrackSource(geometry::VolumeCrackSourceName(geometry::VolumeCrackSource::Shells)) ==
+                  geometry::VolumeCrackSource::Shells && geometry::ParseVolumeCrackSource("?") == geometry::VolumeCrackSource::Inputs,
+          "割り方の保存名を往復できる");
+
+    // グラフ: 殻のときは Volume だけを繋ぐ。Planes を繋ぐと診断する。
+    graph::NodeGraph g;
+    const auto shape = g.CreateNode(graph::NodeKind::BaseRock), volume = g.CreateNode(graph::NodeKind::ToVolume),
+               crack = g.CreateNode(graph::NodeKind::VolumeCrack), planes = g.CreateNode(graph::NodeKind::ParallelPlanes);
+    std::get<geometry::VolumeSettings>(g.FindMutableNode(volume)->settings).resolution = 40;
+    std::get<geometry::VolumeCrackSettings>(g.FindMutableNode(crack)->settings) = shells;
+    g.CreateLink(g.FindNode(shape)->outputs[0].id, g.FindNode(volume)->inputs[0].id);
+    g.CreateLink(g.FindNode(volume)->outputs[0].id, g.FindNode(crack)->inputs[0].id);
+    Check(graph::EvaluateRocks(g, crack).error.empty(), "殻は Volume だけで評価できる");
+    g.CreateLink(g.FindNode(planes)->outputs[0].id, g.FindNode(crack)->inputs[2].id);
+    Check(!graph::EvaluateRocks(g, crack).error.empty(), "殻のときに Planes を繋ぐと診断する");
+}
 void TestParallelPlanes() {
     using namespace geometry;
     Section("Parallel Planes と構造面による割れ目");
