@@ -87,7 +87,7 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 
 - **To Volume の解像度は 16〜128**。セル ≒ 最長辺 ÷ 解像度。これより細い割れ目・隙間・薄片は消える。
 - **比の単位**: Volume 系の幅・深さ・量の多くは「最長辺に対する比」で、メートルではない（catalog の `unit`）。
-- **最大の塊だけ残すノード**（Plane Cuts / Volume Noise / Smooth / Edge Wear / Terrace）。割れ目で分かれた岩をそのまま通すと、大きな塊ごと消える。先に Volume Close（occlusion）で繋ぐ。
+- **小片を捨てるノード**（Plane Cuts / Volume Noise / Smooth / Edge Wear / Terrace）。そのノードが削って切り離した小片と、最大の塊の 1% 未満の破片を捨てる（入力の時点で分かれていた大きな塊は残る）。割れ目で分かれた岩を 1 つの塊にしたいなら、先に Volume Close（occlusion）で繋ぐ。
 - **原点中心の形**: Random Boxes・Base Shape は原点中心。Volume Clip（高さ 0）の前に Volume Transform で持ち上げる。
 - **Volume Crack** は Points か Planes のどちらか一方だけを繋ぐ。深さ 1 や外面に近い面は岩を分ける。
 - **ピース系**: Scatter Points の点数は Pieces 入力で 1 片あたり 2〜512、片の数との積が 1024 以下。Scatter Points は凸な Mesh を要る。Peel は Voronoi 直後（Piece Transform より前）に使う。Piece Filter には Pieces と Selection の両方を繋ぐ。

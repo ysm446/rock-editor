@@ -306,8 +306,8 @@ constexpr ParamDefinition kParams[] = {
 };
 
 constexpr const char* kKeepsLargest =
-    "結果は最大の塊だけ残す（他の塊は黙って捨てる）。入力がすでに複数の塊に分かれていると大きな塊も消えるので、"
-    "先に Volume Close で繋ぐか、rock_cli eval の shells.largestSolidShare で分かれていないか確かめる";
+    "浮いた小片を捨てる: 加工で新しく切り離された小片は入力の塊ごとに最大のものだけ残す。入力の時点で分かれていた塊は"
+    "それぞれ残すが、最大の塊の 1% 未満は捨てる。岩を 1 つの塊にしたいなら、先に Volume Close で繋ぐ";
 
 constexpr NodeSummary kSummaries[] = {
     {K::Surface, "素材のレイヤー（マテリアルとマッピング）。Apply Material の Material へ繋ぐ", ""},

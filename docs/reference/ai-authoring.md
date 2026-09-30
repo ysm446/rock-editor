@@ -1,7 +1,7 @@
 # LLM による岩グラフの作成（AI フレンドリー化）
 
 作成日時: 2026-10-01 02:55
-更新日時: 2026-10-01 06:50
+更新日時: 2026-10-01 07:20
 
 ## 目的
 
@@ -126,7 +126,7 @@ rock_cli eval <graph.rockgraph> [--node <id>] [--pretty]
 - 表を作って分かったこと:
   - Decimate の目標の三角形数は、処理はエラーにするが評価器が先に丸めるので、実際は `clamp`。
   - Volume Close の width は width モードのときだけ、Plane Cuts の radius は global でも確かめる、など、モードで確かめる項目が変わる。
-  - 最大の塊だけを残すのは Plane Cuts / Volume Noise / Volume Smooth / Volume Edge Wear / Volume Terrace。Volume Crack と Volume Clip は分かれた塊を残す。
+  - 最大の塊だけを残すのは Plane Cuts / Volume Noise / Volume Smooth / Volume Edge Wear / Volume Terrace だった。2026-10-01 に、入力の時点で分かれていた大きな塊は残すように直した（小片の除去の規則は [Plane Cuts](plane-cuts.md#浮いた小片の除去)）。Volume Crack と Volume Clip はもとから分かれた塊を残す。
   - UI のスライダーは範囲を描くたびに丸める。いくつかのノード（Subdivide、Displace、UV Unwrap、Apply Material、Material Mask、Material Bake、Surface、ピース系）は設定を直接編集するので、手書きで UI の範囲外（評価の範囲内）の値を書いても、ノードを選んだだけで UI の範囲へ丸められる。
   - 型が違う値（数値の所に文字列など）は黙って既定値になる（未対応。L3 で扱う）。
 

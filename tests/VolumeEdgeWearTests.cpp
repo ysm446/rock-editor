@@ -166,4 +166,24 @@ void RunVolumeEdgeWearTests() {
     Check(changed.error.empty() && changed.rocks[0].volume != first.rocks[0].volume, "設定の変更で作り直す");
     std::get<geometry::VolumeEdgeWearSettings>(g.FindMutableNode(node)->settings).amount = 1;
     Check(!graph::EvaluateRocks(g, node, &cache).error.empty(), "不正な設定を診断する");
+
+    // 入力の時点で分かれていた塊（割れ目で分かれた岩など）は、大きいものはそれぞれ残し、ごく小さいものは捨てる。
+    // 以前は全体で最大の 1 つだけを残していて、分かれた大きな塊まで消えていた。
+    geometry::Mesh pieces;
+    const auto addBox = [&](std::array<float, 3> size, std::array<float, 3> offset) {
+        const geometry::Mesh box = geometry::MakeBox(size);
+        const uint32_t base = uint32_t(pieces.positions.size());
+        for (const auto& p : box.positions) pieces.positions.push_back({p.x + offset[0], p.y + offset[1], p.z + offset[2]});
+        for (const auto& t : box.triangles) pieces.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
+    };
+    addBox({1.6f, 1.6f, 1.6f}, {-1.2f, 0, 0});
+    addBox({1.2f, 1.6f, 1.6f}, {1.2f, 0, 0});
+    addBox({.12f, .12f, .12f}, {0, 1.2f, 0});  // 最大の塊の 1% 未満の小片
+    const auto split = geometry::MeshToVolume(pieces, {64}, error);
+    geometry::MeshInfo splitInfo;
+    Check(error.empty() && Measure(split, splitInfo) && splitInfo.components == 3, "入力は 3 つの塊（大 2・小片 1）");
+    const auto splitWorn = geometry::EdgeWearVolume(split, wear, error);
+    geometry::MeshInfo splitWornInfo;
+    Check(error.empty() && Measure(splitWorn, splitWornInfo) && splitWornInfo.components == 2,
+          "入力で分かれていた大きな塊は 2 つとも残し、小片は捨てる");
 }

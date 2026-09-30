@@ -1,10 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-01 06:50
+更新日時: 2026-10-01 07:20
 
 ## 未リリース
 
+- Plane Cuts / Volume Noise / Volume Smooth / Volume Edge Wear / Volume Terrace が、入力の時点で分かれていた大きな塊を消さないようにした。これまでは結果の最大の塊 1 つだけを残していたので、割れ目で分かれた岩を通すと大きな塊まで黙って消えていた（例: 24 個に分かれた岩で体積 3.25 → 0.85）。今はそのノードが削って切り離した小片と、最大の塊の 1% 未満の破片だけを捨てる。手元とサンプルの岩グラフ 35 件の Volume to Mesh は、変更の前後で同じ結果になることを確かめた。
 - `tools/rock_shot.py --views 4` で、岩を 4 方向から撮って 1 枚にまとめられるようにした（光もカメラに合わせて回すので裏側も見える）。起動引数 `--camera-yaw` / `--camera-pitch` / `--light-azimuth` を追加。
 - 岩の種類ごとのレシピ `examples/ai-recipes/`（片理・塊状・板状節理・丸い転石・層理の段）と、LLM（Claude Code）が岩グラフを組むときの手順 `.claude/skills/rock-graph/SKILL.md` を追加。
 - 撮影（`--screenshot` / `--screenshot-ui`）がグラフの評価の完了も待つようにした（途中や前の形が写らない）。起動引数 `--frame-all`（形全体が入るようにカメラを引く）と、撮影をまとめた `tools/rock_shot.py` を追加。

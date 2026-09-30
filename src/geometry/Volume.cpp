@@ -1,6 +1,7 @@
 #include "geometry/Volume.h"
 #include "geometry/DualContouring.h"
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <execution>
 #include <unordered_map>
@@ -43,14 +44,15 @@ bool FillSlices(const VolumeGrid& grid, Sample sample) {
     });
     return std::find(inside.begin(), inside.end(), uint8_t(1)) != inside.end();
 }
-// 内部の格子点を6近傍でつないだ塊のうち、最大のものだけを残す。
-// 重なった切り落としが角を切り離すと、浮いた小片ができる。小片は外部にする。
-void KeepLargestComponent(VolumeGrid& grid) {
-    const size_t nx = grid.dimensions[0], ny = grid.dimensions[1], nz = grid.dimensions[2];
-    std::vector<uint32_t> labels(grid.values.size(), 0);
-    std::vector<size_t> sizes{0}, stack;
-    for (size_t start = 0; start < grid.values.size(); ++start) {
-        if (grid.values[start] >= 0 || labels[start] != 0) continue;
+// 内部の格子点を6近傍でつないだ塊に番号（1 から）を振る。sizes[番号] はその塊の点の数（[0] は使わない）。
+std::vector<uint32_t> LabelInterior(const std::vector<float>& values, const std::array<uint32_t, 3>& dimensions,
+                                    std::vector<size_t>& sizes) {
+    const size_t nx = dimensions[0], ny = dimensions[1], nz = dimensions[2];
+    std::vector<uint32_t> labels(values.size(), 0);
+    std::vector<size_t> stack;
+    sizes.assign(1, 0);
+    for (size_t start = 0; start < values.size(); ++start) {
+        if (values[start] >= 0 || labels[start] != 0) continue;
         const uint32_t label = uint32_t(sizes.size());
         sizes.push_back(0);
         labels[start] = label;
@@ -61,7 +63,7 @@ void KeepLargestComponent(VolumeGrid& grid) {
             ++sizes[label];
             const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
             const auto visit = [&](bool valid, size_t next) {
-                if (!valid || grid.values[next] >= 0 || labels[next] != 0) return;
+                if (!valid || values[next] >= 0 || labels[next] != 0) return;
                 labels[next] = label;
                 stack.push_back(next);
             };
@@ -73,10 +75,38 @@ void KeepLargestComponent(VolumeGrid& grid) {
             visit(z + 1 < nz, index + nx * ny);
         }
     }
+    return labels;
+}
+// 加工で新しく切り離された小片を外部にする。before は同じ格子の加工前の値。
+// 重なった切り落としやノイズが角を切り離すと、浮いた小片ができる。加工前の塊ごとに、そこから生まれた
+// 最大の塊だけを残す。**加工前から分かれていた塊（割れ目で分かれた岩など）はそれぞれ残す**（以前は全体で
+// 最大の 1 つだけを残していて、分かれた大きな塊まで黙って消えていた）。加工前の塊と重ならない塊と、
+// 最大の塊の 1% 未満の塊は捨てる。
+void KeepLargestComponents(VolumeGrid& grid, const std::vector<float>& before) {
+    std::vector<size_t> sizes, beforeSizes;
+    const std::vector<uint32_t> labels = LabelInterior(grid.values, grid.dimensions, sizes);
     if (sizes.size() <= 2) return;
-    const uint32_t largest = uint32_t(std::max_element(sizes.begin() + 1, sizes.end()) - sizes.begin());
+    const std::vector<uint32_t> beforeLabels = LabelInterior(before, grid.dimensions, beforeSizes);
+    // 加工後の塊ごとに、最も多く重なる加工前の塊。
+    std::vector<std::map<uint32_t, size_t>> overlaps(sizes.size());
+    for (size_t i = 0; i < labels.size(); ++i)
+        if (labels[i] != 0 && beforeLabels[i] != 0) ++overlaps[labels[i]][beforeLabels[i]];
+    std::vector<uint32_t> keeper(beforeSizes.size(), 0);  // 加工前の塊ごとに残す加工後の塊
+    for (uint32_t label = 1; label < sizes.size(); ++label) {
+        if (overlaps[label].empty()) continue;
+        const uint32_t parent = std::max_element(overlaps[label].begin(), overlaps[label].end(),
+                                                 [](const auto& a, const auto& b) { return a.second < b.second; })->first;
+        if (keeper[parent] == 0 || sizes[label] > sizes[keeper[parent]]) keeper[parent] = label;
+    }
+    // 加工前から分かれていても、ごく小さな破片は浮いた小片として捨てる（最大の塊の 1% 未満）。
+    const size_t largestSize = *std::max_element(sizes.begin() + 1, sizes.end());
+    std::vector<uint8_t> keep(sizes.size(), 0);
+    for (const uint32_t label : keeper)
+        if (label != 0 && sizes[label] * 100 >= largestSize) keep[label] = 1;
+    if (std::find(keep.begin(), keep.end(), uint8_t(1)) == keep.end())
+        keep[std::max_element(sizes.begin() + 1, sizes.end()) - sizes.begin()] = 1;
     for (size_t i = 0; i < grid.values.size(); ++i)
-        if (labels[i] != 0 && labels[i] != largest) grid.values[i] = -grid.values[i];
+        if (labels[i] != 0 && !keep[labels[i]]) grid.values[i] = -grid.values[i];
 }
 // 内部の格子点を囲む箱の最長辺。長さの設定を形に対する比で持つノードが使う。内部が無ければ 0。
 float InteriorLongestSide(const VolumeGrid& g) {
@@ -700,7 +730,7 @@ VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::strin
         error = "切り落とした結果に内部が残りません。枚数か切り込みの深さを減らしてください";
         return {};
     }
-    KeepLargestComponent(out);
+    KeepLargestComponents(out, g.values);
     if (usedPlanes) *usedPlanes = std::move(planes);
     return out;
 }
@@ -1148,7 +1178,7 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
         return {};
     }
     // 細かいノイズは、浮いた小片や閉じた空洞を作ることがある。
-    KeepLargestComponent(out);
+    KeepLargestComponents(out, before);
     FillNewVoids(out, before);
     return out;
 }
@@ -1262,7 +1292,7 @@ VolumeGrid SmoothVolume(const VolumeGrid& g, const VolumeSmoothSettings& s, std:
         error = "処理した結果に内部が残りません。半径か量を減らしてください";
         return {};
     }
-    KeepLargestComponent(out);
+    KeepLargestComponents(out, g.values);
     FillNewVoids(out, g.values);
     return out;
 }
@@ -1369,7 +1399,7 @@ VolumeGrid EdgeWearVolume(const VolumeGrid& g, const VolumeEdgeWearSettings& s, 
         error = "処理した結果に内部が残りません。量か半径を減らしてください";
         return {};
     }
-    KeepLargestComponent(out);
+    KeepLargestComponents(out, g.values);
     FillNewVoids(out, g.values);
     return out;
 }
@@ -1487,7 +1517,7 @@ VolumeGrid TerraceVolume(const VolumeGrid& g, const VolumeTerraceSettings& s, st
         error = "段を刻んだ結果に内部が残りません。深さを減らしてください";
         return {};
     }
-    KeepLargestComponent(out);
+    KeepLargestComponents(out, g.values);
     FillNewVoids(out, g.values);
     return out;
 }

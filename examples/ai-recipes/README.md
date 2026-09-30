@@ -15,5 +15,5 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 共通の注意:
 
 - Random Boxes・Base Shape は原点中心にできる。Volume Clip（高さ 0）で接地面を切る前に Volume Transform で持ち上げる。上げないと半分が消えて平たくなる。
-- Plane Cuts / Volume Noise / Volume Smooth / Volume Edge Wear / Volume Terrace は、結果の最大の塊だけを残す。割れ目で塊が分かれたら、先に Volume Close で繋ぐ（`schist` / `platy-joints`）。
+- 割れ目で岩が複数の塊に分かれると、そのまま最後まで分かれて残る（Plane Cuts などは小片だけを捨てる）。1 つの塊にしたいなら、先に Volume Close で繋ぐ（`schist` / `platy-joints`）。
 - 岩には Volume to Mesh の `dualContouring` を使う（面と稜線が立つ）。
