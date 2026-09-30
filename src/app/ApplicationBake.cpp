@@ -275,6 +275,8 @@ std::vector<io::RockAssetLod> Application::MergeRockAssetLods(const graph::RockE
         lods[level].screenSize = level == 0 ? 1.0f : settings.screenSize[std::min<size_t>(level, graph::kMaxRockAssetLods - 1)];
         for (const auto& rock : evaluated.rocks) {
             if (!rock.lods || rock.lods->empty()) continue;
+            // 自分の UV を持つ段は、その段のテクスチャのフォルダを使う。
+            if (int(level) >= rock.sharedUvLods) lods[level].textures = io::RockAssetLodTextureFolder(level);
             const auto& mesh = (*rock.lods)[std::min(level, rock.lods->size() - 1)];
             const auto offset = static_cast<uint32_t>(merged.positions.size());
             merged.positions.insert(merged.positions.end(), mesh.positions.begin(), mesh.positions.end());
@@ -301,6 +303,8 @@ void Application::ProcessPendingAssetBake() {
     const graph::GraphId id = m_pendingAssetBake;
     const auto finish = [&](const std::string& status, bool failed) {
         m_pendingAssetBake = 0;
+        // 先に Material Bake を焼くと、プレビューが Material Bake へ移る。焼く前に見ていたもの（Rock Asset の段）へ戻す。
+        if (m_assetBakeRequestedMaterial) SetPreviewGraphNode(m_assetBakePreviewNode, m_assetBakePreviewPin);
         m_assetBakeRequestedMaterial = false;
         m_assetBakeStatus = status;
         if (failed) ROCK_LOG_ERROR("岩アセット: %s", status.c_str());
@@ -340,6 +344,8 @@ void Application::ProcessPendingAssetBake() {
         if (m_assetBakeRequestedMaterial) return finish("Material Bake に失敗したので、焼けませんでした", true);
         // 先に Material Bake を焼く。終わったらもう一度ここへ来る。
         m_assetBakeRequestedMaterial = true;
+        m_assetBakePreviewNode = m_previewGraphNode;
+        m_assetBakePreviewPin = m_previewGraphPin;
         m_pendingBake = bakeNode;
         m_assetBakeStatus = "Material Bake を先に実行しています…";
         return;
@@ -348,6 +354,14 @@ void Application::ProcessPendingAssetBake() {
     data.lods = MergeRockAssetLods(evaluated, *settings);
     if (data.lods.empty() || data.lods[0].mesh.triangles.empty()) return finish("焼く段がありません", true);
     data.textured = ready && bakeNode;
+    // 自分の UV を持つ段のテクスチャは、LOD0 の Material Bake の結果から転写する。転写元の岩は 1 つだけのはず
+    // （Material Bake は 1 つのメッシュを焼く）。
+    const graph::GeneratedRock* owner = nullptr;
+    size_t owners = 0;
+    for (const auto& rock : evaluated.rocks)
+        if (rock.lods) { owner = &rock; ++owners; }
+    const bool ownUv = std::any_of(data.lods.begin(), data.lods.end(), [](const auto& lod) { return !lod.textures.empty(); });
+    if (ownUv && owners != 1) data.textured = false;
     data.hash = io::RockAssetHash(data.lods, fingerprint);
     geometry::MeshInfo info;
     if (geometry::InspectMesh(data.lods[0].mesh, info)) {
@@ -363,6 +377,22 @@ void Application::ProcessPendingAssetBake() {
             const auto& image = images[channel];
             if (!SaveRgba8Png(folder / io::kRockAssetTextures[channel], image.width, image.height, image.width * 4, image.pixels.data()))
                 return finish(std::string("テクスチャを書けません: ") + io::kRockAssetTextures[channel], true);
+        }
+        for (size_t level = 0; level < data.lods.size(); ++level) {
+            const std::string& textures = data.lods[level].textures;
+            if (textures.empty()) continue;
+            std::string lodError;
+            const auto* set = RockLodTextures(*owner, level, lodError);
+            if (!set)
+                return finish("LOD" + std::to_string(level) + " のテクスチャを作れません" + (lodError.empty() ? "" : ": " + lodError), true);
+            const auto lodFolder = folder / FromUtf8(textures);
+            std::filesystem::create_directories(lodFolder, fileError);
+            for (size_t channel = 0; channel < 4; ++channel) {
+                const auto& image = set->images[channel];
+                if (!SaveRgba8Png(lodFolder / io::kRockAssetTextures[channel], image.width, image.height, image.width * 4,
+                                  image.pixels.data()))
+                    return finish(textures + "/" + io::kRockAssetTextures[channel] + " を書けません", true);
+            }
         }
     }
     std::string error;
@@ -475,6 +505,104 @@ void Application::ProcessPendingBake() {
     FinishBake(id, images, fingerprint);
 }
 
+// 描画用のデータ（MakeRockMeshData は面ごとに 3 頂点を順に並べる）から、面ごとの角の向きを取り出す。
+// 転写の接線空間を描画と揃えるために使う。
+static bool CornerFrames(const renderer::MeshData& geometry, const geometry::Mesh& mesh,
+                         std::vector<std::array<geometry::CornerFrame, 3>>& frames) {
+    if (geometry.vertices.size() != mesh.triangles.size() * 3) return false;
+    frames.resize(mesh.triangles.size());
+    for (size_t f = 0; f < frames.size(); ++f)
+        for (int k = 0; k < 3; ++k) {
+            const auto& v = geometry.vertices[f * 3 + k];
+            frames[f][k] = {{v.normal.x, v.normal.y, v.normal.z}, {v.tangent.x, v.tangent.y, v.tangent.z}, v.tangent.w};
+        }
+    return true;
+}
+
+// Rock Asset の自分の UV を持つ段のテクスチャ。LOD0 の面へレイを飛ばし、LOD0 の UV で Material Bake の結果を読む。
+// 法線は LOD0 の接線空間からこの段の接線空間へ直すので、LOD0 の形の凹凸も法線マップに入る。
+// 呼び出す側は、Material Bake の結果がいまの入力で使えること（ApplyRockMaterial が true）を確かめておく。
+// 返す要素は m_lodTextures の中を指すので、次にこの関数を呼ぶまでに使い終える。
+const Application::LodTextureSet* Application::RockLodTextures(const graph::GeneratedRock& rock, size_t level, std::string& error) {
+    error.clear();
+    if (!rock.lods || level >= rock.lods->size() || int(level) < rock.sharedUvLods || !rock.bakeSource) return nullptr;
+    const auto* node = m_graph.FindNode(rock.bakeSource);
+    const auto* bake = node ? std::get_if<graph::MaterialBakeSettings>(&node->settings) : nullptr;
+    const auto images = m_bakeImages.find(rock.bakeSource);
+    if (!bake || bake->fingerprint.empty() || images == m_bakeImages.end()) return nullptr;
+    const geometry::Mesh& source = (*rock.lods)[0];
+    const geometry::Mesh& target = (*rock.lods)[level];
+    if (!geometry::HasValidUvs(source) || !geometry::HasValidUvs(target)) return nullptr;
+    // 転写元（ベイクの指紋と LOD0）とこの段のメッシュが同じなら、前に作ったものを使う。
+    const std::string key = io::RockAssetHash({{source}, {target}}, bake->fingerprint);
+    for (auto& entry : m_lodTextures)
+        if (entry.key == key) {
+            entry.used = true;
+            return &entry;
+        }
+    const auto start = std::chrono::steady_clock::now();
+    const auto& display = m_settings.Display();
+    std::vector<std::array<geometry::CornerFrame, 3>> sourceFrames, targetFrames;
+    if (!CornerFrames(renderer::MakeRockMeshData(source, display.smoothShading, display.smoothShadingAngle), source, sourceFrames) ||
+        !CornerFrames(renderer::MakeRockMeshData(target, display.smoothShading, display.smoothShadingAngle), target, targetFrames)) {
+        error = "段の法線を作れませんでした";
+        return nullptr;
+    }
+    std::array<geometry::TextureView, 4> views;
+    for (size_t channel = 0; channel < 4; ++channel)
+        views[channel] = {images->second[channel].width, images->second[channel].height, images->second[channel].pixels.data()};
+    // 探す距離は LOD0 の大きさの 5%。段どうしの形のずれより大きく、岩の薄い所の厚みより小さくしたい。
+    geometry::MeshInfo info;
+    geometry::InspectMesh(source, info);
+    const float extent = std::max({info.maximum.x - info.minimum.x, info.maximum.y - info.minimum.y, info.maximum.z - info.minimum.z});
+    // 粗い段ほど LOD0 から離れるので、届かなかった画素だけ距離を広げて探し直す（最初に当たったものを優先する）。
+    float cage = std::clamp(extent * 0.05f, geometry::kMinCageDistance, geometry::kMaxCageDistance);
+    geometry::TextureTransferResult transfer;
+    if (!geometry::TransferTextures(target, targetFrames, source, sourceFrames, views, cage, target.uvWidth, target.uvHeight,
+                                    transfer, error))
+        return nullptr;
+    const auto coveredCount = [](const geometry::TextureTransferResult& result) {
+        return size_t(std::count(result.covered.begin(), result.covered.end(), uint8_t(1)));
+    };
+    for (int retry = 0; retry < 2 && transfer.hits < coveredCount(transfer) * 99 / 100; ++retry) {
+        cage = std::min(cage * 3, geometry::kMaxCageDistance);
+        geometry::TextureTransferResult wider;
+        if (!geometry::TransferTextures(target, targetFrames, source, sourceFrames, views, cage, target.uvWidth, target.uvHeight,
+                                        wider, error))
+            return nullptr;
+        for (size_t i = 0; i < transfer.covered.size(); ++i) {
+            if (transfer.images[0][i * 4 + 3] || !wider.images[0][i * 4 + 3]) continue;
+            for (size_t channel = 0; channel < 4; ++channel)
+                std::copy_n(&wider.images[channel][i * 4], 4, &transfer.images[channel][i * 4]);
+            ++transfer.hits;
+        }
+    }
+    LodTextureSet entry;
+    entry.key = key;
+    for (size_t channel = 0; channel < 4; ++channel) {
+        entry.images[channel].width = transfer.width;
+        entry.images[channel].height = transfer.height;
+        entry.images[channel].pixels = std::move(transfer.images[channel]);
+    }
+    const std::string name = "LOD" + std::to_string(level) + " " + std::to_string(rock.bakeSource);
+    entry.material = MakeBakedMaterial("Bake " + name, "Baked " + name, entry.images, entry.textures);
+    if (entry.material == compositor::kNoMaterialAsset) {
+        error = "段のテクスチャをGPUへ転送できません";
+        return nullptr;
+    }
+    entry.used = true;
+    const size_t covered = size_t(std::count(transfer.covered.begin(), transfer.covered.end(), uint8_t(1)));
+    const double ratio = covered ? double(transfer.hits) / double(covered) : 0.0;
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    ROCK_LOG_INFO("Rock Asset: LOD%zu のテクスチャを LOD0 から転写しました（%u x %u、当たった画素 %.1f%%、%.2f 秒）", level,
+                  transfer.width, transfer.height, ratio * 100.0, seconds);
+    if (covered && ratio < 0.95)
+        ROCK_LOG_WARN("Rock Asset: LOD%zu で LOD0 に当たらなかった画素が %.1f%% あります（周りの色で埋めました）", level,
+                      (1.0 - ratio) * 100.0);
+    m_lodTextures.push_back(std::move(entry));
+    return &m_lodTextures.back();
+}
+
 // ハイポリから転写した法線とハイトを、素材を焼いた画像（images[1] と images[3]）に重ねる。
 //   法線: ハイポリの法線（ローポリの接線空間）に、素材の法線を細部として重ねる（whiteout 合成）。
 //   ハイト: 素材のハイトに、ローポリの面からハイポリまでの距離を足す。距離はケージ距離の 2 倍を 1 とする
@@ -504,17 +632,12 @@ bool Application::TransferHighDetail(const graph::Node& node, const graph::Gener
             high.triangles.push_back(face);
         }
     }
-    // 描画と同じ法線・接線で接線空間を取る（MakeRockMeshData は面ごとに 3 頂点を順に並べる）。
-    if (mesh.geometry.vertices.size() != rock.mesh.triangles.size() * 3) {
+    // 描画と同じ法線・接線で接線空間を取る。
+    std::vector<std::array<geometry::CornerFrame, 3>> frames;
+    if (!CornerFrames(mesh.geometry, rock.mesh, frames)) {
         error = "ローポリの法線を作れませんでした";
         return false;
     }
-    std::vector<std::array<geometry::CornerFrame, 3>> frames(rock.mesh.triangles.size());
-    for (size_t f = 0; f < frames.size(); ++f)
-        for (int k = 0; k < 3; ++k) {
-            const auto& v = mesh.geometry.vertices[f * 3 + k];
-            frames[f][k] = {{v.normal.x, v.normal.y, v.normal.z}, {v.tangent.x, v.tangent.y, v.tangent.z}, v.tangent.w};
-        }
     const uint32_t width = images[1].width, height = images[1].height;
     geometry::DetailTransferImage transfer;
     const auto start = std::chrono::steady_clock::now();
@@ -546,14 +669,11 @@ bool Application::TransferHighDetail(const graph::Node& node, const graph::Gener
     return true;
 }
 
-void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images, const std::string& fingerprint) {
-    auto* node = m_graph.FindMutableNode(id);
-    if (!node || node->kind != graph::NodeKind::MaterialBake) return;
-    const auto fail = [&](const std::string& error) { m_bakeStatus[id] = error; ROCK_LOG_ERROR("Material Bake: %s", error.c_str()); };
-    // 結果はメモリ上にだけ持つ。ファイルへは「テクスチャを出力…」を押したときだけ書く。
-    // テクスチャと材質は一時的なもので、シーンにも保存しない。開き直したら再ベイクする。
+compositor::MaterialAssetId Application::MakeBakedMaterial(const std::string& name, const std::string& materialName,
+                                                           std::array<LdrImage, 4>& images,
+                                                           std::array<compositor::TextureId, 4>& textures) {
     const char* labels[] = {"BaseColor", "Normal", "RoughnessMetallicAO", "Height"};
-    std::array<compositor::TextureId, 4> ids{};
+    textures = {};
     for (size_t channel = 0; channel < 4; ++channel) {
         auto& image = images[channel];
         // UV の島が無い部分を黒や透明のまま残さない。縮小表示やミップマップで、島の縁へその色がにじむ。
@@ -569,27 +689,41 @@ void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images,
                     image.pixels[i + 2] = 255;
                     image.pixels[i + 3] = 255;
                 }
-        ids[channel] = m_textureLibrary.AddTransient(
-            m_device, m_pipelineCache, "Bake " + std::to_string(id) + " " + labels[channel] + "（一時）", image);
-        if (!ids[channel]) {
-            for (size_t created = 0; created < channel; ++created) m_textureLibrary.Remove(m_device, ids[created]);
-            fail("ベイク画像をGPUへ転送できません");
-            return;
+        textures[channel] = m_textureLibrary.AddTransient(m_device, m_pipelineCache, name + " " + labels[channel] + "（一時）", image);
+        if (!textures[channel]) {
+            for (size_t created = 0; created < channel; ++created) m_textureLibrary.Remove(m_device, textures[created]);
+            textures = {};
+            return compositor::kNoMaterialAsset;
         }
     }
-    const auto material = m_materialLibrary.Add("Baked " + std::to_string(id) + "（一時）");
+    const auto material = m_materialLibrary.Add(materialName + "（一時）");
     auto *asset = m_materialLibrary.FindMutable(material);
     asset->transient = true;
-    asset->baseColor = ids[0];
-    asset->normal = ids[1];
+    asset->baseColor = textures[0];
+    asset->normal = textures[1];
     asset->flipNormalGreen = false;
-    asset->roughness = {ids[2], compositor::TextureChannel::R};
+    asset->roughness = {textures[2], compositor::TextureChannel::R};
     asset->roughnessValue = 1;
-    asset->metallic = {ids[2], compositor::TextureChannel::G};
+    asset->metallic = {textures[2], compositor::TextureChannel::G};
     asset->metallicValue = 1;
-    asset->ambientOcclusion = {ids[2], compositor::TextureChannel::B};
+    asset->ambientOcclusion = {textures[2], compositor::TextureChannel::B};
     asset->ambientOcclusionValue = 1;
-    asset->height = {ids[3], compositor::TextureChannel::R};
+    asset->height = {textures[3], compositor::TextureChannel::R};
+    return material;
+}
+
+void Application::FinishBake(graph::GraphId id, std::array<LdrImage, 4>& images, const std::string& fingerprint) {
+    auto* node = m_graph.FindMutableNode(id);
+    if (!node || node->kind != graph::NodeKind::MaterialBake) return;
+    const auto fail = [&](const std::string& error) { m_bakeStatus[id] = error; ROCK_LOG_ERROR("Material Bake: %s", error.c_str()); };
+    // 結果はメモリ上にだけ持つ。ファイルへは「テクスチャを出力…」を押したときだけ書く。
+    // テクスチャと材質は一時的なもので、シーンにも保存しない。開き直したら再ベイクする。
+    std::array<compositor::TextureId, 4> ids{};
+    const auto material = MakeBakedMaterial("Bake " + std::to_string(id), "Baked " + std::to_string(id), images, ids);
+    if (material == compositor::kNoMaterialAsset) {
+        fail("ベイク画像をGPUへ転送できません");
+        return;
+    }
     auto &bake = std::get<graph::MaterialBakeSettings>(node->settings);
     bake.bakedLayer = compositor::MaterialStack::MakeBaseLayer();
     bake.bakedLayer.material = material;

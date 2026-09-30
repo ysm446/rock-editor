@@ -38,4 +38,26 @@ struct DetailTransferImage {
 bool TransferDetail(const Mesh& low, const std::vector<std::array<CornerFrame, 3>>& frames, const Mesh& high,
                     float cageDistance, uint32_t width, uint32_t height, DetailTransferImage& out, std::string& error,
                     std::stop_token stop = {}, const std::function<void(int)>& progress = {});
+
+// RGBA8 の画像への参照（行 0 が v = 0。1 行は width * 4 バイト）。
+struct TextureView {
+    uint32_t width = 0, height = 0;
+    const uint8_t* pixels = nullptr;
+};
+// テクスチャの転写結果。images は RGBA8 で、Material Bake と同じ並び（BaseColor / Normal / RoughnessMetallicAO / Height）。
+// 転写元に当たった画素だけ不透明（アルファ 255）で、それ以外はアルファ 0（エッジパディングで埋める前提）。
+struct TextureTransferResult {
+    uint32_t width = 0, height = 0;
+    std::array<std::vector<uint8_t>, 4> images;
+    std::vector<uint8_t> covered;  // ローポリの UV の中の画素に 1
+    size_t hits = 0;               // 転写元に当たった画素の数
+};
+
+// UV 付きの転写元（high）のテクスチャ 4 枚を、ローポリ（low）の UV へ転写する（LOD の段ごとのテクスチャ）。
+// 探し方は TransferDetail と同じ。当たった点の転写元の UV で画像を双線形に読む。法線は転写元の接線空間
+// （highFrames）からワールドへ戻し、ローポリの接線空間（lowFrames）で表し直す。向きが空なら頂点法線と UV の接線を使う。
+bool TransferTextures(const Mesh& low, const std::vector<std::array<CornerFrame, 3>>& lowFrames, const Mesh& high,
+                      const std::vector<std::array<CornerFrame, 3>>& highFrames, const std::array<TextureView, 4>& highImages,
+                      float cageDistance, uint32_t width, uint32_t height, TextureTransferResult& out, std::string& error,
+                      std::stop_token stop = {}, const std::function<void(int)>& progress = {});
 }  // namespace rock::geometry

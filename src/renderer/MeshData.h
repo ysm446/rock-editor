@@ -3,6 +3,7 @@
 #include "compositor/MaterialStack.h"
 #include "compositor/BoundaryMaterial.h"
 #include <array>
+#include <limits>
 #include <optional>
 #include <DirectXMath.h>
 #include <cstdint>
@@ -77,6 +78,9 @@ struct SceneMesh {
     // Rock Asset の LOD1 以降の形（geometry が LOD0）。どの段を描くかは PreviewRenderer::SetMeshSceneLod で選ぶ。
     // 全ての段を最初に GPU へ送っておくので、段の切り替えではシーンを作り直さない（材質の評価も転送もしない）。
     std::vector<MeshData> lodGeometries;
+    // 描く段の範囲（両端を含む）。PreviewRenderer::SetMeshSceneLod で選んだ段がこの外なら描かない。
+    // 自分の UV（と材質）を持つ LOD の段は、別のメッシュとしてこの範囲で出し分ける。
+    std::array<int, 2> lodRange{0, std::numeric_limits<int>::max()};
     compositor::MaterialMapping mapping;
     // 道路の表示用メタデータ。0は道路以外。生成時に再構築する。
     float roadMetersPerUv = 0.0f;

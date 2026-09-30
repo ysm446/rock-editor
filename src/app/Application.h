@@ -238,6 +238,24 @@ private:
     };
     std::vector<ShapeMaskTexture> m_shapeMaskTextures;
     compositor::TextureId ShapeMaskTextureFor(const std::shared_ptr<const geometry::MaskImage>& image);
+    // Rock Asset の自分の UV を持つ段のテクスチャ。LOD0 の Material Bake の結果から転写する。
+    // 一時テクスチャと材質を持ち、使われなくなったら SyncMeshGraph が捨てる。
+    struct LodTextureSet {
+        std::string key;  // 転写元（ベイクの指紋と LOD0）とこの段のメッシュのハッシュ
+        std::array<LdrImage, 4> images;
+        std::array<compositor::TextureId, 4> textures{};
+        compositor::MaterialAssetId material = compositor::kNoMaterialAsset;
+        bool used = false;
+    };
+    std::vector<LodTextureSet> m_lodTextures;
+    // rock の level 段（自分の UV を持つ段）のテクスチャ。Material Bake の結果がまだ使えるときだけ作る。
+    // 作れなければ nullptr（error に理由。ベイクが無いだけなら空）。
+    const LodTextureSet* RockLodTextures(const graph::GeneratedRock& rock, size_t level, std::string& error);
+    // 焼いた画像 4 枚の背景を埋め、一時テクスチャと材質を作る（Material Bake と同じ作り方）。失敗したら kNoMaterialAsset。
+    // name はテクスチャの名前の頭、materialName は材質の名前（どちらも末尾に「（一時）」を付ける）。
+    compositor::MaterialAssetId MakeBakedMaterial(const std::string& name, const std::string& materialName,
+                                                  std::array<LdrImage, 4>& images,
+                                                  std::array<compositor::TextureId, 4>& textures);
     // フォルダを選んで、ベイク結果の PNG を書き出す。
     // directory が空ならフォルダを選ぶダイアログを出す。
     void ExportBakedTextures(graph::GraphId id, std::filesystem::path directory = {});
@@ -280,6 +298,8 @@ private:
     // 「岩アセットを焼く」を押した Rock Asset。上流の Material Bake が古ければ先にベイクし、終わってから焼く。
     graph::GraphId m_pendingAssetBake = 0;
     bool m_assetBakeRequestedMaterial = false;
+    // Material Bake を先に焼く前に見ていたプレビュー（焼き終えたら戻す）。
+    graph::GraphId m_assetBakePreviewNode = 0, m_assetBakePreviewPin = 0;
     std::string m_assetBakeStatus;
     void ProcessPendingAssetBake();
     // 焼いた岩アセットの目録のハッシュ（シーンのパスと目録の更新時刻で読み直す）。

@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -15,7 +16,8 @@ using json = nlohmann::json;
 
 namespace {
 constexpr const char* kFormat = "rock-editor.rock-asset";
-constexpr int kVersion = 1;
+// 版 2 で段ごとのテクスチャ（lods[].textures）を足した。版 1 も読む。
+constexpr int kVersion = 2;
 // .rockmesh の先頭。版を変えたら末尾の数字を上げる。
 constexpr char kMeshMagic[8] = {'R', 'K', 'M', 'E', 'S', 'H', '0', '1'};
 
@@ -44,13 +46,16 @@ bool ReadManifest(const fs::path& scene, json& manifest) {
     std::ifstream in(RockAssetFolder(scene) / L"asset.json", std::ios::binary);
     if (!in) return false;
     manifest = json::parse(in, nullptr, false);
-    return manifest.is_object() && manifest.value("format", "") == kFormat && manifest.value("version", 0) == kVersion;
+    const int version = manifest.is_object() ? manifest.value("version", 0) : 0;
+    return manifest.is_object() && manifest.value("format", "") == kFormat && version >= 1 && version <= kVersion;
 }
 }  // namespace
 
 fs::path RockAssetFolder(const fs::path& scene) {
     return fs::path(scene.wstring() + L".bake");
 }
+
+std::string RockAssetLodTextureFolder(size_t level) { return "lod" + std::to_string(level); }
 
 std::string RockAssetHash(const std::vector<RockAssetLod>& lods, const std::string& bakeFingerprint) {
     Hasher h;
@@ -67,6 +72,8 @@ std::string RockAssetHash(const std::vector<RockAssetLod>& lods, const std::stri
         h.Bytes(mesh.cornerUvs.data(), mesh.cornerUvs.size() * sizeof(mesh.cornerUvs[0]));
         h.Add(mesh.uvWidth);
         h.Add(mesh.uvHeight);
+        h.Add(uint64_t(lod.textures.size()));
+        h.Bytes(lod.textures.data(), lod.textures.size());
     }
     h.Bytes(bakeFingerprint.data(), bakeFingerprint.size());
     char text[17] = {};
@@ -140,12 +147,23 @@ bool SaveRockAsset(const fs::path& scene, const RockAssetData& data, std::string
             error = "メッシュを書けません: " + name;
             return false;
         }
+        const std::string& textures = data.lods[level].textures;
+        if (!textures.empty() && textures != RockAssetLodTextureFolder(level)) {
+            error = "段のテクスチャのフォルダ名が不正です: " + textures;
+            return false;
+        }
         lods.push_back({{"mesh", name}, {"triangles", data.lods[level].mesh.triangles.size()},
-                        {"screenSize", data.lods[level].screenSize}});
+                        {"screenSize", data.lods[level].screenSize}, {"textures", data.textured ? textures : std::string()}});
     }
-    // 前に焼いた余分な段（段数を減らしたとき）を消す。
+    // 前に焼いた余分な段（段数を減らしたとき）と、使わなくなった段のテクスチャのフォルダを消す。
     for (size_t level = data.lods.size(); level < 16; ++level) fs::remove(folder / ("lod" + std::to_string(level) + ".rockmesh"), fileError);
-    if (!data.textured)
+    for (size_t level = 0; level < 16; ++level) {
+        const bool used = data.textured && level < data.lods.size() && !data.lods[level].textures.empty();
+        if (!used) fs::remove_all(folder / RockAssetLodTextureFolder(level), fileError);
+    }
+    // 直下の共有テクスチャは、共有する段が 1 つも無いかテクスチャを焼かないなら消す。
+    const bool shared = data.textured && std::any_of(data.lods.begin(), data.lods.end(), [](const auto& lod) { return lod.textures.empty(); });
+    if (!shared)
         for (const char* texture : kRockAssetTextures) fs::remove(folder / texture, fileError);
     const json manifest = {{"format", kFormat},
                            {"version", kVersion},
@@ -197,13 +215,21 @@ bool LoadRockAsset(const fs::path& scene, RockAssetData& data, std::string& erro
             return false;
         }
         lod.screenSize = entry.value("screenSize", 1.0f);
+        // 版 1 には無い（全ての段が直下のテクスチャを共有する）。
+        lod.textures = entry.contains("textures") && entry["textures"].is_string() ? entry["textures"].get<std::string>() : "";
+        if (!lod.textures.empty() && lod.textures != RockAssetLodTextureFolder(data.lods.size())) {
+            error = "岩アセットの段のテクスチャのフォルダ名が不正です: " + lod.textures;
+            data = {};
+            return false;
+        }
         data.lods.push_back(std::move(lod));
     }
     data.textured = manifest.value("textured", false);
     if (data.textured) {
         std::error_code fileError;
-        for (const char* texture : kRockAssetTextures)
-            if (!fs::is_regular_file(folder / texture, fileError)) data.textured = false;
+        for (const auto& lod : data.lods)
+            for (const char* texture : kRockAssetTextures)
+                if (!fs::is_regular_file(folder / FromUtf8(lod.textures) / texture, fileError)) data.textured = false;
     }
     data.hash = manifest.value("hash", "");
     const auto vec = [&](const char* key) {

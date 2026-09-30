@@ -546,7 +546,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
                                  {"roughness", terrain->roughness}, {"peak", terrain->peak}};
         } else if (const auto* asset = std::get_if<graph::RockAssetSettings>(&node.settings)) {
             item["rockAsset"] = {{"lodCount", asset->lodCount}, {"maxTriangles", asset->maxTriangles},
-                                 {"trianglePercent", asset->trianglePercent}, {"screenSize", asset->screenSize}};
+                                 {"trianglePercent", asset->trianglePercent}, {"screenSize", asset->screenSize},
+                                 {"shareUv", asset->shareUv}};
         } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node.settings)) {
             item["uvUnwrap"] = {{"resolution", uv->resolution}, {"padding", uv->padding}, {"quality", uv->quality}};
         } else if (const auto* mask = std::get_if<graph::MaterialMaskSettings>(&node.settings)) {
@@ -876,6 +877,9 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     };
                     readLevels("trianglePercent", settings.trianglePercent, 0.1f, 100.0f);
                     readLevels("screenSize", settings.screenSize, 0.001f, 4.0f);
+                    if (const json* share = FindMember(*v, "shareUv"); share && share->is_array())
+                        for (size_t i = 0; i < settings.shareUv.size() && i < share->size(); ++i)
+                            if ((*share)[i].is_boolean()) settings.shareUv[i] = (*share)[i].get<bool>();
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::Remesh) {

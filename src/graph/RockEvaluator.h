@@ -34,8 +34,10 @@ struct GeneratedRock {
     bool previewMaskInvert = false;
     int pieceId = -1;
     bool pieceSelected = false;
-    // Rock Asset が作った LOD（[0] は mesh と同じ LOD0）。どの段も同じ UV を持つ。Rock Asset 以外は空。
+    // Rock Asset が作った LOD（[0] は mesh と同じ LOD0）。Rock Asset 以外は空。
     std::shared_ptr<const std::vector<geometry::Mesh>> lods;
+    // 先頭から何段が LOD0 と同じ UV を持つか。残りの段はそれぞれ自分の UV（とアトラス）を持つ。
+    int sharedUvLods = 0;
     // Rock Asset が形を減らす前のメッシュ（bakeSource があるときだけ）。LOD は形が違うので、
     // Material Bake の結果がまだ使えるかは、焼いたときのこのメッシュで照らす。
     std::shared_ptr<const geometry::Mesh> bakeMesh;

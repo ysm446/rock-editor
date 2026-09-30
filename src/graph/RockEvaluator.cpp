@@ -148,6 +148,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         // 切り替えの大きさ（screenSize）は表示だけに使うので含めない。
         add(asset->lodCount); add(asset->maxTriangles);
         for (const float percent : asset->trianglePercent) add(percent);
+        add(RockAssetSharedUvLods(*asset));
     } else if (const auto* remesh = std::get_if<geometry::RemeshSettings>(&node->settings)) {
         add(remesh->edgeLength); add(remesh->iterations); add(remesh->featureAngle);
     } else if (const auto* uv = std::get_if<geometry::UvUnwrapSettings>(&node->settings)) {
@@ -855,7 +856,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             }
             const int lodCount = std::clamp(settings->lodCount, 1, kMaxRockAssetLods);
             const int maxTriangles = std::clamp(settings->maxTriangles, kMinRockAssetTriangles, kMaxRockAssetTriangles);
-            // 形のずれの上限は設けず、目標の数まで減らす（段の三角形数を揃えるため）。UV の島の境界は Decimate が固定する。
+            // 形のずれの上限は設けず、目標の数まで減らす（段の三角形数を揃えるため）。UV があれば島の境界は Decimate が固定する。
             geometry::DecimateSettings reduce;
             reduce.maxError = 0;
             // 進み具合は「メッシュ × 段」の数で割る。
@@ -879,19 +880,44 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 if (!error.empty()) return finish(Failure(id, "Rock Asset", "LOD0: " + error));
                 ++step;
                 // LOD1 以降は 1 つ前の段から減らす（速く、段どうしの形も揃う）。
+                // LOD0 が UV を持たなければ、どの段も UV を持たないので全段を「共有」として扱う。
+                const bool hasUvs = !lods[0].cornerUvs.empty();
+                const int shared = hasUvs ? std::min(RockAssetSharedUvLods(*settings), lodCount) : lodCount;
                 for (int level = 1; level < lodCount; ++level, ++step) {
                     const float percent = std::clamp(settings->trianglePercent[level], 0.1f, 100.0f);
                     const int target = std::max(kMinRockAssetTriangles, int(double(lods[0].triangles.size()) * percent / 100.0));
-                    const geometry::Mesh& previous = lods.back();
-                    if (previous.triangles.size() <= size_t(target)) {
-                        lods.push_back(previous);
+                    const std::string label = "LOD" + std::to_string(level) + ": ";
+                    if (level < shared) {
+                        // LOD0 の UV を共有する段。UV の島の境界を Decimate が固定する。
+                        const geometry::Mesh& previous = lods.back();
+                        if (previous.triangles.size() <= size_t(target)) {
+                            lods.push_back(previous);
+                            continue;
+                        }
+                        auto reduced = decimate(previous, target, error);
+                        if (!error.empty()) return finish(Failure(id, "Rock Asset", label + error));
+                        lods.push_back(std::move(reduced));
                         continue;
                     }
-                    auto reduced = decimate(previous, target, error);
-                    if (!error.empty()) return finish(Failure(id, "Rock Asset", "LOD" + std::to_string(level) + ": " + error));
-                    lods.push_back(std::move(reduced));
+                    // 自分の UV を持つ段。UV を捨てて減らし（継ぎ目に縛られない）、この段だけで展開し直す。
+                    // アトラスは LOD0 を段ごとに半分にした大きさ（最小 128）。
+                    geometry::Mesh plain = lods.back();
+                    plain.cornerUvs.clear();
+                    plain.uvCharts.clear();
+                    plain.uvWidth = plain.uvHeight = 0;
+                    if (plain.triangles.size() > size_t(target)) {
+                        plain = decimate(plain, target, error);
+                        if (!error.empty()) return finish(Failure(id, "Rock Asset", label + error));
+                    }
+                    geometry::UvUnwrapSettings unwrap;
+                    const int atlas = int(std::max(lods[0].uvWidth, lods[0].uvHeight));
+                    unwrap.resolution = geometry::NormalizeUvResolution(std::max(kMinRockAssetUvResolution, atlas >> level));
+                    auto unwrapped = geometry::UnwrapMesh(plain, unwrap, error, stop);
+                    if (!error.empty()) return finish(Failure(id, "Rock Asset", label + error));
+                    lods.push_back(std::move(unwrapped));
                 }
-                // LOD は UV を保つので、上流の Material Bake の結果をそのまま使える。
+                rock.sharedUvLods = shared;
+                // LOD0 の UV を共有する段は、上流の Material Bake の結果をそのまま使える。
                 // 形が変わるので、焼いた結果がまだ使えるかは減らす前のメッシュで照らす。
                 if (rock.bakeSource && !rock.bakeMesh) rock.bakeMesh = std::make_shared<const geometry::Mesh>(rock.mesh);
                 rock.mesh = lods[0];

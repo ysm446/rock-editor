@@ -14,6 +14,7 @@
 #include "geometry/Volume.h"
 #include "renderer/ModelAsset.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <cstdint>
@@ -189,11 +190,14 @@ struct MaterialBakeSettings {
 };
 
 // Rock Asset。入力のメッシュから LOD0〜LODn を作る。LOD0 は入力そのもの（maxTriangles を超えるときだけ減らす）。
-// LOD1 以降は 1 つ前の段を Decimate（UV の島の境界を固定して UV を保つ）で減らすので、全段が同じ UV を持ち、
-// 同じテクスチャ（Material Bake の結果など）をそのまま使える。
+// LOD1 以降は 1 つ前の段を Decimate で減らす。LOD0 の UV を共有する段は UV の島の境界を固定して減らし、
+// 同じテクスチャ（Material Bake の結果など）をそのまま使う。共有しない段は UV を捨てて減らし、その段だけで
+// UV を展開し直す（テクスチャは LOD0 から転写する）。
 inline constexpr int kMaxRockAssetLods = 6;
 inline constexpr int kMinRockAssetTriangles = 64;
 inline constexpr int kMaxRockAssetTriangles = 500000;
+// 自分の UV を持つ段のアトラスの最小の一辺。
+inline constexpr int kMinRockAssetUvResolution = 128;
 struct RockAssetSettings {
     // LOD の段数（LOD0 を含む）。1〜kMaxRockAssetLods。
     int lodCount = 4;
@@ -204,8 +208,18 @@ struct RockAssetSettings {
     // その段へ切り替える画面上の大きさ。岩を包む球の直径が画面の高さに占める割合。
     // これを下回ったらその段にする（UE の Screen Size と同じ考え方）。[0] は使わない。
     std::array<float, kMaxRockAssetLods> screenSize = {1.0f, 0.5f, 0.25f, 0.12f, 0.06f, 0.03f};
+    // 段ごとに LOD0 の UV を共有するか。[0] は使わない（LOD0 は常に共有）。共有しない段より下の段も共有しない
+    // （LOD0 の UV を持たない形から減らすため）。実際に共有する段の数は RockAssetSharedUvLods。
+    std::array<bool, kMaxRockAssetLods> shareUv = {true, true, false, false, false, false};
     bool operator==(const RockAssetSettings&) const = default;
 };
+// 先頭から何段が LOD0 の UV を共有するか（1〜段数）。最初に共有しない段で打ち切る。
+inline int RockAssetSharedUvLods(const RockAssetSettings& settings) {
+    const int count = std::clamp(settings.lodCount, 1, kMaxRockAssetLods);
+    int shared = 1;
+    while (shared < count && settings.shareUv[size_t(shared)]) ++shared;
+    return shared;
+}
 
 // Rock（山グラフ）。scene は岩グラフのパス（UTF-8。メモリ上は絶対パス、保存はシーンからの相対パス）。
 // 倍率は岩アセットに掛け、重みは Rock Scatter の中でどの岩をどれだけ選ぶかに使う。

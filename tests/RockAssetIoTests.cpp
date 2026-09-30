@@ -55,6 +55,40 @@ void RunRockAssetIoTests() {
               io::RockAssetHash(data.lods, "") == data.hash,
           "ハッシュは段・切り替えの大きさ・ベイクの指紋で変わり、同じ内容なら同じ");
 
+    // 自分の UV を持つ段は、段のテクスチャのフォルダ（lodN）を目録に書く。使わなくなったフォルダは消す。
+    {
+        const auto folder = io::RockAssetFolder(scene);
+        io::RockAssetData textured = data;
+        textured.textured = true;
+        textured.lods[1].textures = io::RockAssetLodTextureFolder(1);
+        for (const auto& sub : {fs::path(), fs::path("lod1")}) {
+            fs::create_directories(folder / sub, error);
+            for (const char* name : io::kRockAssetTextures) std::ofstream(folder / sub / name) << "png";
+        }
+        Check(io::RockAssetHash(textured.lods, "") != data.hash, "段のテクスチャのフォルダもハッシュに入る");
+        Check(io::SaveRockAsset(scene, textured, message) && io::LoadRockAsset(scene, loaded, message) && loaded.textured &&
+                  loaded.lods[0].textures.empty() && loaded.lods[1].textures == "lod1",
+              "段ごとのテクスチャのフォルダを目録に書き、読み直せる");
+        fs::remove(folder / "lod1" / "Height.png", error);
+        Check(io::LoadRockAsset(scene, loaded, message) && !loaded.textured, "段のテクスチャが欠けていればテクスチャなしとして読む");
+        auto wrongFolder = textured;
+        wrongFolder.lods[1].textures = "../elsewhere";
+        Check(!io::SaveRockAsset(scene, wrongFolder, message) && !message.empty(), "段のテクスチャのフォルダ名は lodN に限る");
+        Check(io::SaveRockAsset(scene, data, message) && !fs::exists(folder / "lod1") && !fs::exists(folder / "BaseColor.png"),
+              "テクスチャを焼かないと、段のフォルダと共有のテクスチャを消す");
+        // 版 1 の目録（段ごとのテクスチャが無い）も読む。
+        std::ifstream in(folder / "asset.json");
+        std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        const auto at = text.find("\"version\": 2");
+        if (at != std::string::npos) text.replace(at, 12, "\"version\": 1");
+        std::ofstream(folder / "asset.json", std::ios::trunc) << text;
+        Check(at != std::string::npos && io::LoadRockAsset(scene, loaded, message) && loaded.lods.size() == 2 &&
+                  loaded.lods[1].textures.empty(),
+              "版 1 の目録も読める（全ての段がテクスチャを共有する）");
+        Check(io::SaveRockAsset(scene, data, message), "版 2 で書き直す");
+    }
+
     // 段を減らして焼き直すと、余分な段のファイルは消える。
     data.lods.pop_back();
     Check(io::SaveRockAsset(scene, data, message) && !fs::exists(io::RockAssetFolder(scene) / "lod1.rockmesh") &&

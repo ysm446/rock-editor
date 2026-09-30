@@ -83,6 +83,69 @@ void RunDetailTransferTests() {
     Check(!geometry::TransferDetail(low, std::vector<std::array<geometry::CornerFrame, 3>>(1), high, 0.1f, 64, 64, image, error),
           "向きの数が合わなければ断る");
 
+    Section("テクスチャの転写（LOD の段ごとのテクスチャ）");
+    {
+        // 転写元の画像。BaseColor は画素の位置（x, y）を色にし、法線は真上、ほかは一定。
+        constexpr uint32_t size = 128;
+        std::array<std::vector<uint8_t>, 4> pixels;
+        for (auto& p : pixels) p.assign(size_t(size) * size * 4, 255);
+        for (uint32_t y = 0; y < size; ++y)
+            for (uint32_t x = 0; x < size; ++x) {
+                const size_t i = (size_t(y) * size + x) * 4;
+                pixels[0][i] = uint8_t(x * 2); pixels[0][i + 1] = uint8_t(y * 2); pixels[0][i + 2] = 77;
+                pixels[1][i] = 128; pixels[1][i + 1] = 128; pixels[1][i + 2] = 255;
+                pixels[2][i] = 200; pixels[2][i + 1] = 0; pixels[2][i + 2] = 180;
+                pixels[3][i] = pixels[3][i + 1] = pixels[3][i + 2] = 90;
+            }
+        std::array<geometry::TextureView, 4> views;
+        for (size_t c = 0; c < 4; ++c) views[c] = {size, size, pixels[c].data()};
+
+        // 同じメッシュ・同じ UV へ転写すると、画像はほぼそのまま写る。
+        geometry::TextureTransferResult identity;
+        Check(geometry::TransferTextures(low, {}, low, {}, views, 0.1f, size, size, identity, error) && error.empty() &&
+                  identity.width == size && identity.images[0].size() == size_t(size) * size * 4,
+              "自分自身へテクスチャを転写できる");
+        size_t pixelsIn = 0, off = 0, bent = 0;
+        for (size_t i = 0; i < identity.covered.size(); ++i) {
+            if (!identity.covered[i]) continue;
+            ++pixelsIn;
+            const uint8_t* color = &identity.images[0][i * 4];
+            const uint8_t* normal = &identity.images[1][i * 4];
+            const uint32_t x = uint32_t(i % size), y = uint32_t(i / size);
+            if (color[3] != 255 || std::abs(int(color[0]) - int(x * 2)) > 2 || std::abs(int(color[1]) - int(y * 2)) > 2 || color[2] != 77) ++off;
+            if (std::abs(int(normal[0]) - 128) > 3 || std::abs(int(normal[1]) - 128) > 3 || normal[2] < 250) ++bent;
+        }
+        Check(pixelsIn > 0 && identity.hits >= pixelsIn * 99 / 100, "UV の画素はほぼ全て転写元に当たる");
+        Check(off <= pixelsIn / 100, "同じ UV なら色はその画素の色のまま");
+        Check(bent <= pixelsIn / 100, "同じ形なら真上の法線は真上のまま");
+
+        // 別の UV・細かさの違う形（UV を展開し直した LOD の段にあたる）。一定の色は一定のまま、法線はほぼ真上。
+        geometry::UvUnwrapSettings unwrapSettings;
+        unwrapSettings.resolution = 128;
+        const auto other = geometry::UnwrapMesh(Sphere(2.0f, 16), unwrapSettings, error);
+        geometry::TextureTransferResult moved;
+        Check(error.empty() && geometry::TransferTextures(other, {}, low, {}, views, 0.2f, 64, 64, moved, error) && error.empty(),
+              "別の UV の形へ転写できる");
+        size_t otherCovered = 0, wrong = 0, tilted = 0;
+        for (size_t i = 0; i < moved.covered.size(); ++i) {
+            if (!moved.covered[i] || !moved.images[2][i * 4 + 3]) continue;
+            ++otherCovered;
+            const uint8_t* rma = &moved.images[2][i * 4];
+            if (std::abs(int(rma[0]) - 200) > 1 || rma[1] > 1 || std::abs(int(rma[2]) - 180) > 1 || moved.images[3][i * 4] != 90) ++wrong;
+            if (moved.images[1][i * 4 + 2] < 230) ++tilted;
+        }
+        Check(otherCovered > 0 && moved.hits >= otherCovered, "転写元に当たった画素だけ不透明になる");
+        Check(wrong == 0, "一定の値はそのまま写る");
+        Check(tilted <= otherCovered / 50, "滑らかな球どうしなら、法線は転写先の接線空間でもほぼ真上");
+
+        geometry::TextureTransferResult rejected;
+        Check(!geometry::TransferTextures(low, {}, high, {}, views, 0.1f, 64, 64, rejected, error) && !error.empty(),
+              "UV の無い転写元は断る");
+        auto missing = views;
+        missing[3] = {};
+        Check(!geometry::TransferTextures(low, {}, low, {}, missing, 0.1f, 64, 64, rejected, error), "画像が欠けていれば断る");
+    }
+
     Section("Material Bake の High 入力");
     const auto bake = g.CreateNode(graph::NodeKind::MaterialBake), surface = g.CreateNode(graph::NodeKind::Surface),
                highShape = g.CreateNode(graph::NodeKind::BaseRock);

@@ -38,17 +38,46 @@ void RunRockAssetTests() {
     Check(lods[0].triangles.size() == input.rocks[0].mesh.triangles.size() &&
               rock.mesh.triangles.size() == lods[0].triangles.size(),
           "上限以下の入力なら LOD0 は入力そのまま（出力も LOD0）");
-    bool shrinking = true, uvs = true, closed = true;
+    bool shrinking = true, sharedUvs = true, ownUvs = true, closed = true, reached = true;
     for (size_t level = 0; level < lods.size(); ++level) {
         if (level > 0) shrinking &= lods[level].triangles.size() < lods[level - 1].triangles.size();
-        uvs &= geometry::HasValidUvs(lods[level]) && lods[level].uvWidth == lods[0].uvWidth &&
-               lods[level].uvHeight == lods[0].uvHeight;
+        // 既定では LOD0〜1 が LOD0 の UV を共有し、LOD2 以降は自分の UV（LOD0 のアトラスを段ごとに半分、最小 128）を持つ。
+        if (level < 2)
+            sharedUvs &= geometry::HasValidUvs(lods[level]) && lods[level].uvWidth == lods[0].uvWidth &&
+                         lods[level].uvHeight == lods[0].uvHeight;
+        else
+            ownUvs &= geometry::HasValidUvs(lods[level]) && lods[level].uvWidth == 128 && lods[level].uvHeight == 128 &&
+                      lods[level].cornerUvs != lods[level - 1].cornerUvs;
+        const double target = std::max(64.0, double(lods[0].triangles.size()) *
+                                                 graph::RockAssetSettings{}.trianglePercent[level] / 100.0);
+        if (level >= 2) reached &= double(lods[level].triangles.size()) <= target * 1.05;
         geometry::MeshInfo info;
         closed &= geometry::InspectMesh(lods[level], info) && info.closed && info.components == 1;
     }
+    Check(rock.sharedUvLods == 2, "既定では LOD0〜1 が LOD0 の UV を共有する");
     Check(shrinking, "段が進むごとに三角形が減る");
-    Check(uvs, "どの段も同じアトラスの有効な UV を持つ（同じテクスチャを使える）");
+    Check(sharedUvs, "UV を共有する段は LOD0 と同じアトラスの有効な UV を持つ（同じテクスチャを使える）");
+    Check(ownUvs, "UV を共有しない段は、自分のアトラスの有効な UV を持つ");
+    Check(reached, "UV を共有しない段は目標の三角形数まで減る");
     Check(closed, "どの段も閉じた 1 つのメッシュのまま");
+
+    // 全ての段で共有すると、全段が同じアトラスの UV を持つ（作り直す）。
+    {
+        const auto before = cache.computations[asset];
+        auto& shareSettings = std::get<graph::RockAssetSettings>(g.FindMutableNode(asset)->settings);
+        shareSettings.shareUv.fill(true);
+        const auto shared = graph::EvaluateRocks(g, asset, &cache);
+        bool same = shared.error.empty() && shared.rocks.size() == 1 && shared.rocks[0].lods && shared.rocks[0].sharedUvLods == 4;
+        for (size_t level = 0; same && level < shared.rocks[0].lods->size(); ++level)
+            same &= geometry::HasValidUvs((*shared.rocks[0].lods)[level]) &&
+                    (*shared.rocks[0].lods)[level].uvWidth == lods[0].uvWidth;
+        Check(same && cache.computations[asset] == before + 1, "全ての段で UV を共有すると作り直し、全段が同じアトラスを持つ");
+        // 上の段が共有しないなら、下の段のチェックは効かない。
+        shareSettings.shareUv = {true, false, true, true, true, true};
+        Check(graph::RockAssetSharedUvLods(shareSettings) == 1, "共有しない段より下は共有しない");
+        shareSettings.shareUv = graph::RockAssetSettings{}.shareUv;
+        graph::EvaluateRocks(g, asset, &cache);
+    }
 
     // 表示だけの設定（切り替えの大きさ）は作り直さない。形に効く設定は作り直す。
     const auto runs = cache.computations[asset];

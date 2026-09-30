@@ -1183,6 +1183,8 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
         for (size_t i = 0; i < m_sceneMeshes.size(); ++i) {
             if (outlineMesh >= 0 && i != static_cast<size_t>(outlineMesh)) continue;
             if (m_meshScene.meshes[i].materialOnly) continue;
+            const auto& lodRange = m_meshScene.meshes[i].lodRange;
+            if (m_meshSceneLod < lodRange[0] || m_meshSceneLod > lodRange[1]) continue;
             MeshConstants drawConstants = passConstants;
             // LOD を持つメッシュは、選んだ段の GPU メッシュを描く（段 0 は m_sceneMeshes）。
             const int shownLod = i < m_sceneLodMeshes.size() && !m_sceneLodMeshes[i].empty()

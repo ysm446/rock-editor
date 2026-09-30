@@ -12,7 +12,8 @@
 // （`Foo.rockgraph` の横の `Foo.rockgraph.bake/`）に置く。フォルダの中身:
 //   asset.json                 目録（形式・段ごとのメッシュと切り替えの大きさ・範囲・内容のハッシュ）
 //   lod0.rockmesh, lod1…       段ごとのメッシュ（独自のバイナリ。geometry::Mesh をそのまま書く）
-//   BaseColor.png など 4 枚    Material Bake の結果（ベイクしていれば）。全ての段で共有する
+//   BaseColor.png など 4 枚    Material Bake の結果（ベイクしていれば）。LOD0 の UV を共有する段で使う
+//   lod2/BaseColor.png など    自分の UV を持つ段のテクスチャ（LOD0 から転写したもの）
 // 仕様は docs/reference/rock-asset.md。
 namespace rock::io {
 
@@ -23,6 +24,8 @@ struct RockAssetLod {
     geometry::Mesh mesh;
     // この段へ切り替える画面上の大きさ（Rock Asset の「LODnの切替」）。LOD0 は 1。
     float screenSize = 1.0f;
+    // この段のテクスチャのフォルダ（付属フォルダからの相対）。空なら付属フォルダの直下の共有テクスチャ。
+    std::string textures;
 };
 
 struct RockAssetData {
@@ -37,11 +40,15 @@ struct RockAssetData {
 
 // シーンの付属フォルダ（`<シーンのファイル名>.bake`）。
 std::filesystem::path RockAssetFolder(const std::filesystem::path& scene);
+// 自分の UV を持つ段のテクスチャのフォルダ名（`lod2` など）。
+std::string RockAssetLodTextureFolder(size_t level);
 // 段ごとのメッシュと切り替えの大きさ、ベイクの指紋（テクスチャを焼かないなら空）から作るハッシュ（16 進）。
 std::string RockAssetHash(const std::vector<RockAssetLod>& lods, const std::string& bakeFingerprint);
-// 目録とメッシュを書く（テクスチャは呼び出し側が先に書く）。前に焼いた余分な段のファイルは消す。
+// 目録とメッシュを書く（テクスチャは呼び出し側が先に書く）。前に焼いた余分な段のファイルと、使わなくなった
+// 段のテクスチャのフォルダは消す。
 bool SaveRockAsset(const std::filesystem::path& scene, const RockAssetData& data, std::string& error);
 // 目録とメッシュを読む。付属フォルダが無い・壊れているときは false（未焼成として扱う）。
+// 版 1 の目録（段ごとのテクスチャが無い）は、全ての段が直下のテクスチャを共有するものとして読む。
 bool LoadRockAsset(const std::filesystem::path& scene, RockAssetData& data, std::string& error);
 // 目録のハッシュだけを読む（毎フレームの判定用。メッシュは読まない）。無ければ false。
 bool ReadRockAssetHash(const std::filesystem::path& scene, std::string& hash);

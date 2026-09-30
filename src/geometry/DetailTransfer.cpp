@@ -155,11 +155,60 @@ std::vector<V> VertexNormals(const Mesh& mesh) {
 size_t DetailTransferImage::CoveredCount() const { return size_t(std::count(covered.begin(), covered.end(), uint8_t(1))); }
 size_t DetailTransferImage::HitCount() const { return size_t(std::count(hit.begin(), hit.end(), uint8_t(1))); }
 
-bool TransferDetail(const Mesh& low, const std::vector<std::array<CornerFrame, 3>>& frames, const Mesh& high,
-                    float cageDistance, uint32_t width, uint32_t height, DetailTransferImage& out, std::string& error,
-                    std::stop_token stop, const std::function<void(int)>& progress) {
-    error.clear();
-    out = {};
+namespace {
+// ローポリの UV の画素の点での向き（接線・従接線・法線）。
+struct Frame {
+    V t, b, n;
+};
+
+// 角の向きを、面の中の点（重心座標の b と c の重み）へ補間する。接線空間は PsBake と同じ取り方。
+Frame Interpolate(const std::array<CornerFrame, 3>& frame, double wb, double wc, V faceNormal) {
+    const double wa = 1.0 - wb - wc;
+    const V n = Normalize(Convert(frame[0].normal) * wa + Convert(frame[1].normal) * wb + Convert(frame[2].normal) * wc, faceNormal);
+    const V rawTangent = Convert(frame[0].tangent) * wa + Convert(frame[1].tangent) * wb + Convert(frame[2].tangent) * wc;
+    const V t = Normalize(rawTangent - n * Dot(n, rawTangent), Normalize(Cross({0, 1, 0}, n), {1, 0, 0}));
+    const double sign = frame[0].sign * wa + frame[1].sign * wb + frame[2].sign * wc < 0 ? -1.0 : 1.0;
+    return {t, Cross(n, t) * sign, n};
+}
+
+V UnitFaceNormal(const Mesh& mesh, const std::array<uint32_t, 3>& face) {
+    return Normalize(Cross(Convert(mesh.positions[face[1]]) - Convert(mesh.positions[face[0]]),
+                           Convert(mesh.positions[face[2]]) - Convert(mesh.positions[face[0]])),
+                     {0, 1, 0});
+}
+
+// 面積で重み付けした頂点法線と、UV から求めた接線。向きを渡されなかったときに使う。
+std::vector<std::array<CornerFrame, 3>> FallbackFrames(const Mesh& mesh) {
+    const auto normals = VertexNormals(mesh);
+    std::vector<std::array<CornerFrame, 3>> frames(mesh.triangles.size());
+    for (size_t f = 0; f < mesh.triangles.size(); ++f) {
+        const auto& face = mesh.triangles[f];
+        const auto& uv = mesh.cornerUvs[f];
+        const V a = Convert(mesh.positions[face[0]]), b = Convert(mesh.positions[face[1]]), c = Convert(mesh.positions[face[2]]);
+        const double du1 = uv[1].u - uv[0].u, dv1 = uv[1].v - uv[0].v, du2 = uv[2].u - uv[0].u, dv2 = uv[2].v - uv[0].v;
+        const double determinant = du1 * dv2 - du2 * dv1;
+        V tangent = Normalize(b - a, {1, 0, 0}), bitangent{};
+        if (std::abs(determinant) > 1e-20) {
+            tangent = ((b - a) * dv2 - (c - a) * dv1) * (1 / determinant);
+            bitangent = ((c - a) * du1 - (b - a) * du2) * (1 / determinant);
+        }
+        for (int k = 0; k < 3; ++k) {
+            const V n = normals[face[k]];
+            const V t = Normalize(tangent - n * Dot(n, tangent), Normalize(Cross({0, 1, 0}, n), {1, 0, 0}));
+            frames[f][k] = {{float(n.x), float(n.y), float(n.z)}, {float(t.x), float(t.y), float(t.z)},
+                            Dot(Cross(n, t), bitangent) < 0 ? -1.0f : 1.0f};
+        }
+    }
+    return frames;
+}
+
+// 転写の共通部分。ローポリの UV の画素ごとに、その画素に当たる面の点から、法線の向きにケージ距離だけ外側の点から
+// 内側へレイを飛ばし、最初に当たったハイポリの面を探す。画素ごとに visit(index, frame, hit) を呼ぶ
+// （hit.triangle が UINT32_MAX なら当たらなかった）。covered には UV の中の画素に 1 を書く。
+template <class Visit>
+bool Trace(const Mesh& low, const std::vector<std::array<CornerFrame, 3>>& frames, const Mesh& high, float cageDistance,
+           uint32_t width, uint32_t height, std::vector<uint8_t>& covered, std::string& error, std::stop_token stop,
+           const std::function<void(int)>& progress, Visit&& visit) {
     MeshInfo lowInfo, highInfo;
     if (!HasValidUvs(low) || !InspectMesh(low, lowInfo)) {
         error = "ローポリには UV 付きの Mesh が必要です（UV Unwrap の出力）";
@@ -187,37 +236,18 @@ bool TransferDetail(const Mesh& low, const std::vector<std::array<CornerFrame, 3
     }
     ClosestBvh bvh;
     bvh.Build(high);
-    const std::vector<V> highNormals = VertexNormals(high);
-
-    // 向きを渡されなければ、面積で重み付けした頂点法線と、UV から求めた接線を使う。
     std::vector<std::array<CornerFrame, 3>> fallback;
     const auto* cornerFrames = &frames;
     if (frames.empty()) {
-        const auto normals = VertexNormals(low);
-        fallback.resize(low.triangles.size());
-        for (size_t f = 0; f < low.triangles.size(); ++f) {
-            const auto& face = low.triangles[f];
-            const auto& uv = low.cornerUvs[f];
-            const V a = Convert(low.positions[face[0]]), b = Convert(low.positions[face[1]]), c = Convert(low.positions[face[2]]);
-            const double du1 = uv[1].u - uv[0].u, dv1 = uv[1].v - uv[0].v, du2 = uv[2].u - uv[0].u, dv2 = uv[2].v - uv[0].v;
-            const double determinant = du1 * dv2 - du2 * dv1;
-            V tangent = Normalize(b - a, {1, 0, 0}), bitangent{};
-            if (std::abs(determinant) > 1e-20) {
-                tangent = ((b - a) * dv2 - (c - a) * dv1) * (1 / determinant);
-                bitangent = ((c - a) * du1 - (b - a) * du2) * (1 / determinant);
-            }
-            for (int k = 0; k < 3; ++k) {
-                const V n = normals[face[k]];
-                const V t = Normalize(tangent - n * Dot(n, tangent), Normalize(Cross({0, 1, 0}, n), {1, 0, 0}));
-                fallback[f][k] = {{float(n.x), float(n.y), float(n.z)}, {float(t.x), float(t.y), float(t.z)},
-                                  Dot(Cross(n, t), bitangent) < 0 ? -1.0f : 1.0f};
-            }
-        }
+        fallback = FallbackFrames(low);
         cornerFrames = &fallback;
     }
 
     // 画素の中心がどの面のどこに当たるかを先に決める（直列。辺を共有する面が同じ画素を取り合うので、結果を再現させる）。
-    struct Texel { uint32_t face; float b, c; };
+    struct Texel {
+        uint32_t face;
+        float b, c;
+    };
     constexpr uint32_t kNoFace = UINT32_MAX;
     std::vector<Texel> texels(size_t(width) * height, Texel{kNoFace, 0, 0});
     const auto cross = [](double ax, double ay, double bx, double by) { return ax * by - ay * bx; };
@@ -239,12 +269,7 @@ bool TransferDetail(const Mesh& low, const std::vector<std::array<CornerFrame, 3
             }
     }
 
-    out.width = width;
-    out.height = height;
-    out.normals.assign(texels.size(), Vec3{0, 0, 1});
-    out.heights.assign(texels.size(), 0.0f);
-    out.covered.assign(texels.size(), 0);
-    out.hit.assign(texels.size(), 0);
+    covered.assign(texels.size(), 0);
     const double cage = cageDistance;
     std::vector<uint32_t> rows(height);
     std::iota(rows.begin(), rows.end(), 0u);
@@ -259,40 +284,133 @@ bool TransferDetail(const Mesh& low, const std::vector<std::array<CornerFrame, 3
             const size_t index = size_t(y) * width + x;
             const Texel texel = texels[index];
             if (texel.face == kNoFace) continue;
-            out.covered[index] = 1;
+            covered[index] = 1;
             const auto& face = low.triangles[texel.face];
-            const auto& frame = (*cornerFrames)[texel.face];
-            const double wa = 1.0 - texel.b - texel.c, wb = texel.b, wc = texel.c;
-            const V p = Convert(low.positions[face[0]]) * wa + Convert(low.positions[face[1]]) * wb +
-                        Convert(low.positions[face[2]]) * wc;
-            const V faceNormal = Normalize(Cross(Convert(low.positions[face[1]]) - Convert(low.positions[face[0]]),
-                                                 Convert(low.positions[face[2]]) - Convert(low.positions[face[0]])),
-                                           {0, 1, 0});
-            const V n = Normalize(Convert(frame[0].normal) * wa + Convert(frame[1].normal) * wb + Convert(frame[2].normal) * wc,
-                                  faceNormal);
-            const V rawTangent = Convert(frame[0].tangent) * wa + Convert(frame[1].tangent) * wb + Convert(frame[2].tangent) * wc;
-            const V t = Normalize(rawTangent - n * Dot(n, rawTangent), Normalize(Cross({0, 1, 0}, n), {1, 0, 0}));
-            const double sign = frame[0].sign * wa + frame[1].sign * wb + frame[2].sign * wc < 0 ? -1.0 : 1.0;
-            const V b = Cross(n, t) * sign;
+            const double wa = 1.0 - texel.b - texel.c;
+            const V p = Convert(low.positions[face[0]]) * wa + Convert(low.positions[face[1]]) * texel.b +
+                        Convert(low.positions[face[2]]) * texel.c;
+            const Frame frame = Interpolate((*cornerFrames)[texel.face], texel.b, texel.c, UnitFaceNormal(low, face));
             // 外側（ケージ）から内側へ。最初に当たったハイポリの面を使う。
-            const auto found = bvh.Closest(p + n * cage, n * -1.0, 2 * cage);
-            if (found.triangle == UINT32_MAX) continue;
-            const auto& highFace = high.triangles[found.triangle];
-            const V highNormal = Normalize(highNormals[highFace[0]] * (1 - found.u - found.w) + highNormals[highFace[1]] * found.u +
-                                               highNormals[highFace[2]] * found.w,
-                                           n);
-            const V local = Normalize({Dot(highNormal, t), Dot(highNormal, b), Dot(highNormal, n)}, {0, 0, 1});
-            out.normals[index] = {float(local.x), float(local.y), float(local.z)};
-            out.heights[index] = float(cage - found.t);
-            out.hit[index] = 1;
+            visit(index, frame, bvh.Closest(p + frame.n * cage, frame.n * -1.0, 2 * cage));
         }
         if (progress) progress(int(++done * 100 / height));
     });
     if (cancelled || stop.stop_requested()) {
-        out = {};
         error = "転写をキャンセルしました";
         return false;
     }
+    return true;
+}
+
+// RGBA8 の画像を双線形で読む（行 0 が v = 0。端は繰り返さずに留める）。
+std::array<double, 4> Sample(const TextureView& image, double u, double v) {
+    const double x = std::clamp(u * image.width - .5, 0.0, double(image.width - 1)),
+                 y = std::clamp(v * image.height - .5, 0.0, double(image.height - 1));
+    const uint32_t x0 = uint32_t(x), y0 = uint32_t(y);
+    const uint32_t x1 = std::min(x0 + 1, image.width - 1), y1 = std::min(y0 + 1, image.height - 1);
+    const double fx = x - x0, fy = y - y0;
+    std::array<double, 4> result{};
+    for (int c = 0; c < 4; ++c) {
+        const auto at = [&](uint32_t px, uint32_t py) { return double(image.pixels[(size_t(py) * image.width + px) * 4 + c]); };
+        result[c] = (at(x0, y0) * (1 - fx) + at(x1, y0) * fx) * (1 - fy) + (at(x0, y1) * (1 - fx) + at(x1, y1) * fx) * fy;
+    }
+    return result;
+}
+}  // namespace
+
+bool TransferDetail(const Mesh& low, const std::vector<std::array<CornerFrame, 3>>& frames, const Mesh& high,
+                    float cageDistance, uint32_t width, uint32_t height, DetailTransferImage& out, std::string& error,
+                    std::stop_token stop, const std::function<void(int)>& progress) {
+    error.clear();
+    out = {};
+    const std::vector<V> highNormals = high.triangles.empty() ? std::vector<V>{} : VertexNormals(high);
+    const size_t count = size_t(width) * height;
+    out.normals.assign(count, Vec3{0, 0, 1});
+    out.heights.assign(count, 0.0f);
+    out.hit.assign(count, 0);
+    const double cage = cageDistance;
+    const bool ok = Trace(low, frames, high, cageDistance, width, height, out.covered, error, stop, progress,
+                          [&](size_t index, const Frame& frame, const ClosestBvh::Hit& found) {
+        if (found.triangle == UINT32_MAX) return;
+        const auto& highFace = high.triangles[found.triangle];
+        const V highNormal = Normalize(highNormals[highFace[0]] * (1 - found.u - found.w) + highNormals[highFace[1]] * found.u +
+                                           highNormals[highFace[2]] * found.w,
+                                       frame.n);
+        const V local = Normalize({Dot(highNormal, frame.t), Dot(highNormal, frame.b), Dot(highNormal, frame.n)}, {0, 0, 1});
+        out.normals[index] = {float(local.x), float(local.y), float(local.z)};
+        out.heights[index] = float(cage - found.t);
+        out.hit[index] = 1;
+    });
+    if (!ok) {
+        out = {};
+        return false;
+    }
+    out.width = width;
+    out.height = height;
+    return true;
+}
+
+bool TransferTextures(const Mesh& low, const std::vector<std::array<CornerFrame, 3>>& lowFrames, const Mesh& high,
+                      const std::vector<std::array<CornerFrame, 3>>& highFrames, const std::array<TextureView, 4>& highImages,
+                      float cageDistance, uint32_t width, uint32_t height, TextureTransferResult& out, std::string& error,
+                      std::stop_token stop, const std::function<void(int)>& progress) {
+    error.clear();
+    out = {};
+    if (!HasValidUvs(high)) {
+        error = "転写元には UV 付きの Mesh が必要です";
+        return false;
+    }
+    for (const auto& image : highImages)
+        if (!image.pixels || image.width == 0 || image.height == 0) {
+            error = "転写元のテクスチャがありません";
+            return false;
+        }
+    // 転写元の法線マップを読むための角の向き。渡されなければ頂点法線と UV の接線を使う。
+    std::vector<std::array<CornerFrame, 3>> fallback;
+    const auto* sourceFrames = &highFrames;
+    if (highFrames.empty()) {
+        fallback = FallbackFrames(high);
+        sourceFrames = &fallback;
+    } else if (highFrames.size() != high.triangles.size()) {
+        error = "転写元の向きの数が三角形の数と合いません";
+        return false;
+    }
+    const size_t count = size_t(width) * height;
+    for (auto& image : out.images) image.assign(count * 4, 0);
+    std::vector<uint8_t> hit(count, 0);
+    const bool ok = Trace(low, lowFrames, high, cageDistance, width, height, out.covered, error, stop, progress,
+                          [&](size_t index, const Frame& frame, const ClosestBvh::Hit& found) {
+        if (found.triangle == UINT32_MAX) return;
+        const double wb = found.u, wc = found.w, wa = 1 - wb - wc;
+        const auto& uv = high.cornerUvs[found.triangle];
+        const double u = uv[0].u * wa + uv[1].u * wb + uv[2].u * wc, v = uv[0].v * wa + uv[1].v * wb + uv[2].v * wc;
+        const auto store = [&](size_t channel, double r, double g, double b) {
+            uint8_t* pixel = &out.images[channel][index * 4];
+            pixel[0] = uint8_t(std::lround(std::clamp(r, 0.0, 255.0)));
+            pixel[1] = uint8_t(std::lround(std::clamp(g, 0.0, 255.0)));
+            pixel[2] = uint8_t(std::lround(std::clamp(b, 0.0, 255.0)));
+            pixel[3] = 255;
+        };
+        for (const size_t channel : {size_t(0), size_t(2), size_t(3)}) {
+            const auto value = Sample(highImages[channel], u, v);
+            store(channel, value[0], value[1], value[2]);
+        }
+        // 法線: 転写元の接線空間 → ワールド → ローポリの接線空間。
+        const auto encoded = Sample(highImages[1], u, v);
+        const V local = Normalize({encoded[0] / 255 * 2 - 1, encoded[1] / 255 * 2 - 1, encoded[2] / 255 * 2 - 1}, {0, 0, 1});
+        const Frame source = Interpolate((*sourceFrames)[found.triangle], wb, wc, UnitFaceNormal(high, high.triangles[found.triangle]));
+        const V world = Normalize(source.t * local.x + source.b * local.y + source.n * local.z, frame.n);
+        const V result = Normalize({Dot(world, frame.t), Dot(world, frame.b), Dot(world, frame.n)}, {0, 0, 1});
+        store(1, (result.x * .5 + .5) * 255, (result.y * .5 + .5) * 255, (result.z * .5 + .5) * 255);
+        hit[index] = 1;
+    });
+    if (!ok) {
+        out = {};
+        return false;
+    }
+    out.width = width;
+    out.height = height;
+    out.hits = size_t(std::count(hit.begin(), hit.end(), uint8_t(1)));
     return true;
 }
 }  // namespace rock::geometry

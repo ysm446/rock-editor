@@ -30,7 +30,8 @@ constexpr float kRockCullScreenSize = 0.002f;
 void Application::ReleaseRockAssets() {
     for (auto& [scene, asset] : m_rockAssets) {
         if (asset.gpu) asset.gpu->Destroy(m_device);
-        if (asset.model.materials.size() && asset.model.materials[0]) m_materialLibrary.Remove(m_device, asset.model.materials[0]);
+        for (const auto material : asset.model.materials)
+            if (material) m_materialLibrary.Remove(m_device, material);
         for (const auto texture : asset.textures)
             if (texture) m_textureLibrary.Remove(m_device, texture);
     }
@@ -50,7 +51,8 @@ Application::LoadedRockAsset* Application::RockAssetFor(const std::string& scene
     if (found != m_rockAssets.end()) {
         auto& old = found->second;
         if (old.gpu) old.gpu->Destroy(m_device);
-        if (old.model.materials.size() && old.model.materials[0]) m_materialLibrary.Remove(m_device, old.model.materials[0]);
+        for (const auto material : old.model.materials)
+            if (material) m_materialLibrary.Remove(m_device, material);
         for (const auto texture : old.textures)
             if (texture) m_textureLibrary.Remove(m_device, texture);
         m_rockAssets.erase(found);
@@ -64,11 +66,16 @@ Application::LoadedRockAsset* Application::RockAssetFor(const std::string& scene
         asset.error = error;
         return &asset;
     }
-    // 形。段ごとに部品 1 つ（ノード 1 つ、スロット 1 つ）のモデルにする。
+    // 形。段ごとに部品 1 つ（ノード 1 つ）のモデルにする。スロットはテクスチャのフォルダごと
+    // （[0] が LOD0 の UV を共有する段、自分の UV を持つ段はそれぞれ別のスロット）。
     auto geometry = std::make_shared<renderer::ModelGeometry>();
     geometry->nodes.push_back({"Rock", -1, {}});
     XMStoreFloat4x4(&geometry->nodes[0].bindLocal, XMMatrixIdentity());
-    geometry->slots.push_back({"Rock", {}, {1.0f, 1.0f, 1.0f}, 1.0f});
+    std::vector<std::string> folders = {""};
+    for (const auto& lod : data.lods)
+        if (std::find(folders.begin(), folders.end(), lod.textures) == folders.end()) folders.push_back(lod.textures);
+    for (const auto& folder : folders)
+        geometry->slots.push_back({folder.empty() ? "Rock" : "Rock " + folder, {}, {1.0f, 1.0f, 1.0f}, 1.0f});
     geometry->minimum = {data.minimum.x, data.minimum.y, data.minimum.z};
     geometry->maximum = {data.maximum.x, data.maximum.y, data.maximum.z};
     for (const auto& lod : data.lods) {
@@ -77,6 +84,7 @@ Application::LoadedRockAsset* Application::RockAssetFor(const std::string& scene
         part.mesh = renderer::MakeRockMeshData(lod.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
         part.minimum = geometry->minimum;
         part.maximum = geometry->maximum;
+        part.slot = uint32_t(std::find(folders.begin(), folders.end(), lod.textures) - folders.begin());
         level.triangles = uint32_t(lod.mesh.triangles.size());
         level.parts.push_back(std::move(part));
         geometry->lods.push_back(std::move(level));
@@ -87,35 +95,38 @@ Application::LoadedRockAsset* Application::RockAssetFor(const std::string& scene
     asset.model.path = path;
     asset.model.geometry = geometry;
     asset.textured = data.textured;
-    // 材質。焼いたテクスチャ 4 枚を一時のテクスチャと材質にする（シーンには保存しない）。
-    compositor::MaterialAssetId material = compositor::kNoMaterialAsset;
-    if (data.textured) {
-        const auto folder = io::RockAssetFolder(path);
+    // 材質。焼いたテクスチャ 4 枚ずつを、スロットごとに一時のテクスチャと材質にする（シーンには保存しない）。
+    asset.model.materials.assign(folders.size(), compositor::kNoMaterialAsset);
+    for (size_t slot = 0; data.textured && slot < folders.size(); ++slot) {
+        const auto folder = io::RockAssetFolder(path) / FromUtf8(folders[slot]);
+        const std::string label = folders[slot].empty() ? asset.model.name : asset.model.name + " " + folders[slot];
+        std::array<compositor::TextureId, 4> textures{};
         for (size_t channel = 0; channel < 4; ++channel) {
             LdrImage image;
             if (!LoadLdrImage(folder / io::kRockAssetTextures[channel], image)) break;
-            asset.textures.push_back(m_textureLibrary.AddTransient(
-                m_device, m_pipelineCache, "Rock " + asset.model.name + " " + io::kRockAssetTextures[channel] + "（一時）", image));
+            textures[channel] = m_textureLibrary.AddTransient(
+                m_device, m_pipelineCache, "Rock " + label + " " + io::kRockAssetTextures[channel] + "（一時）", image);
+            asset.textures.push_back(textures[channel]);
         }
-        if (asset.textures.size() == 4 && std::all_of(asset.textures.begin(), asset.textures.end(), [](auto id) { return id != 0; })) {
-            material = m_materialLibrary.Add("岩 " + asset.model.name + "（一時）");
-            auto* m = m_materialLibrary.FindMutable(material);
-            m->transient = true;
-            m->baseColor = asset.textures[0];
-            m->normal = asset.textures[1];
-            m->flipNormalGreen = false;
-            m->roughness = {asset.textures[2], compositor::TextureChannel::R};
-            m->roughnessValue = 1;
-            m->metallic = {asset.textures[2], compositor::TextureChannel::G};
-            m->metallicValue = 1;
-            m->ambientOcclusion = {asset.textures[2], compositor::TextureChannel::B};
-            m->ambientOcclusionValue = 1;
-            m->height = {asset.textures[3], compositor::TextureChannel::R};
-        } else {
+        if (std::any_of(textures.begin(), textures.end(), [](auto id) { return id == 0; })) {
             asset.error = "岩アセットのテクスチャを読めません（形だけで描きます）";
+            continue;
         }
+        const auto material = m_materialLibrary.Add("岩 " + label + "（一時）");
+        auto* m = m_materialLibrary.FindMutable(material);
+        m->transient = true;
+        m->baseColor = textures[0];
+        m->normal = textures[1];
+        m->flipNormalGreen = false;
+        m->roughness = {textures[2], compositor::TextureChannel::R};
+        m->roughnessValue = 1;
+        m->metallic = {textures[2], compositor::TextureChannel::G};
+        m->metallicValue = 1;
+        m->ambientOcclusion = {textures[2], compositor::TextureChannel::B};
+        m->ambientOcclusionValue = 1;
+        m->height = {textures[3], compositor::TextureChannel::R};
+        asset.model.materials[slot] = material;
     }
-    asset.model.materials = {material};
     asset.gpu = std::make_unique<renderer::ModelPreview>(16);
     if (!asset.gpu->PrepareAllLods(m_device, asset.model)) {
         asset.error = "岩アセットを GPU へ転送できません";

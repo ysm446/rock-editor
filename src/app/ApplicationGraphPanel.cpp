@@ -563,6 +563,10 @@ void Application::SyncMeshGraph() {
     // Rock Asset を出しているとき、いまの入力でベイクしたときの指紋（焼いたときのハッシュに入れる）。
     std::string assetFingerprint;
     for (auto& entry : m_shapeMaskTextures) entry.used = false;
+    for (auto& entry : m_lodTextures) entry.used = false;
+    // 自分の UV を持つ LOD の段。岩のメッシュの後ろへ並べる（岩と同じ並びの配列を崩さないため）。
+    std::vector<renderer::SceneMesh> lodMeshes;
+    std::vector<RockMeshReference> lodReferences;
     m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();
     m_rockTriangleCounts.clear();
@@ -617,10 +621,14 @@ void Application::SyncMeshGraph() {
         if (geometry::HasValidUvs(shownMesh) && m_uvPreviewMesh.cornerUvs.empty()) m_uvPreviewMesh = shownMesh;
         renderer::SceneMesh mesh;
         mesh.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
-        if (assetView && rock.lods)
-            for (size_t lod = 1; lod < rock.lods->size(); ++lod)
+        // LOD0 の UV を共有する段は 1 つのメッシュで切り替え、自分の UV を持つ段はその段だけのメッシュにする。
+        const size_t sharedLods = assetView && rock.lods ? std::clamp<size_t>(size_t(rock.sharedUvLods), 1, rock.lods->size()) : 1;
+        if (assetView && rock.lods) {
+            for (size_t lod = 1; lod < sharedLods; ++lod)
                 mesh.lodGeometries.push_back(renderer::MakeRockMeshData((*rock.lods)[lod], m_settings.Display().smoothShading,
                                                                         m_settings.Display().smoothShadingAngle));
+            if (sharedLods < rock.lods->size()) mesh.lodRange = {0, int(sharedLods) - 1};
+        }
         mesh.lod = rock.lods ? 0 : -1;
         mesh.material.baseColor = DirectX::XMFLOAT3{0.35f, 0.32f, 0.28f};
         if (rock.pieceId >= 0) {
@@ -643,16 +651,50 @@ void Application::SyncMeshGraph() {
             // Rock Asset は形を減らしているので、焼いた結果が使えるかは減らす前のメッシュで照らす。
             std::string input;
             std::string* fingerprint = assetView && rock.lods ? &input : nullptr;
+            bool baked = false;
             if (rock.bakeSource && rock.bakeMesh) {
                 const auto bakeGeometry = renderer::MakeRockMeshData(*rock.bakeMesh, m_settings.Display().smoothShading,
                                                                      m_settings.Display().smoothShadingAngle);
-                ApplyRockMaterial(mesh, rock, true, &bakeGeometry, fingerprint);
+                baked = ApplyRockMaterial(mesh, rock, true, &bakeGeometry, fingerprint);
             } else {
-                ApplyRockMaterial(mesh, rock, true, nullptr, fingerprint);
+                baked = ApplyRockMaterial(mesh, rock, true, nullptr, fingerprint);
             }
             assetFingerprint += input;
+            // 自分の UV を持つ段。Material Bake の結果が使えるなら、LOD0 から転写したテクスチャを貼る。
+            // 使えなければ LOD0 と同じ材質のまま（UV で貼る素材は段ごとにずれる）。
+            for (size_t lod = sharedLods; assetView && rock.lods && lod < rock.lods->size(); ++lod) {
+                renderer::SceneMesh extra;
+                extra.geometry = renderer::MakeRockMeshData((*rock.lods)[lod], m_settings.Display().smoothShading,
+                                                            m_settings.Display().smoothShadingAngle);
+                extra.lod = int(lod);
+                extra.lodRange = {int(lod), lod + 1 == rock.lods->size() ? std::numeric_limits<int>::max() : int(lod)};
+                extra.material = mesh.material;
+                extra.materialStack = mesh.materialStack;
+                extra.mapping = mesh.mapping;
+                extra.appliedMaterials = mesh.appliedMaterials;
+                std::string error;
+                const auto* textures = baked ? RockLodTextures(rock, lod, error) : nullptr;
+                if (!error.empty()) ROCK_LOG_ERROR("Rock Asset: LOD%zu: %s", lod, error.c_str());
+                if (textures && mesh.materialStack && !mesh.materialStack->Layers().empty()) {
+                    compositor::MaterialStack stack;
+                    stack.Layers() = {mesh.materialStack->Layers()[0]};
+                    stack.Layers()[0].material = textures->material;
+                    stack.SetTerrainScale(1, 0);
+                    extra.materialStack = std::move(stack);
+                    extra.appliedMaterials.clear();
+                }
+                lodMeshes.push_back(std::move(extra));
+                lodReferences.push_back({rock.source, rock.pieceId});
+            }
         }
         scene.meshes.push_back(std::move(mesh));
+    }
+    for (size_t i = 0; i < lodMeshes.size(); ++i) {
+        scene.meshes.push_back(std::move(lodMeshes[i]));
+        m_rockMeshReferences.push_back(lodReferences[i]);
+        // 三角形数と当たり判定の形は岩のメッシュの側で段ごとに差し替える（ShowRockAssetLod）ので、ここは空にする。
+        m_rockTriangleCounts.push_back(0);
+        m_rockPreviewSurfaces.push_back({});
     }
     // 焼いたときと同じ手順でハッシュを求め、焼いた岩アセットの目録と比べられるようにする。
     if (assetView && assetNode) {
@@ -673,6 +715,13 @@ void Application::SyncMeshGraph() {
             m_meshGraphError = "岩メッシュを描画へ転送できませんでした";
         }
     }
+    // 新しいシーンを渡し終えてから、使われなくなった段のテクスチャと材質を捨てる。
+    std::erase_if(m_lodTextures, [&](const auto& entry) {
+        if (entry.used) return false;
+        m_materialLibrary.Remove(m_device, entry.material);
+        for (const auto texture : entry.textures) m_textureLibrary.Remove(m_device, texture);
+        return true;
+    });
     // 新しいシーンを渡し終えてから、使われなくなった形状マスクのテクスチャを捨てる。
     std::erase_if(m_shapeMaskTextures, [&](const auto& entry) {
         if (entry.used) return false;
@@ -2295,6 +2344,19 @@ void Application::DrawGraphPanel() {
                 changed |= ui::PropertyFloat(label, &edited.screenSize[level], 0.001f, 1.0f, defaults.screenSize[level],
                                              "岩を包む球の直径が画面の高さに占める割合がこれを下回ったら、この段にします（ビューポートの「LOD 自動」）。",
                                              "%.3f");
+                // 上の段が共有しないなら、この段も共有できない（LOD0 の UV を持たない形から減らすため）。
+                std::snprintf(label, sizeof(label), "LOD%dのUV共有", level);
+                const bool above = graph::RockAssetSharedUvLods(edited) >= level;
+                ImGui::BeginDisabled(!above);
+                bool share = above && edited.shareUv[size_t(level)];
+                if (ui::PropertyBool(label, &share, defaults.shareUv[size_t(level)],
+                                     "LOD0 の UV を共有し、Material Bake のテクスチャをそのまま使います。"
+                                     "外すと UV を捨てて減らし、この段だけで UV を展開し直して、テクスチャを LOD0 から転写します"
+                                     "（細かい段まで減らせます）。外した段より下の段も共有しません。")) {
+                    edited.shareUv[size_t(level)] = share;
+                    changed = true;
+                }
+                ImGui::EndDisabled();
             }
             ui::EndPropertyTable();
         }
@@ -2316,7 +2378,8 @@ void Application::DrawGraphPanel() {
             }
             drawStatusLine(counts);
             drawStatusLine(warning.empty() ? std::string()
-                                           : warning + " は目標に届いていません（UV の島の境界は固定するため）");
+                                           : warning + " は目標に届いていません（UV を共有する段は島の境界を動かせません。"
+                                                       "届かない段は「UV共有」を外してください）");
         }
         {
             // 焼く。シーンの付属フォルダ（<シーン>.bake）へ段ごとのメッシュと Material Bake の結果を書く。
@@ -2334,8 +2397,9 @@ void Application::DrawGraphPanel() {
             drawStatusLine(m_pendingAssetBake == selected->id && !m_assetBakeStatus.empty() ? m_assetBakeStatus
                            : m_pendingAssetBake == selected->id ? "焼いています…" : m_assetBakeStatus);
         }
-        ui::HintText("岩グラフの最終段です。入力のメッシュから段階的な LOD を作ります。LOD1 以降は 1 つ前の段を Decimate で減らし、"
-                     "UV を保つので、全ての段で同じテクスチャ（Material Bake の結果など）をそのまま使えます。出力は LOD0 です。");
+        ui::HintText("岩グラフの最終段です。入力のメッシュから段階的な LOD を作ります。LOD1 以降は 1 つ前の段を Decimate で減らします。"
+                     "「UV共有」の段は UV を保つので、LOD0 と同じテクスチャ（Material Bake の結果など）をそのまま使えます。"
+                     "共有しない段は UV を展開し直し、テクスチャを LOD0 から転写します。出力は LOD0 です。");
         ui::HintText("選んでいる間は、ビューポート左上の「LOD 自動 / 0 / 1 …」で段を切り替えて見られます。表示モードの「LOD（色分け）」で段を色で見分けられます。");
         if (changed) {
             edited.lodCount = std::clamp(edited.lodCount, 1, graph::kMaxRockAssetLods);
