@@ -3,10 +3,14 @@
 #include "io/JsonUtil.h"
 #include "io/PieceSettings.h"
 
+#include "graph/NodeParams.h"
+
 #include "core/Log.h"
 #include "core/PathUtf8.h"
 
 #include <algorithm>
+#include <cctype>
+#include <map>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -436,6 +440,131 @@ void ReportUnknownKeys(const json& item, const json& defaults, const std::string
     }
 }
 
+json* FindMutablePath(json& root, const std::string& path) {
+    json* current = &root;
+    for (size_t start = 0;;) {
+        const size_t dot = path.find('.', start);
+        const std::string key = path.substr(start, dot == std::string::npos ? std::string::npos : dot - start);
+        if (!current->is_object()) return nullptr;
+        const auto found = current->find(key);
+        if (found == current->end()) return nullptr;
+        current = &*found;
+        if (dot == std::string::npos) return current;
+        start = dot + 1;
+    }
+}
+
+// 数値の列挙（Piece Select の mode など）を名前でも書けるようにする。項目表の候補の名前を数値へ写す。
+json NormalizeEnumNames(const json& item, graph::NodeKind kind, graph::GraphId id, std::vector<GraphReadIssue>* issues) {
+    json normalized = item;
+    for (const graph::ParamDefinition& param : graph::NodeParams()) {
+        if (param.kind != kind || param.type != graph::ParamType::IntEnum) continue;
+        json* value = FindMutablePath(normalized, param.path);
+        if (!value || !value->is_string()) continue;
+        const std::string name = value->get<std::string>();
+        bool found = false;
+        for (const graph::ParamOption& option : param.options) {
+            if (name == option.name) {
+                *value = option.value;
+                found = true;
+            }
+        }
+        if (!found && issues) {
+            std::string names;
+            for (const graph::ParamOption& option : param.options) names += (names.empty() ? "" : " / ") + std::string(option.name);
+            issues->push_back({id, 0, std::string(graph::FindNodeDefinition(kind)->name) + "#" + std::to_string(id) + " の " +
+                                          param.path + " = \"" + name + "\" は候補にありません（" + names + "）"});
+        }
+    }
+    return normalized;
+}
+
+std::string Lower(std::string text) {
+    for (char& c : text) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return text;
+}
+
+// 書きやすい表記のリンクの端。"12"、"12:Volume"、"12:2"、{"node": 12, "pin": "Volume"}（pin は名前か番号）。
+// 名前は大文字小文字を区別しない。pin を省くと 0 番。
+graph::GraphId ResolveEnd(const graph::NodeGraph& graphData, const json& end, graph::PinKind kind, std::string& error) {
+    graph::GraphId nodeId = 0;
+    std::string pin;
+    if (end.is_number_integer()) {
+        nodeId = end.get<graph::GraphId>();
+    } else if (end.is_string()) {
+        const std::string text = end.get<std::string>();
+        const size_t colon = text.find(':');
+        try {
+            nodeId = std::stoi(text.substr(0, colon));
+        } catch (...) {
+            error = "\"" + text + "\" はノード ID で始まりません";
+            return 0;
+        }
+        if (colon != std::string::npos) pin = text.substr(colon + 1);
+    } else if (end.is_object()) {
+        nodeId = ReadInt(end, "node", 0);
+        if (const json* p = FindMember(end, "pin"))
+            pin = p->is_number_integer() ? std::to_string(p->get<int>()) : p->is_string() ? p->get<std::string>() : "";
+    }
+    const char* side = kind == graph::PinKind::Input ? "入力" : "出力";
+    const graph::Node* owner = graphData.FindNode(nodeId);
+    if (!owner) {
+        error = std::string(side) + "側のノード " + std::to_string(nodeId) + " がありません";
+        return 0;
+    }
+    const auto& pins = kind == graph::PinKind::Input ? owner->inputs : owner->outputs;
+    const std::string ownerName = std::string(graph::FindNodeDefinition(owner->kind)->name) + "#" + std::to_string(nodeId);
+    if (pins.empty()) {
+        error = ownerName + " には" + side + "がありません";
+        return 0;
+    }
+    if (pin.empty()) return pins.front().id;
+    if (std::all_of(pin.begin(), pin.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; })) {
+        const size_t index = std::stoul(pin);
+        if (index < pins.size()) return pins[index].id;
+        error = ownerName + " の" + side + " " + pin + " 番がありません";
+        return 0;
+    }
+    for (const graph::Pin& candidate : pins)
+        if (Lower(candidate.label) == Lower(pin)) return candidate.id;
+    std::string names;
+    for (const graph::Pin& candidate : pins) names += (names.empty() ? "" : " / ") + candidate.label;
+    error = ownerName + " の" + side + "に \"" + pin + "\" がありません（" + names + "）";
+    return 0;
+}
+
+// 位置の無いノードを、上流からの深さで列に並べる（LLM が位置を書かなくてもエディタで重ならない）。
+void LayoutUnplacedNodes(graph::NodeGraph& graphData) {
+    std::map<graph::GraphId, int> depth;
+    bool any = false;
+    for (const graph::Node& node : graphData.Nodes()) {
+        depth[node.id] = 0;
+        any |= !node.positionValid;
+    }
+    if (!any) return;
+    for (size_t pass = 0; pass < graphData.Nodes().size(); ++pass) {
+        bool changed = false;
+        for (const graph::Link& link : graphData.Links()) {
+            const graph::Pin* start = graphData.FindPin(link.startPin);
+            const graph::Pin* end = graphData.FindPin(link.endPin);
+            if (!start || !end) continue;
+            if (depth[end->nodeId] < depth[start->nodeId] + 1) {
+                depth[end->nodeId] = depth[start->nodeId] + 1;
+                changed = true;
+            }
+        }
+        if (!changed) break;
+    }
+    std::map<int, int> rows;
+    for (graph::Node& node : graphData.MutableNodes()) {
+        if (node.positionValid) continue;
+        const int column = depth[node.id];
+        node.posX = float(column * 320);
+        node.posY = float(rows[column]++ * 220);
+        node.positionValid = true;
+    }
+}
+
 }  // namespace
 
 bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialReader& readMaterial,
@@ -460,12 +589,14 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
     }
 
     if (const json* items = FindMember(node, "nodes"); items != nullptr && items->is_array()) {
-        for (const json& item : *items) {
-            if (!item.is_object()) {
+        for (const json& rawItem : *items) {
+            if (!rawItem.is_object()) {
                 continue;
             }
             const graph::NodeDefinition* definition =
-                graph::FindNodeDefinitionByName(ReadString(item, "kind"));
+                graph::FindNodeDefinitionByName(ReadString(rawItem, "kind"));
+            const json item =
+                definition ? NormalizeEnumNames(rawItem, definition->kind, ReadInt(rawItem, "id", 0), issues) : rawItem;
             const int id = ReadInt(item, "id", 0);
             if (definition == nullptr || id <= 0) {
                 // 知らない種類は捨てる（将来のビルドで増えた種類を古いビルドで開いた場合）。
@@ -968,6 +1099,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
         }
     }
 
+    std::vector<const json*> namedLinks;
     // ID が欠けていたピン・重複したピンへ新しい番号を振る（衝突するとリンクが別のピンへ付く）。
     std::unordered_set<graph::GraphId> pinIds;
     for (graph::Node& created : nodes) {
@@ -984,6 +1116,10 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
     if (const json* items = FindMember(node, "links"); items != nullptr && items->is_array()) {
         for (const json& item : *items) {
             if (!item.is_object()) {
+                continue;
+            }
+            if (item.contains("from") || item.contains("to")) {
+                namedLinks.push_back(&item);  // ピンの ID が決まってから解決する
                 continue;
             }
             graph::Link link;
@@ -1003,10 +1139,32 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
     if (nodes.empty()) {
         return false;
     }
+    // 名前で書いたリンク（"from" / "to"）は、ピンの ID が決まったノードの上で解決する。ID は省略できる。
+    if (!namedLinks.empty()) {
+        graph::NodeGraph pinsOnly;
+        pinsOnly.Replace(nodes, {});
+        for (const graph::Link& link : links) maxId = std::max(maxId, link.id);
+        for (const json* item : namedLinks) maxId = std::max(maxId, ReadInt(*item, "id", 0));
+        for (const json* item : namedLinks) {
+            std::string error;
+            graph::Link link;
+            link.startPin = ResolveEnd(pinsOnly, item->value("from", json()), graph::PinKind::Output, error);
+            if (link.startPin) link.endPin = ResolveEnd(pinsOnly, item->value("to", json()), graph::PinKind::Input, error);
+            if (!link.startPin || !link.endPin) {
+                if (issues) issues->push_back({0, ReadInt(*item, "id", 0), "リンクを捨てました: " + error});
+                continue;
+            }
+            link.id = ReadInt(*item, "id", 0);
+            if (link.id <= 0) link.id = ++maxId;
+            links.push_back(link);
+        }
+    }
+
     // Replace が壊れたリンクの除去と次の採番の再構築を行う。
     const std::vector<graph::Link> requested = issues != nullptr ? links : std::vector<graph::Link>{};
     graphData.Replace(std::move(nodes), std::move(links));
     if (issues != nullptr) ReportDroppedLinks(graphData, requested, *issues);
+    LayoutUnplacedNodes(graphData);
     return true;
 }
 

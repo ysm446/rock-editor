@@ -94,6 +94,14 @@ void TestWorkspace() {
           "中身が同じなら書き直さない（サムネイルのキャッシュを無効にしない）");
     json second = {{"materials", json::array({{{"id", 2}, {"asset", materialRef}}})}};
     Check(workspace.Expand(second) && second["materials"][0]["roughness"] == 0.75, "別のシーンから編集後の値が見える");
+    // 手書きのグラフ（LLM など）は Surface の material にルートからのパスを直接書ける。
+    const std::string movedPath = workspace.Reference(moved)["path"].get<std::string>();
+    json authored = {{"graph", {{"nodes", json::array({{{"id", 1}, {"kind", "surface"}, {"layer", {{"material", movedPath}}}},
+                                                       {{"id", 2}, {"kind", "surface"}, {"layer", {{"material", movedPath}}}}})}}}};
+    Check(workspace.Expand(authored) && authored["materials"].size() == 1 && authored["materials"][0]["roughness"] == 0.75 &&
+              authored["graph"]["nodes"][0]["layer"]["material"] == authored["materials"][0]["id"] &&
+              authored["graph"]["nodes"][1]["layer"]["material"] == authored["materials"][0]["id"],
+          "Surface に直接書いたマテリアルのパスを表の番号へ置き換える（同じパスは 1 つにまとめる）");
 
     Section("ProjectWorkspace: シーンの分離保存と展開");
     const fs::path outside = FreshDirectory("outside") / "external.png";

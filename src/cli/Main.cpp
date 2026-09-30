@@ -241,6 +241,31 @@ const json* FindJsonPath(const json& root, const std::string& path) {
     }
 }
 
+// 値の JSON の型が項目の型に合うか。合わない値は読み込みで黙って既定値になる。
+bool TypeMatches(const graph::ParamDefinition& param, const json& value) {
+    const std::string path = param.path;
+    const bool nullable = path.ends_with(".material") || path.ends_with(".model") || path.ends_with(".texture");
+    if (value.is_null()) return nullable;
+    const auto numbers = [&](size_t count) {
+        if (!value.is_array() || (count && value.size() != count)) return false;
+        for (const json& element : value)
+            if (!element.is_number()) return false;
+        return true;
+    };
+    switch (param.type) {
+    case graph::ParamType::Float: return value.is_number();
+    case graph::ParamType::Int: return value.is_number_integer() || (nullable && value.is_string());
+    case graph::ParamType::Bool: return value.is_boolean();
+    case graph::ParamType::String: return value.is_string();
+    case graph::ParamType::Float3: return numbers(3);
+    case graph::ParamType::FloatArray: return value.is_array();
+    case graph::ParamType::BoolArray: return value.is_array();
+    case graph::ParamType::Enum: return value.is_string() || value.is_array();
+    case graph::ParamType::IntEnum: return value.is_number_integer() || value.is_string();
+    }
+    return true;
+}
+
 // ファイルに書かれた値を項目表の範囲・列挙と照らす。評価より先に、どの項目が悪いかをパスで返す。
 void CheckParams(const json& graphNode, std::vector<io::GraphReadIssue>& issues) {
     const json* nodes = graphNode.contains("nodes") ? &graphNode["nodes"] : nullptr;
@@ -255,6 +280,11 @@ void CheckParams(const json& graphNode, std::vector<io::GraphReadIssue>& issues)
             const json* value = FindJsonPath(item, param.path);
             if (!value) continue;
             const std::string where = std::string(definition->name) + "#" + std::to_string(id) + " の " + param.path;
+            if (!TypeMatches(param, *value)) {
+                issues.push_back({id, 0, where + " = " + value->dump() + " の型が違います（" + ParamTypeName(param.type) +
+                                             " が要ります。読み込みでは無視されて既定値になります）"});
+                continue;
+            }
             const auto checkNumber = [&](const json& number) {
                 if (!number.is_number()) return;
                 const double v = number.get<double>();
@@ -287,6 +317,38 @@ void CheckParams(const json& graphNode, std::vector<io::GraphReadIssue>& issues)
             }
         }
     }
+}
+
+// グラフのファイルから上へ project.reproj を探す（アプリの --root と同じ、プロジェクトのルート）。無ければ空。
+fs::path FindProjectRoot(const fs::path& file) {
+    std::error_code error;
+    for (fs::path dir = fs::absolute(file, error).parent_path(); !dir.empty(); dir = dir.parent_path()) {
+        if (fs::exists(dir / "project.reproj", error)) return dir;
+        if (dir == dir.root_path()) break;
+    }
+    return {};
+}
+
+// マテリアルの参照（表の asset.path と、Surface に直接書いたパス）がルートの中に実在するか。
+void CheckAssetPaths(const json& document, const fs::path& file, std::vector<io::GraphReadIssue>& issues) {
+    // 見つからなければ、グラフのあるフォルダをルートとみなす（サンプルは開くまで project.reproj を持たない）。
+    std::error_code absoluteError;
+    fs::path root = FindProjectRoot(file);
+    if (root.empty()) root = fs::absolute(file, absoluteError).parent_path();
+    const auto check = [&](const std::string& path, graph::GraphId node) {
+        std::error_code error;
+        if (!path.empty() && !fs::exists(root / FromUtf8(path), error))
+            issues.push_back({node, 0, "マテリアルが見つかりません: " + path + "（ルート " + ToUtf8Portable(root) + " からのパス）"});
+    };
+    if (const auto materials = document.find("materials"); materials != document.end() && materials->is_array())
+        for (const json& entry : *materials)
+            if (entry.is_object() && entry.contains("asset") && entry["asset"].is_object())
+                check(entry["asset"].value("path", std::string()), 0);
+    if (const auto graphNode = document.find("graph"); graphNode != document.end() && graphNode->contains("nodes"))
+        for (const json& item : (*graphNode)["nodes"])
+            if (item.is_object() && item.contains("layer") && item["layer"].is_object() &&
+                item["layer"].contains("material") && item["layer"]["material"].is_string())
+                check(item["layer"]["material"].get<std::string>(), item.value("id", 0));
 }
 
 struct LoadedGraph {
@@ -323,6 +385,7 @@ std::optional<LoadedGraph> LoadGraphFile(const fs::path& path, std::string& erro
         return std::nullopt;
     }
     CheckParams(*graphNode, loaded.issues);
+    CheckAssetPaths(document, path, loaded.issues);
     return loaded;
 }
 

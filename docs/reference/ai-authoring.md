@@ -1,7 +1,7 @@
 # LLM による岩グラフの作成（AI フレンドリー化）
 
 作成日時: 2026-10-01 02:55
-更新日時: 2026-10-01 05:36
+更新日時: 2026-10-01 05:53
 
 ## 目的
 
@@ -38,7 +38,7 @@ LLM（Claude Code などアプリの外で動くエージェント）に「片�
 | --- | --- | --- |
 | **L1 評価 CLI**（2026-10-01 実装） | グラフの読み書きを GPU から切り離す（`io/GraphIo`）。コンソールの `rock_cli` を追加し、`eval` でグラフを評価して JSON を出す（成否、エラーのノード、各出力のメッシュ数・三角形数・頂点数・範囲・閉じているか、評価時間）。読み込みで捨てたノード・リンクを診断として返す | `rock_schist` を `rock_cli eval` で数秒〜十数秒で評価でき、範囲外の値・知らない種類・壊れたリンクが JSON と終了コードに出る |
 | **L2 ノードカタログ**（2026-10-01 実装） | `rock_cli catalog` で全ノードの保存名・表示名・ピン（向き・型・ラベル・番号）・既定の設定（保存処理で書いた JSON）を出す。範囲・単位・列挙の候補を設定の定義へ寄せ、カタログに載せる | LLM がカタログだけを見て、範囲内の値と正しいピンでグラフを書ける |
-| **L3 書きやすい表記** | 列挙を名前で書ける、リンクを `ノードID.ピン名` で書ける、省略した設定は既定値、ピン ID は省略可（読み込み時に振る）。マテリアルをパスで直接参照できる | 最小の岩グラフ（数ノード）が手書きの短い JSON で書け、アプリでそのまま開ける |
+| **L3 書きやすい表記**（2026-10-01 実装） | 列挙を名前で書ける、リンクを `ノードID:ピン名` で書ける、省略した設定は既定値、ピン ID は省略可（読み込み時に振る）。マテリアルをパスで直接参照できる | 最小の岩グラフ（数ノード）が手書きの短い JSON で書け、アプリでそのまま開ける |
 | **L4 レシピと手引き** | 岩の種類ごとの最小構成（片理・板状節理・塊状・丸い転石など）を `examples/` に置き、LLM 向けの手引き（組み方の考え方、よくある失敗、確認手順）を書く。Claude Code から呼べる手順（skill）にまとめる | 「〇〇な岩を作って」と依頼すると、手引きに従って組み、CLI で確かめて返せる |
 | **L5 見た目の確認** | 評価の完了を待って撮影する起動引数、定まった複数の視点での撮影、UI なしの撮影。可能なら CLI から GPU の評価（Material Bake）と撮影まで | 形と見た目を LLM が画像で確かめられ、フレーム数を推測しなくてよい |
 
@@ -141,8 +141,58 @@ rock_cli eval <graph.rockgraph> [--node <id>] [--pretty]
 - `src/io/GraphIo.{h,cpp}`、`src/io/JsonUtil.h`、`src/cli/Main.cpp`。CMake のターゲットは `rock_cli`（GPU・ImGui にリンクしない）。
 - テストは `tests/GraphIoTests.cpp`（保存往復、捨てたノード・リンク・知らないキーの報告）と `tests/NodeParamsTests.cpp`（項目表と保存形式・評価の一致）。`rock_editor_tests --node-params-only` で後者だけを走らせる。
 
+## L3 の設計（2026-10-01 実装）— 書きやすい表記
+
+`.rockgraph` の読み込みに、手で書きやすい表記を足した（別の書式は作らない。アプリがそのまま開き、保存すると従来の形で書く）。従来の表記もそのまま読める。
+
+### 最小の岩グラフ
+
+```json
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 10, "seed": 7}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 96}},
+      {"id": 3, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.04}},
+      {"id": 4, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 5, "kind": "surface", "layer": {"material": "Materials/rough-rock.rockmat",
+                                             "mapping": {"method": "triplanar", "repeatMeters": 2}}},
+      {"id": 6, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"},
+      {"from": "2", "to": "3"},
+      {"from": "3", "to": "4"},
+      {"from": "4", "to": "6:Geometry"},
+      {"from": "5", "to": "6:Material"}
+    ]
+  }
+}
+```
+
+- **ヘッダ**: `format` と `version` と `graph` だけでよい。マテリアル・テクスチャ・天球の表、プレビューの設定は省ける。
+- **ノード**: `id`（1 以上の整数、グラフの中で重ならない）と `kind`（`rock_cli catalog` の保存名）だけでよい。設定は変えたい項目だけ書き、残りは既定値。`inputs` / `outputs`（ピンの ID）と `position` は省ける。位置の無いノードは、上流からの深さで左から右へ並べる。
+- **リンク**: `{"from": 出力側, "to": 入力側}`。端は `"12"`（0 番のピン）、`"12:Planes"`（ピンの名前。大文字小文字は区別しない）、`"12:2"`（ピンの番号）、`{"node": 12, "pin": "Planes"}` のどれでも書ける。ピンの名前と番号は `rock_cli catalog` の `inputs` / `outputs`。リンクの `id` は省ける。
+- **数値の列挙**を名前で書ける（Piece Select の `"mode": "peel"`、`"rimSide": "top"` など。候補は catalog の `options`）。保存すると数値に戻る。
+- **マテリアル**: Surface の `layer.material` にプロジェクトのルートからのパス（`"Materials/rough-rock.rockmat"`）を直接書ける。開くときに表へ足して番号に置き換える（同じパスは 1 つにまとめる）。表を自分で書く場合も `{"id": 1, "asset": {"path": "..."}}` だけでよい（uid は保存時に補う）。
+- **置き場所**: アプリで開くには、プロジェクトのルート（`project.reproj` のあるフォルダ。手元では `data/`）の中に置く。
+
+### 診断の追加
+
+- 名前で書いたリンクの、無いノード・無いピン（候補つき）・候補に無い列挙の名前（候補つき）。
+- 型の違う値（`"resolution": "128"` など。読み込みでは黙って既定値になる）。`rock_cli` が項目表の型と照らす。
+- マテリアルのパスが実在するか（`rock_cli` がグラフのファイルから上へ `project.reproj` を探してルートを決める。無ければグラフのフォルダ）。
+
+### 実装
+
+- `io::ReadGraph`: 名前のリンクの解決（`ResolveEnd`）、数値の列挙の名前（項目表の `IntEnum` の候補から写す）、位置の無いノードの配置（`LayoutUnplacedNodes`）。ピン・リンクの ID は既存の「欠けた ID を最大 + 1 から振る」処理を使う。
+- `io::ProjectWorkspace::Expand`: Surface の material のパスを表の番号へ置き換える。
+- テストは `tests/GraphIoTests.cpp`（書きやすい表記一式）と `tests/ProjectWorkspaceTests.cpp`（マテリアルのパス）。Debug のアプリで手書きの最小グラフを開いて保存し、配置・列挙・マテリアルの解決と、保存後も CLI で同じ形になることを確かめた。
+
 ## 未決事項
 
-- L3 の表記を `.rockgraph` の読み込みに足すか、別の書式（レシピ）から `.rockgraph` へ変換するか。今は前者を想定（形式が 1 つで済む）。
+- 保存するときも列挙を名前で書くか（今は読み込みだけ。古いビルドで開けなくなるので保留）。
 - 範囲の正本を評価のコードから項目表へ移すか（今は写しとテストで一致を保つ）。移すと、評価のエラーと UI のスライダーも表から作れる。
 - L5 の GPU を使う CLI を `rock_cli` に入れるか、アプリの起動引数で済ませるか。

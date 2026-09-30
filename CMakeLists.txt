@@ -152,6 +152,8 @@ set(rock_sources
     src/io/GraphIo.cpp
     src/io/GraphIo.h
     src/io/JsonUtil.h
+    src/graph/NodeParams.cpp
+    src/graph/NodeParams.h
     src/io/ProjectWorkspace.cpp
     src/io/ProjectWorkspace.h
     src/io/RecentFiles.cpp

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <set>
 #include <string>
 
 using namespace rock;
@@ -101,4 +102,54 @@ void RunGraphIoTests() {
     Check(io::ReadGraph(broken, silent, kReadMaterial, kReadModel, kReadTexture, baseDir) &&
               silent.Links().size() == 3,
           "診断を受け取らなくても同じ結果で読む（アプリの読み込み）");
+
+    // 書きやすい表記（L3）。ピン・リンクの ID と位置を省き、リンクはノード ID とピン名（か番号）で書く。
+    const json authored = json::parse(R"({
+      "nodes": [
+        {"id": 1, "kind": "baseRock"},
+        {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 32}},
+        {"id": 3, "kind": "parallelPlanes"},
+        {"id": 4, "kind": "volumeCrack"},
+        {"id": 5, "kind": "volumeToMesh"},
+        {"id": 6, "kind": "meshOutput"},
+        {"id": 7, "kind": "layeredBoxes"},
+        {"id": 8, "kind": "pieceSelect", "pieces": {"mode": "peel", "rimSide": "top"}}
+      ],
+      "links": [
+        {"from": "1", "to": "2"},
+        {"from": "2:volume", "to": "4:Volume"},
+        {"from": {"node": 3, "pin": "Planes"}, "to": {"node": 4, "pin": 2}},
+        {"from": 4, "to": "5"},
+        {"from": "5", "to": "6:Geometry"},
+        {"from": "5", "to": "6:Surface"},
+        {"from": "9", "to": "6"}
+      ]
+    })");
+    graph::NodeGraph written2;
+    issues.clear();
+    Check(io::ReadGraph(authored, written2, kReadMaterial, kReadModel, kReadTexture, baseDir, &issues),
+          "ピン・リンクの ID と位置を省いたグラフを読める");
+    Check(written2.Links().size() == 5, "名前・番号・オブジェクトで書いたリンクを繋ぐ（大文字小文字は区別しない）");
+    const graph::Node* crack = written2.FindNode(4);
+    Check(crack && written2.FindUpstreamNodeForPin(crack->inputs[2].id) == written2.FindNode(3),
+          "Planes は Volume Crack の 3 本目に繋がる");
+    Check(HasIssue(issues, 0, 0, "\"Surface\" がありません（Geometry / Material）"), "無いピン名を候補つきで報告");
+    Check(HasIssue(issues, 0, 0, "ノード 9 がありません"), "無いノードへのリンクを報告");
+    const graph::Node* select = written2.FindNode(8);
+    const auto* selection = select ? std::get_if<geometry::PieceSelectSettings>(&select->settings) : nullptr;
+    Check(selection && selection->mode == geometry::PieceSelectMode::Peel && selection->rimSide == 1,
+          "数値の列挙を名前で書ける（mode: peel、rimSide: top）");
+    std::set<graph::GraphId> ids;
+    bool unique = true, placed = true;
+    for (const graph::Node& node : written2.Nodes()) {
+        unique &= ids.insert(node.id).second;
+        placed &= node.positionValid;
+        for (const auto* pins : {&node.inputs, &node.outputs})
+            for (const graph::Pin& pin : *pins) unique &= pin.id > 0 && ids.insert(pin.id).second;
+    }
+    for (const graph::Link& link : written2.Links()) unique &= ids.insert(link.id).second;
+    Check(unique, "省いたピン・リンクの ID を重ならないように振る");
+    Check(placed && written2.FindNode(5)->posX > written2.FindNode(4)->posX &&
+              written2.FindNode(4)->posX > written2.FindNode(2)->posX,
+          "位置の無いノードを上流からの深さで左から並べる");
 }

@@ -567,6 +567,25 @@ bool ProjectWorkspace::Expand(json& document) {
             slot = id.is_number_integer() && id.get<int>() > 0 ? id : json();
         }
     }
+    // 手書きのグラフ（LLM など）は Surface の material にルートからのパスを直接書ける。表の番号へ置き換える。
+    if (auto graphNode = document.find("graph"); graphNode != document.end() && graphNode->is_object()) {
+        if (auto nodes = graphNode->find("nodes"); nodes != graphNode->end() && nodes->is_array()) {
+            for (auto& item : *nodes) {
+                if (!item.is_object() || !item.contains("layer") || !item["layer"].is_object()) continue;
+                auto& material = item["layer"]["material"];
+                if (!material.is_string()) continue;
+                const std::string path = material.get<std::string>();
+                json id = nullptr;
+                for (const auto& entry : materials)
+                    if (String(entry.value("asset", json::object()), "path") == path) id = entry["id"];
+                if (id.is_null()) {
+                    id = nextMaterial++;
+                    materials.push_back({{"id", id}, {"asset", {{"path", path}}}});
+                }
+                material = id;
+            }
+        }
+    }
     // 消えた .rockmat でシーン全体を開けなくしない。その表の項目を外し、参照していたレイヤーやモデルの
     // スロットは読み込み器で「なし」へ落ちる（旧版が Bakes/ へ自動保存した Baked 材質を消した後など）。
     for (size_t i = 0; i < materials.size();) {
