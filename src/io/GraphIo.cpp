@@ -395,6 +395,49 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
     return out;
 }
 
+json WriteDefaultNodeSettings(graph::NodeKind kind) {
+    graph::NodeGraph single;
+    const graph::GraphId id = single.CreateNode(kind);
+    if (!single.FindNode(id)) return json::object();
+    const json written = WriteGraph(
+        single, [](compositor::MaterialAssetId material) { return material ? json(material) : json(nullptr); },
+        [](uint64_t) { return json(nullptr); }, [](compositor::TextureId) { return json(nullptr); }, fs::path());
+    json settings = json::object();
+    if (const json* nodes = FindMember(written, "nodes"); nodes && nodes->is_array() && !nodes->empty()) {
+        for (const auto& [key, value] : nodes->front().items())
+            if (key != "id" && key != "kind" && key != "inputs" && key != "outputs" && key != "position")
+                settings[key] = value;
+    }
+    return settings;
+}
+
+namespace {
+
+// 保存処理が条件つきで書くキー（既定値のノードには現れない）。読み込みの診断で「知らないキー」にしない。
+bool IsConditionalKey(const std::string& path) {
+    return path == "note" || path == "materialBake.layer" || path == "materialBake.fingerprint" ||
+           path == "model.nodeRotations";
+}
+
+// ファイルのノードにある設定のキーを、既定値のノードを書いた JSON と比べる。無いキーは読み込みで無視される。
+void ReportUnknownKeys(const json& item, const json& defaults, const std::string& prefix, graph::GraphId node,
+                       std::vector<GraphReadIssue>& issues) {
+    for (const auto& [key, value] : item.items()) {
+        if (prefix.empty() && (key == "id" || key == "kind" || key == "inputs" || key == "outputs" || key == "position"))
+            continue;
+        const std::string path = prefix.empty() ? key : prefix + "." + key;
+        if (IsConditionalKey(path)) continue;
+        const auto known = defaults.find(key);
+        if (known == defaults.end()) {
+            issues.push_back({node, 0, "知らない設定のキーです（無視されます）: " + path});
+        } else if (value.is_object() && known->is_object()) {
+            ReportUnknownKeys(value, *known, path, node, issues);
+        }
+    }
+}
+
+}  // namespace
+
 bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialReader& readMaterial,
                const ModelReader& readModel, const TextureReader& readTexture, const fs::path& baseDir,
                std::vector<GraphReadIssue>* issues) {
@@ -452,6 +495,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                                         std::abs(created.posY) <= 1.0e6f;
             }
             created.note = ReadString(item, "note", "");
+            if (issues != nullptr) ReportUnknownKeys(item, WriteDefaultNodeSettings(created.kind), "", created.id, *issues);
 
             // ピンは定義から再生成し、ID だけファイルの値を使う。
             // 欠けているぶんは後で maxId から振り直す（リンクは繋がらないまま消える）。

@@ -36,10 +36,14 @@ nlohmann::json WriteGraph(const graph::NodeGraph& graphData, const MaterialWrite
                           const ModelWriter& writeModel, const TextureWriter& writeTexture,
                           const std::filesystem::path& baseDir);
 
+// 既定値のノードを保存処理で書いたときの設定（id・kind・ピン・位置を除いた部分）。
+// ノードカタログの既定値と、読み込みで知らないキーを見つけるのに使う。
+nlohmann::json WriteDefaultNodeSettings(graph::NodeKind kind);
+
 // 戻り値はノードを 1 つ以上読めたか。空のグラフ節は「グラフ未使用」とみなし、
 // 呼び出し側が旧 layers からの移行に切り替える。
 // readModel は Model ノードの文書内の番号を実行中のモデル ID へ写す（0 = なし）。
-// issues を渡すと、読めずに捨てたノード・リンクを理由つきで積む。
+// issues を渡すと、読めずに捨てたノード・リンクと、無視した設定のキーを理由つきで積む。
 bool ReadGraph(const nlohmann::json& node, graph::NodeGraph& graphData, const MaterialReader& readMaterial,
                const ModelReader& readModel, const TextureReader& readTexture,
                const std::filesystem::path& baseDir, std::vector<GraphReadIssue>* issues = nullptr);

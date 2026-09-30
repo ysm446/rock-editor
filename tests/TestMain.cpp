@@ -35,6 +35,7 @@ void RunMeshSceneTests();
 void RunFrameLimiterTests();
 void RunNodeGraphTests();
 void RunGraphIoTests();
+void RunNodeParamsTests();
 void RunUiInteractionTests();
 void RunUndoHistoryTests();
 void RunProjectWorkspaceTests();
@@ -48,6 +49,10 @@ void RunDepositionMaskTests();
 void RunMaskCombineTests();
 void RunMaskFilterTests();
 int main(int argc, char** argv) {
+    if (argc == 2 && std::strcmp(argv[1], "--node-params-only") == 0) {
+        RunNodeParamsTests();
+        return rock::tests::g_failures == 0 ? 0 : 1;
+    }
     RunDisplaceTests();
     if (argc == 2 && std::strcmp(argv[1], "--displace-only") == 0)
         return rock::tests::g_failures == 0 ? 0 : 1;
@@ -89,6 +94,7 @@ int main(int argc, char** argv) {
     RunFrameLimiterTests();
     RunNodeGraphTests();
     RunGraphIoTests();
+    RunNodeParamsTests();
 
     std::printf("\n%s\n", (rock::tests::g_failures == 0) ? "すべて成功" : "失敗あり");
     return (rock::tests::g_failures == 0) ? 0 : 1;

@@ -337,6 +337,8 @@ add_executable(rock_editor_tests
     tests/FrameLimiterTests.cpp
     tests/NodeGraphTests.cpp
     tests/GraphIoTests.cpp
+    tests/NodeParamsTests.cpp
+    src/graph/NodeParams.cpp
     tests/UiInteractionTests.cpp
     tests/UndoHistoryTests.cpp
     tests/ProjectWorkspaceTests.cpp
@@ -411,6 +413,7 @@ add_executable(rock_cli
     src/geometry/Remesh.cpp
     src/geometry/Displace.cpp
     src/graph/NodeGraph.cpp
+    src/graph/NodeParams.cpp
     src/graph/RockEvaluator.cpp
     src/graph/PieceEvaluator.cpp
     src/graph/MaterialHeight.cpp

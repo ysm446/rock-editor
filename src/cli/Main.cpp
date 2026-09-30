@@ -5,6 +5,7 @@
 // 出力は標準出力への JSON 1 つ。ログは標準エラーへ出る。
 //
 //   rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--pretty]
+//   rock_cli check <graph.rockgraph> [--pretty]
 //   rock_cli catalog [--pretty]
 //
 // 終了コード: 0 = 成功、1 = 評価エラーか、読み込みで捨てたノード・リンクがある、2 = 読み込めない・引数の誤り。
@@ -12,6 +13,7 @@
 #include "core/PathUtf8.h"
 #include "geometry/Mesh.h"
 #include "graph/NodeGraph.h"
+#include "graph/NodeParams.h"
 #include "graph/RockEvaluator.h"
 #include "io/GraphIo.h"
 
@@ -21,6 +23,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -181,6 +184,111 @@ json MeshJson(const graph::NodeGraph& graph, const graph::GeneratedRock& rock) {
     return item;
 }
 
+const char* ParamTypeName(graph::ParamType type) {
+    switch (type) {
+    case graph::ParamType::Float: return "float";
+    case graph::ParamType::Int: return "int";
+    case graph::ParamType::Bool: return "bool";
+    case graph::ParamType::String: return "string";
+    case graph::ParamType::Float3: return "float3";
+    case graph::ParamType::FloatArray: return "floatArray";
+    case graph::ParamType::BoolArray: return "boolArray";
+    case graph::ParamType::Enum: return "enum";
+    case graph::ParamType::IntEnum: return "intEnum";
+    }
+    return "?";
+}
+
+const char* ParamCheckName(graph::ParamCheck check) {
+    switch (check) {
+    case graph::ParamCheck::Error: return "error";
+    case graph::ParamCheck::Clamp: return "clamp";
+    case graph::ParamCheck::None: return "none";
+    }
+    return "?";
+}
+
+json ParamJson(const graph::ParamDefinition& param) {
+    json item{{"path", param.path}, {"type", ParamTypeName(param.type)}, {"label", param.label},
+              {"meaning", param.meaning}, {"outOfRange", ParamCheckName(param.check)}};
+    if (!std::isnan(param.minimum)) item["min"] = param.minimum;
+    if (!std::isnan(param.maximum)) item["max"] = param.maximum;
+    if (param.unit && *param.unit) item["unit"] = param.unit;
+    if (!param.options.empty()) {
+        json options = json::array();
+        for (const graph::ParamOption& option : param.options) {
+            json entry{{"name", option.name}, {"meaning", option.meaning}};
+            if (param.type == graph::ParamType::IntEnum) entry["value"] = option.value;
+            options.push_back(std::move(entry));
+        }
+        item["options"] = std::move(options);
+    }
+    if (param.internal) item["internal"] = true;
+    return item;
+}
+
+const json* FindJsonPath(const json& root, const std::string& path) {
+    const json* current = &root;
+    for (size_t start = 0;;) {
+        const size_t dot = path.find('.', start);
+        const std::string key = path.substr(start, dot == std::string::npos ? std::string::npos : dot - start);
+        if (!current->is_object()) return nullptr;
+        const auto found = current->find(key);
+        if (found == current->end()) return nullptr;
+        current = &*found;
+        if (dot == std::string::npos) return current;
+        start = dot + 1;
+    }
+}
+
+// ファイルに書かれた値を項目表の範囲・列挙と照らす。評価より先に、どの項目が悪いかをパスで返す。
+void CheckParams(const json& graphNode, std::vector<io::GraphReadIssue>& issues) {
+    const json* nodes = graphNode.contains("nodes") ? &graphNode["nodes"] : nullptr;
+    if (!nodes || !nodes->is_array()) return;
+    for (const json& item : *nodes) {
+        if (!item.is_object() || !item.contains("kind") || !item["kind"].is_string()) continue;
+        const graph::NodeDefinition* definition = graph::FindNodeDefinitionByName(item["kind"].get<std::string>());
+        if (!definition) continue;
+        const graph::GraphId id = item.value("id", 0);
+        for (const graph::ParamDefinition& param : graph::NodeParams()) {
+            if (param.kind != definition->kind) continue;
+            const json* value = FindJsonPath(item, param.path);
+            if (!value) continue;
+            const std::string where = std::string(definition->name) + "#" + std::to_string(id) + " の " + param.path;
+            const auto checkNumber = [&](const json& number) {
+                if (!number.is_number()) return;
+                const double v = number.get<double>();
+                if ((!std::isnan(param.minimum) && v < param.minimum - 1e-6) ||
+                    (!std::isnan(param.maximum) && v > param.maximum + 1e-6)) {
+                    char range[96];
+                    std::snprintf(range, sizeof(range), "%g〜%g", param.minimum, param.maximum);
+                    issues.push_back({id, 0, where + " = " + number.dump() + " は範囲外です（" + range +
+                                                 (param.check == graph::ParamCheck::Clamp ? "。丸めて使われます）" : "）")});
+                }
+            };
+            if (value->is_array()) {
+                for (const json& element : *value) checkNumber(element);
+            } else {
+                checkNumber(*value);
+            }
+            if (param.type == graph::ParamType::Enum && value->is_string()) {
+                bool listed = false;
+                std::string names;
+                for (const graph::ParamOption& option : param.options) {
+                    listed |= *value == option.name;
+                    names += (names.empty() ? "" : " / ") + std::string(option.name);
+                }
+                if (!listed) issues.push_back({id, 0, where + " = " + value->dump() + " は候補にありません（" + names + "）"});
+            }
+            if (param.type == graph::ParamType::IntEnum && value->is_number_integer()) {
+                bool listed = false;
+                for (const graph::ParamOption& option : param.options) listed |= value->get<int>() == option.value;
+                if (!listed) issues.push_back({id, 0, where + " = " + value->dump() + " は候補にありません"});
+            }
+        }
+    }
+}
+
 struct LoadedGraph {
     graph::NodeGraph graph;
     std::vector<io::GraphReadIssue> issues;
@@ -214,6 +322,7 @@ std::optional<LoadedGraph> LoadGraphFile(const fs::path& path, std::string& erro
         error = "グラフにノードがありません";
         return std::nullopt;
     }
+    CheckParams(*graphNode, loaded.issues);
     return loaded;
 }
 
@@ -292,6 +401,18 @@ int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::
     return loaded->issues.empty() ? kExitOk : kExitEvaluationError;
 }
 
+// 読み込みの診断だけを返す（評価しない）。書いた直後の確認に使う。
+int RunCheck(const fs::path& path, bool pretty) {
+    std::string error;
+    auto loaded = LoadGraphFile(path, error);
+    if (!loaded) return Fail(error, pretty);
+    json result{{"file", ToUtf8Portable(path)}, {"ok", loaded->issues.empty()},
+                {"nodes", loaded->graph.Nodes().size()}, {"links", loaded->graph.Links().size()},
+                {"diagnostics", IssuesJson(loaded->issues)}};
+    WriteJson(result, pretty);
+    return loaded->issues.empty() ? kExitOk : kExitEvaluationError;
+}
+
 // 全ノードの保存名・表示名・ピン・既定の設定。既定の設定は保存処理で書いた JSON そのもの。
 int RunCatalog(bool pretty) {
     json kinds = json::array();
@@ -300,12 +421,6 @@ int RunCatalog(bool pretty) {
         if (!definition || uint32_t(definition->kind) != kindValue) continue;
         graph::NodeGraph single;
         const graph::GraphId id = single.CreateNode(definition->kind);
-        const auto writeMaterial = [](compositor::MaterialAssetId material) -> json {
-            return material ? json(material) : json(nullptr);
-        };
-        const auto writeModel = [](uint64_t) -> json { return nullptr; };
-        const auto writeTexture = [](compositor::TextureId) -> json { return nullptr; };
-        const json written = io::WriteGraph(single, writeMaterial, writeModel, writeTexture, fs::current_path());
         json item{{"kind", definition->name}, {"title", definition->title}};
         if (graph::IsMountainNodeKind(definition->kind)) item["graph"] = "mountain";
         json inputs = json::array(), outputs = json::array();
@@ -317,13 +432,15 @@ int RunCatalog(bool pretty) {
         item["inputs"] = std::move(inputs);
         item["outputs"] = std::move(outputs);
         if (graph::IsVariableInputNodeKind(definition->kind)) item["variableInputs"] = true;
-        json settings = json::object();
-        if (written.contains("nodes") && !written["nodes"].empty()) {
-            for (const auto& [key, value] : written["nodes"][0].items())
-                if (key != "id" && key != "kind" && key != "inputs" && key != "outputs" && key != "position")
-                    settings[key] = value;
+        item["defaults"] = io::WriteDefaultNodeSettings(definition->kind);
+        if (const graph::NodeSummary* summary = graph::FindNodeSummary(definition->kind)) {
+            item["purpose"] = summary->purpose;
+            if (summary->notes && *summary->notes) item["notes"] = summary->notes;
         }
-        item["defaults"] = std::move(settings);
+        json params = json::array();
+        for (const graph::ParamDefinition& param : graph::NodeParams())
+            if (param.kind == definition->kind) params.push_back(ParamJson(param));
+        item["params"] = std::move(params);
         kinds.push_back(std::move(item));
     }
     WriteJson({{"ok", true}, {"nodes", std::move(kinds)}}, pretty);
@@ -350,6 +467,13 @@ int wmain(int argc, wchar_t** argv) {
     }
     const std::string& command = args[0];
     if (command == "catalog") return RunCatalog(pretty);
+    if (command == "check") {
+        if (args.size() < 2 || args[1].starts_with("--")) {
+            PrintUsage();
+            return Fail("check にはグラフのファイルが要ります", pretty);
+        }
+        return RunCheck(FromUtf8(args[1]), pretty);
+    }
     if (command == "eval") {
         if (args.size() < 2 || args[1].starts_with("--")) {
             PrintUsage();

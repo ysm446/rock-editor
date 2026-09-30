@@ -83,6 +83,20 @@ void RunGraphIoTests() {
     Check(HasIssue(issues, 0, 912, "id / start / end"), "欠けたリンクを報告");
     Check(issues.size() == 4, "診断はちょうど4件");
 
+    // 設定のキーの打ち間違い（入れ子も）。読み込みは無視して既定値で開くので、診断で知らせる。
+    json typo = written;
+    for (json& item : typo["nodes"]) {
+        if (item["kind"] == "toVolume") item["toVolume"]["resolutoin"] = 64;
+        if (item["kind"] == "baseRock") item["note"] = "メモは条件つきのキーなので診断しない";
+    }
+    graph::NodeGraph typed;
+    issues.clear();
+    io::ReadGraph(typo, typed, kReadMaterial, kReadModel, kReadTexture, baseDir, &issues);
+    Check(issues.size() == 1 && HasIssue(issues, volume->id, 0, "toVolume.resolutoin"),
+          "知らない設定のキーをパスつきで報告（メモは報告しない）");
+    json surface = io::WriteDefaultNodeSettings(graph::NodeKind::Surface);
+    Check(surface.contains("layer") && surface["layer"].contains("mapping"), "既定値のノードの設定を書ける（Surface）");
+
     graph::NodeGraph silent;
     Check(io::ReadGraph(broken, silent, kReadMaterial, kReadModel, kReadTexture, baseDir) &&
               silent.Links().size() == 3,
