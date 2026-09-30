@@ -368,6 +368,16 @@ int Application::Run() {
         // 開発用: グラフの評価が終わっていれば、形全体が入るようにカメラを引く。
         if (m_options.frameAll && !m_pieceUpdating && m_renderer.HasMeshScene())
             m_renderer.GetCamera().Frame({0.0f, 0.0f, 0.0f}, m_renderer.BoundingRadius());
+        // 開発用: 起動引数のカメラの向き（読み込んだシーンの視点より優先する）。
+        if (!std::isnan(m_options.cameraYawDegrees) || !std::isnan(m_options.cameraPitchDegrees)) {
+            renderer::CameraState state = m_renderer.GetCamera().State();
+            constexpr float kRadians = 3.14159265358979f / 180.0f;
+            if (!std::isnan(m_options.cameraYawDegrees)) state.yaw = m_options.cameraYawDegrees * kRadians;
+            if (!std::isnan(m_options.cameraPitchDegrees)) state.pitch = m_options.cameraPitchDegrees * kRadians;
+            m_renderer.GetCamera().SetState(state);
+        }
+        if (!std::isnan(m_options.lightAzimuthDegrees))
+            m_renderer.WorkLight().azimuth = m_options.lightAzimuthDegrees * 3.14159265358979f / 180.0f;
 
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。

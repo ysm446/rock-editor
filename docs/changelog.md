@@ -1,10 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-01 06:25
+更新日時: 2026-10-01 06:50
 
 ## 未リリース
 
+- `tools/rock_shot.py --views 4` で、岩を 4 方向から撮って 1 枚にまとめられるようにした（光もカメラに合わせて回すので裏側も見える）。起動引数 `--camera-yaw` / `--camera-pitch` / `--light-azimuth` を追加。
 - 岩の種類ごとのレシピ `examples/ai-recipes/`（片理・塊状・板状節理・丸い転石・層理の段）と、LLM（Claude Code）が岩グラフを組むときの手順 `.claude/skills/rock-graph/SKILL.md` を追加。
 - 撮影（`--screenshot` / `--screenshot-ui`）がグラフの評価の完了も待つようにした（途中や前の形が写らない）。起動引数 `--frame-all`（形全体が入るようにカメラを引く）と、撮影をまとめた `tools/rock_shot.py` を追加。
 - 岩グラフ（`.rockgraph`）を手で書きやすくした。ピンとリンクの ID・ノードの位置・マテリアルの表を省ける。リンクは `{"from": "3", "to": "6:Geometry"}` のようにノード ID とピンの名前で書ける。Piece Select の mode などの数値の列挙を名前（`"peel"`）で書ける。Surface のマテリアルにパス（`"Materials/rough-rock.rockmat"`）を直接書ける。位置の無いノードは開くときに左から右へ並べる。アプリで保存すると従来の形で書く。`rock_cli` は無いピン・候補に無い名前・型の違う値・見つからないマテリアルを報告する。

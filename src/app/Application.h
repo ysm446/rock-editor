@@ -1,5 +1,6 @@
 #pragma once
 #include <future>
+#include <limits>
 #include <stop_token>
 
 #include "compositor/MaterialLibrary.h"
@@ -81,6 +82,12 @@ struct StartupOptions {
     // 開発用。グラフの評価が終わるたびに、カメラを形全体が入るように引く（キーの A と同じ。グリッドは含めない）。
     // 撮影で被写体が画面からはみ出さないようにする（LLM が見た目を確かめるときなど）。
     bool frameAll = false;
+    // 開発用。カメラの向き（度）。NaN なら変えない。撮影で正面・側面などを撮り分けるのに使う。
+    // yaw は注視点のまわりの水平の角度、pitch は見下ろす角度（正で上から）。
+    float cameraYawDegrees = std::numeric_limits<float>::quiet_NaN();
+    float cameraPitchDegrees = std::numeric_limits<float>::quiet_NaN();
+    // 開発用。作業用ライトの方位（度）。NaN なら変えない。視点を回して撮るときに光も回し、裏側が影で潰れないようにする。
+    float lightAzimuthDegrees = std::numeric_limits<float>::quiet_NaN();
     // 開発用。FBX をモデルとして読み込み、FBX のマテリアルからマテリアルを作ってプレビューを開く。
     std::filesystem::path importModel;
     // 開発用。ルート内のアセットをアセットの帯のダブルクリックと同じ経路で開く。

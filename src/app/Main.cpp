@@ -22,7 +22,7 @@ namespace {
 //   rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
 //                       [--hdri <path>] [--texture <path>]...
 //                       [--screenshot <path>] [--screenshot-ui <path>]
-//                       [--screenshot-frame <n>] [--frame-all] [--import-model <fbx>] [--open-asset <path>] [--place-model <path>] [--gizmo-rotate] [--gizmo-scale]
+//                       [--screenshot-frame <n>] [--frame-all] [--camera-yaw <deg>] [--camera-pitch <deg>] [--light-azimuth <deg>] [--import-model <fbx>] [--open-asset <path>] [--place-model <path>] [--gizmo-rotate] [--gizmo-scale]
 //                       [--model-node-rotation <node> <x> <y> <z>] [--model-node-gizmo <node>] [--focus-panel <name>]
 rock::StartupOptions ParseCommandLine() {
     rock::StartupOptions options;
@@ -123,6 +123,12 @@ rock::StartupOptions ParseCommandLine() {
             options.testGpuAo = true;
         } else if (argument == L"--frame-all") {
             options.frameAll = true;
+        } else if (argument == L"--camera-yaw" && (i + 1) < argc) {
+            options.cameraYawDegrees = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--camera-pitch" && (i + 1) < argc) {
+            options.cameraPitchDegrees = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--light-azimuth" && (i + 1) < argc) {
+            options.lightAzimuthDegrees = static_cast<float>(::_wtof(argv[++i]));
         } else if (argument == L"--screenshot-frame" && (i + 1) < argc) {
             options.screenshotFrame = static_cast<uint32_t>(::_wtoi(argv[i + 1]));
             ++i;
