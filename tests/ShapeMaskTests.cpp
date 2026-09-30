@@ -1,4 +1,5 @@
 #include "TestSupport.h"
+#include "geometry/Volume.h"
 #include "geometry/ShapeMask.h"
 #include "geometry/UvUnwrap.h"
 #include "graph/RockEvaluator.h"
@@ -785,4 +786,61 @@ void RunMaskFilterTests() {
     filterSettings(filter).radius = 0;
     r = graph::EvaluateRocks(g, apply, &cache);
     Check(!r.error.empty() && r.error.find("Mask Filter") != std::string::npos, "invalid settings are diagnosed on the filter node");
+}
+
+void RunStructureMaskTests() {
+    using tests::Check;
+    tests::Section("Structure Mask");
+    std::string error;
+    // 2 m 四方の水平な面。UV は面全体に 1 枚。
+    geometry::Mesh mesh;
+    mesh.positions = {{0, 0, 0}, {2, 0, 0}, {2, 0, 2}, {0, 0, 2}};
+    mesh.triangles = {{0, 2, 1}, {0, 3, 2}};
+    mesh.cornerUvs = {{{{0, 0}, {1, 1}, {1, 0}}}, {{{0, 0}, {0, 1}, {1, 1}}}};
+    mesh.uvCharts = {0, 0};
+    mesh.uvWidth = mesh.uvHeight = 128;
+    geometry::StructureMaskSettings bands;
+    bands.resolution = 128;
+    bands.warp = 0;
+    bands.softness = 0;
+    bands.fill = .5f;
+    geometry::StructureMask(mesh, bands, nullptr, error);
+    Check(!error.empty(), "縞は Planes が無ければ診断する");
+    // 法線 +X、間隔 0.25 m。X 方向に 8 層並び、層ごとに白か黒。Z 方向には変わらない。
+    geometry::StructurePlanes planes;
+    planes.normal = {1, 0, 0};
+    planes.spacing = .25f;
+    const auto image = geometry::StructureMask(mesh, bands, &planes, error);
+    Check(error.empty() && image.pixels.size() == 128 * 128, "縞のマスクを生成");
+    if (image.pixels.size() != 128 * 128) return;
+    bool alongPlane = true;
+    for (size_t y = 1; y < 128; ++y)
+        for (size_t x = 0; x < 128; ++x) alongPlane &= std::abs(int(image.pixels[y * 128 + x]) - int(image.pixels[x])) <= 1;
+    Check(alongPlane, "縞は構造面に沿う（法線と直交する向きには変わらない）");
+    const auto range = std::minmax_element(image.pixels.begin(), image.pixels.end());
+    Check(*range.first < 10 && *range.second > 245, "塗る層と塗らない層がある");
+    geometry::StructureMaskSettings none = bands;
+    none.fill = 0;
+    const auto empty = geometry::StructureMask(mesh, none, &planes, error);
+    Check(error.empty() && *std::max_element(empty.pixels.begin(), empty.pixels.end()) < 5, "塗る割合 0 なら全て黒");
+
+    geometry::StructureMaskSettings veins;
+    veins.type = geometry::StructureMaskType::Veins;
+    veins.resolution = 128;
+    veins.scale = .5f;
+    veins.width = .05f;
+    veins.fill = 1;
+    const auto lines = geometry::StructureMask(mesh, veins, nullptr, error);
+    size_t white = 0;
+    for (auto v : lines.pixels) white += v > 128;
+    Check(error.empty() && white > 0 && white < lines.pixels.size() / 3, "脈は細い線（面の一部だけが白）");
+    veins.fill = 0;
+    const auto gated = geometry::StructureMask(mesh, veins, nullptr, error);
+    Check(error.empty() && *std::max_element(gated.pixels.begin(), gated.pixels.end()) < 5, "脈の残す割合 0 なら全て黒");
+    Check(geometry::ParseStructureMaskType(geometry::StructureMaskTypeName(geometry::StructureMaskType::Veins)) ==
+              geometry::StructureMaskType::Veins, "種類の保存名を往復できる");
+    geometry::StructureMaskSettings bad = bands;
+    bad.resolution = 100;
+    geometry::StructureMask(mesh, bad, &planes, error);
+    Check(!error.empty(), "解像度が 2 のべき乗でなければ診断する");
 }

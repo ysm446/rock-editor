@@ -1,7 +1,7 @@
 # ドキュメント案内
 
 作成日時: 2026-09-20 22:04
-更新日時: 2026-10-01 11:42
+更新日時: 2026-10-01 14:32
 
 現在の入口は [Random Boxes → To Volume](reference/box-volume.md)。ランダムに重ねた直方体から単純な塊を作り、ボリュームへ変換する。
 
@@ -23,7 +23,7 @@ Rock Editor は、岩の形をノードで組み立てる Windows 向け岩生�
 - **形とボリューム**: [直方体の塊とボリューム](reference/box-volume.md)、[Volume to Mesh の変換方式](reference/volume-meshing.md)、[Volume Boolean](reference/volume-boolean.md)、[Plane Cuts](reference/plane-cuts.md)、[Volume Crack](reference/volume-crack.md)、[Volume Crack の入力の拡張と割り方の候補（設計メモ）](reference/volume-crack-sources.md)、[Parallel Planes — 平行な構造面](reference/parallel-planes.md)、[Volume Noise](reference/volume-noise.md)、[Volume Smooth](reference/volume-smooth.md)、[Volume Terrace](reference/volume-terrace.md)、[Volume Close](reference/volume-close.md)、[Volume Edge Wear](reference/volume-edge-wear.md)、[Volume Clip](reference/volume-clip.md)、[Volume Scatter](reference/volume-scatter.md)、[Volume Undercut](reference/volume-undercut.md)
 - **ピース**: [Voronoi分割とピース操作の設計](reference/voronoi-pieces.md)、[薄板の積層とピースの欠け](reference/layered-pieces.md)、[隣接面積によるピースの侵食](reference/piece-erosion.md)
 - **メッシュ**: [Subdivide / Displace](reference/displace.md)、[Decimate](reference/decimate.md)、[Remesh](reference/remesh.md)、[Rock Asset（LOD）](reference/rock-asset.md)、[山グラフと Heightmap](reference/heightmap.md)、[Rock と Rock Scatter](reference/rock-scatter.md)
-- **表面と素材**: [素材の適用と形状AO](reference/material-application.md)、[岩用レイヤーマテリアル](reference/layer-material.md)、[生成メッシュへの材質とTriplanar](reference/triplanar.md)、[自動UV展開・UVビュー・材質ベイク](reference/uv-bake.md)、[Shape Mask](reference/shape-mask.md)、[Noise Mask](reference/noise-mask.md)、[Deposition Mask](reference/deposition-mask.md)、[Mask Combine](reference/mask-combine.md)、[Mask Filter](reference/mask-filter.md)
+- **表面と素材**: [素材の適用と形状AO](reference/material-application.md)、[岩用レイヤーマテリアル](reference/layer-material.md)、[生成メッシュへの材質とTriplanar](reference/triplanar.md)、[自動UV展開・UVビュー・材質ベイク](reference/uv-bake.md)、[Shape Mask](reference/shape-mask.md)、[Noise Mask](reference/noise-mask.md)、[Structure Mask](reference/structure-mask.md)、[Deposition Mask](reference/deposition-mask.md)、[Mask Combine](reference/mask-combine.md)、[Mask Filter](reference/mask-filter.md)
 - **設計メモ**: [岩らしい形と色のためのノード設計メモ](reference/rock-shaping-nodes.md)、[岩アセットと山グラフ（計画）](reference/rock-asset-mountain-graph.md)
 - **LLM・自動化**: [LLM による岩グラフの作成（AI フレンドリー化・rock_cli）](reference/ai-authoring.md)、[岩の種類の網羅（作れる岩と足りないノード）](reference/rock-catalog.md)
 

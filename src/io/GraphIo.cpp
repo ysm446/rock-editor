@@ -258,6 +258,11 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             item["depositionMask"] = {{"amount", deposition->amount}, {"distance", deposition->distance},
                 {"maxSlopeDegrees", deposition->maxSlopeDegrees}, {"recessPreference", deposition->recessPreference},
                 {"resolution", deposition->resolution}, {"samples", deposition->samples}, {"invert", deposition->invert}};
+        } else if (const auto* structure = std::get_if<geometry::StructureMaskSettings>(&node.settings)) {
+            item["structureMask"] = {{"type", geometry::StructureMaskTypeName(structure->type)}, {"resolution", structure->resolution},
+                                     {"fill", structure->fill}, {"softness", structure->softness}, {"scale", structure->scale},
+                                     {"width", structure->width}, {"warp", structure->warp}, {"warpScale", structure->warpScale},
+                                     {"seed", structure->seed}, {"invert", structure->invert}};
         } else if (const auto* noiseMask = std::get_if<geometry::NoiseMaskSettings>(&node.settings)) {
             item["noiseMask"] = {{"size", noiseMask->size}, {"contrast", noiseMask->contrast}, {"seed", noiseMask->seed},
                 {"detail", noiseMask->detail}, {"warp", noiseMask->warp}, {"resolution", noiseMask->resolution}, {"invert", noiseMask->invert}};
@@ -811,6 +816,21 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.recessPreference = ReadFloat(*v, "recessPreference", settings.recessPreference);
                     settings.resolution = ReadInt(*v, "resolution", settings.resolution);
                     settings.samples = ReadInt(*v, "samples", settings.samples);
+                    settings.invert = ReadBool(*v, "invert", settings.invert);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::StructureMask) {
+                geometry::StructureMaskSettings settings;
+                if (const json* v = FindMember(item, "structureMask"); v && v->is_object()) {
+                    settings.type = geometry::ParseStructureMaskType(ReadString(*v, "type", "bands"));
+                    settings.resolution = ReadInt(*v, "resolution", settings.resolution);
+                    settings.fill = ReadFloat(*v, "fill", settings.fill);
+                    settings.softness = ReadFloat(*v, "softness", settings.softness);
+                    settings.scale = ReadFloat(*v, "scale", settings.scale);
+                    settings.width = ReadFloat(*v, "width", settings.width);
+                    settings.warp = ReadFloat(*v, "warp", settings.warp);
+                    settings.warpScale = ReadFloat(*v, "warpScale", settings.warpScale);
+                    settings.seed = ReadUInt(*v, "seed", settings.seed);
                     settings.invert = ReadBool(*v, "invert", settings.invert);
                 }
                 created.settings = settings;

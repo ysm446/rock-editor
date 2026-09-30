@@ -1,0 +1,31 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 7, "size": [2.4, 1.8, 2.0], "sizeVariation": 0.4, "spread": 0.6, "rotation": 20, "seed": 15}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
+      {"id": 3, "kind": "planeCuts", "planeCuts": {"count": 12, "depthMin": 0.05, "depthMax": 0.2, "seed": 8}},
+      {"id": 4, "kind": "parallelPlanes", "note": "片麻状組織の向き。割れ目と縞の両方に使う", "parallelPlanes": {"rotation": [10, 0, 25], "spacing": 0.09, "variation": 0.6, "seed": 3}},
+      {"id": 5, "kind": "volumeCrack", "volumeCrack": {"width": 0.015, "depth": 0.03, "variation": 0.7, "noise": 0.5}},
+      {"id": 6, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.03, "radius": 0.02}},
+      {"id": 7, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 8, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 9, "kind": "decimate", "decimate": {"targetTriangles": 30000}},
+      {"id": 10, "kind": "uvUnwrap", "uvUnwrap": {"resolution": 1024}},
+      {"id": 11, "kind": "surface", "note": "暗い下地（黒雲母の多い層）", "layer": {"material": null, "baseColor": [0.07, 0.07, 0.075], "roughness": 0.6, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 12, "kind": "applyMaterial"},
+      {"id": 13, "kind": "surface", "note": "明るい縞（長石・石英の多い層）", "layer": {"material": null, "baseColor": [0.45, 0.42, 0.38], "roughness": 0.6, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 14, "kind": "structureMask", "note": "縞: 同じ構造面の層ごとに塗る", "structureMask": {"type": "bands", "fill": 0.45, "softness": 0.25, "warp": 0.5, "warpScale": 0.5}},
+      {"id": 15, "kind": "applyMaterial"},
+      {"id": 16, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "5:Volume"}, {"from": "4", "to": "5:Planes"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9"},
+      {"from": "9", "to": "10"}, {"from": "10", "to": "12:Mesh"}, {"from": "11", "to": "12:Material"}, {"from": "10", "to": "14:Mesh"},
+      {"from": "4", "to": "14:Planes"}, {"from": "12", "to": "15:Mesh"}, {"from": "13", "to": "15:Material"}, {"from": "14", "to": "15:Mask"},
+      {"from": "15", "to": "16:Geometry"}
+    ]
+  }
+}

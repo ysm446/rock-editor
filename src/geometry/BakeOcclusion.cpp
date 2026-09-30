@@ -1,6 +1,7 @@
 #include "geometry/BakeOcclusion.h"
 #include "geometry/ShapeMask.h"
 #include "geometry/UvUnwrap.h"
+#include "geometry/Volume.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -232,12 +233,13 @@ double CloudNoise(V surface,const NoiseMaskSettings& settings) {
 }
 }
 static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings, std::string &error,
-                    std::stop_token stop, const std::function<void(int)> &progress, const NoiseMaskSettings* noise, const DepositionMaskSettings* deposition = nullptr) {
+                    std::stop_token stop, const std::function<void(int)> &progress, const NoiseMaskSettings* noise, const DepositionMaskSettings* deposition = nullptr,
+                    const std::function<double(V)>* pattern = nullptr) {
 
     error.clear();
     const int resolution = settings.resolution;
     if (stop.stop_requested()) { error="マスク生成をキャンセルしました";return {}; }
-    const bool occlusion = !noise && settings.type == ShapeMaskType::Occlusion;
+    const bool occlusion = !noise && !pattern && settings.type == ShapeMaskType::Occlusion;
     const bool curvature = !noise && !deposition && (settings.type == ShapeMaskType::ValleyCurvature || settings.type == ShapeMaskType::RidgeCurvature);
     if ((settings.type != ShapeMaskType::Occlusion && settings.type != ShapeMaskType::Direction &&
          settings.type != ShapeMaskType::Height && !curvature) ||
@@ -367,7 +369,9 @@ static MaskImage SurfaceMask(const Mesh &mesh, const ShapeMaskSettings &settings
             n = nl > 1e-12 ? n * (1 / nl) : Unit(Cross(t.b - t.a, t.c - t.a));
             const V surface = t.a + (t.b - t.a) * double(texel.b) + (t.c - t.a) * double(texel.c);
             double ratio = 0;
-            if (noise) {
+            if (pattern) {
+                ratio = std::clamp((*pattern)(surface), 0., 1.);
+            } else if (noise) {
                 ratio=CloudNoise(surface,*noise);
             } else if (curvature) {
                 const double value = signedCurvature[f[0]] * wa + signedCurvature[f[1]] * double(texel.b) + signedCurvature[f[2]] * double(texel.c);
@@ -491,5 +495,104 @@ MaskImage NoiseMask(const Mesh& mesh,const NoiseMaskSettings& settings,std::stri
     ShapeMaskSettings raster;raster.type=ShapeMaskType::Height;raster.resolution=settings.resolution;
     raster.low=0;raster.high=1;
     return SurfaceMask(mesh,raster,error,stop,progress,&settings);
+}
+const char* StructureMaskTypeName(StructureMaskType type) { return type == StructureMaskType::Veins ? "veins" : "bands"; }
+StructureMaskType ParseStructureMaskType(std::string_view name) {
+    return name == "veins" ? StructureMaskType::Veins : StructureMaskType::Bands;
+}
+MaskImage StructureMask(const Mesh& mesh, const StructureMaskSettings& s, const StructurePlanes* planes, std::string& error,
+                        std::stop_token stop, const std::function<void(int)>& progress) {
+    error.clear();
+    const auto unit = [](float v) { return std::isfinite(v) && v >= 0 && v <= 1; };
+    const auto within = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if ((s.type != StructureMaskType::Bands && s.type != StructureMaskType::Veins) || !unit(s.fill) || !unit(s.softness) ||
+        !unit(s.warp) || !within(s.scale, .01f, 100) || !within(s.width, .005f, .5f) || !within(s.warpScale, .01f, 100) ||
+        s.resolution < kMinShapeMaskResolution || s.resolution > kMaxShapeMaskResolution || (s.resolution & (s.resolution - 1))) {
+        error = "Structure Maskの設定が不正です";
+        return {};
+    }
+    if (s.type == StructureMaskType::Bands && !planes) {
+        error = "縞には Planes（Parallel Planes）を接続してください";
+        return {};
+    }
+    const auto smooth = [](double e0, double e1, double x) {
+        const double t = std::clamp((x - e0) / std::max(e1 - e0, 1e-9), 0., 1.);
+        return t * t * (3 - 2 * t);
+    };
+    const auto warpOffset = [&](V p, uint32_t salt) {
+        return (ValueNoise(p * (1. / s.warpScale), s.seed + salt) * 2 - 1);
+    };
+    std::function<double(V)> pattern;
+    std::vector<StructurePlane> expanded;
+    if (s.type == StructureMaskType::Bands) {
+        MeshInfo info;
+        if (!InspectMesh(mesh, info)) {
+            error = "UV付きのMeshが必要です。先にUV Unwrapを通してください";
+            return {};
+        }
+        const float margin = planes->spacing * 2;
+        expanded = ExpandParallelPlanes(*planes, {info.minimum.x - margin, info.minimum.y - margin, info.minimum.z - margin},
+                                        {info.maximum.x + margin, info.maximum.y + margin, info.maximum.z + margin}, error);
+        if (!error.empty()) return {};
+        if (expanded.size() < 2) {
+            error = "形の範囲に構造面が 2 枚以上必要です。平行面の間隔を狭めてください";
+            return {};
+        }
+        const V normal{planes->normal.x, planes->normal.y, planes->normal.z};
+        pattern = [&, normal](V p) {
+            const double along = Dot(p, normal) + warpOffset(p, 17) * s.warp * planes->spacing;
+            // 面の位置は昇順。along を挟む 2 枚の面の間が 1 つの層。
+            const auto upper = std::upper_bound(expanded.begin(), expanded.end(), along,
+                                                [](double value, const StructurePlane& plane) { return value < plane.offset; });
+            if (upper == expanded.begin() || upper == expanded.end()) return 0.;
+            const auto lower = upper - 1;
+            const auto layerOn = [&](int64_t index) {
+                return double(NoiseHash(uint32_t(index * 2654435761ll) ^ (s.seed * 0x9E3779B9u))) / double(UINT32_MAX) < s.fill ? 1. : 0.;
+            };
+            const double here = layerOn(lower->index);
+            // 境のぼかし: 近い方の面までの距離で隣の層へ混ぜる。
+            const double toLower = along - lower->offset, toUpper = upper->offset - along;
+            const double blend = s.softness * planes->spacing * .5 + 1e-9;
+            const double neighbor = toLower < toUpper ? layerOn(lower->index - 1) : layerOn(upper->index);
+            const double d = std::min(toLower, toUpper);
+            return here + (neighbor - here) * .5 * (1 - smooth(0, blend, d));
+        };
+    } else {
+        pattern = [&](V p) {
+            const V w{warpOffset(p, 31), warpOffset(p, 57), warpOffset(p, 83)};
+            const V q = (p + w * (s.warp * s.scale)) * (1. / s.scale);
+            // 3D の Voronoi（セルに 1 点）。最も近い点と 2 番目の距離の差が線からの距離。
+            const double fx = std::floor(q.x), fy = std::floor(q.y), fz = std::floor(q.z);
+            double best = 1e30, second = 1e30;
+            for (int dz = -1; dz <= 1; ++dz)
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int64_t ix = int64_t(fx) + dx, iy = int64_t(fy) + dy, iz = int64_t(fz) + dz;
+                        const uint32_t h = NoiseHash(uint32_t(ix) * 73856093u ^ uint32_t(iy) * 19349663u ^ uint32_t(iz) * 83492791u ^ s.seed);
+                        const V c{double(ix) + double(NoiseHash(h ^ 0x51u)) / UINT32_MAX, double(iy) + double(NoiseHash(h ^ 0xA3u)) / UINT32_MAX,
+                                  double(iz) + double(NoiseHash(h ^ 0xC7u)) / UINT32_MAX};
+                        const V d = q - c;
+                        const double dist = std::sqrt(Dot(d, d));
+                        if (dist < best) {
+                            second = best;
+                            best = dist;
+                        } else if (dist < second) {
+                            second = dist;
+                        }
+                    }
+            const double edge = (second - best) * .5;  // 境界面までの距離（網目の大きさを 1 とする）
+            const double half = s.width * .5;
+            const double line = 1 - smooth(half * (1 - s.softness), half * (1 + s.softness) + 1e-9, edge);
+            // 網目のうち fill の割合だけを残し、脈を途切れさせる（閉じた多角形の亀甲模様にしない）。
+            const double gate = ValueNoise(p * (1. / (s.scale * 1.5)), s.seed + 101);
+            return line * (1 - smooth(s.fill - .08, s.fill + .08, gate));
+        };
+    }
+    ShapeMaskSettings raster;
+    raster.type = ShapeMaskType::Height;
+    raster.resolution = s.resolution;
+    raster.low = 0;
+    raster.high = 1;
+    return SurfaceMask(mesh, raster, error, stop, progress, nullptr, nullptr, &pattern);
 }
 } // namespace rock::geometry

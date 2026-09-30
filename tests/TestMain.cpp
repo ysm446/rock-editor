@@ -47,6 +47,7 @@ void RunDisplaceTests();
 void RunShapeMaskTests();
 void RunCurvatureMaskTests();
 void RunNoiseMaskTests();
+void RunStructureMaskTests();
 void RunDepositionMaskTests();
 void RunMaskCombineTests();
 void RunMaskFilterTests();
@@ -63,6 +64,7 @@ int main(int argc, char** argv) {
     RunShapeMaskTests();
     RunCurvatureMaskTests();
     RunNoiseMaskTests();
+    RunStructureMaskTests();
     RunDepositionMaskTests();
     RunMaskCombineTests();
     RunMaskFilterTests();

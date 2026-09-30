@@ -119,11 +119,17 @@ std::optional<Host> MakeHost(graph::NodeKind kind, bool bareCrack = false) {
         host.evaluate = crack;
         return host;
     }
-    case K::ShapeMask: case K::NoiseMask: case K::DepositionMask: {
+    case K::ShapeMask: case K::NoiseMask: case K::DepositionMask: case K::StructureMask: {
         const auto uv = Add(g, K::UvUnwrap);
         Connect(g, SmallBox(g), uv, 0);
         host.target = host.evaluate = Add(g, kind);
         Connect(g, uv, host.target, 0);
+        if (kind == K::StructureMask) {
+            // 縞（既定）は構造面が要る。間隔 0.1 m で 1 m の箱に 10 枚ほど。
+            const auto planes = Add(g, K::ParallelPlanes);
+            std::get<geometry::ParallelPlanesSettings>(g.FindMutableNode(planes)->settings).spacing = .1f;
+            Connect(g, planes, host.target, 1);
+        }
         return host;
     }
     case K::ScatterPoints: case K::VoronoiFracture: case K::PieceSelect: case K::PieceFilter: case K::PiecesToMesh: {
@@ -187,6 +193,7 @@ const std::vector<EdgeRule>& EdgeRules() {
         {"parallelPlanes:parallelPlanes.spacing", json::object(), true, false, "評価範囲の面は 512 枚まで"},
         {"subdivide:subdivide.levels", json::object(), false, true, "重い"},
         {"depositionMask:depositionMask.resolution", json::object(), false, true, "重い"},
+        {"structureMask:structureMask.resolution", json::object(), false, true, "重い"},
         {"depositionMask:depositionMask.samples", json::object(), false, true, "重い"},
     };
     return rules;

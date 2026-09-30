@@ -93,12 +93,16 @@ constexpr std::array<PinDefinition, 1> kRockPins = {{{PinKind::Output, ValueType
 constexpr std::array<PinDefinition, 4> kRockScatterPins = {{{PinKind::Input, ValueType::Mesh, "Terrain"},
     {PinKind::Input, ValueType::Mask, "Mask"}, {PinKind::Input, ValueType::Rock, "Rock 1"},
     {PinKind::Output, ValueType::Instances, "Instances"}}};
-constexpr std::array<NodeDefinition, 46> kNodeDefinitions = {{
+// Structure Mask。UV付きの Mesh と、縞に使う構造面（Planes）を受ける。
+constexpr std::array<PinDefinition, 3> kStructureMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Input, ValueType::Planes, "Planes"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
+constexpr std::array<NodeDefinition, 47> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::DepositionMask, "depositionMask", "Deposition Mask", kShapeMaskPins},
+    {NodeKind::StructureMask, "structureMask", "Structure Mask", kStructureMaskPins},
     {NodeKind::NoiseMask, "noiseMask", "Noise Mask", kShapeMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
     {NodeKind::MaskCombine, "maskCombine", "Mask Combine", kMaskCombinePins},
@@ -187,7 +191,8 @@ bool IsMeshNodeKind(NodeKind kind) {
 }
 
 bool IsImageMaskNodeKind(NodeKind kind) {
-    return kind == NodeKind::ShapeMask || kind == NodeKind::NoiseMask || kind == NodeKind::DepositionMask || kind == NodeKind::MaskCombine ||
+    return kind == NodeKind::ShapeMask || kind == NodeKind::NoiseMask || kind == NodeKind::DepositionMask ||
+           kind == NodeKind::StructureMask || kind == NodeKind::MaskCombine ||
            kind == NodeKind::MaskFilter;
 }
 
@@ -195,6 +200,7 @@ bool ImageMaskInvert(const Node& node) {
     // Mask Combine は反転を画像に焼き込むので、Shape Mask / Noise Mask は使う側で掛ける。
     if (const auto* deposition = std::get_if<geometry::DepositionMaskSettings>(&node.settings)) return deposition->invert;
     if (const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node.settings)) return noise->invert;
+    if (const auto* structure = std::get_if<geometry::StructureMaskSettings>(&node.settings)) return structure->invert;
     if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) return shape->invert;
     return false;
 }
@@ -586,6 +592,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::DepositionMaskSettings{};
     } else if (kind == NodeKind::NoiseMask) {
         node.settings = geometry::NoiseMaskSettings{};
+    } else if (kind == NodeKind::StructureMask) {
+        node.settings = geometry::StructureMaskSettings{};
     } else if (kind == NodeKind::ShapeMask) {
         node.settings = geometry::ShapeMaskSettings{};
     } else if (kind == NodeKind::MaskCombine) {

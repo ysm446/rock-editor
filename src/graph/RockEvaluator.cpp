@@ -167,6 +167,9 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* deposition = std::get_if<geometry::DepositionMaskSettings>(&node->settings)) {
         add(deposition->amount); add(deposition->distance); add(deposition->maxSlopeDegrees);
         add(deposition->recessPreference); add(deposition->resolution); add(deposition->samples);
+    } else if (const auto* structure = std::get_if<geometry::StructureMaskSettings>(&node->settings)) {
+        add(int(structure->type)); add(structure->resolution); add(structure->fill); add(structure->softness); add(structure->scale);
+        add(structure->width); add(structure->warp); add(structure->warpScale); add(structure->seed);
     } else if (const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node->settings)) {
         add(noise->size); add(noise->contrast); add(noise->seed); add(noise->detail); add(noise->warp); add(noise->resolution);
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
@@ -312,6 +315,28 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 else persistent->pieceOutputs.erase(id);
             }
             return finish(std::move(pieces));
+        } else if (node->kind == NodeKind::StructureMask) {
+            const auto* settings = std::get_if<geometry::StructureMaskSettings>(&node->settings);
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            const auto* planesNode = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
+            if (!settings || !upstream) return finish(Failure(id, "Structure Mask", "UV付きのMeshを接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            report(id, 0, 0);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.size() != 1 || result.rocks[0].volume)
+                return finish(Failure(id, "Structure Mask", "UV付きの生成メッシュを1つ接続してください（UV Unwrapの出力）"));
+            std::shared_ptr<const geometry::StructurePlanes> planes;
+            if (planesNode) {
+                const auto planeResult = evaluate(planesNode->id, depth + 1);
+                if (!planeResult.error.empty()) return finish(planeResult);
+                planes = planeResult.planes;
+            }
+            std::string error;
+            auto image = geometry::StructureMask(result.rocks[0].mesh, *settings, planes.get(), error, stop,
+                                                 [&](int p) { report(id, 0, p); });
+            if (!error.empty()) return finish(Failure(id, "Structure Mask", error));
+            result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
+            result.rocks[0].previewMaskInvert = ImageMaskInvert(*node);
         } else if (node->kind == NodeKind::ShapeMask || node->kind == NodeKind::NoiseMask || node->kind == NodeKind::DepositionMask) {
             const char* title = node->kind == NodeKind::DepositionMask ? "Deposition Mask" : node->kind == NodeKind::NoiseMask ? "Noise Mask" : "Shape Mask";
             const auto* deposition = std::get_if<geometry::DepositionMaskSettings>(&node->settings);

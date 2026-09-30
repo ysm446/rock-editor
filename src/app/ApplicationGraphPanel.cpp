@@ -1455,6 +1455,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::MaterialMask, "Material Mask — 定数・画像マスク");
         addNodeMenuItem(graph::NodeKind::DepositionMask, "Deposition Mask — 隙間や上向きの面に堆積する土のマスク");
         addNodeMenuItem(graph::NodeKind::NoiseMask, "Noise Mask — 3Dノイズでムラのマスクを作る");
+        addNodeMenuItem(graph::NodeKind::StructureMask, "Structure Mask — 構造面に沿う縞・網目の脈のマスクを作る");
         addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（遮蔽 / 上向き度 / 高さ / 曲率）");
         addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
         addNodeMenuItem(graph::NodeKind::MaskFilter, "Mask Filter — マスクを加工（ぼかし / シャープ / レベル）");
@@ -1767,6 +1768,56 @@ void Application::DrawGraphPanel() {
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *wear = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* structure = std::get_if<geometry::StructureMaskSettings>(&selected->settings)) {
+        auto edited = *structure;
+        bool changed = false;
+        const bool bands = edited.type == geometry::StructureMaskType::Bands;
+        if (ui::BeginPropertyTable("structureMaskRows")) {
+            const char* types[] = {"縞（構造面の層）", "脈（網目の線）"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 1);
+            if (ui::PropertyCombo("種類", &type, types, 2, 0,
+                                  "縞は Planes に繋いだ構造面（Parallel Planes）の層ごとに塗ります。形の割れ目と同じ面に揃えられます。"
+                                  "脈は 3D の網目の線です。")) {
+                edited.type = static_cast<geometry::StructureMaskType>(type);
+                changed = true;
+            }
+            if (bands) {
+                changed |= ui::PropertyFloat("塗る層の割合", &edited.fill, 0, 1, .4f, "層のうち白にする割合です。");
+            } else {
+                changed |= ui::PropertyFloat("残す割合", &edited.fill, 0, 1, .4f, "網目のうち残す割合です。残りは途切れ、閉じた網目になりません。");
+                changed |= ui::PropertyFloat("網目の大きさ (m)", &edited.scale, .01f, 100, .4f);
+                changed |= ui::PropertyFloat("線の幅", &edited.width, .005f, .5f, .04f, "網目の大きさに対する比です。");
+            }
+            changed |= ui::PropertyFloat("ぼかし", &edited.softness, 0, 1, .15f, "境・縁のぼかしです。");
+            changed |= ui::PropertyFloat("ゆがみ", &edited.warp, 0, 1, .3f, "縞は間隔、脈は網目に対する比です。");
+            changed |= ui::PropertyFloat("ゆがみの大きさ (m)", &edited.warpScale, .01f, 100, .6f);
+            const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+            int resolution = std::clamp(static_cast<int>(std::log2(std::max(edited.resolution, 128))) - 7, 0, 5);
+            if (ui::PropertyCombo("マスク解像度", &resolution, resolutions, 6, 3)) {
+                edited.resolution = 128 << resolution;
+                changed = true;
+            }
+            int seed = static_cast<int>(edited.seed);
+            if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
+                edited.seed = static_cast<uint32_t>(std::max(seed, 0));
+                changed = true;
+            }
+            changed |= ui::PropertyBool("反転", &edited.invert, false);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("岩の構造から素材の模様のマスクを作ります。Apply Material の Mask へ繋ぎ、縞や脈に別の素材を塗ります。"
+                     "UV Unwrap の出力を Mesh に繋ぎます。");
+        if (changed) {
+            edited.fill = std::clamp(edited.fill, 0.0f, 1.0f);
+            edited.softness = std::clamp(edited.softness, 0.0f, 1.0f);
+            edited.scale = std::clamp(edited.scale, .01f, 100.0f);
+            edited.width = std::clamp(edited.width, .005f, .5f);
+            edited.warp = std::clamp(edited.warp, 0.0f, 1.0f);
+            edited.warpScale = std::clamp(edited.warpScale, .01f, 100.0f);
+            *structure = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

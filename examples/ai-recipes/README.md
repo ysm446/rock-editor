@@ -2,7 +2,7 @@
 
 LLM に岩を作らせるときの出発点。どれも手で書きやすい表記（ピン ID・位置を省き、リンクをノード ID とピン名で書く）で書いてある。書き方は [LLM による岩グラフの作成](../../docs/reference/ai-authoring.md)、手順は [skill](../../.claude/skills/rock-graph/SKILL.md)。
 
-アプリでこのフォルダをルートとして開くか、`rock_cli eval` / `python tools/rock_shot.py` で確かめる。形だけのグラフ（マテリアルは付けていない）。どれも `rock_cli eval` で塊 1 つ・空洞 0・閉じたメッシュになることを確かめてある。
+アプリでこのフォルダをルートとして開くか、`rock_cli eval` / `python tools/rock_shot.py` で確かめる。形だけのグラフ（マテリアルは付けていない。`gneiss` / `marble` だけは Surface の定数色で模様を塗る）。どれも `rock_cli eval` で塊 1 つ・空洞 0・閉じたメッシュになることを確かめてある。
 
 | ファイル | 岩 | 組み方の要点 | 評価 |
 | --- | --- | --- | --- |
@@ -23,6 +23,8 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `hoodoo.rockgraph` | フードゥー | 縦長の塊に Volume Undercut の帯を 4 段重ね、Volume Terrace で層の筋 | 約 0.1 秒 |
 | `roche-moutonnee.rockgraph` | 羊背岩（氷河の研磨） | 角張った塊の上流側（-X と上）だけを Volume Smooth と Edge Wear の「集中する向き」で丸める。丸めた面の縁に薄いヒレが残る | 約 0.2 秒 |
 | `obsidian.rockgraph` | 黒曜石・フリント（貝殻状断口） | 楕円体を Plane Cuts の「曲がり」で切り、えぐれた剥離痕を重ねる。ガラス質の見た目は素材で | 約 0.2 秒 |
+| `gneiss.rockgraph` | 片麻岩（縞） | 同じ Parallel Planes で浅い割れ目と Structure Mask の縞を作り、暗い下地に明るい層を塗る（Surface の定数色） | 約 9 秒（UV 展開を含む） |
+| `marble.rockgraph` | 大理石（脈） | 丸めた塊の白い下地に、Structure Mask の脈で暗い線を塗る。網目の感じが少し残る | 約 4 秒（UV 展開を含む） |
 | `river-pebble.rockgraph` | 河原の丸石 | 平たい楕円体を弱いノイズで歪ませ、Marching Tetrahedra でなめらかに | 約 0.1 秒 |
 
 作れる岩・作れない岩の一覧と足りないノードは [岩の種類の網羅](../../docs/reference/rock-catalog.md)。

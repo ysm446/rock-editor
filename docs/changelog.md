@@ -1,10 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-01 13:00
+更新日時: 2026-10-01 14:32
 
 ## 未リリース
 
+- Structure Mask ノードを追加。岩の構造から素材の模様のマスクを作る。縞は Parallel Planes の構造面の層ごとに塗り（片麻岩の縞・砂岩の色の層。割れ目と同じ面に揃う）、脈は 3D の網目の細い線（大理石・石英の脈）。仕様は [Structure Mask](reference/structure-mask.md)。レシピ `gneiss` / `marble` を追加。
 - Plane Cuts に「曲がり」を追加。平面の代わりに外側に中心を置いた球で切り、えぐれた曲面の切り口にする（黒曜石・フリントの貝殻状断口）。0 で従来の平面。レシピ `obsidian` を追加。
 - Volume Smooth と Volume Edge Wear の「上向きに集中」を、任意の向きで指定できるようにした（「集中する向き」、保存名 `focusDirection`、既定は上）。風上や氷河の流れてきた側だけを丸められる（羊背岩・風食）。既存のグラフの結果は変わらない。レシピ `roche-moutonnee` を追加。
 - Volume Undercut ノードを追加。形の高さの帯を内側へ削ってくびれを作る（きのこ岩・フードゥー）。帯の高さ・幅・深さ・繰り返しの数と間隔を選べる。削りすぎて形が上下に切り離されたり、底が削り切られて浮いたりした場合はエラーにする。仕様は [Volume Undercut](reference/volume-undercut.md)。レシピ `mushroom-rock` / `hoodoo` を追加。

@@ -3,6 +3,7 @@
 #include <functional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rock::geometry {
@@ -44,6 +45,31 @@ inline constexpr int kMinShapeMaskResolution = 128, kMaxShapeMaskResolution = 40
 // 失敗・取消では空の画像を返し、error に理由を入れる。
 MaskImage ShapeMask(const Mesh& mesh, const ShapeMaskSettings& settings, std::string& error,
                     std::stop_token stop = {}, const std::function<void(int)>& progress = {});
+
+// Structure Mask。岩の構造から素材の模様を作る（UV は結果の保存先）。
+//   縞（Bands）: 構造面（Parallel Planes）の間の層ごとに塗るかを決める。片麻岩の縞・砂岩の色の層。形の割れ目と同じ面に揃う。
+//   脈（Veins）: 3D の Voronoi の境界に沿う細い線の網。大理石・石英の脈。
+enum class StructureMaskType : uint32_t { Bands = 0, Veins = 1 };
+const char* StructureMaskTypeName(StructureMaskType type);
+// 知らない名前は Bands。
+StructureMaskType ParseStructureMaskType(std::string_view name);
+struct StructureMaskSettings {
+    StructureMaskType type = StructureMaskType::Bands;
+    int resolution = 1024;
+    float fill = .4f;       // 縞: 塗る層の割合、脈: 網目のうち残す割合（残りは途切れる）。0～1
+    float softness = .15f;  // 縞: 層の境のぼかし（間隔に対する比）、脈: 線の縁のぼかし（線の幅に対する比）。0～1
+    float scale = .4f;      // 脈: 網目 1 つの大きさ (m)。0.01～100
+    float width = .04f;     // 脈: 線の幅（網目に対する比）。0.005～0.5
+    float warp = .3f;       // ゆがみ。縞は間隔、脈は網目に対する比。0～1
+    float warpScale = .6f;  // ゆがみのノイズの大きさ (m)。0.01～100
+    uint32_t seed = 1;
+    bool invert = false;
+    bool operator==(const StructureMaskSettings&) const = default;
+};
+struct StructurePlanes;
+// 縞は planes が要る（無ければエラー）。脈は planes を使わない。
+MaskImage StructureMask(const Mesh&, const StructureMaskSettings&, const StructurePlanes* planes, std::string&,
+                        std::stop_token = {}, const std::function<void(int)>& progress = {});
 
 // メッシュの3D座標から作るムラ。UVは結果の保存先として使う。
 struct NoiseMaskSettings {

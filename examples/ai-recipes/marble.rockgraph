@@ -1,0 +1,28 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 6, "size": [2.2, 1.6, 1.8], "sizeVariation": 0.35, "spread": 0.6, "rotation": 25, "seed": 21}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
+      {"id": 3, "kind": "planeCuts", "planeCuts": {"count": 10, "depthMin": 0.05, "depthMax": 0.2, "seed": 2}},
+      {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.03, "amount": 1}},
+      {"id": 5, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 6, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 7, "kind": "decimate", "decimate": {"targetTriangles": 30000}},
+      {"id": 8, "kind": "uvUnwrap", "uvUnwrap": {"resolution": 2048}},
+      {"id": 9, "kind": "surface", "note": "白い大理石の下地", "layer": {"material": null, "baseColor": [0.75, 0.74, 0.7], "roughness": 0.35, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 10, "kind": "applyMaterial"},
+      {"id": 11, "kind": "surface", "note": "暗い脈", "layer": {"material": null, "baseColor": [0.12, 0.12, 0.13], "roughness": 0.4, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 12, "kind": "structureMask", "note": "脈: 3D の網目の細い線", "structureMask": {"type": "veins", "scale": 0.5, "width": 0.03, "softness": 0.4, "warp": 0.9, "warpScale": 0.35, "resolution": 2048, "fill": 0.5}},
+      {"id": 13, "kind": "applyMaterial"},
+      {"id": 14, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "10:Mesh"},
+      {"from": "9", "to": "10:Material"}, {"from": "8", "to": "12:Mesh"}, {"from": "10", "to": "13:Mesh"}, {"from": "11", "to": "13:Material"},
+      {"from": "12", "to": "13:Mask"}, {"from": "13", "to": "14:Geometry"}
+    ]
+  }
+}
