@@ -365,6 +365,10 @@ int Application::Run() {
         if (m_options.bakeAssetNode && m_frameCounter >= 2) { m_pendingAssetBake = m_options.bakeAssetNode; m_options.bakeAssetNode = 0; }
         ProcessPendingAssetBake();
 
+        // 開発用: グラフの評価が終わっていれば、形全体が入るようにカメラを引く。
+        if (m_options.frameAll && !m_pieceUpdating && m_renderer.HasMeshScene())
+            m_renderer.GetCamera().Frame({0.0f, 0.0f, 0.0f}, m_renderer.BoundingRadius());
+
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。
         if (!m_options.saveProjectPath.empty() && !m_bakeJob && !m_pendingBake && !m_pendingAssetBake && !m_options.bakeAssetNode &&
@@ -516,7 +520,8 @@ int Application::Run() {
 
         // UI 込みの書き出しは、バックバッファが描き終わったこのフレームで写す。
         // **材質の評価は非同期なので、走っている最中は撮らない**（前回の絵が写る）。
-        const bool evaluationIdle = !m_renderer.IsEvaluating();
+        // グラフの評価（別スレッド）も待つ。待たないと、途中の形や前の形が写る。
+        const bool evaluationIdle = !m_renderer.IsEvaluating() && !m_pieceUpdating;
         const bool captureUi = !m_options.uiScreenshotPath.empty() &&
                                (m_frameCounter + 1) >= m_options.screenshotFrame && evaluationIdle &&
                                (m_options.saveProjectPath.empty() || (!m_bakeJob && !m_pendingBake)) &&

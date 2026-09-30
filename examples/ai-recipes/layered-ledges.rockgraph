@@ -1,0 +1,22 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes",
+       "randomBoxes": {"count": 8, "size": [2.4, 1.8, 2.0], "sizeVariation": 0.45, "spread": 0.7, "rotation": 20, "seed": 5}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
+      {"id": 3, "kind": "volumeTerrace", "note": "水平に近い層の段（層理）。rotation で層の傾き",
+       "volumeTerrace": {"step": 0.09, "depth": 0.03, "ratio": 0.45, "softness": 0.08, "variation": 0.4, "noise": 0.3,
+                         "rotation": [4, 0, 3]}},
+      {"id": 4, "kind": "volumeClip"},
+      {"id": 5, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.03, "radius": 0.02}},
+      {"id": 6, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 7, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7:Geometry"}
+    ]
+  }
+}

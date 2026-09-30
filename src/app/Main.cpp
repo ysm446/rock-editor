@@ -22,7 +22,7 @@ namespace {
 //   rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
 //                       [--hdri <path>] [--texture <path>]...
 //                       [--screenshot <path>] [--screenshot-ui <path>]
-//                       [--screenshot-frame <n>] [--import-model <fbx>] [--open-asset <path>] [--place-model <path>] [--gizmo-rotate] [--gizmo-scale]
+//                       [--screenshot-frame <n>] [--frame-all] [--import-model <fbx>] [--open-asset <path>] [--place-model <path>] [--gizmo-rotate] [--gizmo-scale]
 //                       [--model-node-rotation <node> <x> <y> <z>] [--model-node-gizmo <node>] [--focus-panel <name>]
 rock::StartupOptions ParseCommandLine() {
     rock::StartupOptions options;
@@ -121,6 +121,8 @@ rock::StartupOptions ParseCommandLine() {
             ++i;
         } else if (argument == L"--test-gpu-ao") {
             options.testGpuAo = true;
+        } else if (argument == L"--frame-all") {
+            options.frameAll = true;
         } else if (argument == L"--screenshot-frame" && (i + 1) < argc) {
             options.screenshotFrame = static_cast<uint32_t>(::_wtoi(argv[i + 1]));
             ++i;

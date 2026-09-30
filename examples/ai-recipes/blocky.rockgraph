@@ -1,0 +1,25 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "note": "非対称な主塊。seed を変えると別の岩。原点中心にできる",
+       "randomBoxes": {"count": 12, "size": [2.4, 1.8, 2.0], "sizeVariation": 0.6, "spread": 0.9, "rotation": 40, "seed": 21}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
+      {"id": 3, "kind": "volumeTransform", "note": "持ち上げてから Volume Clip で接地面を切る（上げないと半分が消える）",
+       "volumeTransform": {"position": [0, 0.55, 0]}},
+      {"id": 4, "kind": "planeCuts", "note": "3 系統の主方向で切ると、節理で割れた角張った面になる",
+       "planeCuts": {"count": 24, "distribution": "directional", "systems": 3, "rotation": [0, 20, 0], "spread": 14,
+                     "depthMin": 0.08, "depthMax": 0.32, "seed": 5}},
+      {"id": 5, "kind": "volumeClip"},
+      {"id": 6, "kind": "volumeNoise", "volumeNoise": {"type": "facet", "amount": 0.012, "scale": 14, "octaves": 2}},
+      {"id": 7, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.025, "radius": 0.015, "noise": 0.5}},
+      {"id": 8, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 9, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9:Geometry"}
+    ]
+  }
+}

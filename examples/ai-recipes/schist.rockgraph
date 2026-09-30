@@ -1,0 +1,42 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "layeredBoxes", "note": "片理面の向きは rotation。Voronoi と Parallel Planes にも同じ向きを書く",
+       "pieces": {"count": 12, "size": [2.5, 0.16, 2.0], "rotation": [8, 0, -64], "position": [0, 0.45, 0],
+                  "gap": 0.01, "offset": 0.1, "thicknessVariation": 0.45, "sizeVariation": 0.15, "seed": 3}},
+      {"id": 2, "kind": "scatterPoints", "pieces": {"count": 9, "planar": true, "seed": 2}},
+      {"id": 3, "kind": "voronoiFracture", "note": "片理の向きに伸ばして割ると、細長い破片になる",
+       "pieces": {"rotation": [8, 0, -64], "stretch": [2.6, 1, 1]}},
+      {"id": 4, "kind": "pieceSelect", "pieces": {"mode": "peel", "fraction": 0.35, "peelNoise": 0.2, "seed": 4}},
+      {"id": 5, "kind": "pieceFilter", "pieces": {"keep": false}},
+      {"id": 6, "kind": "piecesToMesh"},
+      {"id": 7, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 8, "kind": "volumeClip", "note": "高さ 0 で切って接地面を作る"},
+      {"id": 9, "kind": "parallelPlanes",
+       "parallelPlanes": {"rotation": [8, 0, -64], "spacing": 0.12, "offset": 0.03, "variation": 0.4, "seed": 5}},
+      {"id": 10, "kind": "volumeCrack", "note": "片理に沿った細溝",
+       "volumeCrack": {"width": 0.035, "depth": 0.06, "variation": 0.6, "noise": 0.35, "noiseScale": 4, "seed": 2}},
+      {"id": 11, "kind": "parallelPlanes",
+       "parallelPlanes": {"rotation": [85, 30, 0], "spacing": 0.9, "offset": 0.2, "variation": 0.3, "seed": 9}},
+      {"id": 12, "kind": "volumeCrack", "note": "片理とほぼ直交する節理",
+       "volumeCrack": {"width": 0.035, "depth": 0.35, "variation": 0.6, "noise": 0.5, "noiseScale": 3, "seed": 3}},
+      {"id": 13, "kind": "volumeClose",
+       "note": "溝で分かれた塊を繋ぎ直し、板の隙間の空洞を埋める。Edge Wear は最大の塊だけ残すので必須",
+       "volumeClose": {"mode": "occlusion", "distance": 0.2, "threshold": 0.905, "softness": 0.1, "samples": 32}},
+      {"id": 14, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.06, "radius": 0.025, "noise": 0.6}},
+      {"id": 15, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 16, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "1", "to": "3:Geometry"}, {"from": "2", "to": "3:Points"},
+      {"from": "3", "to": "4"}, {"from": "3", "to": "5:Pieces"}, {"from": "4", "to": "5:Selection"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"},
+      {"from": "8", "to": "10:Volume"}, {"from": "9", "to": "10:Planes"},
+      {"from": "10", "to": "12:Volume"}, {"from": "11", "to": "12:Planes"},
+      {"from": "12", "to": "13"}, {"from": "13", "to": "14"}, {"from": "14", "to": "15"},
+      {"from": "15", "to": "16:Geometry"}
+    ]
+  }
+}

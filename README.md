@@ -83,14 +83,15 @@ rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
                 [--import-model <path>] [--place-model <path>] [--open-asset <path>]
                 [--select-node <id>] [--focus-panel <name>]
                 [--screenshot <path>] [--screenshot-ui <path>]
-                [--screenshot-frame <n>]
+                [--screenshot-frame <n>] [--frame-all]
                 [--test-gpu-ao] [--test-copy-to <scene>]
 ```
 
 `--root` はプロジェクトのルートフォルダ（省略時は最近使ったルート、無ければ `data/`）。
 `--project` にはシーンかルートのフォルダを渡せる。
 `--save-project` は指定フレーム後に保存して終了する。
-`--screenshot` はビュー、`--screenshot-ui` は UI を含む PNG を出力して終了する。
+`--screenshot` はビュー、`--screenshot-ui` は UI を含む PNG を出力して終了する（素材とグラフの評価の完了を待つ）。
+`--frame-all` はグラフの評価が終わるたびに、形全体が入るようにカメラを引く。
 `--test-gpu-ao` は GPU の AO ベイクを CPU 版と比べ、結果を終了コードで返す（CTest には入れていない。GPU が要るため）。
 `--test-copy-to` は先頭以外のノードをコピーして指定シーンへ貼る（`--save-project` と併用）。
 検証素材・プロジェクト・スクリーンショットは Git 対象外の `data/` に置く。
@@ -111,6 +112,8 @@ rock_cli catalog [--pretty]
 `catalog` は全ノードの保存名・ピン・既定の設定・概要と、項目ごとの範囲・単位・列挙の候補・意味を出す。
 終了コードは 0 = 成功、1 = 評価エラーか読み込みで捨てたものがある、2 = 読み込めない・引数の誤り。
 グラフは手で書きやすい表記でも書ける（ピン ID・位置を省き、リンクを `{"from": "3", "to": "6:Geometry"}` のようにノード ID とピン名で書く、列挙を名前で書く、マテリアルをパスで書く）。
+見た目は `python tools/rock_shot.py <graph> <out.png> [--node <id>]` で撮る（評価の完了を待ち、形全体が入るようにカメラを引く）。
+岩の種類ごとのレシピは `examples/ai-recipes/`、LLM（Claude Code）向けの手順は `.claude/skills/rock-graph/SKILL.md`。
 仕様は [LLM による岩グラフの作成](docs/reference/ai-authoring.md)。
 
 ## ドキュメント

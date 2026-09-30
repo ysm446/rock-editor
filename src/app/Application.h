@@ -78,6 +78,9 @@ struct StartupOptions {
     // 画面キャプチャは他ウィンドウを掴むことがあるため、確認にはこちらを使う。
     std::filesystem::path uiScreenshotPath;
     uint32_t screenshotFrame = 8;
+    // 開発用。グラフの評価が終わるたびに、カメラを形全体が入るように引く（キーの A と同じ。グリッドは含めない）。
+    // 撮影で被写体が画面からはみ出さないようにする（LLM が見た目を確かめるときなど）。
+    bool frameAll = false;
     // 開発用。FBX をモデルとして読み込み、FBX のマテリアルからマテリアルを作ってプレビューを開く。
     std::filesystem::path importModel;
     // 開発用。ルート内のアセットをアセットの帯のダブルクリックと同じ経路で開く。
