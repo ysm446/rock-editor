@@ -148,6 +148,8 @@ constexpr ParamDefinition kParams[] = {
     {K::PlaneCuts, "planeCuts.spread", T::Float, 0, 90, "度", "ばらつき", "主方向からのずれ", C::Error},
     {K::PlaneCuts, "planeCuts.blend", T::Float, 0, 10, "m", "なめらかさ", "", C::Error},
     {K::PlaneCuts, "planeCuts.seed", T::Int, 0, N, "", "Seed", "", C::None},
+    {K::PlaneCuts, "planeCuts.curvature", T::Float, 0, 1, "", "曲がり",
+     "0 で平らな切り口。正なら外側に中心を置いた球で切り、えぐれた曲面の切り口（貝殻状断口）。球の半径は 最長辺 ÷ (4 × 曲がり)", C::Error},
     {K::ParallelPlanes, "parallelPlanes.rotation", T::Float3, N, N, "度", "向き", "回転した +Y が面の法線。片理なら Layered Boxes の rotation と揃える", C::Error},
     {K::ParallelPlanes, "parallelPlanes.spacing", T::Float, 0.001, 1000, "m", "間隔",
      "面の間隔。評価範囲の面は 512 枚まで（岩の大きさ ÷ 間隔が 512 を超えるとエラー）", C::Error},

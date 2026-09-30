@@ -358,7 +358,7 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                  {"systems", cuts->systems},
                                  {"rotation", cuts->rotationDegrees},
                                  {"spread", cuts->spreadDegrees},
-                                 {"blend", cuts->blend}};
+                                 {"blend", cuts->blend}, {"curvature", cuts->curvature}};
         } else if (const auto* boolean = std::get_if<geometry::VolumeBooleanSettings>(&node.settings)) {
             item["volumeBoolean"] = {{"operation", geometry::VolumeBooleanOperationName(boolean->operation)},
                                      {"blend", boolean->blend}};
@@ -1069,6 +1069,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.rotationDegrees = {rotation.x, rotation.y, rotation.z};
                     settings.spreadDegrees = ReadFloat(*v, "spread", settings.spreadDegrees);
                     settings.blend = ReadFloat(*v, "blend", settings.blend);
+                    settings.curvature = ReadFloat(*v, "curvature", settings.curvature);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeBoolean) {

@@ -69,6 +69,9 @@ struct PlaneCutsSettings {
     std::array<float, 3> rotationDegrees{0, 0, 0};  // 右手系 Z → X → Y、度。
     float spreadDegrees = 12;                       // 主方向からの法線のばらつき。0～90。
     float blend = 0;                                // 稜線を丸める幅 (m)。0 で角を残す。0～10。
+    // 切り口の曲がり。0 で平面。正なら平面の外側に中心を置いた球で切り、えぐれた曲面の切り口にする
+    // （貝殻状断口）。球の半径は 最長辺 ÷ (4 × curvature)（平面ごとに ±30% ばらつく）。0～1。
+    float curvature = 0;
 };
 // 平面 dot(normal, p) = offset。normal は単位長で、切り落とす側（外）を向く。
 // radius が正なら局所の欠け。center を中心とする球の中だけを切る。0 なら形全体を切る。

@@ -693,6 +693,10 @@ std::vector<CutPlane> MakeCutPlanes(const VolumeGrid& g, const PlaneCutsSettings
 }
 VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::string& error,
                      std::vector<CutPlane>* usedPlanes) {
+    if (!std::isfinite(s.curvature) || s.curvature < 0 || s.curvature > 1) {
+        error = "曲がりは 0～1 にしてください";
+        return {};
+    }
     auto planes = MakeCutPlanes(g, s, error);
     if (!error.empty()) return {};
     VolumeGrid out;
@@ -702,12 +706,47 @@ VolumeGrid CutVolume(const VolumeGrid& g, const PlaneCutsSettings& s, std::strin
     out.values.resize(g.values.size());
     const float threshold = out.spacing * 1e-4f;
     const float k = s.blend;
+    // 曲がった切り口: 平面ごとに、形の中心を平面へ投影した点から外側へ半径だけ離した球の中心。
+    std::vector<Vec3> sphereCenters;
+    std::vector<float> sphereRadii;
+    if (s.curvature > 0) {
+        const float longest = InteriorLongestSide(g);
+        uint32_t lo[3] = {g.dimensions[0], g.dimensions[1], g.dimensions[2]}, hi[3] = {0, 0, 0};
+        for (uint32_t z = 0; z < g.dimensions[2]; ++z)
+            for (uint32_t y = 0; y < g.dimensions[1]; ++y)
+                for (uint32_t x = 0; x < g.dimensions[0]; ++x)
+                    if (g.values[g.Index(x, y, z)] < 0) {
+                        const uint32_t c[3] = {x, y, z};
+                        for (int i = 0; i < 3; ++i) {
+                            lo[i] = std::min(lo[i], c[i]);
+                            hi[i] = std::max(hi[i], c[i]);
+                        }
+                    }
+        const Vec3 center = g.Position((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+        const uint64_t seed = uint64_t(uint32_t(s.seed)) << 40;
+        for (size_t i = 0; i < planes.size(); ++i) {
+            const auto& plane = planes[i];
+            const float radius = longest / (4 * s.curvature) * (.7f + .6f * float(HashUnit(seed ^ (uint64_t(i) * 0xC0FFEEull))));
+            const Vec3 base = plane.radius > 0 ? plane.center : center;
+            const float along = Dot(plane.normal, base) - plane.offset;
+            sphereCenters.push_back({base.x - plane.normal.x * (along - radius), base.y - plane.normal.y * (along - radius),
+                                     base.z - plane.normal.z * (along - radius)});
+            sphereRadii.push_back(radius);
+        }
+    }
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
         const auto p = out.Position(x, y, z);
         const size_t index = out.Index(x, y, z);
         float value = g.values[index];
-        for (const auto& plane : planes) {
+        for (size_t planeIndex = 0; planeIndex < planes.size(); ++planeIndex) {
+            const auto& plane = planes[planeIndex];
             float cut = Dot(plane.normal, p) - plane.offset;
+            if (!sphereCenters.empty()) {
+                // 球の中を切り落とす。球面は平面上の点で平面に接し、切り口はえぐれた曲面になる。
+                const Vec3& c = sphereCenters[planeIndex];
+                const Vec3 d{p.x - c.x, p.y - c.y, p.z - c.z};
+                cut = sphereRadii[planeIndex] - std::sqrt(Dot(d, d));
+            }
             if (plane.radius > 0) {
                 // 局所の欠け。切り落とす領域は「平面の外側」かつ「球の中」。
                 // 球の壁が形に当たらない欠けだけを MakeCutPlanes が選ぶので、切断面は平面だけになる。

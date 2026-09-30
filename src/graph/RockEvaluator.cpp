@@ -109,7 +109,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         if (!s) return std::nullopt;
         add(s->count); add(s->seed); add(s->depthMin); add(s->depthMax); add(s->distribution);
         add(s->scope); add(s->radius);
-        add(s->systems); add(s->rotationDegrees); add(s->spreadDegrees); add(s->blend);
+        add(s->systems); add(s->rotationDegrees); add(s->spreadDegrees); add(s->blend); add(s->curvature);
     } else if (node->kind == NodeKind::VolumeBoolean) {
         const auto* s = std::get_if<geometry::VolumeBooleanSettings>(&node->settings);
         if (!s) return std::nullopt;

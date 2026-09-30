@@ -393,4 +393,30 @@ void RunPlaneCutsTests() {
     const auto fineThird = graph::EvaluateRocks(g, fine, &cache);
     Check(fineThird.error.empty() && fineThird.rocks[0].volume != fineSecond.rocks[0].volume,
           "上段の変更は下段へ伝わる");
+
+    // 曲がり: 平面の代わりに外側に中心を置いた球で切る。切り口がえぐれた曲面になる。
+    {
+        std::string curvedError;
+        geometry::PlaneCutsSettings flat;
+        flat.count = 1;
+        flat.depthMin = flat.depthMax = .2f;
+        geometry::PlaneCutsSettings curved = flat;
+        curved.curvature = .8f;
+        const auto flatCut = geometry::CutVolume(sphere, flat, curvedError);
+        const auto curvedCut = geometry::CutVolume(sphere, curved, curvedError);
+        geometry::MeshInfo flatInfo, curvedInfo, curvedDual;
+        Check(curvedError.empty() && Measure(flatCut, flatInfo) && Measure(curvedCut, curvedInfo) && curvedInfo.components == 1,
+              "曲がり: 閉じた1つの塊になる");
+        Check(Measure(curvedCut, curvedDual, geometry::VolumeMeshingMethod::DualContouring), "曲がり: Dual Contouring でも閉じる");
+        // 球は平面に外側から接するので、えぐれの最深部が平面の深さと同じで、切り落とす量は平面より少ない。
+        Check(curvedInfo.volume > flatInfo.volume && curvedInfo.volume < sphereInfo.volume,
+              "曲がり: 最深部は平面と同じ深さのえぐれになり、切り落とす量は平面より少ない");
+        geometry::PlaneCutsSettings zero = flat;
+        zero.curvature = 0;
+        Check(geometry::CutVolume(sphere, zero, curvedError).values == flatCut.values, "曲がり 0 は従来の平面と同じ");
+        geometry::PlaneCutsSettings bad = flat;
+        bad.curvature = 1.5f;
+        geometry::CutVolume(sphere, bad, curvedError);
+        Check(!curvedError.empty(), "曲がりが範囲外なら診断する");
+    }
 }

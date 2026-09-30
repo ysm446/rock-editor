@@ -1,0 +1,19 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "baseRock": {"shape": "ellipsoid", "size": [1.6, 1.0, 1.2], "subdivisions": 16}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
+      {"id": 3, "kind": "planeCuts", "note": "重なった貝殻状の割れ面（曲がり 0.35 の球で切る）", "planeCuts": {"count": 24, "depthMin": 0.04, "depthMax": 0.18, "curvature": 0.35, "seed": 4}},
+      {"id": 4, "kind": "planeCuts", "note": "縁の小さな剥離痕（局所・強く曲げる）", "planeCuts": {"scope": "local", "count": 60, "radius": 0.12, "depthMin": 0.2, "depthMax": 0.45, "curvature": 0.7, "seed": 6}},
+      {"id": 5, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.1}},
+      {"id": 6, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 7, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7:Geometry"}
+    ]
+  }
+}

@@ -2069,6 +2069,9 @@ void Application::DrawGraphPanel() {
             }
             changed |= ui::PropertyFloat("なめらかさ (m)", &edited.blend, 0, 1, 0,
                                          "稜線を丸める幅。0 で角を残します。Ctrl + クリックで 10 m まで入力できます。");
+            changed |= ui::PropertyFloat("曲がり", &edited.curvature, 0, 1, 0,
+                                         "0 で平らな切り口。大きいほど、えぐれた曲面の切り口になります（黒曜石・フリントの貝殻状断口）。"
+                                         "平面の枠の表示は平面のままです。");
             ui::EndPropertyTable();
         }
         ui::HintText("平面の群でボリュームを切り落とし、割れた岩のような角張った面を作ります。入力・出力とも Volume 型で、格子は変わりません。");
@@ -2093,6 +2096,7 @@ void Application::DrawGraphPanel() {
             edited.depthMax = std::clamp(edited.depthMax, 0.0f, geometry::MaxPlaneCutDepth);
             edited.depthMin = std::min(edited.depthMin, edited.depthMax);
             edited.blend = std::clamp(edited.blend, 0.0f, 10.0f);
+            edited.curvature = std::clamp(edited.curvature, 0.0f, 1.0f);
             edited.radius = std::clamp(edited.radius, 0.02f, 1.0f);
             *cuts = edited;
             m_graph.MarkDirty();
