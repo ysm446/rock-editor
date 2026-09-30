@@ -1,0 +1,28 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "柱の範囲。外周の片は後で除くので、欲しい大きさより一回り大きく", "baseRock": {"shape": "box", "size": [3.0, 2.2, 2.6]}},
+      {"id": 2, "kind": "scatterPoints", "pieces": {"count": 48, "seed": 3}},
+      {"id": 3, "kind": "voronoiFracture", "note": "縦（Y）に 16 倍伸ばした Voronoi で、多角柱に割る", "pieces": {"stretch": [1, 16, 1]}},
+      {"id": 4, "kind": "pieceSelect", "note": "箱の外面に接する片（±X・±Z）を選んで除き、柱の断面の多角形を外周に出す", "pieces": {"mode": "outer", "outerFaces": 51}},
+      {"id": 5, "kind": "pieceFilter", "pieces": {"keep": false}},
+      {"id": 6, "kind": "pieceTransform", "note": "柱を少し細らせて、柱の間に節理の隙間を作る", "pieces": {"individual": true, "pose": {"scale": [0.95, 1, 0.95]}}},
+      {"id": 7, "kind": "pieceSelect", "note": "一部の柱を選んで下げ、柱の高さをばらつかせる", "pieces": {"mode": "random", "fraction": 0.4, "seed": 5}},
+      {"id": 8, "kind": "pieceTransform", "pieces": {"pose": {"position": [0, -0.3, 0]}}},
+      {"id": 9, "kind": "piecesToMesh"},
+      {"id": 10, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 11, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.25}},
+      {"id": 12, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.02, "radius": 0.012}},
+      {"id": 13, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 14, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "1", "to": "3:Geometry"}, {"from": "2", "to": "3:Points"}, {"from": "3", "to": "4"},
+      {"from": "3", "to": "5:Pieces"}, {"from": "4", "to": "5:Selection"}, {"from": "5", "to": "6:Pieces"}, {"from": "6", "to": "7"},
+      {"from": "6", "to": "8:Pieces"}, {"from": "7", "to": "8:Selection"}, {"from": "8", "to": "9"}, {"from": "9", "to": "10"},
+      {"from": "10", "to": "11"}, {"from": "11", "to": "12"}, {"from": "12", "to": "13"}, {"from": "13", "to": "14:Geometry"}
+    ]
+  }
+}

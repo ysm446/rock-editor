@@ -11,6 +11,12 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `platy-joints.rockgraph` | 板状節理 | 不規則な塊を緩く傾いた Parallel Planes で浅く彫り、直交する縦の節理を足す | 約 0.3 秒 |
 | `rounded-boulder.rockgraph` | 丸い転石 | 塊に大きな面を少し作ってから Volume Smooth で丸め、セル状のノイズでくぼみ | 約 0.1 秒 |
 | `layered-ledges.rockgraph` | 層理の段 | Volume Terrace で水平に近い層の段を作る | 約 0.1 秒 |
+| `columnar.rockgraph` | 柱状節理（玄武岩） | 縦に 16 倍伸ばした Voronoi で多角柱に割り、外周の片を除き、柱を細らせて隙間を作り、一部の柱を下げる。柱は別々の塊のまま | 約 0.5 秒 |
+| `slate.rockgraph` | スレート・頁岩 | 水平に近い薄い Layered Boxes を Peel で欠き、Volume Close で繋ぐ | 約 0.5 秒 |
+| `talus-fragment.rockgraph` | 崖錐の角張った岩片 | 箱を大きな平面で強く切り、局所の欠けを多数 | 約 0.1 秒 |
+| `river-pebble.rockgraph` | 河原の丸石 | 平たい楕円体を弱いノイズで歪ませ、Marching Tetrahedra でなめらかに | 約 0.1 秒 |
+
+作れる岩・作れない岩の一覧と足りないノードは [岩の種類の網羅](../../docs/reference/rock-catalog.md)。
 
 共通の注意:
 

@@ -1,0 +1,20 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "baseRock": {"shape": "box", "size": [1.4, 0.9, 1.1]}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 96}},
+      {"id": 3, "kind": "planeCuts", "note": "大きな平面で強く切り、割れた岩片の形にする", "planeCuts": {"count": 9, "depthMin": 0.12, "depthMax": 0.35, "seed": 9}},
+      {"id": 4, "kind": "planeCuts", "note": "局所の小さな欠けを多数", "planeCuts": {"scope": "local", "count": 30, "radius": 0.12, "depthMin": 0.1, "depthMax": 0.35, "seed": 3}},
+      {"id": 5, "kind": "volumeNoise", "volumeNoise": {"type": "facet", "amount": 0.008, "scale": 16}},
+      {"id": 6, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.05}},
+      {"id": 7, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 8, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8:Geometry"}
+    ]
+  }
+}

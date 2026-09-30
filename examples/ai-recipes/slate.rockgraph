@@ -1,0 +1,26 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "layeredBoxes", "note": "水平に近い薄板を多数。板厚 7cm、隙間はセルより狭いので繋がる", "pieces": {"count": 16, "size": [2.6, 0.07, 2.0], "rotation": [4, 0, 6], "gap": 0.006, "offset": 0.12, "thicknessVariation": 0.5, "sizeVariation": 0.2, "seed": 2}},
+      {"id": 2, "kind": "scatterPoints", "pieces": {"count": 10, "planar": true, "seed": 3}},
+      {"id": 3, "kind": "voronoiFracture"},
+      {"id": 4, "kind": "pieceSelect", "note": "外周から欠いて、剥がれた縁を作る", "pieces": {"mode": "peel", "fraction": 0.4, "peelNoise": 0.3, "seed": 2}},
+      {"id": 5, "kind": "pieceFilter", "pieces": {"keep": false}},
+      {"id": 6, "kind": "piecesToMesh"},
+      {"id": 7, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 8, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0}},
+      {"id": 9, "kind": "volumeClose", "note": "板の隙間の空洞を埋める", "volumeClose": {"mode": "occlusion", "threshold": 0.95}},
+      {"id": 10, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.02, "radius": 0.01}},
+      {"id": 11, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 12, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "1", "to": "3:Geometry"}, {"from": "2", "to": "3:Points"}, {"from": "3", "to": "4"},
+      {"from": "3", "to": "5:Pieces"}, {"from": "4", "to": "5:Selection"}, {"from": "5", "to": "6"}, {"from": "6", "to": "7"},
+      {"from": "7", "to": "8"}, {"from": "8", "to": "9"}, {"from": "9", "to": "10"}, {"from": "10", "to": "11"},
+      {"from": "11", "to": "12:Geometry"}
+    ]
+  }
+}

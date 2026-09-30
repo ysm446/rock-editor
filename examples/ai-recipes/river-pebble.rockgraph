@@ -1,0 +1,18 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "平たい楕円体を弱いノイズで歪ませる", "baseRock": {"shape": "ellipsoid", "size": [1.4, 0.55, 1.0], "subdivisions": 16, "noiseStrength": 0.06, "noiseScale": 1.2, "seed": 4}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 96}},
+      {"id": 3, "kind": "volumeNoise", "volumeNoise": {"type": "smooth", "amount": 0.01, "scale": 3, "octaves": 2}},
+      {"id": 4, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.08}},
+      {"id": 5, "kind": "volumeToMesh", "note": "丸石は Marching Tetrahedra の方がなめらか", "volumeToMesh": {"method": "marchingTetrahedra"}},
+      {"id": 6, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6:Geometry"}
+    ]
+  }
+}
