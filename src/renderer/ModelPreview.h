@@ -16,6 +16,12 @@
 
 namespace rock::renderer {
 
+// インスタンス描画の 1 まとまり。段 lod の部品を、行列のバッファの base から count 個描く。
+struct ModelInstanceBatch {
+    int lod = 0;
+    uint32_t base = 0, count = 0;
+};
+
 // シーンへ置いたモデル 1 つぶん。ワールド行列と、ノードに足す回転（Model ノードの設定。無ければ読んだままの姿勢）。
 struct ModelInstanceDraw {
     DirectX::XMFLOAT4X4 world{};
@@ -51,6 +57,16 @@ public:
                        const compositor::MaterialLibrary& materials, const compositor::TextureLibrary& textures,
                        const SceneDrawContext& context, const std::vector<ModelInstanceDraw>& instances);
 
+    // インスタンス描画用に、全ての段の GPU メッシュを用意する（形状が変わったときだけ作り直す）。
+    bool PrepareAllLods(rhi::Device& device, const ModelAsset& asset);
+    // 山グラフの岩のように、同じモデルを大量に置く。行列は instanceBuffer（SRV 番号。float4x4 を転置して並べた
+    // 構造化バッファ）の中にあり、batches ごとに段を選んで 1 回ずつ描く。ノードの回転は使わない（部品のノードは単位）。
+    void RenderInstancedInScene(rhi::Device& device, rhi::PipelineCache& pipelineCache,
+                                ID3D12GraphicsCommandList* commandList, const ModelAsset& model,
+                                const compositor::MaterialLibrary& materials, const compositor::TextureLibrary& textures,
+                                const SceneDrawContext& context, uint32_t instanceBuffer,
+                                const std::vector<ModelInstanceBatch>& batches);
+
     Camera& GetCamera() { return m_camera; }
     bool HasOutput() const { return m_output.IsValid(); }
     D3D12_GPU_DESCRIPTOR_HANDLE OutputHandle() const { return m_output.srv.gpu; }
@@ -67,6 +83,9 @@ private:
     std::shared_ptr<const ModelGeometry> m_geometry;
     int m_lod = -1;
     std::vector<Mesh> m_meshes;
+    // PrepareAllLods の結果（段 → 部品）。
+    std::shared_ptr<const ModelGeometry> m_allLodsGeometry;
+    std::vector<std::vector<Mesh>> m_lodMeshes;
     rhi::GpuTexture m_output, m_depth;
     Camera m_camera;
 };

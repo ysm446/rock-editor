@@ -1,7 +1,7 @@
 # 岩アセットと山グラフ（設計メモ）
 
 作成日時: 2026-09-30 06:08
-更新日時: 2026-09-30 15:50
+更新日時: 2026-09-30 18:35
 
 ## 目的
 
@@ -201,7 +201,7 @@ terrain-graph にある Heightmap・地形マスク・ModelScatter の実装を�
 | A2 LOD | UV を保つ簡略化、LOD の段と切り替えの大きさ（2026-09-30 に実装。付属フォルダへの保存は A1 と一緒に） | 4 段の LOD が同じテクスチャで継ぎ目なく表示でき、ビューポートで段を確認できる |
 | A3 変種と古さの判定 | グラフ全体の Seed のずらし量、変種 N 個を焼く、ハッシュの記録 | Seed 違いの N 個が焼かれ、グラフを変えると「古い」と判定される |
 | M1 山グラフの土台 | `.rockmountain` の保存・読込・Undo、グラフの種類の切り替え、Heightmap（Mesh を出す。2026-09-30 に実装） | ハイトマップを読み、実寸の下地を材質つきで表示できる |
-| M2 撒く | （A1 の保存が前提）Rock、Rock Scatter（地形の Mesh と Shape Mask を受ける）、Instance Merge、Mountain Output、インスタンシング、LOD の選択 | 傾斜の強い所に、2 つ以上の岩グラフの変種が撒かれ、数千個でも操作できる速さで表示できる |
+| M2 撒く | 2026-09-30 に実装（[Rock と Rock Scatter](rock-scatter.md)）。Instance Merge / Mountain Output は作らず、Instances を Mesh Output で描く。（A1 の保存が前提）Rock、Rock Scatter（地形の Mesh と Shape Mask を受ける）、Instance Merge、Mountain Output、インスタンシング、LOD の選択 | 傾斜の強い所に、2 つ以上の岩グラフの変種が撒かれ、数千個でも操作できる速さで表示できる |
 | M3 岩場らしさ | Scatter を分けた大・中・小の階層、避ける入力、層の向き、めり込み、高度と曲率のマスク | 参考写真と並べて、岩場として破綻がないことを複数の視点で確認する |
 | M4 後続 | HLOD の焼き込み、書き出し | 別のビューア（または terrain-graph）で読み直せる |
 

@@ -272,6 +272,8 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
 
 void Application::ResetProject() {
     // どれも GPU 待機を伴う。フレームの外から呼ぶこと。
+    // 岩アセットの一時の材質・テクスチャは、ライブラリを空にする前に捨てる。
+    ReleaseRockAssets();
     m_materialLibrary.Clear(m_device);
     m_skyLibrary.Clear(m_device);
     m_skyLibrary.EnsureDefault();
@@ -407,6 +409,8 @@ void Application::ProcessPendingFileWork() {
                              m_renderer, m_graph, &m_models};
         // .rockscene はルートの共有アセットを参照する。旧 .reproj は従来の埋め込み形式のまま読む。
         const bool isScene = io::IsSceneFile(path);
+        // 岩アセットの一時の材質・テクスチャは、読み込みがライブラリを入れ替える前に捨てる。
+        ReleaseRockAssets();
         if (io::LoadProject(path, m_device, m_pipelineCache, refs, isScene ? &m_workspace : nullptr)) {
             m_documentKind = io::IsMountainFile(path) ? DocumentKind::Mountain : DocumentKind::Rock;
             m_newDocumentSavePath.clear();

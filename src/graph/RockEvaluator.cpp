@@ -23,6 +23,11 @@ void Append(RockEvaluation& target, const RockEvaluation& source) {
                          [&](const auto& other) { return other.source == item.source && other.meshHistory == item.meshHistory && other.materials == item.materials && other.materialSource == item.materialSource && other.bakeSource == item.bakeSource; }))
             target.rocks.push_back(item);
     target.hasModels |= source.hasModels;
+    // 撒いた岩は、同じノードの同じ岩グラフが 2 度届いても 1 回だけ描く。
+    for (const auto& set : source.rockInstances)
+        if (std::none_of(target.rockInstances.begin(), target.rockInstances.end(),
+                         [&](const auto& other) { return other.source == set.source && other.scene == set.scene; }))
+            target.rockInstances.push_back(set);
 }
 // 対応する枝を完全な値で比較し、改版番号の巻き戻りにも対応する。
 std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const std::map<GraphId,std::string>& heightKeys, size_t depth = 0, bool usesHeight = false) {
@@ -756,6 +761,84 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             rock.source = id;
             rock.mesh = std::move(mesh);
             result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::Rock) {
+            const auto* settings = std::get_if<RockNodeSettings>(&node->settings);
+            if (!settings) return finish(Failure(id, "Rock", "設定がありません"));
+            if (settings->scene.empty()) return finish(Failure(id, "Rock", "岩グラフ（.rockscene）を選んでください"));
+            result.rockReferences.push_back({id, settings->scene, settings->scale, settings->weight});
+            // 選んで見るときは、原点に 1 つ置く（Rock Scatter はこの配置は使わず、参照だけを読む）。
+            RockInstanceSet single;
+            single.source = id;
+            single.scene = settings->scene;
+            single.scale = settings->scale;
+            single.instances.push_back({});
+            result.rockInstances.push_back(std::move(single));
+        } else if (node->kind == NodeKind::RockScatter) {
+            const auto* settings = std::get_if<geometry::RockScatterSettings>(&node->settings);
+            if (!settings) return finish(Failure(id, "Rock Scatter", "設定がありません"));
+            const auto* terrain = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!terrain) return finish(Failure(id, "Rock Scatter", "Terrainに地形（Heightmap など）を接続してください"));
+            result = evaluate(terrain->id, depth + 1);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.empty())
+                return finish(Failure(id, "Rock Scatter", "Terrainには生成メッシュ（地形）を接続してください"));
+            // 地形。複数のメッシュは 1 つにまとめて撒く。
+            geometry::Mesh surface;
+            for (const auto& rock : result.rocks) {
+                if (rock.volume) return finish(Failure(id, "Rock Scatter", "TerrainにはMeshを接続してください（Volume to Meshを挟む）"));
+                const auto offset = static_cast<uint32_t>(surface.positions.size());
+                surface.positions.insert(surface.positions.end(), rock.mesh.positions.begin(), rock.mesh.positions.end());
+                for (auto face : rock.mesh.triangles) {
+                    for (auto& index : face) index += offset;
+                    surface.triangles.push_back(face);
+                }
+                surface.cornerUvs.insert(surface.cornerUvs.end(), rock.mesh.cornerUvs.begin(), rock.mesh.cornerUvs.end());
+                surface.uvWidth = rock.mesh.uvWidth;
+                surface.uvHeight = rock.mesh.uvHeight;
+            }
+            if (surface.cornerUvs.size() != surface.triangles.size()) surface.cornerUvs.clear();
+            // マスク（地形の UV の画像）。Shape Mask などの画像のマスクだけを受ける。
+            std::shared_ptr<const geometry::MaskImage> mask;
+            bool invert = false;
+            if (const auto* maskNode = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr) {
+                if (!IsImageMaskNodeKind(maskNode->kind))
+                    return finish(Failure(id, "Rock Scatter", "MaskにはShape Maskなど、地形のUVの画像を作るマスクを接続してください"));
+                const auto masked = evaluate(maskNode->id, depth + 1);
+                if (!masked.error.empty()) return finish(masked);
+                if (masked.rocks.size() != 1 || !masked.rocks[0].previewMask ||
+                    masked.rocks[0].mesh.triangles.size() != surface.triangles.size())
+                    return finish(Failure(id, "Rock Scatter", "Maskは、Terrainと同じ地形から作ったマスクを接続してください"));
+                mask = masked.rocks[0].previewMask;
+                invert = ImageMaskInvert(*maskNode);
+            }
+            // つないだ Rock。
+            std::vector<RockReference> references;
+            for (size_t pin = FixedInputCount(node->kind); pin < node->inputs.size(); ++pin) {
+                const auto* upstream = graph.FindUpstreamNodeForPin(node->inputs[pin].id);
+                if (!upstream) continue;
+                const auto rocks = evaluate(upstream->id, depth + 1);
+                if (!rocks.error.empty()) return finish(rocks);
+                references.insert(references.end(), rocks.rockReferences.begin(), rocks.rockReferences.end());
+            }
+            if (references.empty()) return finish(Failure(id, "Rock Scatter", "Rockに岩（Rockノード）を接続してください"));
+            std::vector<float> weights;
+            for (const auto& reference : references) weights.push_back(reference.weight);
+            report(id, 0, -1);
+            std::string error;
+            const auto instances = geometry::ScatterRocks(surface, mask.get(), invert, weights, *settings, error, stop);
+            if (!error.empty()) return finish(Failure(id, "Rock Scatter", error));
+            // 地形は、この Rock Scatter を選んで見ているときだけ通す（Mesh Output で地形と一緒に出すと二重になるため）。
+            if (id != preview) result.rocks.clear();
+            // 岩グラフごとにまとめる。
+            for (size_t i = 0; i < references.size(); ++i) {
+                RockInstanceSet set;
+                set.source = id;
+                set.scene = references[i].scene;
+                set.scale = references[i].scale;
+                for (const auto& instance : instances)
+                    if (instance.rock == i) set.instances.push_back(instance);
+                if (!set.instances.empty()) result.rockInstances.push_back(std::move(set));
+            }
         } else if (node->kind == NodeKind::RockAsset) {
             const auto* settings = std::get_if<RockAssetSettings>(&node->settings);
             const auto* upstream =

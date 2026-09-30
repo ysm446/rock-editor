@@ -214,6 +214,8 @@ struct SceneDrawContext {
     DirectX::XMFLOAT3 lightDirection{};
     float lightIlluminance = 0.0f;
     DirectX::XMFLOAT3 lightColor{};
+    // 表示モードが「LOD（色分け）」か。インスタンス描画の岩を段の色で塗る。
+    bool lodView = false;
 };
 
 class PreviewRenderer {

@@ -405,7 +405,8 @@ void Application::SyncMeshGraph() {
     if (m_uvLastSelectedNode != m_selectedGraphNode) {
         if (const auto* previous = m_graph.FindNode(m_uvLastSelectedNode);
             previous && (previous->kind == graph::NodeKind::UvUnwrap || previous->kind == graph::NodeKind::PieceSelect ||
-                         previous->kind == graph::NodeKind::RockAsset || graph::IsImageMaskNodeKind(previous->kind)) &&
+                         previous->kind == graph::NodeKind::RockAsset || previous->kind == graph::NodeKind::Rock ||
+                         previous->kind == graph::NodeKind::RockScatter || graph::IsImageMaskNodeKind(previous->kind)) &&
             m_previewGraphNode == previous->id)
             SetPreviewGraphNode(m_uvPreviousPreviewNode, m_uvPreviousPreviewPin);
         m_pieceSelectionEditing = false;
@@ -415,7 +416,8 @@ void Application::SyncMeshGraph() {
         // Rock Asset は選ぶと LOD を出す。選択を外すと元のプレビューへ戻す。
         if (const auto* node = m_graph.FindNode(m_selectedGraphNode);
             node && (node->kind == graph::NodeKind::UvUnwrap || node->kind == graph::NodeKind::PieceSelect ||
-                     node->kind == graph::NodeKind::RockAsset || graph::IsImageMaskNodeKind(node->kind))) {
+                     node->kind == graph::NodeKind::RockAsset || node->kind == graph::NodeKind::Rock ||
+                     node->kind == graph::NodeKind::RockScatter || graph::IsImageMaskNodeKind(node->kind))) {
             m_uvPreviousPreviewNode = m_previewGraphNode;
             m_uvPreviousPreviewPin = m_previewGraphPin;
             SetPreviewGraphNode(node->id);
@@ -434,7 +436,7 @@ void Application::SyncMeshGraph() {
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
                n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate || n.kind == graph::NodeKind::Remesh ||
                n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace || n.kind == graph::NodeKind::RockAsset ||
-               n.kind == graph::NodeKind::Heightmap ||
+               n.kind == graph::NodeKind::Heightmap || n.kind == graph::NodeKind::RockScatter ||
                graph::IsImageMaskNodeKind(n.kind);
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
@@ -519,6 +521,8 @@ void Application::SyncMeshGraph() {
     }
     m_piecePreview = evaluated.pieces;
     m_pointPreview = evaluated.points;
+    // 山グラフの撒いた岩。使う岩アセットを読む（GPU への転送を伴うので、ここ＝フレームの外で）。
+    if (!lodOnly) SyncRockInstances(evaluated.rockInstances);
     // Rock Asset を出しているときは LOD の段を選んで出す。LOD だけの切り替えに備えて結果を持っておく。
     const auto* assetNode = m_graph.FindNode(previewMeshNode);
     const bool assetView = assetNode && assetNode->kind == graph::NodeKind::RockAsset && evaluated.error.empty() &&
@@ -1338,6 +1342,10 @@ void Application::DrawGraphEditor() {
             ImGui::TextDisabled("地形");
             addNodeMenuItem(graph::NodeKind::Heightmap, "Heightmap — ハイトマップ（画像 / ノイズ）から地形を作る");
             ImGui::Separator();
+            ImGui::TextDisabled("岩の配置");
+            addNodeMenuItem(graph::NodeKind::Rock, "Rock — 岩グラフ（焼いた岩アセット）を 1 つ選ぶ");
+            addNodeMenuItem(graph::NodeKind::RockScatter, "Rock Scatter — 地形に岩を間隔を空けて撒く（マスクで場所を決める）");
+            ImGui::Separator();
         } else {
         ImGui::TextDisabled("メッシュ（ポリゴン）");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Shape — 基本形状と弱いノイズ");
@@ -2083,6 +2091,103 @@ void Application::DrawGraphPanel() {
             edited.iterations = std::clamp(edited.iterations, 1, geometry::kMaxRemeshIterations);
             edited.featureAngle = std::clamp(edited.featureAngle, 0.0f, 180.0f);
             *remesh = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* rockNode = std::get_if<graph::RockNodeSettings>(&selected->settings)) {
+        auto edited = *rockNode;
+        bool changed = false;
+        if (ImGui::Button("岩グラフを選ぶ…")) {
+            const std::filesystem::path path = ShowOpenFileDialog(L"岩グラフを選ぶ", {{L"岩グラフ", L"*.rockscene"}});
+            if (!path.empty()) {
+                edited.scene = ToUtf8Portable(path);
+                changed = true;
+            }
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(edited.scene.empty());
+        if (ImGui::Button("読み直す")) {
+            // 岩グラフで焼き直した結果を読み直す（目録の更新時刻でも読み直すが、明示的にも）。
+            m_rockAssets.erase(edited.scene);
+            m_graph.MarkDirty();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("岩グラフを開く")) m_pendingProjectOpen = FromUtf8(edited.scene);
+        ImGui::EndDisabled();
+        drawStatusLine(edited.scene.empty() ? "岩グラフ: 未選択" : "岩グラフ: " + ToUtf8Display(FromUtf8(edited.scene)));
+        {
+            std::string state = "岩アセット: 未読込";
+            if (const auto found = m_rockAssets.find(edited.scene); !edited.scene.empty() && found != m_rockAssets.end()) {
+                const auto& asset = found->second;
+                if (!asset.loaded) {
+                    state = "岩アセット: " + (asset.error.empty() ? std::string("読めません") : asset.error) +
+                            "（岩グラフを開いて「岩アセットを焼く」を押してください）";
+                } else {
+                    state = "岩アセット: " + std::to_string(asset.triangles.size()) + " 段・LOD0 " +
+                            std::to_string(asset.triangles.empty() ? 0 : asset.triangles[0]) + " 三角形・" +
+                            (asset.textured ? "テクスチャあり" : "テクスチャなし");
+                    if (!asset.error.empty()) state += "（" + asset.error + "）";
+                }
+            }
+            drawStatusLine(state);
+        }
+        if (ui::BeginPropertyTable("rockRows")) {
+            changed |= ui::PropertyFloat("倍率", &edited.scale, 0.01f, 10.0f, 1.0f, "岩アセットに掛ける倍率です。", "%.2f");
+            changed |= ui::PropertyFloat("重み", &edited.weight, 0.0f, 10.0f, 1.0f,
+                                         "Rock Scatter に複数の岩をつないだとき、この岩を選ぶ割合です。", "%.2f");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("山グラフで撒く岩です。岩グラフ（.rockscene）を選び、その付属フォルダ（<岩グラフ>.bake）に焼いた岩アセットを読みます。"
+                     "Rock Scatter の Rock につなぎます。選んでいる間は、原点に 1 つ置いて見せます。");
+        if (changed) {
+            edited.scale = std::clamp(edited.scale, 0.001f, 1000.0f);
+            edited.weight = std::clamp(edited.weight, 0.0f, 1000.0f);
+            *rockNode = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* scatter = std::get_if<geometry::RockScatterSettings>(&selected->settings)) {
+        auto edited = *scatter;
+        bool changed = false;
+        const geometry::RockScatterSettings defaults;
+        if (ui::BeginPropertyTable("rockScatterRows")) {
+            changed |= ui::PropertyFloat("間隔 (m)", &edited.spacing, 0.5f, 50.0f, defaults.spacing,
+                                         "岩どうしの最小の間隔（中心どうしの距離）です。小さいほど密に置きます。Ctrl + クリックで 10000 まで入力できます。",
+                                         "%.2f");
+            changed |= ui::PropertyInt("上限の数", &edited.maxCount, 1, 20000, defaults.maxCount,
+                                       "置く数の上限です。Ctrl + クリックで 50000 まで入力できます。");
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 9999, defaults.seed);
+            changed |= ui::PropertyFloat("最小の倍率", &edited.scaleMin, 0.05f, 5.0f, defaults.scaleMin, nullptr, "%.2f");
+            changed |= ui::PropertyFloat("最大の倍率", &edited.scaleMax, 0.05f, 5.0f, defaults.scaleMax, nullptr, "%.2f");
+            changed |= ui::PropertyFloat("法線に合わせる", &edited.alignToNormal, 0.0f, 1.0f, defaults.alignToNormal,
+                                         "0 で真上を向け、1 で地形の面に垂直に立てます。");
+            changed |= ui::PropertyFloat("沈める量", &edited.embed, 0.0f, 0.9f, defaults.embed,
+                                         "岩の高さに対する比で、地形へ沈めます。接地の継ぎ目を隠します。");
+            ui::EndPropertyTable();
+        }
+        {
+            size_t placed = 0;
+            for (const auto& set : m_rockInstanceSets)
+                if (set.source == selected->id) placed += set.instances.size();
+            drawStatusLine("置いた岩: " + std::to_string(placed) + " 個（上限 " + std::to_string(edited.maxCount) + "）");
+            std::string lods = "描画: " + std::to_string(m_rockInstanceStats.drawn) + " 個（画面で小さく省いた " +
+                               std::to_string(m_rockInstanceStats.culled) + " 個）";
+            for (size_t lod = 0; lod < m_rockInstanceStats.perLod.size(); ++lod)
+                lods += " · LOD" + std::to_string(lod) + " " + std::to_string(m_rockInstanceStats.perLod[lod]);
+            drawStatusLine(lods);
+        }
+        ui::HintText("Terrain（地形）の表面に、Rock につないだ岩を間隔を空けて撒きます。Mask（Shape Mask の上向き度など）をつなぐと、"
+                     "その値を置く確率にします。複数の Rock をつなぐと、Rock の重みで選びます。");
+        ui::HintText("岩は段（LOD）を持ち、カメラから見た大きさで段を選んで描きます（表示モードの「LOD（色分け）」では段の色になりません。"
+                     "描画の数は上の行で確かめられます）。大・中・小の岩は Rock Scatter を分けて撒きます。");
+        if (changed) {
+            edited.spacing = std::clamp(edited.spacing, geometry::kMinScatterSpacing, 10000.0f);
+            edited.maxCount = std::clamp(edited.maxCount, 1, geometry::kMaxScatterCount);
+            edited.scaleMin = std::clamp(edited.scaleMin, 0.01f, 100.0f);
+            edited.scaleMax = std::clamp(edited.scaleMax, edited.scaleMin, 100.0f);
+            edited.alignToNormal = std::clamp(edited.alignToNormal, 0.0f, 1.0f);
+            edited.embed = std::clamp(edited.embed, 0.0f, 0.9f);
+            *scatter = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

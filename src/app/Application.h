@@ -35,6 +35,8 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <array>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -369,6 +371,44 @@ private:
     bool RockMeshUsesNode(graph::GraphId nodeId) const;
     // レンダラの drawSceneExtras から呼ぶ。ビューポートに出すモデルを本描画・シャドウパスへ描く。
     void DrawSceneModels(ID3D12GraphicsCommandList* commandList, const renderer::SceneDrawContext& context);
+
+    // --- 山グラフの岩（ApplicationRocks.cpp） -------------------------------------
+    // 読んだ岩アセット（岩グラフの付属フォルダ）。岩グラフのパスごと。目録が更新されたら読み直す。
+    struct LoadedRockAsset {
+        std::filesystem::file_time_type time{};
+        bool exists = false, loaded = false, textured = false;
+        renderer::ModelAsset model;                   // 形（全段）と材質（一時）
+        std::unique_ptr<renderer::ModelPreview> gpu;  // 全段の GPU メッシュとインスタンス描画
+        std::vector<float> screenSizes;               // 段ごとの切り替えの大きさ
+        std::vector<size_t> triangles;                // 段ごとの三角形数
+        std::vector<compositor::TextureId> textures;  // 一時のテクスチャ（読み直すときに捨てる）
+        float radius = 0.0f, height = 0.0f;           // LOD0 を包む球の半径と高さ（倍率 1）
+        std::string error;
+    };
+    std::map<std::string, LoadedRockAsset> m_rockAssets;
+    // 評価で得た、撒いた岩（岩グラフごと）。
+    std::vector<graph::RockInstanceSet> m_rockInstanceSets;
+    // このフレームの描画。岩グラフごとに、段ごとのまとまり（行列はバッファの中）。
+    struct RockDraw {
+        std::string scene;
+        std::vector<renderer::ModelInstanceBatch> batches;
+    };
+    std::vector<RockDraw> m_rockDraws;
+    std::array<rhi::GpuBuffer, rhi::kFrameCount> m_rockInstanceBuffers;
+    std::array<size_t, rhi::kFrameCount> m_rockInstanceCapacity{};
+    uint32_t m_rockInstanceBufferSrv = 0;
+    uint64_t m_rockInstanceFrame = UINT64_MAX;
+    // 撒いた岩を包む球の半径（原点から）。レンダラの「追加で描くもの」の範囲に使う。
+    float m_rockInstancesRadius = 0.0f;
+    struct RockInstanceStats {
+        size_t drawn = 0, culled = 0;
+        std::vector<size_t> perLod;
+    } m_rockInstanceStats;
+    void ReleaseRockAssets();
+    LoadedRockAsset* RockAssetFor(const std::string& scene);
+    void SyncRockInstances(const std::vector<graph::RockInstanceSet>& sets);
+    void BuildRockInstanceBatches();
+    void DrawRockInstances(ID3D12GraphicsCommandList* commandList, const renderer::SceneDrawContext& context);
     // ビューポートに出すモデルを包む球の半径（原点中心）。無ければ 0。
     float ModelInstancesRadius() const;
     // カーソル直下のモデルの Model ノード（と距離）。無ければ 0。modelNode を渡すと、当たった部品の FBX のノードの番号も返す。

@@ -17,6 +17,8 @@ public:
 
     // asPatches が真なら 3 制御点のパッチとして描く（テセレーション用）。
     void Draw(ID3D12GraphicsCommandList* commandList, bool asPatches = false) const;
+    // 同じメッシュを instances 個描く（シェーダは SV_InstanceID で行列を選ぶ）。
+    void DrawInstanced(ID3D12GraphicsCommandList* commandList, uint32_t instances) const;
     // 外周の辺を LINELIST で描く（ホバー / 選択のシルエット枠）。頂点バッファは共有。
     void DrawOutline(ID3D12GraphicsCommandList* commandList) const;
 

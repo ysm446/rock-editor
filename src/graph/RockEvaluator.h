@@ -42,6 +42,19 @@ struct GeneratedRock {
     // Material Bake の High（ハイポリ）の内容のハッシュ。0 は未接続。変わったら焼き直しが要る。
     uint64_t bakeDetail = 0;
 };
+// 山グラフの Rock ノードが出す、岩グラフ（焼いた岩アセット）への参照。
+struct RockReference {
+    GraphId node = 0;
+    std::string scene;  // 岩グラフのパス（UTF-8、絶対パス）
+    float scale = 1.0f, weight = 1.0f;
+};
+// 撒いた岩。岩グラフごとにまとめる。描画する側が岩アセットを読み、段を選んで描く。
+struct RockInstanceSet {
+    GraphId source = 0;  // 撒いたノード（Rock Scatter。Rock を選んで見ているときは Rock）
+    std::string scene;
+    float scale = 1.0f;  // Rock ノードの倍率
+    std::vector<geometry::RockInstance> instances;
+};
 struct RockEvaluation {
     std::shared_ptr<const geometry::StructurePlanes> planes;
     std::shared_ptr<const geometry::PointSet> points;
@@ -49,6 +62,9 @@ struct RockEvaluation {
     std::shared_ptr<const geometry::PieceSelection> selection;
     bool hasModels = false;
     std::vector<GeneratedRock> rocks;
+    // 山グラフ。Rock ノードの参照と、撒いた岩。
+    std::vector<RockReference> rockReferences;
+    std::vector<RockInstanceSet> rockInstances;
     std::string error;
 };
 // ボリューム系の枝を設定と接続の内容で再利用する。アプリ単位で保持する。

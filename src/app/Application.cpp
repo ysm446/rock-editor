@@ -124,6 +124,7 @@ bool Application::Initialize(const StartupOptions& options) {
     // 置いたモデルはメッシュシーンとは別に、レンダラの本描画とシャドウパスの中で描く。
     m_renderer.drawSceneExtras = [this](ID3D12GraphicsCommandList* list, const renderer::SceneDrawContext& context) {
         DrawSceneModels(list, context);
+        DrawRockInstances(list, context);
     };
     if (!m_renderer.Initialize(m_device, m_pipelineCache)) {
         return false;
@@ -235,6 +236,8 @@ void Application::Shutdown() {
     m_skySphere.Destroy(m_device);
     for (auto& [id, preview] : m_modelPreviews) preview->Destroy(m_device);
     m_modelPreviews.clear();
+    ReleaseRockAssets();
+    for (auto& buffer : m_rockInstanceBuffers) m_device.DeferRelease(buffer);
     m_materialLibrary.Destroy(m_device);
     m_skyLibrary.Destroy(m_device);
     m_textureLibrary.Destroy(m_device);
@@ -467,7 +470,8 @@ int Application::Run() {
         m_renderer.ShowUvChecker() = m_settings.Display().showUvChecker || m_uvCheckerPreview;
         m_renderer.ShowWireframeOverlay() = m_settings.Display().showWireframeOverlay;
 
-        m_renderer.SetExtraSceneRadius(ModelInstancesRadius());
+        // 置いたモデルと、山グラフで撒いた岩の範囲。0 より大きいときだけ、レンダラがそれらを描く。
+        m_renderer.SetExtraSceneRadius(std::max(ModelInstancesRadius(), m_rockInstancesRadius));
         m_renderer.Render(m_device, m_pipelineCache, commandList, m_textureLibrary,
                           m_materialLibrary);
 

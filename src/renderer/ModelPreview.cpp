@@ -36,7 +36,8 @@ struct ModelConstants {
     uint32_t sceneMode;
     // マップごとの UV（MaterialAsset::mapUvSets）。立っているビットのマップは 2 つ目の UV で読む。
     uint32_t mapUvSets;
-    uint32_t pad;
+    // インスタンスの行列のバッファ（SRV 番号）。0xFFFFFFFF なら world を使う。
+    uint32_t instanceBuffer = 0xFFFFFFFFu;
     // ワールド行列（転置して入れる。viewProjection と同じ規約）。
     DirectX::XMFLOAT4X4 world;
     // ここから下はシーンの影。MeshPbr と同じく転置せずに入れる。
@@ -50,14 +51,77 @@ struct ModelConstants {
     float shadowNear;
     uint32_t shadowCascadeCount;
     compositor::LayerMaterialGpu layerMaterial;
+    // インスタンスの行列のバッファの中の、このまとまりの先頭。
+    uint32_t instanceBase = 0;
+    uint32_t instancePad[3] = {};
 };
 static_assert(sizeof(ModelConstants) % 16 == 0);
+
+// シーンで描くときの定数（材質・照明・影）。RenderInScene とインスタンス描画で共用する。
+ModelConstants SceneConstants(const compositor::MaterialAsset& asset, const compositor::TextureLibrary& textures,
+                              const SceneDrawContext& context, DirectX::FXMMATRIX world) {
+    const bool hasEnvironment = context.environment != nullptr && context.environment->IsReady();
+    ModelConstants constants = {};
+    DirectX::XMStoreFloat4x4(&constants.viewProjection,
+                             DirectX::XMMatrixTranspose(DirectX::XMLoadFloat4x4(&context.viewProjection)));
+    DirectX::XMStoreFloat4x4(&constants.world, DirectX::XMMatrixTranspose(world));
+    constants.sceneMode = 1;
+    constants.baseColorIndex = textures.SrvIndex(asset.baseColor, true);
+    constants.normalIndex = textures.SrvIndex(asset.normal, false);
+    constants.roughnessIndex = textures.SrvIndex(asset.roughness.texture, false);
+    constants.metallicIndex = textures.SrvIndex(asset.metallic.texture, false);
+    constants.aoIndex = textures.SrvIndex(asset.ambientOcclusion.texture, false);
+    constants.opacityIndex = textures.SrvIndex(asset.opacity.texture, false);
+    constants.mapChannels = compositor::PackMaterialChannels(asset);
+    constants.mapUvSets = asset.mapUvSets;
+    constants.flipNormalGreen = asset.flipNormalGreen ? 1u : 0u;
+    constants.irradianceIndex = hasEnvironment ? context.environment->IrradianceSrvIndex()
+                                               : compositor::kInvalidTextureIndex;
+    constants.prefilteredIndex = hasEnvironment ? context.environment->PrefilteredSrvIndex() : 0u;
+    constants.brdfLutIndex = hasEnvironment ? context.environment->BrdfLutSrvIndex() : 0u;
+    constants.prefilteredMipCount = hasEnvironment ? context.environment->PrefilteredMipCount() : 1u;
+    constants.baseColorTint[0] = asset.baseColorTint.x;
+    constants.baseColorTint[1] = asset.baseColorTint.y;
+    constants.baseColorTint[2] = asset.baseColorTint.z;
+    constants.roughnessValue = asset.roughnessValue;
+    constants.metallicValue = asset.metallicValue;
+    constants.aoValue = asset.ambientOcclusionValue;
+    constants.opacityValue = asset.opacityValue;
+    constants.maskThreshold = asset.maskThreshold;
+    constants.colorAdjust[0] = asset.hueShiftDegrees * (kPi / 180.0f);
+    constants.colorAdjust[1] = asset.saturation;
+    constants.brightness = asset.brightness;
+    constants.layerMaterial = asset.layerGpu;
+    constants.blendMode = static_cast<uint32_t>(asset.blendMode);
+    std::memcpy(constants.cameraPosition, &context.cameraPosition, sizeof(context.cameraPosition));
+    constants.exposure = 1.0f;
+    std::memcpy(constants.lightDirection, &context.lightDirection, sizeof(context.lightDirection));
+    constants.lightIlluminance = context.lightIlluminance;
+    std::memcpy(constants.lightColor, &context.lightColor, sizeof(context.lightColor));
+    constants.iblIntensity = hasEnvironment ? context.iblIntensity : 0.0f;
+    constants.view = context.view;
+    for (uint32_t i = 0; i < kShadowCascadeCount; ++i) {
+        constants.lightViewProjections[i] = context.lightViewProjections[i];
+        constants.shadowIndices[i] = context.shadowPass ? compositor::kInvalidTextureIndex : context.shadowIndices[i];
+        constants.shadowSplits[i] = context.shadowSplits[i];
+        constants.shadowBiases[i] = context.shadowBiases[i];
+    }
+    constants.shadowTexelSize = context.shadowTexelSize;
+    constants.shadowBlend = context.shadowBlend;
+    constants.shadowNear = context.shadowNear;
+    constants.shadowCascadeCount = context.shadowCascadeCount;
+    return constants;
+}
 
 }  // namespace
 
 void ModelPreview::Destroy(rhi::Device& device) {
     for (auto& mesh : m_meshes) mesh.Release(device);
     m_meshes.clear();
+    for (auto& level : m_lodMeshes)
+        for (auto& mesh : level) mesh.Release(device);
+    m_lodMeshes.clear();
+    m_allLodsGeometry.reset();
     m_geometry.reset();
     m_lod = -1;
     device.DeferRelease(m_output);
@@ -110,6 +174,26 @@ bool ModelPreview::Prepare(rhi::Device& device, const ModelAsset& asset, int lod
     }
     m_lod = lod;
     if (changed) ResetView();
+    return true;
+}
+
+bool ModelPreview::PrepareAllLods(rhi::Device& device, const ModelAsset& asset) {
+    if (!asset.geometry) return false;
+    if (m_allLodsGeometry == asset.geometry) return true;
+    for (auto& level : m_lodMeshes)
+        for (auto& mesh : level) mesh.Release(device);
+    m_lodMeshes.clear();
+    m_allLodsGeometry = asset.geometry;
+    m_lodMeshes.resize(asset.geometry->lods.size());
+    for (size_t lod = 0; lod < m_lodMeshes.size(); ++lod) {
+        const auto& parts = asset.geometry->lods[lod].parts;
+        m_lodMeshes[lod].resize(parts.size());
+        for (size_t i = 0; i < parts.size(); ++i)
+            if (!parts[i].mesh.indices.empty() && !m_lodMeshes[lod][i].Create(device, parts[i].mesh, L"ModelInstanceMesh")) {
+                m_allLodsGeometry.reset();
+                return false;
+            }
+    }
     return true;
 }
 
@@ -275,7 +359,6 @@ void ModelPreview::RenderInScene(rhi::Device& device, rhi::PipelineCache& pipeli
         const auto* material = slot < model.materials.size() ? materials.Find(model.materials[slot]) : nullptr;
         return material ? *material : fallback;
     };
-    const bool hasEnvironment = context.environment != nullptr && context.environment->IsReady();
     // 置いたモデルごとの、ノードのモデル座標での行列（回転を足したもの）。
     static const std::vector<ModelNodeRotation> kNoRotations;
     std::vector<std::vector<DirectX::XMFLOAT4X4>> nodeWorlds(instances.size());
@@ -286,55 +369,7 @@ void ModelPreview::RenderInScene(rhi::Device& device, rhi::PipelineCache& pipeli
         const uint32_t node = m_geometry->lods[m_lod].parts[part].node;
         DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&instances[instance].world);
         if (node < nodeWorlds[instance].size()) world = DirectX::XMLoadFloat4x4(&nodeWorlds[instance][node]) * world;
-        ModelConstants constants = {};
-        DirectX::XMStoreFloat4x4(&constants.viewProjection,
-                                 DirectX::XMMatrixTranspose(DirectX::XMLoadFloat4x4(&context.viewProjection)));
-        DirectX::XMStoreFloat4x4(&constants.world, DirectX::XMMatrixTranspose(world));
-        constants.sceneMode = 1;
-        constants.baseColorIndex = textures.SrvIndex(asset.baseColor, true);
-        constants.normalIndex = textures.SrvIndex(asset.normal, false);
-        constants.roughnessIndex = textures.SrvIndex(asset.roughness.texture, false);
-        constants.metallicIndex = textures.SrvIndex(asset.metallic.texture, false);
-        constants.aoIndex = textures.SrvIndex(asset.ambientOcclusion.texture, false);
-        constants.opacityIndex = textures.SrvIndex(asset.opacity.texture, false);
-        constants.mapChannels = compositor::PackMaterialChannels(asset);
-        constants.mapUvSets = asset.mapUvSets;
-        constants.flipNormalGreen = asset.flipNormalGreen ? 1u : 0u;
-        constants.irradianceIndex = hasEnvironment ? context.environment->IrradianceSrvIndex()
-                                                   : compositor::kInvalidTextureIndex;
-        constants.prefilteredIndex = hasEnvironment ? context.environment->PrefilteredSrvIndex() : 0u;
-        constants.brdfLutIndex = hasEnvironment ? context.environment->BrdfLutSrvIndex() : 0u;
-        constants.prefilteredMipCount = hasEnvironment ? context.environment->PrefilteredMipCount() : 1u;
-        constants.baseColorTint[0] = asset.baseColorTint.x;
-        constants.baseColorTint[1] = asset.baseColorTint.y;
-        constants.baseColorTint[2] = asset.baseColorTint.z;
-        constants.roughnessValue = asset.roughnessValue;
-        constants.metallicValue = asset.metallicValue;
-        constants.aoValue = asset.ambientOcclusionValue;
-        constants.opacityValue = asset.opacityValue;
-        constants.maskThreshold = asset.maskThreshold;
-        constants.colorAdjust[0] = asset.hueShiftDegrees * (kPi / 180.0f);
-        constants.colorAdjust[1] = asset.saturation;
-        constants.brightness = asset.brightness;
-        constants.layerMaterial = asset.layerGpu;
-        constants.blendMode = static_cast<uint32_t>(asset.blendMode);
-        std::memcpy(constants.cameraPosition, &context.cameraPosition, sizeof(context.cameraPosition));
-        constants.exposure = 1.0f;
-        std::memcpy(constants.lightDirection, &context.lightDirection, sizeof(context.lightDirection));
-        constants.lightIlluminance = context.lightIlluminance;
-        std::memcpy(constants.lightColor, &context.lightColor, sizeof(context.lightColor));
-        constants.iblIntensity = hasEnvironment ? context.iblIntensity : 0.0f;
-        constants.view = context.view;
-        for (uint32_t i = 0; i < kShadowCascadeCount; ++i) {
-            constants.lightViewProjections[i] = context.lightViewProjections[i];
-            constants.shadowIndices[i] = context.shadowPass ? compositor::kInvalidTextureIndex : context.shadowIndices[i];
-            constants.shadowSplits[i] = context.shadowSplits[i];
-            constants.shadowBiases[i] = context.shadowBiases[i];
-        }
-        constants.shadowTexelSize = context.shadowTexelSize;
-        constants.shadowBlend = context.shadowBlend;
-        constants.shadowNear = context.shadowNear;
-        constants.shadowCascadeCount = context.shadowCascadeCount;
+        ModelConstants constants = SceneConstants(asset, textures, context, world);
         const auto cb = device.Upload().Allocate(sizeof(constants), 256);
         if (!cb.IsValid()) return;
         std::memcpy(cb.cpu, &constants, sizeof(constants));
@@ -352,6 +387,54 @@ void ModelPreview::RenderInScene(rhi::Device& device, rhi::PipelineCache& pipeli
             for (size_t i = 0; i < m_meshes.size(); ++i)
                 if (m_meshes[i].IsValid() && materialOf(i).blendMode == compositor::BlendMode::Translucent)
                     draw(i, instance);
+    }
+}
+
+void ModelPreview::RenderInstancedInScene(rhi::Device& device, rhi::PipelineCache& pipelineCache,
+                                          ID3D12GraphicsCommandList* commandList, const ModelAsset& model,
+                                          const compositor::MaterialLibrary& materials,
+                                          const compositor::TextureLibrary& textures, const SceneDrawContext& context,
+                                          uint32_t instanceBuffer, const std::vector<ModelInstanceBatch>& batches) {
+    if (!m_allLodsGeometry || m_allLodsGeometry != model.geometry || batches.empty()) return;
+    rhi::GraphicsPipelineDesc desc;
+    desc.shaderPath = L"ModelPreview.hlsl";
+    desc.vertexEntry = L"VsMain";
+    desc.layout = rhi::VertexLayout::MeshStandard;
+    desc.rtvFormat = context.rtvFormat;
+    desc.dsvFormat = context.dsvFormat;
+    if (context.shadowPass) desc.cullMode = D3D12_CULL_MODE_NONE;
+    else desc.pixelEntry = L"PsMain";
+    // 岩は不透明として描く（切り抜き・半透明の材質は想定しない）。
+    ID3D12PipelineState* pipeline = pipelineCache.GetGraphics(desc);
+    if (pipeline == nullptr) return;
+    commandList->SetGraphicsRootSignature(pipelineCache.GlobalRootSignature());
+    commandList->SetPipelineState(pipeline);
+    const compositor::MaterialAsset fallback;
+    for (const ModelInstanceBatch& batch : batches) {
+        if (batch.count == 0 || batch.lod < 0 || size_t(batch.lod) >= m_lodMeshes.size()) continue;
+        const auto& parts = m_allLodsGeometry->lods[size_t(batch.lod)].parts;
+        for (size_t part = 0; part < parts.size() && part < m_lodMeshes[size_t(batch.lod)].size(); ++part) {
+            const auto& mesh = m_lodMeshes[size_t(batch.lod)][part];
+            if (!mesh.IsValid()) continue;
+            const auto slot = parts[part].slot;
+            const auto* material = slot < model.materials.size() ? materials.Find(model.materials[slot]) : nullptr;
+            ModelConstants constants = SceneConstants(material ? *material : fallback, textures, context, DirectX::XMMatrixIdentity());
+            constants.instanceBuffer = instanceBuffer;
+            constants.instanceBase = batch.base;
+            if (context.lodView) {
+                // LOD の色分け。テクスチャの色を外し、段の色にする（陰影は残る）。
+                const auto& color = kLodDebugColors[std::min<size_t>(size_t(batch.lod), std::size(kLodDebugColors) - 1)];
+                constants.baseColorIndex = compositor::kInvalidTextureIndex;
+                constants.baseColorTint[0] = color.x;
+                constants.baseColorTint[1] = color.y;
+                constants.baseColorTint[2] = color.z;
+            }
+            const auto cb = device.Upload().Allocate(sizeof(constants), 256);
+            if (!cb.IsValid()) return;
+            std::memcpy(cb.cpu, &constants, sizeof(constants));
+            commandList->SetGraphicsRootConstantBufferView(1, cb.gpuAddress);
+            mesh.DrawInstanced(commandList, batch.count);
+        }
     }
 }
 

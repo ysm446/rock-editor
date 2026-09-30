@@ -25,7 +25,9 @@ struct ModelConstants
     float3 cameraPosition; float exposure;
     float3 lightDirection; float lightIlluminance;
     float3 lightColor; float iblIntensity;
-    uint tonemapMode; uint sceneMode; uint mapUvSets; uint pad;
+    uint tonemapMode; uint sceneMode; uint mapUvSets;
+    // インスタンスの行列のバッファ（SRV 番号）。0xFFFFFFFF なら world を使う。
+    uint instanceBuffer;
     float4x4 world;
     // シーンの影。MeshPbr と同じく転置せずに入っているので mul(M, v) で読む。
     float4x4 view;
@@ -35,6 +37,8 @@ struct ModelConstants
     float4 shadowBiases;
     float shadowTexelSize, shadowBlend, shadowNear; uint shadowCascadeCount;
     LayerMaterialData layerMaterial;
+    // インスタンスの行列のバッファの中の、このまとまりの先頭（SV_InstanceID は描画ごとに 0 から数える）。
+    uint instanceBase; uint3 instancePad;
 };
 
 ConstantBuffer<ModelConstants> g_model : register(b1);
@@ -145,15 +149,22 @@ struct MapUv
     float2 uv, deltaX, deltaY;
 };
 
-PixelInput VsMain(VertexInput input)
+PixelInput VsMain(VertexInput input, uint instance : SV_InstanceID)
 {
     PixelInput output;
+    // インスタンス描画（山グラフの岩）では、行列を構造化バッファから読む（C++ 側で転置して並べてある）。
+    float4x4 worldMatrix = g_model.world;
+    if (g_model.instanceBuffer != 0xFFFFFFFFu)
+    {
+        StructuredBuffer<float4x4> instances = ResourceDescriptorHeap[g_model.instanceBuffer];
+        worldMatrix = instances[g_model.instanceBase + instance];
+    }
     // 置いたモデルの倍率は均一なので、法線と接線も同じ行列で回して正規化すればよい。
-    const float3 world = mul(float4(input.position, 1.0f), g_model.world).xyz;
+    const float3 world = mul(float4(input.position, 1.0f), worldMatrix).xyz;
     output.clip = mul(float4(world, 1.0f), g_model.viewProjection);
     output.position = world;
-    output.normal = mul(input.normal, (float3x3)g_model.world);
-    output.tangent = float4(mul(input.tangent.xyz, (float3x3)g_model.world), input.tangent.w);
+    output.normal = mul(input.normal, (float3x3)worldMatrix);
+    output.tangent = float4(mul(input.tangent.xyz, (float3x3)worldMatrix), input.tangent.w);
     output.uv = input.uv;
     output.uv2 = input.uv2;
     return output;

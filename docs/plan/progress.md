@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-30 16:20
+更新日時: 2026-09-30 18:35
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,14 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-09-30 岩を撒く（M2）
+
+- 山グラフに Rock（岩グラフを選び、焼いた岩アセットを読む。出力 Rock）と Rock Scatter（Terrain・Mask・可変本数の Rock。出力 Instances）を追加。`ValueType::Rock` / `Instances` を足し、Instances は Mesh Output で描く。可変本数のピンは `FixedInputCount` で先頭の固定の入力を残すようにした。
+- 撒く処理は `geometry/RockScatter`（面積比の候補、マスクの確率、空間の格子でのダーツ投げ）。評価結果は `RockEvaluation::rockInstances`（岩グラフごと）。Rock Scatter は、選んで見ているときだけ地形を通す（Mesh Output で二重に描かないため）。
+- 描画は `app/ApplicationRocks.cpp`。岩アセットをモデルの形にし（一時の材質）、`ModelPreview::PrepareAllLods` / `RenderInstancedInScene` でインスタンス描画する。行列はフレームごとのアップロードバッファ（`rhi::CreateUploadStructuredBuffer`）に段ごとに並べ、`ModelPreview.hlsl` が `SV_InstanceID` で読む。段は毎フレーム画面上の大きさで選び、小さい岩は省く。レンダラの「追加で描く範囲」に撒いた岩を含めた（0 だと描かれなかった）。「LOD（色分け）」で岩も段の色にした。
+- Debug ビルド警告 0、全テスト成功（`tests/RockScatterTests.cpp`）。RelWithDebInfo の実アプリで 365 個を 8 ドローコール・120 FPS、遠景 LOD3・中景で段が混ざる・近くは LOD0 を確認。`examples/mountain/` に `boulder.rockscene` と Rock / Rock Scatter を足した（焼いてから使う）。焼いた付属フォルダはサンプルに含めない（`.gitignore`）。
+- 未確認（実マウス）: 岩グラフを選ぶダイアログ、Rock Scatter の設定の変更、Undo。
 
 ### 2026-09-30 モデルの拡張子を .model へ
 

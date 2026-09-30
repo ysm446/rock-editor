@@ -138,6 +138,9 @@ public:
     bool CreateStructuredBuffer(uint32_t count, uint32_t stride, const wchar_t* debugName, GpuBuffer& outBuffer,
                                 bool allowUnorderedAccess = false);
 
+    // UPLOAD ヒープ上の構造化バッファ（SRV 付き）。CPU が毎フレーム書き、シェーダが読む（岩のインスタンスの行列など）。
+    bool CreateUploadStructuredBuffer(uint32_t count, uint32_t stride, const wchar_t* debugName, GpuBuffer& outBuffer);
+
     // READBACK ヒープ上のバッファ。GPU の結果を CPU 側へ持ってくる用途に使う。
     bool CreateReadbackBuffer(uint64_t sizeInBytes, const wchar_t* debugName,
                               GpuBuffer& outBuffer);

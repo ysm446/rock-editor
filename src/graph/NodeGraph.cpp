@@ -88,7 +88,12 @@ constexpr std::array<PinDefinition, 2> kMaskFilterPins = {{{PinKind::Input, Valu
     {PinKind::Output, ValueType::Mask, "Mask"}}};
 // 山グラフの地形。入力は無く、UV 付きの Mesh を出す。
 constexpr std::array<PinDefinition, 1> kHeightmapPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
-constexpr std::array<NodeDefinition, 42> kNodeDefinitions = {{
+// 山グラフの岩。Rock は入力なし。Rock Scatter は Terrain（地形の Mesh）、Mask（任意）、Rock（可変本数）を受ける。
+constexpr std::array<PinDefinition, 1> kRockPins = {{{PinKind::Output, ValueType::Rock, "Rock"}}};
+constexpr std::array<PinDefinition, 4> kRockScatterPins = {{{PinKind::Input, ValueType::Mesh, "Terrain"},
+    {PinKind::Input, ValueType::Mask, "Mask"}, {PinKind::Input, ValueType::Rock, "Rock 1"},
+    {PinKind::Output, ValueType::Instances, "Instances"}}};
+constexpr std::array<NodeDefinition, 44> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -112,6 +117,8 @@ constexpr std::array<NodeDefinition, 42> kNodeDefinitions = {{
     {NodeKind::MaterialBake, "materialBake", "Material Bake", kBakePins},
     {NodeKind::RockAsset, "rockAsset", "Rock Asset", kMeshFilterPins},
     {NodeKind::Heightmap, "heightmap", "Heightmap", kHeightmapPins},
+    {NodeKind::Rock, "rock", "Rock", kRockPins},
+    {NodeKind::RockScatter, "rockScatter", "Rock Scatter", kRockScatterPins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
     {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
@@ -170,7 +177,8 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
-           kind == NodeKind::RockAsset || kind == NodeKind::Heightmap ||
+           kind == NodeKind::RockAsset || kind == NodeKind::Heightmap || kind == NodeKind::Rock ||
+           kind == NodeKind::RockScatter ||
            // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
            IsImageMaskNodeKind(kind);
 }
@@ -198,11 +206,15 @@ bool IsModelNodeKind(NodeKind kind) {
 }
 
 bool IsVariableInputNodeKind(NodeKind kind) {
-    return kind == NodeKind::Merge;
+    return kind == NodeKind::Merge || kind == NodeKind::RockScatter;
 }
 
 bool IsMountainNodeKind(NodeKind kind) {
-    return kind == NodeKind::Heightmap;
+    return kind == NodeKind::Heightmap || kind == NodeKind::Rock || kind == NodeKind::RockScatter;
+}
+
+size_t FixedInputCount(NodeKind kind) {
+    return kind == NodeKind::RockScatter ? 2 : 0;
 }
 
 // --- NodeGraph ------------------------------------------------------------
@@ -358,7 +370,7 @@ bool NodeGraph::TypesCompatible(ValueType output, ValueType input) {
         return type == ValueType::Mesh || type == ValueType::Model || type == ValueType::Any;
     };
     if (input == ValueType::Preview)
-        return scene(output) || output == ValueType::Boxes || output == ValueType::Volume;
+        return scene(output) || output == ValueType::Boxes || output == ValueType::Volume || output == ValueType::Instances;
     if (input == ValueType::Any) return scene(output);
     if (output == ValueType::Any) return input == ValueType::Mesh || input == ValueType::Model;
     return output == input;
@@ -449,9 +461,15 @@ void NodeGraph::NormalizeVariablePins() {
     for (Node& node : m_nodes) {
         if (!IsVariableInputNodeKind(node.kind)) continue;
         // 繋がっている入力を順に残し、末尾に空きを 1 本だけ置く。ラベルは並びで振り直す。
-        std::vector<Pin> connected;
+        // 先頭の固定の入力（Rock Scatter の Terrain と Mask）はそのまま残す。
+        const size_t fixed = std::min(FixedInputCount(node.kind), node.inputs.size());
+        const bool rocks = node.kind == NodeKind::RockScatter;
+        const ValueType variableType = rocks ? ValueType::Rock : ValueType::Any;
+        const std::string prefix = rocks ? "Rock " : "Input ";
+        std::vector<Pin> connected(node.inputs.begin(), node.inputs.begin() + fixed);
         Pin spare;
-        for (const Pin& pin : node.inputs) {
+        for (size_t index = fixed; index < node.inputs.size(); ++index) {
+            const Pin& pin = node.inputs[index];
             const bool linked = std::any_of(m_links.begin(), m_links.end(),
                                             [&](const Link& link) { return link.endPin == pin.id; });
             if (linked) connected.push_back(pin);
@@ -461,11 +479,11 @@ void NodeGraph::NormalizeVariablePins() {
         if (spare.id == 0) spare.id = AllocateGraphId();
         spare.nodeId = node.id;
         spare.kind = PinKind::Input;
-        spare.valueType = ValueType::Any;
+        spare.valueType = variableType;
         connected.push_back(std::move(spare));
-        for (size_t i = 0; i < connected.size(); ++i) {
-            connected[i].valueType = ValueType::Any;
-            connected[i].label = "Input " + std::to_string(i + 1);
+        for (size_t i = fixed; i < connected.size(); ++i) {
+            connected[i].valueType = variableType;
+            connected[i].label = prefix + std::to_string(i - fixed + 1);
         }
         node.inputs = std::move(connected);
     }
@@ -549,6 +567,10 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = RockAssetSettings{};
     } else if (kind == NodeKind::Heightmap) {
         node.settings = geometry::HeightmapSettings{};
+    } else if (kind == NodeKind::Rock) {
+        node.settings = RockNodeSettings{};
+    } else if (kind == NodeKind::RockScatter) {
+        node.settings = geometry::RockScatterSettings{};
     } else if (kind == NodeKind::MaterialMask) {
         node.settings = MaterialMaskSettings{};
     } else if (kind == NodeKind::ApplyMaterial) {

@@ -102,6 +102,63 @@
           "distance": 0.5,
           "samples": 16
         }
+      },
+      {
+        "id": 400,
+        "kind": "rock",
+        "inputs": [],
+        "outputs": [
+          401
+        ],
+        "position": [
+          420,
+          300
+        ],
+        "note": "boulder.rockscene を開いて「岩アセットを焼く」を押すと、ここで読めるようになる",
+        "rock": {
+          "scene": "boulder.rockscene",
+          "scale": 2.0,
+          "weight": 1.0
+        }
+      },
+      {
+        "id": 420,
+        "kind": "rockScatter",
+        "inputs": [
+          421,
+          422,
+          423,
+          424
+        ],
+        "outputs": [
+          426
+        ],
+        "position": [
+          700,
+          100
+        ],
+        "rockScatter": {
+          "seed": 1,
+          "spacing": 7.0,
+          "maxCount": 5000,
+          "scaleMin": 0.7,
+          "scaleMax": 1.4,
+          "alignToNormal": 0.5,
+          "embed": 0.15
+        }
+      },
+      {
+        "id": 430,
+        "kind": "meshOutput",
+        "inputs": [
+          431,
+          432
+        ],
+        "outputs": [],
+        "position": [
+          950,
+          100
+        ]
       }
     ],
     "links": [
@@ -119,6 +176,26 @@
         "id": 302,
         "start": 201,
         "end": 211
+      },
+      {
+        "id": 500,
+        "start": 201,
+        "end": 421
+      },
+      {
+        "id": 501,
+        "start": 212,
+        "end": 422
+      },
+      {
+        "id": 502,
+        "start": 401,
+        "end": 423
+      },
+      {
+        "id": 504,
+        "start": 426,
+        "end": 431
       }
     ]
   },

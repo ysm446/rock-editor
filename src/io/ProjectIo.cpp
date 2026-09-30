@@ -527,6 +527,14 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["decimate"] = {{"targetTriangles", decimate->targetTriangles},
                                 {"maxError", decimate->maxError},
                                 {"creaseWeight", decimate->creaseWeight}};
+        } else if (const auto* rockNode = std::get_if<graph::RockNodeSettings>(&node.settings)) {
+            // 岩グラフはシーンからの相対パスで書く。
+            item["rock"] = {{"scene", rockNode->scene.empty() ? std::string() : RelativePathString(FromUtf8(rockNode->scene), baseDir)},
+                            {"scale", rockNode->scale}, {"weight", rockNode->weight}};
+        } else if (const auto* scatter = std::get_if<geometry::RockScatterSettings>(&node.settings)) {
+            item["rockScatter"] = {{"seed", scatter->seed}, {"spacing", scatter->spacing}, {"maxCount", scatter->maxCount},
+                                   {"scaleMin", scatter->scaleMin}, {"scaleMax", scatter->scaleMax},
+                                   {"alignToNormal", scatter->alignToNormal}, {"embed", scatter->embed}};
         } else if (const auto* terrain = std::get_if<geometry::HeightmapSettings>(&node.settings)) {
             // 画像はシーンからの相対パスで書く（ルートごと動かしても読めるように）。
             item["heightmap"] = {{"source", geometry::HeightmapSourceName(terrain->source)},
@@ -811,6 +819,27 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.targetTriangles = ReadInt(*v, "targetTriangles", settings.targetTriangles);
                     settings.maxError = ReadFloat(*v, "maxError", settings.maxError);
                     settings.creaseWeight = ReadFloat(*v, "creaseWeight", settings.creaseWeight);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::Rock) {
+                graph::RockNodeSettings settings;
+                if (const json* v = FindMember(item, "rock"); v && v->is_object()) {
+                    const std::string scene = ReadString(*v, "scene");
+                    if (!scene.empty()) settings.scene = ToUtf8Portable(ResolvePath(scene, baseDir));
+                    settings.scale = std::clamp(ReadFloat(*v, "scale", settings.scale), 0.001f, 1000.0f);
+                    settings.weight = std::clamp(ReadFloat(*v, "weight", settings.weight), 0.0f, 1000.0f);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::RockScatter) {
+                geometry::RockScatterSettings settings;
+                if (const json* v = FindMember(item, "rockScatter"); v && v->is_object()) {
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
+                    settings.spacing = std::clamp(ReadFloat(*v, "spacing", settings.spacing), geometry::kMinScatterSpacing, 10000.0f);
+                    settings.maxCount = std::clamp(ReadInt(*v, "maxCount", settings.maxCount), 1, geometry::kMaxScatterCount);
+                    settings.scaleMin = std::clamp(ReadFloat(*v, "scaleMin", settings.scaleMin), 0.01f, 100.0f);
+                    settings.scaleMax = std::clamp(ReadFloat(*v, "scaleMax", settings.scaleMax), settings.scaleMin, 100.0f);
+                    settings.alignToNormal = std::clamp(ReadFloat(*v, "alignToNormal", settings.alignToNormal), 0.0f, 1.0f);
+                    settings.embed = std::clamp(ReadFloat(*v, "embed", settings.embed), 0.0f, 0.9f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::Heightmap) {

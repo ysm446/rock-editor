@@ -1466,6 +1466,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
         SceneDrawContext context;
         context.rtvFormat = kSceneColorFormat;
         context.dsvFormat = kDepthFormat;
+        context.lodView = displayView == DebugView::Lod;
         context.viewProjection = constants.viewProjection;
         context.view = constants.view;
         context.cameraPosition = m_camera.Position();

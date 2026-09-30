@@ -147,6 +147,16 @@ void Mesh::Draw(ID3D12GraphicsCommandList* commandList, bool asPatches) const {
     commandList->DrawIndexedInstanced(m_indexCount, 1, 0, 0, 0);
 }
 
+void Mesh::DrawInstanced(ID3D12GraphicsCommandList* commandList, uint32_t instances) const {
+    if (m_indexCount == 0 || instances == 0) {
+        return;
+    }
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+    commandList->IASetIndexBuffer(&m_indexBufferView);
+    commandList->DrawIndexedInstanced(m_indexCount, instances, 0, 0, 0);
+}
+
 void Mesh::DrawOutline(ID3D12GraphicsCommandList* commandList) const {
     if (m_outlineIndexCount == 0) {
         return;

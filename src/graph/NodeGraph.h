@@ -4,6 +4,7 @@
 #include "geometry/Decimate.h"
 #include "geometry/DetailTransfer.h"
 #include "geometry/Terrain.h"
+#include "geometry/RockScatter.h"
 #include "geometry/Remesh.h"
 #include "geometry/UvUnwrap.h"
 #include "geometry/Pieces.h"
@@ -55,7 +56,11 @@ enum class ValueType : uint32_t {
     Any = 6,
     Boxes = 7,
     Volume = 8,
-    Preview = 9,  // Mesh Output 専用。Mesh / Model / Boxes / Volume を表示する。
+    Preview = 9,  // Mesh Output 専用。Mesh / Model / Boxes / Volume / Instances を表示する。
+    // 山グラフ。岩グラフ（焼いた岩アセット）への参照。Rock ノードが出し、Rock Scatter が受ける。
+    Rock = 16,
+    // 山グラフ。撒いた岩のインスタンス（と、撒いた地形）。Rock Scatter が出し、Mesh Output で表示する。
+    Instances = 17,
 };
 
 // 数値は保存名ではなくファイルには書かない（定義テーブルの name を書く）が、
@@ -106,6 +111,10 @@ enum class NodeKind : uint32_t {
     RockAsset = 72,
     // 山グラフの地形。ハイトマップ（画像かノイズ）から UV 付きの格子のメッシュを作る。
     Heightmap = 73,
+    // 山グラフ。岩グラフ（.rockscene）を 1 つ選び、焼いた岩アセットを読む。出力は Rock。
+    Rock = 74,
+    // 山グラフ。地形（Mesh）とマスクを受け、つないだ Rock を間隔を空けて撒く。出力は Instances。
+    RockScatter = 75,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -198,6 +207,15 @@ struct RockAssetSettings {
     bool operator==(const RockAssetSettings&) const = default;
 };
 
+// Rock（山グラフ）。scene は岩グラフのパス（UTF-8。メモリ上は絶対パス、保存はシーンからの相対パス）。
+// 倍率は岩アセットに掛け、重みは Rock Scatter の中でどの岩をどれだけ選ぶかに使う。
+struct RockNodeSettings {
+    std::string scene;
+    float scale = 1.0f;
+    float weight = 1.0f;
+    bool operator==(const RockNodeSettings&) const = default;
+};
+
 // モデル。model は Application のモデル一覧の ID（0 = なし）。position はモデルの底面の中心の位置（m）、
 // 倍率はモデルアセットの倍率に掛ける。
 // 回転は X・Y・Z 軸まわりの角度（度）で、Z → X → Y の順に回す（DirectX の RollPitchYaw と同じ）。
@@ -243,7 +261,8 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
-                                  geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, std::monostate>;
+                                  geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, RockNodeSettings,
+                                  geometry::RockScatterSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;
@@ -371,6 +390,8 @@ bool IsModelNodeKind(NodeKind kind);
 bool IsVariableInputNodeKind(NodeKind kind);
 // 山グラフでだけ使う種類か（Heightmap）。右クリックメニューを文書の種類で分けるのに使う。
 bool IsMountainNodeKind(NodeKind kind);
+// 可変本数の入力のうち、先頭の固定の入力の数（Rock Scatter は Terrain と Mask の 2 本）。
+size_t FixedInputCount(NodeKind kind);
 // UV空間の画像としてマスクを出す種類か（Shape Mask / Mask Combine）。選ぶと入力メッシュにマスクを貼って見せる。
 bool IsImageMaskNodeKind(NodeKind kind);
 // 画像マスクのノードの「反転」。使う側（描画・Displace・Subdivide）で 1 - mask にする分。
