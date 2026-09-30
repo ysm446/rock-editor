@@ -3,6 +3,7 @@
 #include "geometry/ShapeMask.h"
 #include "geometry/Decimate.h"
 #include "geometry/DetailTransfer.h"
+#include "geometry/Terrain.h"
 #include "geometry/Remesh.h"
 #include "geometry/UvUnwrap.h"
 #include "geometry/Pieces.h"
@@ -103,6 +104,8 @@ enum class NodeKind : uint32_t {
     // 岩グラフの最終段。入力のメッシュから段階的な LOD を作り、この岩グラフの岩アセットにする。
     // 出力は LOD0（Mesh Output へ繋いで表示できる）。選ぶとビューポートで LOD を切り替えて見られる。
     RockAsset = 72,
+    // 山グラフの地形。ハイトマップ（画像かノイズ）から UV 付きの格子のメッシュを作る。
+    Heightmap = 73,
     UvUnwrap = 42,
     MaterialBake = 43,
     ScatterPoints = 44, VoronoiFracture = 45, PieceSelect = 46,
@@ -240,7 +243,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
-                                  geometry::PieceTransformSettings, RockAssetSettings, std::monostate>;
+                                  geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, std::monostate>;
 
 struct Node {
     GraphId id = 0;
@@ -274,6 +277,8 @@ class NodeGraph {
 public:
     // サーフェス（ベース）1 つだけの最小構成。
     static NodeGraph CreateDefault();
+    // 山グラフの最小構成。Heightmap（ノイズの山）→ Mesh Output、Surface（Triplanar）→ Mesh Output の Material。
+    static NodeGraph CreateDefaultMountain();
 
     const std::vector<Node>& Nodes() const { return m_nodes; }
     std::vector<Node>& MutableNodes() { return m_nodes; }
@@ -364,6 +369,8 @@ bool IsPreviewableNodeKind(NodeKind kind);
 bool IsModelNodeKind(NodeKind kind);
 // 入力数が可変の種類か（Merge）。
 bool IsVariableInputNodeKind(NodeKind kind);
+// 山グラフでだけ使う種類か（Heightmap）。右クリックメニューを文書の種類で分けるのに使う。
+bool IsMountainNodeKind(NodeKind kind);
 // UV空間の画像としてマスクを出す種類か（Shape Mask / Mask Combine）。選ぶと入力メッシュにマスクを貼って見せる。
 bool IsImageMaskNodeKind(NodeKind kind);
 // 画像マスクのノードの「反転」。使う側（描画・Displace・Subdivide）で 1 - mask にする分。

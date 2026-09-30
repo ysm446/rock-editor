@@ -485,7 +485,8 @@ compositor::MaterialLayer ReadLayer(
 // writeModel は Model ノードのモデル（実行中の ID）を文書内の番号へ写す。無ければ null を書く。
 json WriteGraph(const graph::NodeGraph& graphData,
                 const std::function<json(compositor::MaterialAssetId)>& writeMaterial,
-                const std::function<json(uint64_t)>& writeModel, const TextureWriter& writeTexture) {
+                const std::function<json(uint64_t)>& writeModel, const TextureWriter& writeTexture,
+                const fs::path& baseDir) {
     json out;
     json nodes = json::array();
     for (const graph::Node& node : graphData.Nodes()) {
@@ -526,6 +527,15 @@ json WriteGraph(const graph::NodeGraph& graphData,
             item["decimate"] = {{"targetTriangles", decimate->targetTriangles},
                                 {"maxError", decimate->maxError},
                                 {"creaseWeight", decimate->creaseWeight}};
+        } else if (const auto* terrain = std::get_if<geometry::HeightmapSettings>(&node.settings)) {
+            // 画像はシーンからの相対パスで書く（ルートごと動かしても読めるように）。
+            item["heightmap"] = {{"source", geometry::HeightmapSourceName(terrain->source)},
+                                 {"image", terrain->image.empty() ? std::string() : RelativePathString(FromUtf8(terrain->image), baseDir)},
+                                 {"width", terrain->width}, {"depth", terrain->depth},
+                                 {"minHeight", terrain->minHeight}, {"maxHeight", terrain->maxHeight},
+                                 {"resolution", terrain->resolution}, {"textureResolution", terrain->textureResolution},
+                                 {"seed", terrain->seed}, {"featureSize", terrain->featureSize},
+                                 {"roughness", terrain->roughness}, {"peak", terrain->peak}};
         } else if (const auto* asset = std::get_if<graph::RockAssetSettings>(&node.settings)) {
             item["rockAsset"] = {{"lodCount", asset->lodCount}, {"maxTriangles", asset->maxTriangles},
                                  {"trianglePercent", asset->trianglePercent}, {"screenSize", asset->screenSize}};
@@ -687,7 +697,8 @@ json WriteGraph(const graph::NodeGraph& graphData,
 // readModel は Model ノードの文書内の番号を実行中のモデル ID へ写す（0 = なし）。
 bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                const std::function<compositor::MaterialAssetId(const json&)>& readMaterial,
-               const std::function<uint64_t(const json&)>& readModel, const TextureReader& readTexture) {
+               const std::function<uint64_t(const json&)>& readModel, const TextureReader& readTexture,
+               const fs::path& baseDir) {
     std::vector<graph::Node> nodes;
     std::vector<graph::Link> links;
     graph::GraphId maxId = 0;
@@ -800,6 +811,25 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData,
                     settings.targetTriangles = ReadInt(*v, "targetTriangles", settings.targetTriangles);
                     settings.maxError = ReadFloat(*v, "maxError", settings.maxError);
                     settings.creaseWeight = ReadFloat(*v, "creaseWeight", settings.creaseWeight);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::Heightmap) {
+                geometry::HeightmapSettings settings;
+                if (const json* v = FindMember(item, "heightmap"); v && v->is_object()) {
+                    settings.source = geometry::ParseHeightmapSource(ReadString(*v, "source", "noise"));
+                    const std::string image = ReadString(*v, "image");
+                    if (!image.empty()) settings.image = ToUtf8Portable(ResolvePath(image, baseDir));
+                    settings.width = std::clamp(ReadFloat(*v, "width", settings.width), geometry::kMinTerrainSize, geometry::kMaxTerrainSize);
+                    settings.depth = std::clamp(ReadFloat(*v, "depth", settings.depth), geometry::kMinTerrainSize, geometry::kMaxTerrainSize);
+                    settings.minHeight = ReadFloat(*v, "minHeight", settings.minHeight);
+                    settings.maxHeight = ReadFloat(*v, "maxHeight", settings.maxHeight);
+                    settings.resolution = std::clamp(ReadInt(*v, "resolution", settings.resolution),
+                                                     geometry::kMinTerrainResolution, geometry::kMaxTerrainResolution);
+                    settings.textureResolution = ReadInt(*v, "textureResolution", settings.textureResolution);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
+                    settings.featureSize = ReadFloat(*v, "featureSize", settings.featureSize);
+                    settings.roughness = std::clamp(ReadFloat(*v, "roughness", settings.roughness), 0.0f, 1.0f);
+                    settings.peak = std::clamp(ReadFloat(*v, "peak", settings.peak), 0.0f, 1.0f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::RockAsset) {
@@ -1579,8 +1609,8 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
     // シーンとして保存するときは、先に共有アセットを各ファイルへ書く。
     // ここで失敗したら文書には触らない（片方だけ新しい状態を作らない）。
     if (workspace != nullptr) {
-        if (_wcsicmp(savePath.extension().c_str(), L".rockscene") != 0 || !workspace->Contains(savePath)) {
-            ROCK_LOG_ERROR("シーンはプロジェクトルート内の .rockscene へ保存してください: %s",
+        if (!IsSceneFile(savePath) || !workspace->Contains(savePath)) {
+            ROCK_LOG_ERROR("シーンはプロジェクトルート内の .rockscene / .rockmountain へ保存してください: %s",
                          ToUtf8Display(savePath).c_str());
             return false;
         }
@@ -1677,7 +1707,7 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
         const auto found = modelIndex.find(id);
         return found != modelIndex.end() ? json(found->second) : json();
     };
-    document["graph"] = WriteGraph(refs.graph, writeMaterial, writeModel, writeTexture);
+    document["graph"] = WriteGraph(refs.graph, writeMaterial, writeModel, writeTexture, baseDir);
 
     // 天球はマテリアルと同じく、構造ごと埋め込む（画像だけ相対パスの参照）。
     json skies = json::array();
@@ -1869,7 +1899,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
             const auto found = modelIds.find(value.get<int>());
             return found != modelIds.end() ? found->second : 0;
         };
-        graphLoaded = ReadGraph(*graphNode, refs.graph, readMaterial, readModel, readTexture);
+        graphLoaded = ReadGraph(*graphNode, refs.graph, readMaterial, readModel, readTexture, baseDir);
     }
     if (!graphLoaded) {
         refs.graph = graph::NodeGraph::CreateDefault();

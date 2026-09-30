@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-30 10:30
+更新日時: 2026-09-30 13:10
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,15 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-09-30 山グラフの土台（M1）と Heightmap
+
+- 山グラフ（`.rockmountain`）を追加。中身は岩グラフと同じ形式で、拡張子で文書の種類（`Application::DocumentKind`）を決める。`io::IsSceneFile` / `IsMountainFile` で拡張子の判定をまとめた。「新規山グラフ」は `NodeGraph::CreateDefaultMountain`（Heightmap → Mesh Output、Surface → Material）とカメラを引いた状態で始まる。右クリックメニューは文書の種類で分ける（`IsMountainNodeKind`）。
+- Heightmap ノード（`geometry/Terrain`）: ノイズか画像（16bit PNG / 8bit / EXR、`LoadHeightImage`）から UV 付きの格子の Mesh を作る。地形を Mesh として渡すので、Shape Mask（上向き度 = 傾斜）などが地形にそのまま使える。画像のパスはシーンからの相対で保存する。
+- 優先順位: ボリュームの研究より山グラフを優先（ユーザー判断）。次は A1 → M2。
+- Debug ビルド警告 0、全テスト成功（`tests/TerrainTests.cpp`）。テストへ `core/ImageIo.cpp` と tinyexr を足した。RelWithDebInfo の実アプリで `examples/mountain/` の表示・傾斜マスク・保存の往復、16bit PNG の読み込みと相対パスを確認（`build/rock-asset-validation/`）。
+- アセット欄の右クリックに「岩グラフを作成」「山グラフを作成」を追加。表示中のフォルダに新しい文書を作って開き、描いた後で保存する（`m_pendingNewPath` → `m_newDocumentSavePath`）。
+- 未確認: 「新規山グラフ」とアセット欄の「岩グラフ / 山グラフを作成」のメニュー操作、画像を選ぶダイアログ、Undo（どれも実マウス）。
 
 ### 2026-09-30 Material Bake のハイポリからの転写（High → Low）
 

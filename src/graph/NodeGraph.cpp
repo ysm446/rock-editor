@@ -86,7 +86,9 @@ constexpr std::array<PinDefinition, 3> kMaskCombinePins = {{{PinKind::Input, Val
 // 1つのマスクの加工。出力の形とメッシュは入力のマスクのもの。
 constexpr std::array<PinDefinition, 2> kMaskFilterPins = {{{PinKind::Input, ValueType::Mask, "Mask"},
     {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 41> kNodeDefinitions = {{
+// 山グラフの地形。入力は無く、UV 付きの Mesh を出す。
+constexpr std::array<PinDefinition, 1> kHeightmapPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<NodeDefinition, 42> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -109,6 +111,7 @@ constexpr std::array<NodeDefinition, 41> kNodeDefinitions = {{
     {NodeKind::UvUnwrap, "uvUnwrap", "UV Unwrap", kMeshFilterPins},
     {NodeKind::MaterialBake, "materialBake", "Material Bake", kBakePins},
     {NodeKind::RockAsset, "rockAsset", "Rock Asset", kMeshFilterPins},
+    {NodeKind::Heightmap, "heightmap", "Heightmap", kHeightmapPins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
     {NodeKind::VolumeTransform, "volumeTransform", "Volume Transform", kVolumeTransformPins},
@@ -167,7 +170,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
-           kind == NodeKind::RockAsset ||
+           kind == NodeKind::RockAsset || kind == NodeKind::Heightmap ||
            // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
            IsImageMaskNodeKind(kind);
 }
@@ -198,6 +201,10 @@ bool IsVariableInputNodeKind(NodeKind kind) {
     return kind == NodeKind::Merge;
 }
 
+bool IsMountainNodeKind(NodeKind kind) {
+    return kind == NodeKind::Heightmap;
+}
+
 // --- NodeGraph ------------------------------------------------------------
 
 NodeGraph NodeGraph::CreateDefault() {
@@ -210,6 +217,36 @@ NodeGraph NodeGraph::CreateDefault() {
         base->posY = 120.0f;
         base->positionValid = true;
     }
+    return graph;
+}
+
+NodeGraph NodeGraph::CreateDefaultMountain() {
+    NodeGraph graph;
+    const GraphId terrain = graph.CreateNode(NodeKind::Heightmap);
+    const GraphId surface = graph.CreateNode(NodeKind::Surface);
+    const GraphId output = graph.CreateNode(NodeKind::MeshOutput);
+    const auto place = [&](GraphId id, float x, float y) {
+        if (Node* node = graph.FindMutableNode(id)) {
+            node->posX = x;
+            node->posY = y;
+            node->positionValid = true;
+        }
+    };
+    place(terrain, 60.0f, 60.0f);
+    place(surface, 60.0f, 260.0f);
+    place(output, 380.0f, 120.0f);
+    if (Node* base = graph.FindMutableNode(surface)) {
+        // 地形は大きいので、UV ではなく Triplanar で数 m ごとに繰り返す。
+        compositor::MaterialLayer layer = compositor::MaterialStack::MakeBaseLayer();
+        layer.mapping.method = compositor::MappingMethod::Triplanar;
+        layer.mapping.repeatMeters = 4.0f;
+        base->settings = LayerNodeSettings{std::move(layer)};
+    }
+    const Node* terrainNode = graph.FindNode(terrain);
+    const Node* surfaceNode = graph.FindNode(surface);
+    const Node* outputNode = graph.FindNode(output);
+    graph.CreateLink(terrainNode->outputs[0].id, outputNode->inputs[0].id);
+    graph.CreateLink(surfaceNode->outputs[0].id, outputNode->inputs[1].id);
     return graph;
 }
 
@@ -510,6 +547,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::RemeshSettings{};
     } else if (kind == NodeKind::RockAsset) {
         node.settings = RockAssetSettings{};
+    } else if (kind == NodeKind::Heightmap) {
+        node.settings = geometry::HeightmapSettings{};
     } else if (kind == NodeKind::MaterialMask) {
         node.settings = MaterialMaskSettings{};
     } else if (kind == NodeKind::ApplyMaterial) {

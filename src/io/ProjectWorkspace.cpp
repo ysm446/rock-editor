@@ -334,8 +334,16 @@ bool ProjectWorkspace::ReadAsset(const fs::path& path, const char* kind, json& b
            body.contains("version") && body["version"] == 1;
 }
 
+bool IsMountainFile(const fs::path& path) {
+    return _wcsicmp(path.extension().c_str(), L".rockmountain") == 0;
+}
+
+bool IsSceneFile(const fs::path& path) {
+    return _wcsicmp(path.extension().c_str(), L".rockscene") == 0 || IsMountainFile(path);
+}
+
 bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
-    if (_wcsicmp(path.extension().c_str(), L".rockscene") != 0 || !Contains(path) || !Scan()) return false;
+    if (!IsSceneFile(path) || !Contains(path) || !Scan()) return false;
     const auto baseDir = Absolute(path).parent_path();
     std::unordered_map<int, json> textures;
     // 画像の参照。ルート外の実在ファイルは Imported/ へ取り込む。

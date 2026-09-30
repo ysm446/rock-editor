@@ -39,7 +39,10 @@ void Application::RequestOpenProject() {
 // saveAs が偽でも、まだ一度も保存していなければ保存先を聞く。
 // 保存先は常にルート内の .rockscene。
 void Application::RequestSaveProject(bool saveAs) {
-    const bool isScene = _wcsicmp(m_projectPath.extension().c_str(), L".rockscene") == 0;
+    // 岩グラフは .rockscene、山グラフは .rockmountain。
+    const bool mountain = m_documentKind == DocumentKind::Mountain;
+    const wchar_t* extension = mountain ? L".rockmountain" : L".rockscene";
+    const bool isScene = _wcsicmp(m_projectPath.extension().c_str(), extension) == 0;
     if (!saveAs && isScene && m_workspace.Contains(m_projectPath)) {
         m_pendingProjectSave = m_projectPath;
         return;
@@ -47,14 +50,14 @@ void Application::RequestSaveProject(bool saveAs) {
     const std::filesystem::path initial =
         isScene ? m_projectPath
                 : m_workspace.Root() / L"Scenes" /
-                      (m_projectPath.empty() ? std::wstring(L"Untitled.rockscene")
-                                             : m_projectPath.stem().wstring() + L".rockscene");
-    std::filesystem::path path = ShowSaveFileDialog(
-        L"シーンを保存", {{L"Rock Editor シーン", L"*.rockscene"}}, L"rockscene", initial);
+                      ((m_projectPath.empty() ? std::wstring(L"Untitled") : m_projectPath.stem().wstring()) + extension);
+    std::filesystem::path path =
+        mountain ? ShowSaveFileDialog(L"山グラフを保存", {{L"Rock Editor 山グラフ", L"*.rockmountain"}}, L"rockmountain", initial)
+                 : ShowSaveFileDialog(L"シーンを保存", {{L"Rock Editor シーン", L"*.rockscene"}}, L"rockscene", initial);
     if (path.empty()) {
         return;
     }
-    path.replace_extension(L".rockscene");
+    path.replace_extension(extension);
     if (!m_workspace.Contains(path)) {
         ROCK_LOG_ERROR("シーンはプロジェクトルート内に保存してください: %s", ToUtf8Display(path).c_str());
         return;
@@ -65,7 +68,7 @@ void Application::RequestSaveProject(bool saveAs) {
 // 保存したシーンのプレビュー画像。ビューポートを縦横比を保って最大 256px へ縮小する。
 // 失敗してもシーン本体の保存は成功扱い。
 void Application::SaveSceneThumbnail(const std::filesystem::path& path) {
-    if (_wcsicmp(path.extension().c_str(), L".rockscene") != 0 || !m_renderer.HasOutput()) return;
+    if (!io::IsSceneFile(path) || !m_renderer.HasOutput()) return;
     const std::filesystem::path thumbnail = io::SceneThumbnailPath(m_workspace, path);
     if (thumbnail.empty()) {
         ROCK_LOG_WARN("シーンのサムネイルの保存先がルート外です");
@@ -98,6 +101,8 @@ void Application::HandleShortcuts() {
 
     if (ImGui::IsKeyPressed(ImGuiKey_N, false)) {
         m_pendingProjectNew = true;
+        m_pendingNewKind = DocumentKind::Rock;
+        m_pendingNewPath.clear();
     } else if (ImGui::IsKeyPressed(ImGuiKey_B, false) && !io.WantTextInput) {
         // アセットの帯を畳む / 戻す（ウィンドウメニューと同じ）。
         m_settings.Display().showAssetBand = !m_settings.Display().showAssetBand;
@@ -189,15 +194,22 @@ void Application::DrawFileMenu() {
         return;
     }
 
-    if (ImGui::MenuItem("新規シーン", "Ctrl+N")) {
+    if (ImGui::MenuItem("新規シーン（岩グラフ）", "Ctrl+N")) {
         m_pendingProjectNew = true;
+        m_pendingNewKind = DocumentKind::Rock;
+        m_pendingNewPath.clear();
+    }
+    if (ImGui::MenuItem("新規山グラフ")) {
+        m_pendingProjectNew = true;
+        m_pendingNewKind = DocumentKind::Mountain;
+        m_pendingNewPath.clear();
     }
     if (ImGui::MenuItem("ルートフォルダを開く…", "Ctrl+O")) {
         RequestOpenProject();
     }
     if (ImGui::MenuItem("シーンを開く…")) {
         const std::filesystem::path path = ShowOpenFileDialog(
-            L"シーンを開く", {{L"シーン", L"*.rockscene"}});
+            L"シーンを開く", {{L"シーン・山グラフ", L"*.rockscene;*.rockmountain"}});
         if (!path.empty()) {
             m_pendingProjectOpen = path;
         }
@@ -225,7 +237,7 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         // 拡張子で行き先を決める。読み込み自体はどれも保留し、フレームの外で処理する。
-        if (extension == ".rockscene") {
+        if (extension == ".rockscene" || extension == ".rockmountain") {
             m_pendingProjectOpen = path;
         } else if (extension == ".rocksky" || extension == ".rockmodel") {
             m_pendingAssetOpen = path;
@@ -274,6 +286,10 @@ void Application::ResetProject() {
     // メッシュシーンは次のフレームの SyncMeshGraph が作り直す（改版を 0 に戻す）。
     m_meshHighlight = MeshHighlightState{};
     m_graph = graph::NodeGraph::CreateDefault();
+    // 種類は岩グラフへ戻す。山グラフの新規作成は、この後で種類とグラフを差し替える。
+    m_documentKind = DocumentKind::Rock;
+    // 前の文書の保存待ちは捨てる（別の文書をその名前で保存しない）。
+    m_newDocumentSavePath.clear();
     ++m_pieceEpoch;
     m_pendingBake = 0;
     m_bakeStatus.clear(); m_bakeImages.clear(); m_shapeMaskTextures.clear();
@@ -357,8 +373,30 @@ void Application::ProcessPendingFileWork() {
     if (m_pendingProjectNew) {
         m_pendingProjectNew = false;
         ResetProject();
+        m_documentKind = m_pendingNewKind;
+        m_pendingNewKind = DocumentKind::Rock;
+        if (m_documentKind == DocumentKind::Mountain) {
+            // 山グラフは Heightmap（ノイズの山）から始める。カメラは山全体が見える所へ引く。
+            m_graph = graph::NodeGraph::CreateDefaultMountain();
+            RequestGraphNodePlacement();
+            renderer::CameraState camera;
+            camera.target = {0.0f, 20.0f, 0.0f};
+            camera.distance = 330.0f;
+            camera.pitch = 0.45f;
+            m_renderer.GetCamera().SetState(camera);
+        }
         m_projectPath.clear();
         UpdateWindowTitle();
+        // アセット欄から作ったときは、その場所へ保存する。新しい文書を描いてから（下で）保存する。
+        if (!m_pendingNewPath.empty()) {
+            m_newDocumentSavePath = std::move(m_pendingNewPath);
+            m_pendingNewPath.clear();
+            m_newDocumentSaveFrame = m_frameCounter + 3;
+        }
+    }
+    if (!m_newDocumentSavePath.empty() && m_frameCounter >= m_newDocumentSaveFrame && !m_pieceUpdating) {
+        m_pendingProjectSave = std::move(m_newDocumentSavePath);
+        m_newDocumentSavePath.clear();
     }
 
     if (!m_pendingProjectOpen.empty()) {
@@ -368,8 +406,10 @@ void Application::ProcessPendingFileWork() {
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                              m_renderer, m_graph, &m_models};
         // .rockscene はルートの共有アセットを参照する。旧 .reproj は従来の埋め込み形式のまま読む。
-        const bool isScene = _wcsicmp(path.extension().c_str(), L".rockscene") == 0;
+        const bool isScene = io::IsSceneFile(path);
         if (io::LoadProject(path, m_device, m_pipelineCache, refs, isScene ? &m_workspace : nullptr)) {
+            m_documentKind = io::IsMountainFile(path) ? DocumentKind::Mountain : DocumentKind::Rock;
+            m_newDocumentSavePath.clear();
             m_meshHighlight = MeshHighlightState{};
             if (isScene) m_recentProjects.Add(m_workspace.Root(), path);
             m_projectPath = path;

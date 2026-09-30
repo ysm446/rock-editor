@@ -5,6 +5,8 @@
 #include "core/Log.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cwctype>
 #include <cstdlib>
 #include <fstream>
 #include <string>
@@ -83,6 +85,59 @@ bool SavePng(const std::filesystem::path& path, uint32_t width, uint32_t height,
 }
 
 }  // namespace
+
+bool LoadHeightImage(const std::filesystem::path& path, uint32_t& width, uint32_t& height, std::vector<float>& values) {
+    width = height = 0;
+    values.clear();
+    const std::string utf8Path = ToUtf8Display(path);
+    std::wstring extension = path.extension().wstring();
+    for (auto& c : extension) c = static_cast<wchar_t>(::towlower(c));
+    if (extension == L".exr") {
+        HdrImage image;
+        if (!LoadExrImage(path, image)) return false;
+        width = image.width;
+        height = image.height;
+        values.resize(size_t(width) * height);
+        float low = 1e30f, high = -1e30f;
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = std::isfinite(image.pixels[i * 4]) ? image.pixels[i * 4] : 0.0f;
+            low = std::min(low, values[i]);
+            high = std::max(high, values[i]);
+        }
+        if ((low < 0.0f || high > 1.0f) && high - low > 1e-12f)
+            for (float& value : values) value = (value - low) / (high - low);
+        return true;
+    }
+    const std::vector<uint8_t> bytes = ReadFileBytes(path);
+    if (bytes.empty()) {
+        ROCK_LOG_ERROR("ハイトマップを読み込めません: %s (ファイルを開けない)", utf8Path.c_str());
+        return false;
+    }
+    int w = 0, h = 0, channels = 0;
+    const int size = static_cast<int>(bytes.size());
+    if (::stbi_is_16_bit_from_memory(bytes.data(), size)) {
+        stbi_us* data = ::stbi_load_16_from_memory(bytes.data(), size, &w, &h, &channels, 1);
+        if (data == nullptr) {
+            ROCK_LOG_ERROR("ハイトマップを読み込めません: %s (%s)", utf8Path.c_str(), ::stbi_failure_reason());
+            return false;
+        }
+        values.resize(size_t(w) * h);
+        for (size_t i = 0; i < values.size(); ++i) values[i] = data[i] / 65535.0f;
+        ::stbi_image_free(data);
+    } else {
+        stbi_uc* data = ::stbi_load_from_memory(bytes.data(), size, &w, &h, &channels, 1);
+        if (data == nullptr) {
+            ROCK_LOG_ERROR("ハイトマップを読み込めません: %s (%s)", utf8Path.c_str(), ::stbi_failure_reason());
+            return false;
+        }
+        values.resize(size_t(w) * h);
+        for (size_t i = 0; i < values.size(); ++i) values[i] = data[i] / 255.0f;
+        ::stbi_image_free(data);
+    }
+    width = static_cast<uint32_t>(w);
+    height = static_cast<uint32_t>(h);
+    return true;
+}
 
 bool LoadLdrImage(const std::filesystem::path& path, LdrImage& outImage) {
     outImage = LdrImage{};

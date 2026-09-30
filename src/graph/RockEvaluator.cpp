@@ -1,8 +1,11 @@
 #include "graph/RockEvaluator.h"
 #include "graph/PieceEvaluator.h"
+#include "core/ImageIo.h"
+#include "core/PathUtf8.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <unordered_set>
@@ -123,6 +126,19 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(subdivide->levels); add(subdivide->threshold);
     } else if (const auto* decimate = std::get_if<geometry::DecimateSettings>(&node->settings)) {
         add(decimate->targetTriangles); add(decimate->maxError); add(decimate->creaseWeight);
+    } else if (const auto* terrain = std::get_if<geometry::HeightmapSettings>(&node->settings)) {
+        add(terrain->source); add(terrain->width); add(terrain->depth); add(terrain->minHeight); add(terrain->maxHeight);
+        add(terrain->resolution); add(terrain->textureResolution);
+        if (terrain->source == geometry::HeightmapSource::Image) {
+            // 画像はパスと、ファイルの大きさ・更新時刻で見分ける（描き直した画像を読み直すため）。
+            key += terrain->image;
+            std::error_code error;
+            const auto path = FromUtf8(terrain->image);
+            add(uint64_t(std::filesystem::file_size(path, error)));
+            add(std::filesystem::last_write_time(path, error).time_since_epoch().count());
+        } else {
+            add(terrain->seed); add(terrain->featureSize); add(terrain->roughness); add(terrain->peak);
+        }
     } else if (const auto* asset = std::get_if<RockAssetSettings>(&node->settings)) {
         // 切り替えの大きさ（screenSize）は表示だけに使うので含めない。
         add(asset->lodCount); add(asset->maxTriangles);
@@ -232,7 +248,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::VolumeTransform || node->kind == NodeKind::VolumeBoolean ||
                                  node->kind == NodeKind::PlaneCuts || node->kind == NodeKind::VolumeCrack ||
                                  node->kind == NodeKind::VolumeNoise || node->kind == NodeKind::Decimate || node->kind == NodeKind::Remesh ||
-                                 node->kind == NodeKind::RockAsset ||
+                                 node->kind == NodeKind::RockAsset || node->kind == NodeKind::Heightmap ||
                                  node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace ||
                                  node->kind == NodeKind::VolumeClose || node->kind == NodeKind::VolumeEdgeWear ||
                                  node->kind == NodeKind::VolumeClip ||
@@ -720,6 +736,26 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 rock.bakeSource = 0;
                 done += before;
             }
+        } else if (node->kind == NodeKind::Heightmap) {
+            const auto* settings = std::get_if<geometry::HeightmapSettings>(&node->settings);
+            std::string error;
+            if (!settings) return finish(Failure(id, "Heightmap", "設定がありません"));
+            if (!geometry::ValidateHeightmapSettings(*settings, error)) return finish(Failure(id, "Heightmap", error));
+            geometry::HeightGrid grid;
+            if (settings->source == geometry::HeightmapSource::Image) {
+                if (settings->image.empty()) return finish(Failure(id, "Heightmap", "ハイトマップの画像を選んでください"));
+                if (!LoadHeightImage(FromUtf8(settings->image), grid.width, grid.height, grid.values))
+                    return finish(Failure(id, "Heightmap", "ハイトマップの画像を読み込めません: " + settings->image));
+            } else {
+                grid = geometry::MakeNoiseHeights(*settings, uint32_t(settings->resolution) + 1);
+            }
+            report(id, 0, 50);
+            auto mesh = geometry::MakeTerrainMesh(grid, *settings, error);
+            if (!error.empty()) return finish(Failure(id, "Heightmap", error));
+            GeneratedRock rock;
+            rock.source = id;
+            rock.mesh = std::move(mesh);
+            result.rocks.push_back(std::move(rock));
         } else if (node->kind == NodeKind::RockAsset) {
             const auto* settings = std::get_if<RockAssetSettings>(&node->settings);
             const auto* upstream =

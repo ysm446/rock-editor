@@ -1,7 +1,7 @@
 # 岩アセットと山グラフ（設計メモ）
 
 作成日時: 2026-09-30 06:08
-更新日時: 2026-09-30 08:55
+更新日時: 2026-09-30 12:45
 
 ## 目的
 
@@ -93,7 +93,7 @@
 
 ### ファイルとアプリ
 
-- 拡張子の案は `.rockmountain`。岩グラフと同じアプリで、開くファイルによってグラフの種類を切り替える。
+- 拡張子は `.rockmountain`。岩グラフと同じアプリで、開くファイルによってグラフの種類を切り替える（2026-09-30 に M1 として実装。[山グラフと Heightmap](heightmap.md)）。
 - ノードエディタ、プロパティ、ビューポート、アセット欄、保存、Undo は今の仕組みを共用する。ノードの一覧（右クリックメニュー）はグラフの種類ごとに分ける。
 - Rock ノードからは、元の岩グラフを開けるようにする。
 
@@ -104,15 +104,17 @@
 ```text
 [Rock: cliff_a.rockscene] ─┐
 [Rock: cliff_b.rockscene] ─┼→ Rock Scatter（大）─────────────────┐
-[Heightmap]→[Terrain Mesh]─┤    ↑ Mask（傾斜）                    │
+[Heightmap]────────────────┤    ↑ Mask（Shape Mask の上向き度）    │
                            │                                       ├→ Instance Merge → Mountain Output
 [Rock: boulder.rockscene] ─┼→ Rock Scatter（中）← 避ける ←（大の結果）│
 [Rock: pebble.rockscene] ──┴→ Rock Scatter（小）← Mask（窪み）──────┘
 ```
 
-（地形の線は図を簡単にするため一部省いた。Scatter はどれも Terrain Mesh を受ける。Mountain Output も地形を受ける。）
+（地形の線は図を簡単にするため一部省いた。Scatter はどれも Heightmap の地形を受ける。Mountain Output も地形を受ける。）
 
 ### 型
+
+2026-09-30 の判断（M1）: 下の表のうち Heightfield / Terrain / Terrain Mask は作らない。地形は **UV 付きの Mesh**、地形のマスクは今の **Mask**（UV の画像）をそのまま使う。地形の格子にはハイトマップと同じ UV が付くので、Shape Mask（上向き度 = 傾斜、高さ、曲率）・Mask Combine・Apply Material などが地形にそのまま使える。以下の表は当初の案として残す。
 
 | 型 | 中身 |
 | --- | --- |
@@ -133,6 +135,8 @@
 | Rock Scatter | Terrain、Terrain Mask（任意）、Rock（可変本数）、避ける Instances（任意） | Instances | 岩を撒く |
 | Instance Merge | Instances（可変本数） | Instances | 複数の Scatter の結果をまとめる |
 | Mountain Output | Terrain、Instances | なし | 表示と書き出しの末端 |
+
+2026-09-30 の判断により、Heightmap は Terrain Mesh と 1 つにして Mesh を出す。Terrain Mask は作らず Shape Mask を使う。Mountain Output は今の Mesh Output で足りるかを M2 で判断する。
 
 terrain-graph にある Heightmap・地形マスク・ModelScatter の実装を参考に移植する。ただし terrain-graph は数 km の地形向けで GPU の compute で評価しているので、山一つの規模に合わせて簡単にしてよい。
 
@@ -196,12 +200,12 @@ terrain-graph にある Heightmap・地形マスク・ModelScatter の実装を�
 | A1 岩アセットを焼く | Rock Asset ノード（変種 1・LOD0 のみ。ノードと LOD の生成は 2026-09-30 に実装、保存は未実装）、付属フォルダへのメッシュとテクスチャの保存、Model ノードからの `.rockscene` の参照 | 岩グラフで焼いた岩アセットを、別のシーンの Model ノードで置いて、同じ見た目で表示できる |
 | A2 LOD | UV を保つ簡略化、LOD の段と切り替えの大きさ（2026-09-30 に実装。付属フォルダへの保存は A1 と一緒に） | 4 段の LOD が同じテクスチャで継ぎ目なく表示でき、ビューポートで段を確認できる |
 | A3 変種と古さの判定 | グラフ全体の Seed のずらし量、変種 N 個を焼く、ハッシュの記録 | Seed 違いの N 個が焼かれ、グラフを変えると「古い」と判定される |
-| M1 山グラフの土台 | `.rockmountain` の保存・読込・Undo、グラフの種類の切り替え、Heightmap → Terrain Mesh | ハイトマップを読み、実寸の下地を材質つきで表示できる |
-| M2 撒く | Terrain Mask（傾斜）、Rock、Rock Scatter、Instance Merge、Mountain Output、インスタンシング、LOD の選択 | 傾斜の強い所に、2 つ以上の岩グラフの変種が撒かれ、数千個でも操作できる速さで表示できる |
+| M1 山グラフの土台 | `.rockmountain` の保存・読込・Undo、グラフの種類の切り替え、Heightmap（Mesh を出す。2026-09-30 に実装） | ハイトマップを読み、実寸の下地を材質つきで表示できる |
+| M2 撒く | （A1 の保存が前提）Rock、Rock Scatter（地形の Mesh と Shape Mask を受ける）、Instance Merge、Mountain Output、インスタンシング、LOD の選択 | 傾斜の強い所に、2 つ以上の岩グラフの変種が撒かれ、数千個でも操作できる速さで表示できる |
 | M3 岩場らしさ | Scatter を分けた大・中・小の階層、避ける入力、層の向き、めり込み、高度と曲率のマスク | 参考写真と並べて、岩場として破綻がないことを複数の視点で確認する |
 | M4 後続 | HLOD の焼き込み、書き出し | 別のビューア（または terrain-graph）で読み直せる |
 
-A1〜A3 だけでも、既存の Model ノードで岩アセットを確かめられる。M1 以降は A1 の後なら着手できる。
+A1〜A3 だけでも、既存の Model ノードで岩アセットを確かめられる。2026-09-30 のユーザー判断で、山グラフを優先し M1 を先に行った。M2 は岩グラフを読み込むので、その直前に A1（岩アセットの保存）を行う。
 
 ## 決めていないこと
 

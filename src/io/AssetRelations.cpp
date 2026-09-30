@@ -19,7 +19,7 @@ bool SamePath(const fs::path& a, const fs::path& b) {
 
 bool IsDocument(const fs::path& path) {
     const auto ext = path.extension().wstring();
-    for (const auto* value : {L".rockscene", L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".rockmodel", L".reproj", L".mmproj", L".mmmat"})
+    for (const auto* value : {L".rockscene", L".rockmountain", L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".rockmodel", L".reproj", L".mmproj", L".mmmat"})
         if (_wcsicmp(ext.c_str(), value) == 0) return true;
     return false;
 }
@@ -96,7 +96,7 @@ AssetRelations InspectAssetRelations(ProjectWorkspace& workspace, const fs::path
         return hit;
     };
     if (header.is_object()) references(header, target, true);
-    if (_wcsicmp(target.extension().c_str(), L".rockscene") == 0) {
+    if (IsSceneFile(target)) {
         const auto thumbnail = SceneThumbnailPath(workspace, target);
         if (!thumbnail.empty() && fs::exists(thumbnail, error)) result.related.push_back(thumbnail);
     }

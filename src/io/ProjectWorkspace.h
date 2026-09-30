@@ -58,4 +58,9 @@ private:
     std::unordered_map<std::string, std::string> m_knownUids;
 };
 
+// シーンのファイルか。岩グラフ（.rockscene）と山グラフ（.rockmountain）は中身が同じ形式で、拡張子だけが違う。
+bool IsSceneFile(const std::filesystem::path& path);
+// 山グラフ（.rockmountain）か。
+bool IsMountainFile(const std::filesystem::path& path);
+
 }  // namespace rock::io

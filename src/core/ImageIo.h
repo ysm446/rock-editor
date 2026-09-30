@@ -29,6 +29,11 @@ struct LdrImage {
 // PNG / TGA / JPG などを読み込む。失敗したら false を返し、理由はログへ出す。
 bool LoadLdrImage(const std::filesystem::path& path, LdrImage& outImage);
 
+// ハイトマップの画像を 0〜1 の高さとして読む（最初のチャンネル）。行 0 が画像の上。
+// 16bit の PNG は 16bit のまま、8bit の画像は 8bit で読む。EXR は値をそのまま使い、0〜1 を外れていれば
+// 最低〜最高を 0〜1 へ伸ばす。失敗したら false を返し、理由はログへ出す。
+bool LoadHeightImage(const std::filesystem::path& path, uint32_t& width, uint32_t& height, std::vector<float>& values);
+
 // Radiance HDR (.hdr) を読み込む。失敗したら false を返し、理由はログへ出す。
 // HDRI の「空」の代表輝度（上側の中央値）。
 //

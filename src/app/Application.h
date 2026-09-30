@@ -877,6 +877,17 @@ private:
     compositor::TextureId m_textureRemoveCandidate = compositor::kNoTexture;
     std::vector<std::string> m_textureRemoveUsers;
     bool m_pendingProjectNew = false;
+    // 開いている文書の種類。拡張子（.rockscene / .rockmountain）で決まり、右クリックメニューと保存先に効く。
+    enum class DocumentKind { Rock, Mountain };
+    DocumentKind m_documentKind = DocumentKind::Rock;
+    // 新規作成で作る文書の種類（m_pendingProjectNew と一緒に使う）。
+    DocumentKind m_pendingNewKind = DocumentKind::Rock;
+    // 新規作成した文書をすぐ保存する先（アセット欄の右クリックから作ったとき）。空なら保存しない。
+    std::filesystem::path m_pendingNewPath;
+    // 作った文書を保存する先と、保存してよいフレーム。新しい文書を描いてから保存する
+    // （すぐ保存すると、サムネイルに前の文書の画面が写る）。
+    std::filesystem::path m_newDocumentSavePath;
+    uint64_t m_newDocumentSaveFrame = 0;
 
     // --- アンドゥの状態 -----------------------------------------------------
     UndoHistory m_undoHistory;

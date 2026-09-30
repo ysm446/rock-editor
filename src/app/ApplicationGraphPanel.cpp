@@ -7,6 +7,8 @@
 // ノードエディタ UI から移植した。
 
 #include "app/Application.h"
+#include "core/FileDialog.h"
+#include "core/PathUtf8.h"
 #include "graph/RockEvaluator.h"
 #include "io/ProjectIo.h"
 #include "renderer/RockMesh.h"
@@ -432,6 +434,7 @@ void Application::SyncMeshGraph() {
         return graph::IsPieceNodeKind(n.kind) || n.kind == graph::NodeKind::ToVolume ||
                n.kind == graph::NodeKind::UvUnwrap || n.kind == graph::NodeKind::Decimate || n.kind == graph::NodeKind::Remesh ||
                n.kind == graph::NodeKind::Subdivide || n.kind == graph::NodeKind::Displace || n.kind == graph::NodeKind::RockAsset ||
+               n.kind == graph::NodeKind::Heightmap ||
                graph::IsImageMaskNodeKind(n.kind);
     });
     // 形状を決める部分と、選択中ノード（ピース操作欄に出す入力の評価先）を分けて持つ。
@@ -1317,6 +1320,13 @@ void Application::DrawGraphEditor() {
             ROCK_LOG_INFO("ノードを追加しました: %s", NodeDisplayName(*node));
         };
         // 扱う型ごとに分けて並べる。見出しは出力する型（変換ノードは変換後の型）で選ぶ。
+        // 山グラフでは地形・材質・共通だけを出す（岩を作るノードは岩グラフで使う）。
+        const bool mountain = m_documentKind == DocumentKind::Mountain;
+        if (mountain) {
+            ImGui::TextDisabled("地形");
+            addNodeMenuItem(graph::NodeKind::Heightmap, "Heightmap — ハイトマップ（画像 / ノイズ）から地形を作る");
+            ImGui::Separator();
+        } else {
         ImGui::TextDisabled("メッシュ（ポリゴン）");
         addNodeMenuItem(graph::NodeKind::BaseRock, "Base Shape — 基本形状と弱いノイズ");
         addNodeMenuItem(graph::NodeKind::RandomBoxes, "Random Boxes — 直方体メッシュを重ねて塊を作る");
@@ -1355,6 +1365,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
         ImGui::Separator();
+        }
         ImGui::TextDisabled("共通");
         addNodeMenuItem(graph::NodeKind::Merge, "Merge — メッシュとモデルをまとめる（モデルだけなら Transform へ繋げる）");
         addNodeMenuItem(graph::NodeKind::MeshOutput, "Mesh Output — メッシュとモデルを表示");
@@ -2060,6 +2071,84 @@ void Application::DrawGraphPanel() {
             edited.iterations = std::clamp(edited.iterations, 1, geometry::kMaxRemeshIterations);
             edited.featureAngle = std::clamp(edited.featureAngle, 0.0f, 180.0f);
             *remesh = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* terrain = std::get_if<geometry::HeightmapSettings>(&selected->settings)) {
+        auto edited = *terrain;
+        bool changed = false;
+        const geometry::HeightmapSettings defaults;
+        if (ui::BeginPropertyTable("heightmapRows")) {
+            const char* sources[] = {"ノイズ", "画像"};
+            int source = edited.source == geometry::HeightmapSource::Image ? 1 : 0;
+            if (ui::PropertyCombo("種類", &source, sources, 2, 0)) {
+                edited.source = source == 1 ? geometry::HeightmapSource::Image : geometry::HeightmapSource::Noise;
+                changed = true;
+            }
+            changed |= ui::PropertyFloat("幅 (m)", &edited.width, 10.0f, 2000.0f, defaults.width,
+                                         "X の長さです。Ctrl + クリックで 10000 まで入力できます。", "%.1f");
+            changed |= ui::PropertyFloat("奥行き (m)", &edited.depth, 10.0f, 2000.0f, defaults.depth,
+                                         "Z の長さです。Ctrl + クリックで 10000 まで入力できます。", "%.1f");
+            changed |= ui::PropertyFloat("最低の高さ (m)", &edited.minHeight, -500.0f, 500.0f, defaults.minHeight,
+                                         "ハイトマップの 0（黒）に当てる高さです。", "%.1f");
+            changed |= ui::PropertyFloat("最高の高さ (m)", &edited.maxHeight, 1.0f, 2000.0f, defaults.maxHeight,
+                                         "ハイトマップの 1（白）に当てる高さです。", "%.1f");
+            changed |= ui::PropertyInt("格子の細かさ", &edited.resolution, geometry::kMinTerrainResolution,
+                                       geometry::kMaxTerrainResolution, defaults.resolution,
+                                       "格子の一辺の分割数です。三角形数は 2 × 細かさ²（256 で約 13 万）。");
+            const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+            int resolutionIndex = 0;
+            while ((128 << resolutionIndex) < edited.textureResolution && resolutionIndex < 5) ++resolutionIndex;
+            if (ui::PropertyCombo("テクスチャ解像度", &resolutionIndex, resolutions, 6, 3,
+                                  "UV の画像の大きさです。Shape Mask や Material Bake がこの UV に画像を作ります。")) {
+                edited.textureResolution = 128 << resolutionIndex;
+                changed = true;
+            }
+            if (edited.source == geometry::HeightmapSource::Noise) {
+                changed |= ui::PropertyInt("Seed", &edited.seed, 0, 9999, defaults.seed);
+                changed |= ui::PropertyFloat("起伏の大きさ (m)", &edited.featureSize, 5.0f, 500.0f, defaults.featureSize,
+                                             "いちばん大きな起伏の大きさです。", "%.1f");
+                changed |= ui::PropertyFloat("荒さ", &edited.roughness, 0.0f, 1.0f, defaults.roughness,
+                                             "細かい起伏の強さです。大きいほど荒れます。");
+                changed |= ui::PropertyFloat("山の形", &edited.peak, 0.0f, 1.0f, defaults.peak,
+                                             "1 で中央が高く縁が低い 1 つの山、0 で一様な起伏です。");
+            }
+            ui::EndPropertyTable();
+        }
+        if (edited.source == geometry::HeightmapSource::Image) {
+            if (ImGui::Button("画像を選ぶ…")) {
+                const std::filesystem::path path = ShowOpenFileDialog(
+                    L"ハイトマップを開く", {{L"ハイトマップ", L"*.png;*.exr;*.tga;*.bmp;*.jpg"}});
+                if (!path.empty()) {
+                    edited.image = ToUtf8Portable(path);
+                    changed = true;
+                }
+            }
+            drawStatusLine(edited.image.empty() ? "画像: 未選択" : "画像: " + ToUtf8Display(FromUtf8(edited.image)));
+        }
+        {
+            size_t triangles = 0;
+            bool shown = false;
+            for (size_t i = 0; i < m_rockMeshReferences.size() && i < m_rockTriangleCounts.size(); ++i)
+                if (m_rockMeshReferences[i].source == selected->id) {
+                    triangles += m_rockTriangleCounts[i];
+                    shown = true;
+                }
+            drawStatusLine(shown ? "現在の出力: " + std::to_string(triangles) + " 三角形" : "現在の出力: 未評価");
+        }
+        ui::HintText("山グラフの地形です。ハイトマップ（画像かノイズ）から、UV 付きの格子のメッシュを作ります。"
+                     "中心が原点、ハイトマップの上が奥（-Z）です。");
+        ui::HintText("画像は 16bit PNG（推奨）、8bit PNG、EXR を読めます。EXR の値が 0〜1 を外れていれば、最低〜最高を 0〜1 に伸ばします。"
+                     "地形は UV 付きの Mesh なので、Shape Mask の上向き度（傾斜）・高さ・曲率、Apply Material がそのまま使えます。");
+        if (changed) {
+            edited.width = std::clamp(edited.width, geometry::kMinTerrainSize, geometry::kMaxTerrainSize);
+            edited.depth = std::clamp(edited.depth, geometry::kMinTerrainSize, geometry::kMaxTerrainSize);
+            edited.maxHeight = std::max(edited.maxHeight, edited.minHeight + 0.01f);
+            edited.resolution = std::clamp(edited.resolution, geometry::kMinTerrainResolution, geometry::kMaxTerrainResolution);
+            edited.featureSize = std::max(edited.featureSize, 0.1f);
+            edited.roughness = std::clamp(edited.roughness, 0.0f, 1.0f);
+            edited.peak = std::clamp(edited.peak, 0.0f, 1.0f);
+            *terrain = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

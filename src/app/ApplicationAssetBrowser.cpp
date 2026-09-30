@@ -334,6 +334,7 @@ void Application::DrawSceneSwitchDialog() {
         m_deferredRoot.clear();
         m_deferredScene.clear();
         m_deferredNew = false;
+        m_pendingNewPath.clear();
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
@@ -352,7 +353,7 @@ void Application::RefreshAssetBrowser() {
         if (entry.is_symlink(error) || entry.path().filename().wstring().starts_with(L".")) continue;
         const auto ext = Extension(entry.path());
         if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".rockmat" && ext != ".tglayer" && ext != ".rocksky" &&
-            ext != ".rockmodel" && ext != ".fbx" && ext != ".rockscene") continue;
+            ext != ".rockmodel" && ext != ".fbx" && ext != ".rockscene" && ext != ".rockmountain") continue;
         m_assetEntries.push_back(entry);
     }
     std::sort(m_assetEntries.begin(), m_assetEntries.end(), [](const auto& a, const auto& b) {
@@ -480,7 +481,7 @@ void Application::ProcessAssetWork() {
         io::ProjectWorkspace next;
         if (next.Open(root)) {
             // ルートの選択とシーンの選択を分ける。履歴から指定されたシーンだけ開く。
-            if (!m_pendingProjectOpen.empty() && Extension(m_pendingProjectOpen) == ".rockscene") {
+            if (!m_pendingProjectOpen.empty() && io::IsSceneFile(m_pendingProjectOpen)) {
                 nlohmann::json validation;
                 if (!next.ReadScene(m_pendingProjectOpen, validation)) {
                     ROCK_LOG_ERROR("シーンを読み込めません。現在のプロジェクトを保持します");
@@ -768,7 +769,7 @@ void Application::DrawAssetBrowser() {
             if (folder) {
                 DrawFolderIcon(thumb.min, thumb.max);
             } else if (!handle) {
-                const char* type = ext == ".rockscene" ? "シーン" : (ext == ".rockmat" || ext == ".tglayer") ? "マテリアル" :
+                const char* type = ext == ".rockscene" ? "シーン" : ext == ".rockmountain" ? "山グラフ" : (ext == ".rockmat" || ext == ".tglayer") ? "マテリアル" :
                     ext == ".rocksky" ? "天球" :
                     (ext == ".rockmodel" || ext == ".fbx") ? "モデル" :
                     IsImage(ext) || ext == ".hdr" ? "画像" : "ファイル";
@@ -942,6 +943,15 @@ void Application::DrawAssetBrowser() {
                 m_pendingAssetsSave = true;
                 MarkDocumentChanged();
             }
+            // 岩グラフ / 山グラフは、新しい文書を作って開き、このフォルダへすぐ保存する。
+            // 今の文書を閉じることになるので、切り替えの確認（保存するか）を通す。
+            const auto createDocument = [&](DocumentKind kind, const char* name, const char* extension) {
+                m_pendingProjectNew = true;
+                m_pendingNewKind = kind;
+                m_pendingNewPath = m_workspace.UniquePath(m_assetDirectory, name, extension);
+            };
+            if (ImGui::MenuItem("岩グラフを作成")) createDocument(DocumentKind::Rock, "新規岩グラフ", ".rockscene");
+            if (ImGui::MenuItem("山グラフを作成")) createDocument(DocumentKind::Mountain, "新規山グラフ", ".rockmountain");
             if (ImGui::MenuItem("天球を作成")) {
                 const auto id = m_skyLibrary.Add("新規天球");
                 auto* asset = m_skyLibrary.FindMutable(id);

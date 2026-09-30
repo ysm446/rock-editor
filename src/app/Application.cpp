@@ -355,7 +355,7 @@ int Application::Run() {
         if (!m_options.saveProjectPath.empty() && !m_bakeJob && !m_pendingBake && m_frameCounter >= m_options.screenshotFrame) {
             const io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                                        m_renderer, m_graph, &m_models};
-            const bool scene = _wcsicmp(m_options.saveProjectPath.extension().c_str(), L".rockscene") == 0;
+            const bool scene = io::IsSceneFile(m_options.saveProjectPath);
             if (io::SaveProject(m_options.saveProjectPath, refs, scene ? &m_workspace : nullptr) && scene) {
                 SaveSceneThumbnail(m_options.saveProjectPath);
             }

@@ -345,6 +345,7 @@ add_executable(rock_editor_tests
     src/io/RecentFiles.h
     src/core/Log.cpp
     src/core/Log.h
+    src/core/ImageIo.cpp
     src/app/UndoHistory.cpp
     src/app/UndoHistory.h
     src/core/FrameLimiter.cpp
@@ -366,7 +367,7 @@ add_executable(rock_editor_tests
 
 target_include_directories(rock_editor_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_sources(rock_editor_tests PRIVATE src/geometry/UvUnwrap.cpp tests/UvTests.cpp src/renderer/BakePadding.cpp)
-target_link_libraries(rock_editor_tests PRIVATE rock_xatlas)
+target_link_libraries(rock_editor_tests PRIVATE rock_xatlas unofficial::tinyexr::tinyexr)
 # テストの一時フォルダは data/test/ に作る（AGENTS.md）。
 target_compile_definitions(rock_editor_tests PRIVATE ROCK_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 target_compile_options(rock_editor_tests PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)
@@ -390,8 +391,8 @@ target_sources(rock_editor PRIVATE src/app/ApplicationPiecePanel.cpp)
 target_sources(rock_editor PRIVATE src/geometry/MeshVolume.cpp)
 target_sources(rock_editor_tests PRIVATE src/geometry/MeshVolume.cpp tests/MeshVolumeTests.cpp)
 
-target_sources(rock_editor PRIVATE src/geometry/DetailTransfer.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp)
-target_sources(rock_editor_tests PRIVATE src/geometry/DetailTransfer.cpp tests/DetailTransferTests.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp tests/DecimateTests.cpp tests/RemeshTests.cpp tests/RockAssetTests.cpp)
+target_sources(rock_editor PRIVATE src/geometry/Terrain.cpp src/geometry/DetailTransfer.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp)
+target_sources(rock_editor_tests PRIVATE src/geometry/Terrain.cpp tests/TerrainTests.cpp src/geometry/DetailTransfer.cpp tests/DetailTransferTests.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp tests/DecimateTests.cpp tests/RemeshTests.cpp tests/RockAssetTests.cpp)
 
 target_sources(rock_editor_tests PRIVATE tests/ApplyMaterialTests.cpp)
 
