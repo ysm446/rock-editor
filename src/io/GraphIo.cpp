@@ -304,6 +304,12 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
         } else if (const auto* clip = std::get_if<geometry::VolumeClipSettings>(&node.settings)) {
             item["volumeClip"] = {{"mode", geometry::VolumeClipModeName(clip->mode)}, {"height", clip->height},
                                   {"invert", clip->invert}, {"embed", clip->embed}};
+        } else if (const auto* spread = std::get_if<geometry::VolumeScatterSettings>(&node.settings)) {
+            item["volumeScatter"] = {{"shape", geometry::VolumeScatterShapeName(spread->shape)},
+                                     {"operation", geometry::VolumeScatterOperationName(spread->operation)},
+                                     {"count", spread->count}, {"radiusMin", spread->radiusMin}, {"radiusMax", spread->radiusMax},
+                                     {"depthMin", spread->depthMin}, {"depthMax", spread->depthMax},
+                                     {"elongation", spread->elongation}, {"blend", spread->blend}, {"seed", spread->seed}};
         } else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node.settings)) {
             item["volumeClose"] = {{"mode", geometry::VolumeCloseModeName(close->mode)}, {"width", close->width},
                                    {"distance", close->distance}, {"threshold", close->threshold},
@@ -940,6 +946,21 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.height = ReadFloat(*v, "height", settings.height);
                     settings.invert = ReadBool(*v, "invert", settings.invert);
                     settings.embed = ReadFloat(*v, "embed", settings.embed);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeScatter) {
+                geometry::VolumeScatterSettings settings;
+                if (const json* v = FindMember(item, "volumeScatter"); v && v->is_object()) {
+                    settings.shape = geometry::ParseVolumeScatterShape(ReadString(*v, "shape", "sphere"));
+                    settings.operation = geometry::ParseVolumeScatterOperation(ReadString(*v, "operation", "union"));
+                    settings.count = ReadInt(*v, "count", settings.count);
+                    settings.radiusMin = ReadFloat(*v, "radiusMin", settings.radiusMin);
+                    settings.radiusMax = ReadFloat(*v, "radiusMax", settings.radiusMax);
+                    settings.depthMin = ReadFloat(*v, "depthMin", settings.depthMin);
+                    settings.depthMax = ReadFloat(*v, "depthMax", settings.depthMax);
+                    settings.elongation = ReadFloat(*v, "elongation", settings.elongation);
+                    settings.blend = ReadFloat(*v, "blend", settings.blend);
+                    settings.seed = ReadUInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeClose) {

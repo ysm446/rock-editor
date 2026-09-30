@@ -1476,6 +1476,217 @@ VolumeGrid ClipVolume(const VolumeGrid& g, const VolumeClipSettings& s, std::str
     }
     return out;
 }
+const char* VolumeScatterShapeName(VolumeScatterShape shape) {
+    switch (shape) {
+        case VolumeScatterShape::Ellipsoid: return "ellipsoid";
+        case VolumeScatterShape::Box: return "box";
+        default: return "sphere";
+    }
+}
+const char* VolumeScatterOperationName(VolumeScatterOperation operation) {
+    return operation == VolumeScatterOperation::Difference ? "difference" : "union";
+}
+VolumeScatterShape ParseVolumeScatterShape(std::string_view name) {
+    if (name == "ellipsoid") return VolumeScatterShape::Ellipsoid;
+    if (name == "box") return VolumeScatterShape::Box;
+    return VolumeScatterShape::Sphere;
+}
+VolumeScatterOperation ParseVolumeScatterOperation(std::string_view name) {
+    return name == "difference" ? VolumeScatterOperation::Difference : VolumeScatterOperation::Union;
+}
+namespace {
+struct ScatterShape {
+    Vec3 center;
+    float axes[3][3];  // 回転した局所軸（行が軸）
+    float radii[3];
+    float bound;       // 中心から形が届く最大の距離
+};
+float ScatterShapeDistance(const ScatterShape& shape, VolumeScatterShape kind, const Vec3& p) {
+    const float d[3] = {p.x - shape.center.x, p.y - shape.center.y, p.z - shape.center.z};
+    float q[3];
+    for (int i = 0; i < 3; ++i) q[i] = shape.axes[i][0] * d[0] + shape.axes[i][1] * d[1] + shape.axes[i][2] * d[2];
+    if (kind == VolumeScatterShape::Sphere) return std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2]) - shape.radii[0];
+    if (kind == VolumeScatterShape::Box) {
+        float outside = 0, inside = -std::numeric_limits<float>::max();
+        for (int i = 0; i < 3; ++i) {
+            const float e = std::abs(q[i]) - shape.radii[i];
+            outside += std::max(e, 0.f) * std::max(e, 0.f);
+            inside = std::max(inside, e);
+        }
+        return std::sqrt(outside) + std::min(inside, 0.f);
+    }
+    // 楕円体の距離の近似（表面の近くで正確）。
+    float k0 = 0, k1 = 0;
+    for (int i = 0; i < 3; ++i) {
+        k0 += (q[i] / shape.radii[i]) * (q[i] / shape.radii[i]);
+        k1 += (q[i] / (shape.radii[i] * shape.radii[i])) * (q[i] / (shape.radii[i] * shape.radii[i]));
+    }
+    k0 = std::sqrt(k0);
+    k1 = std::sqrt(k1);
+    return k1 > 0 ? k0 * (k0 - 1) / k1 : -shape.radii[0];
+}
+}  // namespace
+VolumeGrid ScatterVolume(const VolumeGrid& g, const VolumeScatterSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (s.shape != VolumeScatterShape::Sphere && s.shape != VolumeScatterShape::Ellipsoid &&
+        s.shape != VolumeScatterShape::Box) {
+        error = "形の種類が不正です";
+        return {};
+    }
+    if (s.operation != VolumeScatterOperation::Union && s.operation != VolumeScatterOperation::Difference) {
+        error = "合成の仕方が不正です";
+        return {};
+    }
+    if (s.count < 1 || s.count > kMaxVolumeScatterCount) {
+        error = "数は 1～2000 にしてください";
+        return {};
+    }
+    if (!range(s.radiusMin, .005f, .3f) || !range(s.radiusMax, .005f, .3f) || s.radiusMin > s.radiusMax) {
+        error = "半径は 0.005～0.3 で、最小を最大以下にしてください";
+        return {};
+    }
+    if (!range(s.depthMin, -1, 4) || !range(s.depthMax, -1, 4) || s.depthMin > s.depthMax) {
+        error = "深さは -1～4 で、最小を最大以下にしてください";
+        return {};
+    }
+    if (!range(s.elongation, 1, 4) || !range(s.blend, 0, 1)) {
+        error = "細長さは 1～4、なじませる幅は 0～1 にしてください";
+        return {};
+    }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    const bool add = s.operation == VolumeScatterOperation::Union;
+    const float radiusMax = s.radiusMax * longest;
+    const float reachMax = radiusMax * (s.shape == VolumeScatterShape::Sphere ? 1.f : std::sqrt(3.f)) * (1 + s.blend);
+    // 和では形が表面から突き出す。突き出す分だけ格子を広げる（外周は空のまま保つ）。
+    const uint32_t pad = add ? uint32_t(std::ceil(reachMax * (1 - std::min(s.depthMin, 0.f)) / g.spacing)) + 1 : 0;
+    VolumeGrid out;
+    out.spacing = g.spacing;
+    out.origin = {g.origin.x - float(pad) * g.spacing, g.origin.y - float(pad) * g.spacing, g.origin.z - float(pad) * g.spacing};
+    for (int i = 0; i < 3; ++i) {
+        if (uint64_t(g.dimensions[i]) + 2 * pad > kMaxGridPointsPerAxis) {
+            error = "突き出す形のために広げた格子が各軸256点の上限を超えます。半径を小さくするか、上流の解像度を下げてください";
+            return {};
+        }
+        out.dimensions[i] = g.dimensions[i] + 2 * pad;
+    }
+    out.values.resize(size_t(out.dimensions[0]) * out.dimensions[1] * out.dimensions[2]);
+    for (uint32_t z = 0; z < out.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < out.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < out.dimensions[0]; ++x) {
+                const bool onInput = x >= pad && y >= pad && z >= pad && x - pad < g.dimensions[0] &&
+                                     y - pad < g.dimensions[1] && z - pad < g.dimensions[2];
+                out.values[out.Index(x, y, z)] =
+                    onInput ? g.values[g.Index(x - pad, y - pad, z - pad)] : SampleVolume(g, out.Position(x, y, z));
+            }
+    const std::vector<float> before = out.values;
+
+    // 中心を選ぶ。内部の外接箱の中から乱数で点を取り、表面からの深さが狙いに近いものを採る。
+    float lo[3], hi[3];
+    {
+        uint32_t minimum[3] = {g.dimensions[0], g.dimensions[1], g.dimensions[2]}, maximum[3] = {0, 0, 0};
+        for (uint32_t z = 0; z < g.dimensions[2]; ++z)
+            for (uint32_t y = 0; y < g.dimensions[1]; ++y)
+                for (uint32_t x = 0; x < g.dimensions[0]; ++x)
+                    if (g.values[g.Index(x, y, z)] < 0) {
+                        const uint32_t c[3] = {x, y, z};
+                        for (int i = 0; i < 3; ++i) {
+                            minimum[i] = std::min(minimum[i], c[i]);
+                            maximum[i] = std::max(maximum[i], c[i]);
+                        }
+                    }
+        const float o[3] = {g.origin.x, g.origin.y, g.origin.z};
+        for (int i = 0; i < 3; ++i) {
+            lo[i] = o[i] + float(minimum[i]) * g.spacing - radiusMax;
+            hi[i] = o[i] + float(maximum[i]) * g.spacing + radiusMax;
+        }
+    }
+    uint64_t state = (uint64_t(s.seed) << 32) ^ 0x5CA77E4ull;
+    const auto next = [&]() { return float(HashUnit(state++)); };
+    std::vector<ScatterShape> shapes;
+    shapes.reserve(size_t(s.count));
+    const size_t maxTries = size_t(s.count) * 400;
+    for (size_t tries = 0; tries < maxTries && shapes.size() < size_t(s.count); ++tries) {
+        const float r = (s.radiusMin + (s.radiusMax - s.radiusMin) * next()) * longest;
+        const Vec3 c{lo[0] + (hi[0] - lo[0]) * next(), lo[1] + (hi[1] - lo[1]) * next(), lo[2] + (hi[2] - lo[2]) * next()};
+        const float target = (s.depthMin + (s.depthMax - s.depthMin) * next()) * r;
+        const float depth = -SampleVolume(g, c);
+        if (std::abs(depth - target) > std::max(g.spacing, .25f * r)) continue;
+        ScatterShape shape;
+        shape.center = c;
+        shape.radii[0] = r;
+        for (int i = 1; i < 3; ++i)
+            shape.radii[i] = s.shape == VolumeScatterShape::Sphere ? r : r / (1 + (s.elongation - 1) * next());
+        if (s.shape == VolumeScatterShape::Box)
+            for (float& radius : shape.radii) radius *= .8f;
+        // 一様な乱数の回転（四元数）。
+        const float u1 = next(), u2 = next() * 2 * std::numbers::pi_v<float>, u3 = next() * 2 * std::numbers::pi_v<float>;
+        const float qa = std::sqrt(1 - u1) * std::sin(u2), qb = std::sqrt(1 - u1) * std::cos(u2),
+                    qc = std::sqrt(u1) * std::sin(u3), qd = std::sqrt(u1) * std::cos(u3);
+        const float m[3][3] = {{1 - 2 * (qb * qb + qc * qc), 2 * (qa * qb - qc * qd), 2 * (qa * qc + qb * qd)},
+                               {2 * (qa * qb + qc * qd), 1 - 2 * (qa * qa + qc * qc), 2 * (qb * qc - qa * qd)},
+                               {2 * (qa * qc - qb * qd), 2 * (qb * qc + qa * qd), 1 - 2 * (qa * qa + qb * qb)}};
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) shape.axes[i][j] = m[i][j];
+        shape.bound = std::sqrt(shape.radii[0] * shape.radii[0] + shape.radii[1] * shape.radii[1] + shape.radii[2] * shape.radii[2]) *
+                      (1 + s.blend) + g.spacing;
+        shapes.push_back(shape);
+    }
+    if (shapes.empty()) {
+        error = "表面の近くに形を置けませんでした。深さの範囲か半径を見直してください";
+        return {};
+    }
+
+    // 形ごとに、届く範囲の格子点だけを更新する。なめらかな和・差（多項式の smin）でなじませる。
+    for (const ScatterShape& shape : shapes) {
+        const float k = s.blend * shape.radii[0];
+        const float c[3] = {shape.center.x, shape.center.y, shape.center.z}, o[3] = {out.origin.x, out.origin.y, out.origin.z};
+        uint32_t from[3], to[3];
+        for (int i = 0; i < 3; ++i) {
+            const float a = std::floor((c[i] - shape.bound - o[i]) / out.spacing), b = std::ceil((c[i] + shape.bound - o[i]) / out.spacing);
+            from[i] = uint32_t(std::clamp(a, 1.f, float(out.dimensions[i] - 2)));
+            to[i] = uint32_t(std::clamp(b, 1.f, float(out.dimensions[i] - 2)));
+        }
+        for (uint32_t z = from[2]; z <= to[2]; ++z)
+            for (uint32_t y = from[1]; y <= to[1]; ++y)
+                for (uint32_t x = from[0]; x <= to[0]; ++x) {
+                    float& value = out.values[out.Index(x, y, z)];
+                    const float d = ScatterShapeDistance(shape, s.shape, out.Position(x, y, z));
+                    const float a = value, b = add ? d : -d;
+                    if (k <= 0) {
+                        value = add ? std::min(a, b) : std::max(a, b);
+                    } else if (add) {
+                        const float h = std::clamp(.5f + .5f * (b - a) / k, 0.f, 1.f);
+                        value = b * (1 - h) + a * h - k * h * (1 - h);
+                    } else {
+                        const float h = std::clamp(.5f - .5f * (b - a) / k, 0.f, 1.f);
+                        value = b * (1 - h) + a * h + k * h * (1 - h);
+                    }
+                }
+    }
+    const float threshold = out.spacing * 1e-4f;
+    bool inside = false;
+    for (float& value : out.values) {
+        if (std::abs(value) < threshold) value = threshold;
+        inside |= value < 0;
+    }
+    if (!inside) {
+        error = "合成した結果に内部が残りません。穴の数か半径を減らしてください";
+        return {};
+    }
+    // 浮いた形（入力の塊と重ならない礫）と、穴が切り離した小片を除く。内部に閉じた気泡は埋める（見えないため）。
+    KeepLargestComponents(out, before);
+    FillNewVoids(out, before);
+    return out;
+}
 VolumeGrid TerraceVolume(const VolumeGrid& g, const VolumeTerraceSettings& s, std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {

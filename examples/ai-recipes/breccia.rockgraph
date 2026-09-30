@@ -1,0 +1,20 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 7, "size": [2.2, 1.6, 1.8], "sizeVariation": 0.45, "spread": 0.7, "rotation": 25, "seed": 41}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 3, "kind": "planeCuts", "planeCuts": {"count": 10, "depthMin": 0.04, "depthMax": 0.18, "seed": 6}},
+      {"id": 8, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.025, "amount": 1}},
+      {"id": 4, "kind": "volumeScatter", "note": "角張った礫（箱）を埋める", "volumeScatter": {"shape": "box", "operation": "union", "count": 160, "radiusMin": 0.02, "radiusMax": 0.05, "depthMin": 0.3, "depthMax": 0.9, "elongation": 1.6, "blend": 0.1, "seed": 8}},
+      {"id": 5, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 6, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 7, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "8"}, {"from": "8", "to": "4"},
+      {"from": "4", "to": "5"}, {"from": "5", "to": "6"}, {"from": "6", "to": "7:Geometry"}
+    ]
+  }
+}

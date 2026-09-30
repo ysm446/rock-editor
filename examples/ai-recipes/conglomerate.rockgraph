@@ -1,0 +1,21 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 7, "size": [2.2, 1.6, 1.8], "sizeVariation": 0.45, "spread": 0.7, "rotation": 25, "seed": 41}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 3, "kind": "planeCuts", "planeCuts": {"count": 10, "depthMin": 0.04, "depthMax": 0.18, "seed": 6}},
+      {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.025, "amount": 1}},
+      {"id": 5, "kind": "volumeScatter", "note": "丸い礫を半分ほど埋める（大きい礫）", "volumeScatter": {"shape": "ellipsoid", "operation": "union", "count": 70, "radiusMin": 0.035, "radiusMax": 0.08, "depthMin": -0.1, "depthMax": 0.6, "elongation": 1.8, "blend": 0.15, "seed": 3}},
+      {"id": 6, "kind": "volumeScatter", "note": "小さい礫を多数", "volumeScatter": {"shape": "ellipsoid", "operation": "union", "count": 300, "radiusMin": 0.012, "radiusMax": 0.03, "depthMin": 0, "depthMax": 0.6, "elongation": 1.6, "blend": 0.1, "seed": 4}},
+      {"id": 7, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 8, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 9, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9:Geometry"}
+    ]
+  }
+}

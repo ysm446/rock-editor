@@ -1430,6 +1430,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeBoolean, "Volume Boolean — 2つのボリュームの和・交差・差");
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
         addNodeMenuItem(graph::NodeKind::VolumeClip, "Volume Clip — 水平な平面で切り、下（または上）を捨てる");
+        addNodeMenuItem(graph::NodeKind::VolumeScatter, "Volume Scatter — 表面の近くに小さな形を散らし、礫を足す / 穴を抜く");
         addNodeMenuItem(graph::NodeKind::ParallelPlanes, "Parallel Planes — 向きと間隔から平行な構造面を定義");
         addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 構造面や点群の境界に沿って割れ目を彫る");
         addNodeMenuItem(graph::NodeKind::VolumeNoise, "Volume Noise — 表面をノイズで削り、直線的な面を崩す");
@@ -1755,6 +1756,52 @@ void Application::DrawGraphPanel() {
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *wear = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* spread = std::get_if<geometry::VolumeScatterSettings>(&selected->settings)) {
+        auto edited = *spread;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeScatterRows")) {
+            const char* shapes[] = {"球", "楕円体", "箱（角張った礫）"};
+            int shape = std::clamp(static_cast<int>(edited.shape), 0, 2);
+            if (ui::PropertyCombo("形", &shape, shapes, 3, 0, "散らす形です。")) {
+                edited.shape = static_cast<geometry::VolumeScatterShape>(shape);
+                changed = true;
+            }
+            const char* operations[] = {"和（足す）", "差（抜く）"};
+            int operation = std::clamp(static_cast<int>(edited.operation), 0, 1);
+            if (ui::PropertyCombo("合成", &operation, operations, 2, 0,
+                                  "和は形を足します（埋まった礫・角礫）。差は形を抜きます（気泡の穴・くぼみ）。")) {
+                edited.operation = static_cast<geometry::VolumeScatterOperation>(operation);
+                changed = true;
+            }
+            changed |= ui::PropertyInt("数", &edited.count, 1, geometry::kMaxVolumeScatterCount, 60, "散らす形の数（置けた分だけ）です。");
+            changed |= ui::PropertyFloat("半径 最小", &edited.radiusMin, .005f, .3f, .03f, "形の最長辺に対する比です。");
+            changed |= ui::PropertyFloat("半径 最大", &edited.radiusMax, .005f, .3f, .07f, "形の最長辺に対する比です。");
+            changed |= ui::PropertyFloat("深さ 最小", &edited.depthMin, -1, 4, -.3f,
+                                         "中心を置く深さ。表面から内側を正とし、その形の半径に対する比です。負なら中心が外に出ます。");
+            changed |= ui::PropertyFloat("深さ 最大", &edited.depthMax, -1, 4, .5f, "中心を置く深さの最大です。");
+            changed |= ui::PropertyFloat("細長さ", &edited.elongation, 1, 4, 1.6f, "楕円体・箱の軸の長さの比の最大です。");
+            changed |= ui::PropertyFloat("なじませる幅", &edited.blend, 0, 1, .2f, "形の境をなめらかにつなぐ幅。その形の半径に対する比です。");
+            int seed = static_cast<int>(edited.seed);
+            if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
+                edited.seed = static_cast<uint32_t>(std::max(seed, 0));
+                changed = true;
+            }
+            ui::EndPropertyTable();
+        }
+        ui::HintText("表面の近くに小さな形を散らします。和で礫岩・角礫岩の埋まった礫、差で多孔質の溶岩の気泡の穴を作れます。"
+                     "形の外に浮いた形は除きます。");
+        if (changed) {
+            edited.count = std::clamp(edited.count, 1, geometry::kMaxVolumeScatterCount);
+            edited.radiusMin = std::clamp(edited.radiusMin, .005f, .3f);
+            edited.radiusMax = std::clamp(edited.radiusMax, edited.radiusMin, .3f);
+            edited.depthMin = std::clamp(edited.depthMin, -1.0f, 4.0f);
+            edited.depthMax = std::clamp(edited.depthMax, edited.depthMin, 4.0f);
+            edited.elongation = std::clamp(edited.elongation, 1.0f, 4.0f);
+            edited.blend = std::clamp(edited.blend, 0.0f, 1.0f);
+            *spread = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

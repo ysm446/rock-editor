@@ -101,7 +101,7 @@ std::optional<Host> MakeHost(graph::NodeKind kind) {
         Connect(g, SmallBox(g), host.target, 0);
         return host;
     case K::VolumeTransform: case K::PlaneCuts: case K::VolumeNoise: case K::VolumeSmooth: case K::VolumeTerrace:
-    case K::VolumeClose: case K::VolumeEdgeWear: case K::VolumeClip: case K::VolumeToMesh:
+    case K::VolumeClose: case K::VolumeEdgeWear: case K::VolumeClip: case K::VolumeToMesh: case K::VolumeScatter:
         host.target = host.evaluate = Add(g, kind);
         Connect(g, SmallVolume(g), host.target, 0);
         return host;
@@ -169,6 +169,10 @@ const std::vector<EdgeRule>& EdgeRules() {
         {"planeCuts:planeCuts.blend", json::object(), false, true, "大きいと小さな形では中身が残らない"},
         {"volumeClip:volumeClip.height", json::object(), false, true, "形より上で切ると中身が残らない"},
         {"planeCuts:planeCuts.depthMin", {{"planeCuts.depthMax", 0.45}}},
+        {"volumeScatter:volumeScatter.radiusMin", {{"volumeScatter.radiusMax", 0.3}}},
+        {"volumeScatter:volumeScatter.radiusMax", {{"volumeScatter.radiusMin", 0.005}}},
+        {"volumeScatter:volumeScatter.depthMin", {{"volumeScatter.depthMax", 4}}},
+        {"volumeScatter:volumeScatter.depthMax", {{"volumeScatter.depthMin", -1}}},
         {"planeCuts:planeCuts.depthMax", {{"planeCuts.depthMin", 0}}},
         {"heightmap:heightmap.minHeight", {{"heightmap.maxHeight", 10000}}, false, true, "最高より低くなければならない"},
         {"heightmap:heightmap.maxHeight", {{"heightmap.minHeight", -10000}}, true, false, "最低より高くなければならない"},

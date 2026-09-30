@@ -197,6 +197,28 @@ struct VolumeTerraceSettings {
 //   幅  : モルフォロジーのクロージング。幅より狭い隙間を埋める。浅い切れ込みや表面の細かいくぼみも幅が狭ければ埋まる。
 //   遮蔽: 表面近くの外部の点から全方向へレイを飛ばし、距離以内に形へ当たった割合（遮蔽率）がしきい値以上の点を埋める。
 //         平らな面の近くは半分しか遮られないので残り、割れ目の奥や壁の陰だけが埋まる。幅にも深さにも直接は依らない。
+// Volume Scatter。散らす形と合成の仕方。
+enum class VolumeScatterShape { Sphere, Ellipsoid, Box };
+enum class VolumeScatterOperation { Union, Difference };
+const char* VolumeScatterShapeName(VolumeScatterShape shape);
+const char* VolumeScatterOperationName(VolumeScatterOperation operation);
+// 知らない名前は Sphere / Union。
+VolumeScatterShape ParseVolumeScatterShape(std::string_view name);
+VolumeScatterOperation ParseVolumeScatterOperation(std::string_view name);
+inline constexpr int kMaxVolumeScatterCount = 2000;
+struct VolumeScatterSettings {
+    VolumeScatterShape shape = VolumeScatterShape::Sphere;
+    VolumeScatterOperation operation = VolumeScatterOperation::Union;
+    int count = 60;                           // 散らす数。1～2000
+    float radiusMin = .03f, radiusMax = .07f; // 半径。形の最長辺に対する比。0.005～0.3（最小 ≦ 最大）
+    // 中心を置く深さ。表面から内側を正とし、その形の半径に対する比。-1～4（最小 ≦ 最大）。
+    // 礫は -0.3～0.5 くらい（半分ほど突き出る）、気泡の穴は 0～1.5 くらい。
+    float depthMin = -.3f, depthMax = .5f;
+    float elongation = 1.6f;                  // 楕円体・箱の軸の長さの比の最大。1～4
+    float blend = .2f;                        // 形の境をなじませる幅。その形の半径に対する比。0～1
+    uint32_t seed = 1;
+};
+
 enum class VolumeCloseMode { Width, Occlusion };
 const char* VolumeCloseModeName(VolumeCloseMode mode);
 // 不明な名前は Occlusion として読む。
@@ -274,6 +296,9 @@ VolumeGrid TerraceVolume(const VolumeGrid& grid, const VolumeTerraceSettings& se
 VolumeGrid CloseVolume(const VolumeGrid& grid, const VolumeCloseSettings& settings, std::string& error);
 // 格子（範囲・セル間隔）は入力のまま。切り口は平らな面になる。切り離された塊もそのまま残す。
 VolumeGrid ClipVolume(const VolumeGrid& grid, const VolumeClipSettings& settings, std::string& error);
+// 表面の近くに小さな形を散らし、和（埋まった礫）か差（穴・気泡）で合成する。和では突き出す分だけ格子を広げる。
+// 形の外に浮いた形（入力の塊と重ならない塊）と、加工でできた閉じた空洞は除く。
+VolumeGrid ScatterVolume(const VolumeGrid& grid, const VolumeScatterSettings& settings, std::string& error);
 // 表示用の等値面。グリッドを残し、内部に重複面のない外皮を抽出する。
 Mesh VolumeSurface(const VolumeGrid& grid, std::string& error,
                    VolumeMeshingMethod method = VolumeMeshingMethod::MarchingTetrahedra);

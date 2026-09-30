@@ -44,6 +44,9 @@ constexpr ParamOption kCombineOps[] = {{"multiply", 0, "積"}, {"maximum", 1, "�
 constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"}};
 constexpr ParamOption kClipModes[] = {{"world", 0, "指定した高さで切る"},
                                      {"ground", 1, "形の底から embed の位置で切り、切り口を height（地面）に置く"}};
+constexpr ParamOption kScatterShapes[] = {{"sphere", 0, "球"}, {"ellipsoid", 1, "楕円体（丸い礫・気泡）"},
+                                         {"box", 2, "箱（角張った礫・角礫岩）"}};
+constexpr ParamOption kScatterOperations[] = {{"union", 0, "和: 形を足す（埋まった礫）"}, {"difference", 1, "差: 形を抜く（気泡の穴）"}};
 constexpr ParamOption kHeightmapSources[] = {{"noise", 0, "ノイズの山"}, {"image", 1, "画像（image のパス）"}};
 constexpr ParamOption kMappingMethods[] = {{"uv", 0, "UV"}, {"triplanar", 1, "Triplanar（UV 不要。岩の下地に向く）"}};
 constexpr ParamOption kValueSources[] = {{"constant", 0, "一定"}, {"noise", 1, "ノイズ"}, {"texture", 2, "テクスチャ"}};
@@ -196,6 +199,19 @@ constexpr ParamDefinition kParams[] = {
     {K::VolumeClip, "volumeClip.embed", T::Float, 0, 0.9, "形の高さに対する比", "埋める割合",
      "ground 用。形の底からこの割合の高さで切って捨てる（地面に埋まった部分）。0 で底をそのまま据える", C::Error},
     {K::VolumeClip, "volumeClip.invert", T::Bool, N, N, "", "反転", "false で下を捨てる、true で上を捨てる", C::None},
+    {K::VolumeScatter, "volumeScatter.shape", T::Enum, N, N, "", "形", "散らす形", C::Clamp, kScatterShapes},
+    {K::VolumeScatter, "volumeScatter.operation", T::Enum, N, N, "", "合成", "", C::Clamp, kScatterOperations},
+    {K::VolumeScatter, "volumeScatter.count", T::Int, 1, 2000, "個", "数", "置けた分だけ置く（表面の近くに置ける場所が足りないと減る）", C::Error},
+    {K::VolumeScatter, "volumeScatter.radiusMin", T::Float, 0.005, 0.3, kLongest, "半径 最小", "radiusMax 以下", C::Error},
+    {K::VolumeScatter, "volumeScatter.radiusMax", T::Float, 0.005, 0.3, kLongest, "半径 最大",
+     "To Volume のセル（最長辺 ÷ 解像度）の 2 倍より小さい形は潰れる", C::Error},
+    {K::VolumeScatter, "volumeScatter.depthMin", T::Float, -1, 4, "その形の半径に対する比", "深さ 最小",
+     "中心を置く深さ。表面から内側が正。礫は -0.3〜0.5（半分ほど突き出る）、気泡の穴は 0〜1.5。depthMax 以下", C::Error},
+    {K::VolumeScatter, "volumeScatter.depthMax", T::Float, -1, 4, "その形の半径に対する比", "深さ 最大", "", C::Error},
+    {K::VolumeScatter, "volumeScatter.elongation", T::Float, 1, 4, "比", "細長さ", "楕円体・箱の軸の長さの比の最大", C::Error},
+    {K::VolumeScatter, "volumeScatter.blend", T::Float, 0, 1, "その形の半径に対する比", "なじませる幅",
+     "形の境をなめらかにつなぐ（和では礫の根元が埋まったように、差では穴の縁が丸く）", C::Error},
+    {K::VolumeScatter, "volumeScatter.seed", T::Int, 0, N, "", "Seed", "", C::None},
     // --- メッシュ ---
     {K::Decimate, "decimate.targetTriangles", T::Int, 64, 500000, "三角形", "目標の三角形数", "入力全体に対する数。評価で範囲へ丸める", C::Clamp},
     {K::Decimate, "decimate.maxError", T::Float, 0, 0.1, kLongest, "形のずれの上限", "0 で上限なし", C::Error},
@@ -363,6 +379,8 @@ constexpr NodeSummary kSummaries[] = {
     {K::NoiseMask, "表面の 3D 座標からムラのマスクを作る", "UV 付きの Mesh が要る"},
     {K::DepositionMask, "土が溜まりそうな所（窪み・緩い面）のマスクを作る", "UV 付きの Mesh が要る"},
     {K::MaskFilter, "マスクをぼかす・シャープにする・レベル補正する", ""},
+    {K::VolumeScatter, "表面の近くに小さな形を散らし、和（埋まった礫）か差（穴・気泡）で合成する",
+     "礫岩・角礫岩・多孔質の溶岩に使う。和で突き出す分だけ格子を広げる（各軸 256 点まで）。浮いた形は除く"},
     {K::VolumeClip, "水平面でボリュームを切り、片側を捨てる（接地面を作る）",
      "mode: ground で、原点中心の形を持ち上げずに地面へ据えられる。分かれた塊は残す"},
     {K::RockAsset, "岩グラフの最終段。LOD を作り、岩アセットにする", "Material Bake の後に置く"},

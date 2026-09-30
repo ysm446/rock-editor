@@ -76,6 +76,11 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         const auto* s = std::get_if<geometry::VolumeClipSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->height); add(s->invert); add(int(s->mode)); add(s->embed);
+    } else if (node->kind == NodeKind::VolumeScatter) {
+        const auto* s = std::get_if<geometry::VolumeScatterSettings>(&node->settings);
+        if (!s) return std::nullopt;
+        add(int(s->shape)); add(int(s->operation)); add(s->count); add(s->radiusMin); add(s->radiusMax);
+        add(s->depthMin); add(s->depthMax); add(s->elongation); add(s->blend); add(s->seed);
     } else if (node->kind == NodeKind::VolumeClose) {
         const auto* s = std::get_if<geometry::VolumeCloseSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -257,7 +262,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                                  node->kind == NodeKind::RockAsset || node->kind == NodeKind::Heightmap ||
                                  node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace ||
                                  node->kind == NodeKind::VolumeClose || node->kind == NodeKind::VolumeEdgeWear ||
-                                 node->kind == NodeKind::VolumeClip ||
+                                 node->kind == NodeKind::VolumeClip || node->kind == NodeKind::VolumeScatter ||
                                  node->kind == NodeKind::VolumeToMesh || node->kind == NodeKind::Subdivide || node->kind == NodeKind::Displace ||
                                  IsImageMaskNodeKind(node->kind);
         const auto persistentKey = persistent && volumeCache ? VolumeKey(graph, id, heightKeys) : std::nullopt;
@@ -938,8 +943,10 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 rock.source = id;
             }
         } else if (node->kind == NodeKind::VolumeSmooth || node->kind == NodeKind::VolumeTerrace || node->kind == NodeKind::VolumeClose ||
-                   node->kind == NodeKind::VolumeEdgeWear || node->kind == NodeKind::VolumeClip) {
-            const char* name = node->kind == NodeKind::VolumeSmooth ? "Volume Smooth"
+                   node->kind == NodeKind::VolumeEdgeWear || node->kind == NodeKind::VolumeClip ||
+                   node->kind == NodeKind::VolumeScatter) {
+            const char* name = node->kind == NodeKind::VolumeScatter ? "Volume Scatter"
+                             : node->kind == NodeKind::VolumeSmooth ? "Volume Smooth"
                              : node->kind == NodeKind::VolumeTerrace ? "Volume Terrace"
                              : node->kind == NodeKind::VolumeEdgeWear ? "Volume Edge Wear"
                              : node->kind == NodeKind::VolumeClip ? "Volume Clip" : "Volume Close";
@@ -960,6 +967,8 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 processed = geometry::EdgeWearVolume(*input.rocks[0].volume, *wear, error);
             else if (const auto* clip = std::get_if<geometry::VolumeClipSettings>(&node->settings))
                 processed = geometry::ClipVolume(*input.rocks[0].volume, *clip, error);
+            else if (const auto* scatter = std::get_if<geometry::VolumeScatterSettings>(&node->settings))
+                processed = geometry::ScatterVolume(*input.rocks[0].volume, *scatter, error);
             else error = "設定がありません";
             if (!error.empty()) return finish(Failure(id, name, error));
             GeneratedRock rock;
