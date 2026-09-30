@@ -239,7 +239,7 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
         // 拡張子で行き先を決める。読み込み自体はどれも保留し、フレームの外で処理する。
         if (extension == ".rockscene" || extension == ".rockmountain") {
             m_pendingProjectOpen = path;
-        } else if (extension == ".rocksky" || extension == ".rockmodel") {
+        } else if (extension == ".rocksky" || extension == ".model") {
             m_pendingAssetOpen = path;
         } else if (extension == ".fbx") {
             // ルート外ならアセットの帯で表示中のフォルダへ取り込む（ProcessModelWork）。

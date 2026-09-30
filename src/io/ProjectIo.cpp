@@ -2040,7 +2040,7 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs) {
             json body = {{"name", model.name}, {"source", source(model.path)}, {"scale", model.scale},
                          {"materials", std::move(slots)}};
             body["uid"] = model.assetUid;
-            fs::path assetPath = placement(body, model.assetPath, "model-asset", L"Models", model.name, ".rockmodel");
+            fs::path assetPath = placement(body, model.assetPath, "model-asset", L"Models", model.name, ".model");
             if (!valid || !workspace.SaveAsset(assetPath, "model-asset", body)) {
                 ROCK_LOG_ERROR("モデルを保存できません: %s", model.name.c_str());
                 return false;
@@ -2117,7 +2117,7 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
     }
     const json reference = {{"uid", assetUid}, {"path", RelativePathString(path, workspace.Root())}};
     const bool isMaterial = _wcsicmp(path.extension().c_str(), L".rockmat") == 0 || _wcsicmp(path.extension().c_str(), L".tglayer") == 0;
-    const bool isModel = _wcsicmp(path.extension().c_str(), L".rockmodel") == 0;
+    const bool isModel = _wcsicmp(path.extension().c_str(), L".model") == 0;
     if (isModel && models == nullptr) {
         return false;
     }

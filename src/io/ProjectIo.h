@@ -25,7 +25,7 @@ struct ProjectRefs {
     renderer::SkyLibrary& skies;
     renderer::PreviewRenderer& renderer;
     graph::NodeGraph& graph;
-    // モデル（.rockmodel）。渡さなければモデルは読み書きしない。
+    // モデル（.model）。渡さなければモデルは読み書きしない。
     std::vector<renderer::ModelAsset>* models = nullptr;
 };
 
@@ -45,7 +45,7 @@ bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
                  rhi::PipelineCache& pipelineCache, const ProjectRefs& refs,
                  ProjectWorkspace* workspace = nullptr);
 
-// --- 共有アセット（ルート内の .rockmat / .rocksky / .rockmodel） ---------------
+// --- 共有アセット（ルート内の .rockmat / .rocksky / .model） ---------------
 //
 // 読み込み済みのマテリアル・天球・モデルをそれぞれのファイルへ書く。
 // 置き場所が未定のものは `Materials/` / `Skies/` / `Models/` に名前から作る。
@@ -56,7 +56,7 @@ bool SaveSharedAssets(ProjectWorkspace& workspace, const ProjectRefs& refs);
 // 共有アセット 1 つを現在のライブラリへ足す。同じ ID がすでにあれば足さずにそれを使う
 // （天球は適用する）。参照している画像もその場で読み込む。
 // rescan を false にすると、ルートを走査し直さず手持ちの ID 表で解決する（サムネイルの連続生成用）。
-// .rockmodel は models へ足し（参照するマテリアルもライブラリへ）、models が無ければ失敗する。
+// .model は models へ足し（参照するマテリアルもライブラリへ）、models が無ければ失敗する。
 bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& path,
                      rhi::Device& device, rhi::PipelineCache& pipelineCache,
                      compositor::TextureLibrary& textures, compositor::MaterialLibrary& materials,

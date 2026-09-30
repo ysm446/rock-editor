@@ -151,8 +151,8 @@ compositor::TextureId Application::ShapeMaskTextureFor(const std::shared_ptr<con
     return id;
 }
 
-void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::GeneratedRock &rock,
-                                    bool useBaked, const renderer::MeshData* bakeGeometry) {
+bool Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::GeneratedRock &rock,
+                                    bool useBaked, const renderer::MeshData* bakeGeometry, std::string* inputFingerprint) {
     if (rock.previewMask) {
         // Shape Mask を見ているとき。黒の全面の上に、マスクで白を重ねる（既存の素材の合成をそのまま使う）。
         const auto texture = ShapeMaskTextureFor(rock.previewMask);
@@ -177,7 +177,7 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
         }
         mesh.materialStack = mesh.appliedMaterials[0].stack;
         mesh.mapping = mesh.appliedMaterials[0].mapping;
-        return;
+        return false;
     }
     if (!rock.materials.empty()) {
         for (const auto& binding : rock.materials) {
@@ -214,7 +214,7 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
     }
     const auto *surface = m_graph.FindNode(rock.materialSource);
     const auto *settings = surface ? std::get_if<graph::LayerNodeSettings>(&surface->settings) : nullptr;
-    if (!settings && mesh.appliedMaterials.empty()) return;
+    if (!settings && mesh.appliedMaterials.empty()) return false;
     if (settings) {
         compositor::MaterialStack stack;
         stack.Layers() = m_graph.CompileLayersTo(surface->id).layers;
@@ -229,7 +229,7 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
         mesh.mapping = settings->layer.mapping;
     }
     if (!rock.bakeSource || !useBaked)
-        return;
+        return false;
     const auto *node = m_graph.FindNode(rock.bakeSource);
     const auto *bake = node ? std::get_if<graph::MaterialBakeSettings>(&node->settings) : nullptr;
     std::string fingerprint;
@@ -242,6 +242,7 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
     } else if (bake) {
         fingerprint = BakeFingerprint(mesh, rock.mesh, rock.bakeSource, rock.bakeDetail);
     }
+    if (inputFingerprint) *inputFingerprint = fingerprint;
     bool ready = bake && !bake->fingerprint.empty() && bake->fingerprint == fingerprint;
     const auto *baked = ready ? m_materialLibrary.Find(bake->bakedLayer.material) : nullptr;
     ready &= baked != nullptr;
@@ -260,6 +261,130 @@ void Application::ApplyRockMaterial(renderer::SceneMesh &mesh, const graph::Gene
         mesh.mapping = {};
         mesh.appliedMaterials.clear();
     }
+    return ready;
+}
+
+std::vector<io::RockAssetLod> Application::MergeRockAssetLods(const graph::RockEvaluation& evaluated,
+                                                              const graph::RockAssetSettings& settings) {
+    size_t count = 0;
+    for (const auto& rock : evaluated.rocks)
+        if (rock.lods) count = std::max(count, rock.lods->size());
+    std::vector<io::RockAssetLod> lods(count);
+    for (size_t level = 0; level < count; ++level) {
+        auto& merged = lods[level].mesh;
+        lods[level].screenSize = level == 0 ? 1.0f : settings.screenSize[std::min<size_t>(level, graph::kMaxRockAssetLods - 1)];
+        for (const auto& rock : evaluated.rocks) {
+            if (!rock.lods || rock.lods->empty()) continue;
+            const auto& mesh = (*rock.lods)[std::min(level, rock.lods->size() - 1)];
+            const auto offset = static_cast<uint32_t>(merged.positions.size());
+            merged.positions.insert(merged.positions.end(), mesh.positions.begin(), mesh.positions.end());
+            for (auto face : mesh.triangles) {
+                for (auto& index : face) index += offset;
+                merged.triangles.push_back(face);
+            }
+            merged.cornerUvs.insert(merged.cornerUvs.end(), mesh.cornerUvs.begin(), mesh.cornerUvs.end());
+            merged.uvCharts.insert(merged.uvCharts.end(), mesh.uvCharts.begin(), mesh.uvCharts.end());
+            merged.uvWidth = std::max(merged.uvWidth, mesh.uvWidth);
+            merged.uvHeight = std::max(merged.uvHeight, mesh.uvHeight);
+        }
+        // UV を持たないメッシュが混ざったら、UV は付けない（並びが三角形と合わなくなる）。
+        if (merged.cornerUvs.size() != merged.triangles.size()) { merged.cornerUvs.clear(); merged.uvCharts.clear(); }
+        if (merged.uvCharts.size() != merged.triangles.size()) merged.uvCharts.clear();
+    }
+    return lods;
+}
+
+// 「岩アセットを焼く」。シーンの付属フォルダへ、段ごとのメッシュと Material Bake の結果を書く。
+// 上流の Material Bake が古い（未ベイク）なら先にベイクを頼み、終わってからもう一度ここへ来る。
+void Application::ProcessPendingAssetBake() {
+    if (!m_pendingAssetBake || m_bakeJob || m_pendingBake || m_pieceUpdating) return;
+    const graph::GraphId id = m_pendingAssetBake;
+    const auto finish = [&](const std::string& status, bool failed) {
+        m_pendingAssetBake = 0;
+        m_assetBakeRequestedMaterial = false;
+        m_assetBakeStatus = status;
+        if (failed) ROCK_LOG_ERROR("岩アセット: %s", status.c_str());
+        else ROCK_LOG_INFO("岩アセット: %s", status.c_str());
+    };
+    const auto* node = m_graph.FindNode(id);
+    const auto* settings = node ? std::get_if<graph::RockAssetSettings>(&node->settings) : nullptr;
+    if (!settings) return finish("Rock Asset が見つかりません", true);
+    if (m_projectPath.empty() || !io::IsSceneFile(m_projectPath) || io::IsMountainFile(m_projectPath) ||
+        !m_workspace.Contains(m_projectPath))
+        return finish("先にシーン（.rockscene）をルートの中へ保存してください", true);
+    const auto evaluated = graph::EvaluateRocks(m_graph, id, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod, {},
+                                                nullptr, m_materialHeights.get());
+    if (!evaluated.error.empty()) return finish(evaluated.error, true);
+    // Material Bake の結果。描画と同じ照らし方で、まだ使えるかを確かめる。
+    graph::GraphId bakeNode = 0;
+    bool ready = true;
+    // いまの入力でベイクしたときの指紋。焼いたときのハッシュに入れる（ベイクの結果は一時的なので、
+    // 「ベイクしたか」ではなく「何をベイクするか」で比べる。開き直しても古いと判定しない）。
+    std::string fingerprint;
+    for (const auto& rock : evaluated.rocks) {
+        if (!rock.lods) continue;
+        if (!rock.bakeSource) { ready = false; continue; }
+        bakeNode = rock.bakeSource;
+        renderer::SceneMesh probe;
+        probe.geometry = renderer::MakeRockMeshData(rock.mesh, m_settings.Display().smoothShading, m_settings.Display().smoothShadingAngle);
+        renderer::MeshData bakeGeometry;
+        if (rock.bakeMesh)
+            bakeGeometry = renderer::MakeRockMeshData(*rock.bakeMesh, m_settings.Display().smoothShading,
+                                                      m_settings.Display().smoothShadingAngle);
+        std::string input;
+        ready &= ApplyRockMaterial(probe, rock, true, rock.bakeMesh ? &bakeGeometry : nullptr, &input);
+        fingerprint += input;
+    }
+    ready &= bakeNode != 0 && m_bakeImages.contains(bakeNode);
+    if (bakeNode && !ready) {
+        if (m_assetBakeRequestedMaterial) return finish("Material Bake に失敗したので、焼けませんでした", true);
+        // 先に Material Bake を焼く。終わったらもう一度ここへ来る。
+        m_assetBakeRequestedMaterial = true;
+        m_pendingBake = bakeNode;
+        m_assetBakeStatus = "Material Bake を先に実行しています…";
+        return;
+    }
+    io::RockAssetData data;
+    data.lods = MergeRockAssetLods(evaluated, *settings);
+    if (data.lods.empty() || data.lods[0].mesh.triangles.empty()) return finish("焼く段がありません", true);
+    data.textured = ready && bakeNode;
+    data.hash = io::RockAssetHash(data.lods, fingerprint);
+    geometry::MeshInfo info;
+    if (geometry::InspectMesh(data.lods[0].mesh, info)) {
+        data.minimum = info.minimum;
+        data.maximum = info.maximum;
+    }
+    const auto folder = io::RockAssetFolder(m_projectPath);
+    std::error_code fileError;
+    std::filesystem::create_directories(folder, fileError);
+    if (data.textured) {
+        const auto& images = m_bakeImages[bakeNode];
+        for (size_t channel = 0; channel < 4; ++channel) {
+            const auto& image = images[channel];
+            if (!SaveRgba8Png(folder / io::kRockAssetTextures[channel], image.width, image.height, image.width * 4, image.pixels.data()))
+                return finish(std::string("テクスチャを書けません: ") + io::kRockAssetTextures[channel], true);
+        }
+    }
+    std::string error;
+    if (!io::SaveRockAsset(m_projectPath, data, error)) return finish(error, true);
+    m_assetRefresh = true;
+    m_bakedAssetCache = {};
+    char text[160] = {};
+    std::snprintf(text, sizeof(text), "焼きました（%zu 段、LOD0 %zu 三角形%s）", data.lods.size(), data.lods[0].mesh.triangles.size(),
+                  data.textured ? "、テクスチャあり" : "、テクスチャなし");
+    finish(text, false);
+}
+
+const Application::BakedAssetCache& Application::BakedAsset() {
+    const auto manifest = io::RockAssetFolder(m_projectPath) / L"asset.json";
+    std::error_code error;
+    const auto time = m_projectPath.empty() ? std::filesystem::file_time_type{} : std::filesystem::last_write_time(manifest, error);
+    const bool exists = !m_projectPath.empty() && !error;
+    if (m_bakedAssetCache.scene != m_projectPath || m_bakedAssetCache.exists != exists || m_bakedAssetCache.time != time) {
+        m_bakedAssetCache = {m_projectPath, time, exists, {}};
+        if (exists && !io::ReadRockAssetHash(m_projectPath, m_bakedAssetCache.hash)) m_bakedAssetCache.exists = false;
+    }
+    return m_bakedAssetCache;
 }
 
 void Application::ProcessPendingBake() {

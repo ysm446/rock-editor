@@ -1,6 +1,6 @@
 // モデル（FBX）の取り込み、モデルプレビューの窓、スロットへのマテリアルの割り当て。
 // rock-editor の ApplicationModelPanel から、配置（Model Scatter）と一覧パネルを外して移植した。
-// 一覧はアセットの帯（.rockmodel / .fbx）が兼ねる。仕様は docs/reference/model-assets.md。
+// 一覧はアセットの帯（.model / .fbx）が兼ねる。仕様は docs/reference/model-assets.md。
 
 #include "app/Application.h"
 
@@ -28,7 +28,7 @@ renderer::ModelAsset* Application::FindModel(uint64_t id) {
 void Application::CreateModelMaterials(uint64_t modelId) {
     renderer::ModelAsset* model = FindModel(modelId);
     if (model == nullptr || !model->geometry) return;
-    // 作ったマテリアルは .rockmodel の隣（未保存なら FBX の隣）へ置く。
+    // 作ったマテリアルは .model の隣（未保存なら FBX の隣）へ置く。
     const fs::path directory = (!model->assetPath.empty() ? model->assetPath : model->path).parent_path();
     // 未保存のマテリアルは UniquePath がまだファイルを見られない。同じ名前のスロットが並んでも
     // 同じファイルへ書かないよう、この場で決めた置き場所を覚えておく。
@@ -120,7 +120,7 @@ uint64_t Application::ImportModelFile(const fs::path& inputPath) {
         renderer::ModelAsset asset;
         asset.id = m_nextModelId++;
         asset.name = ToUtf8Display(path.stem());
-        asset.assetPath = m_workspace.UniquePath(path.parent_path(), asset.name, ".rockmodel");
+        asset.assetPath = m_workspace.UniquePath(path.parent_path(), asset.name, ".model");
         if (!renderer::LoadModel(path, asset)) {
             ROCK_LOG_ERROR("モデルを読み込めません（%s）: %s", asset.error.c_str(), ToUtf8Display(path).c_str());
             return 0;
@@ -153,7 +153,7 @@ void Application::ProcessModelWork() {
     // --- ビューポートへ落としたモデルを置く --------------------------------------
     for (const auto& placement : std::exchange(m_pendingModelPlacements, {})) {
         const auto ext = placement.path.extension().wstring();
-        const bool isModelAsset = _wcsicmp(ext.c_str(), L".rockmodel") == 0;
+        const bool isModelAsset = _wcsicmp(ext.c_str(), L".model") == 0;
         uint64_t id = 0;
         for (const auto& model : m_models) {
             if ((isModelAsset ? model.assetPath : model.path).lexically_normal() == placement.path.lexically_normal())
@@ -247,7 +247,7 @@ void Application::DrawModelPreviewWindow() {
     }
     renderer::ModelAsset* found = FindModel(m_selectedModel);
     if (found == nullptr) {
-        ui::HintText("アセットの帯でモデル（.rockmodel / .fbx）をダブルクリックすると開く");
+        ui::HintText("アセットの帯でモデル（.model / .fbx）をダブルクリックすると開く");
         ImGui::End();
         return;
     }

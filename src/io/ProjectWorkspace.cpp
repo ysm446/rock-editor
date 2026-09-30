@@ -39,7 +39,7 @@ fs::path Absolute(const fs::path& path) {
 
 bool IsNative(const fs::path& path) {
     const auto ext = path.extension().wstring();
-    for (const auto* native : {L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".rockmodel"})
+    for (const auto* native : {L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".model"})
         if (_wcsicmp(ext.c_str(), native) == 0) return true;
     return false;
 }
@@ -422,7 +422,7 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
         }
         if (!save(entry, "sky-asset", "Skies", ".rocksky")) return false;
     }
-    // モデル。FBX は元ファイルの固定 ID、スロットは .rockmat の参照にして .rockmodel へ分ける。
+    // モデル。FBX は元ファイルの固定 ID、スロットは .rockmat の参照にして .model へ分ける。
     for (auto& entry : document["models"]) {
         if (!entry.is_object()) return false;
         entry["source"] = sourceRef(entry.value("path", json()));
@@ -430,7 +430,7 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
         entry.erase("path");
         if (!entry.contains("materials") || !entry["materials"].is_array()) entry["materials"] = json::array();
         for (auto& slot : entry["materials"]) slot = byNumber(materialRefs)(slot);
-        if (!save(entry, "model-asset", "Models", ".rockmodel")) return false;
+        if (!save(entry, "model-asset", "Models", ".model")) return false;
     }
     // レイヤーマテリアルと境界マテリアル。マテリアル・画像の参照を永続 ID へ写してファイルへ分け、
     // 配置データには番号（SurfaceId）と参照だけを残す。区間やプリセットはその番号で指したまま。

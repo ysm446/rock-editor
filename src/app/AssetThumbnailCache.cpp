@@ -38,7 +38,7 @@ bool AssetThumbnailCache::Supports(const fs::path& path) {
     const auto ext = Extension(path);
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" ||
            ext == ".exr" || ext == ".hdr" || ext == ".rockmat" || ext == ".rocksky" || ext == ".rockscene" || ext == ".rockmountain" ||
-           ext == ".tglayer" || ext == ".tgboundary" || ext == ".rockmodel" || ext == ".fbx";
+           ext == ".tglayer" || ext == ".tgboundary" || ext == ".model" || ext == ".fbx";
 }
 
 void AssetThumbnailCache::BeginRequests() {
@@ -173,12 +173,12 @@ bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, 
     return result;
 }
 
-// モデルを一時の領域へ読み、斜め上からの全体を描く。.rockmodel は割り当てたマテリアルで、
+// モデルを一時の領域へ読み、斜め上からの全体を描く。.model は割り当てたマテリアルで、
 // FBX 単体は灰色で描く。
 bool AssetThumbnailCache::BuildModel(rhi::Device& device, rhi::PipelineCache& pipelines,
                                      io::ProjectWorkspace& workspace, const fs::path& path, rhi::GpuTexture& output) {
     std::vector<renderer::ModelAsset> models;
-    if (Extension(path) == ".rockmodel") {
+    if (Extension(path) == ".model") {
         if (!io::LoadSharedAsset(workspace, path, device, pipelines, m_textures, m_materials, m_skies, false, &models))
             return false;
     } else {
@@ -261,7 +261,7 @@ void AssetThumbnailCache::Process(rhi::Device& device, rhi::PipelineCache& pipel
         m_entries[path].failed = false;
         return;
     }
-    if (extension == ".rockmodel" || extension == ".fbx") {
+    if (extension == ".model" || extension == ".fbx") {
         ClearScratch(device, m_textures.Entries().size() >= MaxScratchTextures);
         if (!BuildModel(device, pipelines, workspace, path, thumbnail)) device.DeferRelease(thumbnail);
         Store(device, path, std::move(thumbnail));

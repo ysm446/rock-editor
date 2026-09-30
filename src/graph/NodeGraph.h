@@ -113,7 +113,7 @@ enum class NodeKind : uint32_t {
     MeshOutput = 25,
     // 複数の Mesh の枝を 1 つにまとめる。同じノード由来のメッシュは 1 回だけ積む。
     Merge = 30,
-    // 3D モデル（.rockmodel）を 1 つ置く。出力（Model 型）を Mesh Output か Merge
+    // 3D モデル（.model）を 1 つ置く。出力（Model 型）を Mesh Output か Merge
     // へ繋ぐとビューポートに出る。
     Model = 32,
     // 上流のモデルをまとめて移動・回転・拡大する。Model 型を受けて Model 型を出す。

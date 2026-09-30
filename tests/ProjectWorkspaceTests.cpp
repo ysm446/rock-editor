@@ -137,7 +137,7 @@ void TestWorkspace() {
     json other = loaded;
     Check(workspace.SaveScene(root / "Scenes" / "copy.rockscene", other) && other["sceneUid"] != uid, "名前を付けて保存は別 ID");
 
-    Section("ProjectWorkspace: モデル（.rockmodel）の分離保存と展開");
+    Section("ProjectWorkspace: モデル（.model）の分離保存と展開");
     const fs::path fbx = workspace.UniquePath(root / "Models", "plane", ".fbx");
     fs::create_directories(fbx.parent_path(), error);
     Touch(fbx);
@@ -152,10 +152,10 @@ void TestWorkspace() {
     const fs::path modelScene = workspace.UniquePath(root / "Scenes", "model", ".rockscene");
     Check(workspace.SaveScene(modelScene, withModel), "モデルを含むシーンを保存する");
     json modelBody;
-    Check(workspace.ReadAsset(root / "Models" / "plane.rockmodel", "model-asset", modelBody) &&
+    Check(workspace.ReadAsset(root / "Models" / "plane.model", "model-asset", modelBody) &&
               modelBody["source"]["uid"].is_string() && modelBody["materials"][0]["uid"].is_string() &&
               modelBody["materials"][1].is_null() && modelBody["scale"] == 100.0,
-          "モデルを .rockmodel へ分け、FBX とスロットを固定 ID で参照する");
+          "モデルを .model へ分け、FBX とスロットを固定 ID で参照する");
     json modelLoaded;
     Check(workspace.ReadScene(modelScene, modelLoaded) && modelLoaded["models"].size() == 1 &&
               modelLoaded["models"][0]["path"] == rock::ToUtf8Portable(fbx) &&

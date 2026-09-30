@@ -19,7 +19,7 @@ bool SamePath(const fs::path& a, const fs::path& b) {
 
 bool IsDocument(const fs::path& path) {
     const auto ext = path.extension().wstring();
-    for (const auto* value : {L".rockscene", L".rockmountain", L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".rockmodel", L".reproj", L".mmproj", L".mmmat"})
+    for (const auto* value : {L".rockscene", L".rockmountain", L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".model", L".reproj", L".mmproj", L".mmmat"})
         if (_wcsicmp(ext.c_str(), value) == 0) return true;
     return false;
 }
@@ -118,6 +118,10 @@ AssetRelations InspectAssetRelations(ProjectWorkspace& workspace, const fs::path
     if (error) result.complete = false;
     Unique(result.related);
     Unique(result.referencers);
+    // シーンの付属フォルダ（焼いた岩アセット）も一緒に退避する。中身は変わっていても（焼き直しても）確認し直さない。
+    if (IsSceneFile(target))
+        if (const fs::path bake = target.wstring() + L".bake"; fs::is_directory(bake, error) && !fs::is_symlink(bake, error))
+            result.companions.push_back(bake);
     Unique(result.companions);
     return result;
 }
@@ -189,6 +193,17 @@ fs::path RelocateAsset(ProjectWorkspace& workspace, const fs::path& target, cons
     std::vector<std::pair<fs::path, fs::path>> files{{target, destination}};
     const fs::path meta = target.wstring() + L".meta";
     if (fs::exists(meta, error)) files.emplace_back(meta, destination.wstring() + L".meta");
+    // シーンの付属フォルダ（焼いた岩アセット、<シーン>.bake）も新しい名前へ揃える。
+    if (IsSceneFile(target)) {
+        const fs::path bake = target.wstring() + L".bake";
+        if (fs::is_directory(bake, error) && !fs::is_symlink(bake, error)) {
+            if (fs::exists(destination.wstring() + L".bake", error)) {
+                ROCK_LOG_WARN("同じ名前の付属フォルダがあります: %s", ToUtf8Display(destination).c_str());
+                return {};
+            }
+            files.emplace_back(bake, destination.wstring() + L".bake");
+        }
+    }
     size_t moved = 0;
     for (; moved < files.size(); ++moved) {
         fs::rename(files[moved].first, files[moved].second, error);

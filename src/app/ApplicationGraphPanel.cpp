@@ -547,11 +547,15 @@ void Application::SyncMeshGraph() {
                     m_rockAssetView.radius = std::max(m_rockAssetView.radius, std::sqrt(dx * dx + dy * dy + dz * dz));
                 }
         m_rockAssetView.shown = RockAssetWantedLod(previewMeshNode);
+        // ハッシュは段に依らないので、段だけを切り替えたときは求め直さない。
+        if (!lodOnly) m_rockAssetView.hash.clear();
     } else {
         m_rockAssetEvaluation.reset();
         m_rockAssetView = {};
     }
     renderer::MeshScene scene;
+    // Rock Asset を出しているとき、いまの入力でベイクしたときの指紋（焼いたときのハッシュに入れる）。
+    std::string assetFingerprint;
     for (auto& entry : m_shapeMaskTextures) entry.used = false;
     m_uvPreviewMesh = {};
     m_rockMeshReferences.clear();
@@ -626,15 +630,23 @@ void Application::SyncMeshGraph() {
         mesh.material.roughness = 0.8f;
         if (!selectionView) {
             // Rock Asset は形を減らしているので、焼いた結果が使えるかは減らす前のメッシュで照らす。
+            std::string input;
+            std::string* fingerprint = assetView && rock.lods ? &input : nullptr;
             if (rock.bakeSource && rock.bakeMesh) {
                 const auto bakeGeometry = renderer::MakeRockMeshData(*rock.bakeMesh, m_settings.Display().smoothShading,
                                                                      m_settings.Display().smoothShadingAngle);
-                ApplyRockMaterial(mesh, rock, true, &bakeGeometry);
+                ApplyRockMaterial(mesh, rock, true, &bakeGeometry, fingerprint);
             } else {
-                ApplyRockMaterial(mesh, rock, true);
+                ApplyRockMaterial(mesh, rock, true, nullptr, fingerprint);
             }
+            assetFingerprint += input;
         }
         scene.meshes.push_back(std::move(mesh));
+    }
+    // 焼いたときと同じ手順でハッシュを求め、焼いた岩アセットの目録と比べられるようにする。
+    if (assetView && assetNode && !lodOnly) {
+        const auto& settings = std::get<graph::RockAssetSettings>(assetNode->settings);
+        m_rockAssetView.hash = io::RockAssetHash(MergeRockAssetLods(evaluated, settings), assetFingerprint);
     }
     m_meshGraphError = evaluated.error;
     m_meshHighlight = MeshHighlightState{};
@@ -762,7 +774,7 @@ void Application::AdoptGraphClipboard() {
         if (path.empty()) return 0;
         if (const uint64_t id = findModel(path)) return id;
         loaded = true;
-        if (_wcsicmp(path.extension().c_str(), L".rockmodel") != 0) return ImportModelFile(path);
+        if (_wcsicmp(path.extension().c_str(), L".model") != 0) return ImportModelFile(path);
         return io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache, m_textureLibrary,
                                    m_materialLibrary, m_skyLibrary, true, &m_models)
                    ? findModel(path) : 0;
@@ -1362,7 +1374,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::VolumeEdgeWear, "Volume Edge Wear — 凸な稜線と角だけを削る（角の摩耗）");
         ImGui::Separator();
         ImGui::TextDisabled("モデル");
-        addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.rockmodel）を 1 つ置く");
+        addNodeMenuItem(graph::NodeKind::Model, "Model — 3D モデル（.model）を 1 つ置く");
         addNodeMenuItem(graph::NodeKind::Transform, "Transform — 上流のモデルをまとめて移動・回転・拡大");
         ImGui::Separator();
         }
@@ -2192,6 +2204,22 @@ void Application::DrawGraphPanel() {
             drawStatusLine(counts);
             drawStatusLine(warning.empty() ? std::string()
                                            : warning + " は目標に届いていません（UV の島の境界は固定するため）");
+        }
+        {
+            // 焼く。シーンの付属フォルダ（<シーン>.bake）へ段ごとのメッシュと Material Bake の結果を書く。
+            const bool saved = !m_projectPath.empty() && io::IsSceneFile(m_projectPath) && !io::IsMountainFile(m_projectPath);
+            ImGui::BeginDisabled(!saved || m_pieceUpdating || m_pendingAssetBake != 0 || m_bakeJob.has_value() || m_pendingBake != 0);
+            if (ImGui::Button("岩アセットを焼く")) m_pendingAssetBake = selected->id;
+            ImGui::EndDisabled();
+            std::string state;
+            if (!saved) state = "焼いた結果: シーンを保存すると焼けます";
+            else if (!BakedAsset().exists) state = "焼いた結果: 未焼成";
+            else if (m_rockAssetView.node != selected->id || m_rockAssetView.hash.empty()) state = "焼いた結果: あり（評価の後で古さを判定します）";
+            else if (BakedAsset().hash == m_rockAssetView.hash) state = "焼いた結果: 最新";
+            else state = "焼いた結果: 古い（焼いた後にグラフか設定が変わっています）";
+            drawStatusLine(state);
+            drawStatusLine(m_pendingAssetBake == selected->id && !m_assetBakeStatus.empty() ? m_assetBakeStatus
+                           : m_pendingAssetBake == selected->id ? "焼いています…" : m_assetBakeStatus);
         }
         ui::HintText("岩グラフの最終段です。入力のメッシュから段階的な LOD を作ります。LOD1 以降は 1 つ前の段を Decimate で減らし、"
                      "UV を保つので、全ての段で同じテクスチャ（Material Bake の結果など）をそのまま使えます。出力は LOD0 です。");

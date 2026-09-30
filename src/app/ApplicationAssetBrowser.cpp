@@ -3,7 +3,7 @@
 // 旧「テクスチャ / マテリアル / 天球」のタブの代わり。
 //
 // 一覧はファイルそのもの。**シーンへ読み込んでいないものも見える。** ダブルクリックで
-// 読み込み（画像 → テクスチャ、.rockmat → マテリアル、.rocksky → 天球、.rockmodel → モデル、
+// 読み込み（画像 → テクスチャ、.rockmat → マテリアル、.rocksky → 天球、.model → モデル、
 // .fbx → モデルを作る、.rockscene → シーン）。
 // 読み込み済みのものはライブラリのサムネイルとドラッグ元（ROCK_TEXTURE / ROCK_MATERIAL）を使い、
 // 未読み込みのものは AssetThumbnailCache が
@@ -353,7 +353,7 @@ void Application::RefreshAssetBrowser() {
         if (entry.is_symlink(error) || entry.path().filename().wstring().starts_with(L".")) continue;
         const auto ext = Extension(entry.path());
         if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".rockmat" && ext != ".tglayer" && ext != ".rocksky" &&
-            ext != ".rockmodel" && ext != ".fbx" && ext != ".rockscene" && ext != ".rockmountain") continue;
+            ext != ".model" && ext != ".fbx" && ext != ".rockscene" && ext != ".rockmountain") continue;
         m_assetEntries.push_back(entry);
     }
     std::sort(m_assetEntries.begin(), m_assetEntries.end(), [](const auto& a, const auto& b) {
@@ -519,7 +519,7 @@ void Application::ProcessAssetWork() {
         const auto path = m_pendingAssetOpen;
         m_pendingAssetOpen.clear();
         const auto ext = Extension(path);
-        if (ext == ".rockmodel") {
+        if (ext == ".model") {
             // シーンのモデルへ足し（読み込み済みならそれを使い）、参照するマテリアルもライブラリへ読む。
             const size_t before = m_models.size();
             if (io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache, m_textureLibrary, m_materialLibrary,
@@ -727,7 +727,7 @@ void Application::DrawAssetBrowser() {
             loaded[PathKey(a.assetPath)] = {static_cast<ImTextureID>(a.thumbnail.srv.gpu.ptr), compositor::kNoTexture, a.id, MaterialHasMissingTexture(a)};
         for (const auto& a : m_skyLibrary.Entries()) if (!a.assetPath.empty())
             loaded[PathKey(a.assetPath)] = {static_cast<ImTextureID>(a.thumbnail.srv.gpu.ptr)};
-        // モデルは .rockmodel と元の FBX の両方を読み込み済みとして扱う（FBX のダブルクリックでそのモデルを開く）。
+        // モデルは .model と元の FBX の両方を読み込み済みとして扱う（FBX のダブルクリックでそのモデルを開く）。
         for (const auto& a : m_models) {
             const auto preview = m_modelPreviews.find(a.id);
             Loaded entry;
@@ -771,7 +771,7 @@ void Application::DrawAssetBrowser() {
             } else if (!handle) {
                 const char* type = ext == ".rockscene" ? "シーン" : ext == ".rockmountain" ? "山グラフ" : (ext == ".rockmat" || ext == ".tglayer") ? "マテリアル" :
                     ext == ".rocksky" ? "天球" :
-                    (ext == ".rockmodel" || ext == ".fbx") ? "モデル" :
+                    (ext == ".model" || ext == ".fbx") ? "モデル" :
                     IsImage(ext) || ext == ".hdr" ? "画像" : "ファイル";
                 const auto min = thumb.min, max = thumb.max;
                 const auto text = ImGui::CalcTextSize(type);
@@ -860,8 +860,8 @@ void Application::DrawAssetBrowser() {
             if (thumb.hovered && ImGui::GetDragDropPayload() == nullptr) {
                 const char* hint = folder ? "ダブルクリックで開く / サムネイルを落とすと移動"
                     : modelId ? "ダブルクリックでモデルプレビュー（マテリアルスロットの割り当て）"
-                    : ext == ".fbx" ? "ダブルクリックでモデル（.rockmodel）を作ってシーンへ読み込む"
-                    : ext == ".rockmodel" ? "ダブルクリックでシーンへ読み込んでプレビュー"
+                    : ext == ".fbx" ? "ダブルクリックでモデル（.model）を作ってシーンへ読み込む"
+                    : ext == ".model" ? "ダブルクリックでシーンへ読み込んでプレビュー"
                     : "ダブルクリックで開く";
                 ImGui::SetTooltip("%s\n%s\nCtrl / Shift + クリックで複数選択", ToUtf8Display(path).c_str(), hint);
             }

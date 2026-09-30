@@ -70,7 +70,7 @@ $exe = Join-Path $PWD 'build/bin/Debug/rock_editor.exe'
 
 プロジェクトはルートフォルダで管理する（「ファイル > ルートフォルダを開く…」）。
 ルート直下に目印の `project.reproj` ができ、シーンは `.rockscene`、
-マテリアル / 天球 / モデルはルート内の `.rockmat` / `.rocksky` / `.rockmodel` として共有する。
+マテリアル / 天球 / モデルはルート内の `.rockmat` / `.rocksky` / `.model` として共有する。
 JSON の形式識別子は `rock-editor.*`。
 
 road-editor 時代の `.tgproj` / `.tgscene` / `.tgmat` などの読み込み互換は持たない。

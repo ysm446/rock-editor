@@ -27,6 +27,7 @@ void RunRemeshTests();
 void RunRockAssetTests();
 void RunDetailTransferTests();
 void RunTerrainTests();
+void RunRockAssetIoTests();
 void RunUvTests();
 void RunShadowCascadeTests();
 void RunMeshSceneTests();
@@ -75,6 +76,7 @@ int main(int argc, char** argv) {
     RunRockAssetTests();
     RunDetailTransferTests();
     RunTerrainTests();
+    RunRockAssetIoTests();
     RunUvTests();
     RunShadowCascadeTests();
     RunMeshSceneTests();

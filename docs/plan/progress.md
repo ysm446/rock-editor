@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-09-30 13:10
+更新日時: 2026-09-30 16:20
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,19 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-09-30 モデルの拡張子を .model へ
+
+- FBX などの外部モデルを包む共有アセットの拡張子を `.rockmodel` → `.model` に変えた（ユーザー判断。岩アセットと紛らわしく、岩以外のモデルも取り込めるため）。保存名（`model-asset`）や `Models/` フォルダは変えていない。旧 `.rockmodel` の読み込みは残していない（`examples/` と `data/` に使用例が無いことを確認）。
+- Debug ビルド警告 0、全テスト成功。
+
+### 2026-09-30 岩アセットを焼く（A1）
+
+- Rock Asset の「岩アセットを焼く」で、シーンの付属フォルダ `<シーン>.bake/` に `asset.json`（目録）、`lodN.rockmesh`（段ごとのメッシュ、独自のバイナリ）、Material Bake の結果の PNG 4 枚を書く（`io/RockAssetIo`、`Application::ProcessPendingAssetBake`）。上流の Material Bake が古ければ先にベイクする。
+- 「焼いた結果: 未焼成 / 最新 / 古い」を設定欄に出す。ハッシュには段のメッシュ・切り替えの大きさ・Material Bake の**入力の**指紋を入れる（ベイクの結果は一時的なので、開き直しても入力が同じなら最新）。`ApplyRockMaterial` がいまの入力の指紋を返すようにした。
+- アセット欄の改名・移動・退避で、付属フォルダもシーンと一緒に動かす（`AssetRelations`）。
+- Model ノードから `.rockscene` を参照する案は見送り（`.rockmodel` の参照の仕組みへの改修が大きい）。M2 の Rock ノードが付属フォルダを直接読む。
+- Debug ビルド警告 0、全テスト成功（`tests/RockAssetIoTests.cpp`）。実アプリで焼く・開き直して最新・設定を変えて古い、を確認（`data/test/rock-asset-bake/`、`build/rock-asset-validation/`）。ボタンの実マウス操作は未確認。
 
 ### 2026-09-30 山グラフの土台（M1）と Heightmap
 

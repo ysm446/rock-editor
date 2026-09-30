@@ -349,10 +349,13 @@ int Application::Run() {
             m_options.exportBakeDirectory.clear();
         }
         ProcessPendingBake();
+        if (m_options.bakeAssetNode && m_frameCounter >= 2) { m_pendingAssetBake = m_options.bakeAssetNode; m_options.bakeAssetNode = 0; }
+        ProcessPendingAssetBake();
 
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。
-        if (!m_options.saveProjectPath.empty() && !m_bakeJob && !m_pendingBake && m_frameCounter >= m_options.screenshotFrame) {
+        if (!m_options.saveProjectPath.empty() && !m_bakeJob && !m_pendingBake && !m_pendingAssetBake && !m_options.bakeAssetNode &&
+            m_frameCounter >= m_options.screenshotFrame) {
             const io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                                        m_renderer, m_graph, &m_models};
             const bool scene = io::IsSceneFile(m_options.saveProjectPath);

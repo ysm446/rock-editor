@@ -67,7 +67,7 @@ struct ModelNodeRotation {
 // GPU リソースを持たないので、アンドゥのスナップショットへそのまま複製できる。
 struct ModelAsset {
     uint64_t id = 0;
-    // 共有アセット（.rockmodel）の置き場所と永続 ID。未保存なら空。
+    // 共有アセット（.model）の置き場所と永続 ID。未保存なら空。
     std::filesystem::path assetPath;
     std::string assetUid;
     std::string name;

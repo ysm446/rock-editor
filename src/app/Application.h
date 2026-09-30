@@ -14,6 +14,7 @@
 #include "app/UndoHistory.h"
 #include "io/AssetRelations.h"
 #include "io/ProjectWorkspace.h"
+#include "io/RockAssetIo.h"
 #include "io/AppSettings.h"
 #include "io/RecentFiles.h"
 #include "renderer/MaterialSphere.h"
@@ -79,7 +80,7 @@ struct StartupOptions {
     std::filesystem::path importModel;
     // 開発用。ルート内のアセットをアセットの帯のダブルクリックと同じ経路で開く。
     std::filesystem::path openAsset;
-    // 開発用。モデル（.rockmodel / .fbx）を原点へ置く（帯からビューポートへ落としたのと同じ経路）。
+    // 開発用。モデル（.model / .fbx）を原点へ置く（帯からビューポートへ落としたのと同じ経路）。
     std::filesystem::path placeModel;
     // 開発用。モデルのギズモを回転（E）で始める。
     bool gizmoRotate = false;
@@ -102,6 +103,8 @@ struct StartupOptions {
     // Rock Asset の LOD の出し方（--rock-asset-lod <n>。-1 は自動）と表示モード（--view <番号>）。撮影用。
     int rockAssetLod = -2;
     int debugView = -1;
+    // 読み込み後にこの Rock Asset を焼く（--bake-asset <node>）。検証用。
+    graph::GraphId bakeAssetNode = 0;
     bool testDrag = false;
     bool testLayerThumbnailCache = false;
     bool testDragShift = false;
@@ -192,8 +195,10 @@ private:
 
     void DrawUvPanel();
     // bakeGeometry を渡すと、Material Bake の結果がまだ使えるかをそのメッシュで照らす（Rock Asset の LOD は形が違うため）。
-    void ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked,
-                           const renderer::MeshData* bakeGeometry = nullptr);
+    // 戻り値は、Material Bake の結果（まだ使えるもの）を貼ったか。inputFingerprint を渡すと、
+    // いまの入力でベイクしたときの指紋（ベイクしたかどうかに依らない）を入れる。Material Bake が無ければ空。
+    bool ApplyRockMaterial(renderer::SceneMesh& mesh, const graph::GeneratedRock& rock, bool useBaked,
+                           const renderer::MeshData* bakeGeometry = nullptr, std::string* inputFingerprint = nullptr);
     // detail は Material Bake の High（ハイポリ）の内容のハッシュ（GeneratedRock::bakeDetail）。0 は未接続。
     std::string BakeFingerprint(const renderer::SceneMesh& mesh, const geometry::Mesh& input, graph::GraphId bakeNode = 0,
                                 uint64_t detail = 0) const;
@@ -262,7 +267,25 @@ private:
         DirectX::XMFLOAT3 center{};          // LOD0 を包む球
         float radius = 0.0f;
         int shown = 0;                       // いま出している段
+        // いまの結果を焼いたときのハッシュ（io::RockAssetHash）。焼いた岩アセットの目録と比べて古さを判定する。
+        std::string hash;
     } m_rockAssetView;
+    // Rock Asset の段をメッシュごとに 1 つへまとめる（切り替えの大きさは設定から）。
+    static std::vector<io::RockAssetLod> MergeRockAssetLods(const graph::RockEvaluation& evaluated,
+                                                            const graph::RockAssetSettings& settings);
+    // 「岩アセットを焼く」を押した Rock Asset。上流の Material Bake が古ければ先にベイクし、終わってから焼く。
+    graph::GraphId m_pendingAssetBake = 0;
+    bool m_assetBakeRequestedMaterial = false;
+    std::string m_assetBakeStatus;
+    void ProcessPendingAssetBake();
+    // 焼いた岩アセットの目録のハッシュ（シーンのパスと目録の更新時刻で読み直す）。
+    struct BakedAssetCache {
+        std::filesystem::path scene;
+        std::filesystem::file_time_type time{};
+        bool exists = false;
+        std::string hash;
+    } m_bakedAssetCache;
+    const BakedAssetCache& BakedAsset();
     // -1 は自動（画面上の大きさで選ぶ）、0 以上はその段に固定。
     int m_rockAssetLodMode = -1;
     // LOD だけを切り替えるときに評価し直さないよう、Rock Asset を出している間だけ直近の評価結果を持つ。
@@ -301,7 +324,7 @@ private:
     void DrawMaterialSphereWindow();
     // --- モデル（ApplicationModelPanel.cpp） --------------------------------------
     // モデルプレビューの窓（回せるモデル + 寸法・LOD・マテリアルスロット）。
-    // アセットの帯でモデル（.rockmodel / .fbx）をダブルクリックするか、ウィンドウメニューから開く。
+    // アセットの帯でモデル（.model / .fbx）をダブルクリックするか、ウィンドウメニューから開く。
     void DrawModelPreviewWindow();
     // FBX の取り込み、スロットのマテリアル作成、シーンから外す、GPU メッシュの用意。フレームの外で呼ぶ。
     void ProcessModelWork();
@@ -610,7 +633,7 @@ private:
         // 空なら持ち越せない（未保存・一時的なもの）。
         std::vector<std::filesystem::path> materialPaths;  // VisitNodeMaterialLayers の順
         std::filesystem::path texturePath;                  // Material Mask の画像
-        std::filesystem::path modelPath;                    // Model（.rockmodel か取り込み元）
+        std::filesystem::path modelPath;                    // Model（.model か取り込み元）
         struct Source {
             int copiedIndex = -1;              // コピーした集合の中の添字
             graph::GraphId externalPin = 0;    // 集合の外なら、その出力ピン

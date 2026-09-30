@@ -1255,7 +1255,7 @@ void Application::ModelDropTarget(const ImVec2& viewportMin, const ImVec2& viewp
                 const size_t end = std::min(text.find(L'\n', begin), text.size());
                 const fs::path path = text.substr(begin, end - begin);
                 const auto ext = LowerExtension(path);
-                if (ext == L".rockmodel" || ext == L".fbx") {
+                if (ext == L".model" || ext == L".fbx") {
                     m_pendingModelPlacements.push_back({path, {point.x + offset, point.y, point.z}});
                     offset += 2.0f;
                 }
@@ -1275,7 +1275,7 @@ bool Application::DrawModelNodeSettings(graph::Node& node) {
     ui::SectionHeader(settings ? "モデル" : "Transform");
     if (ui::BeginPropertyTable("modelNode")) {
         if (settings != nullptr) {
-            ui::PropertyLabel("モデル", "シーンに読み込んだモデル。アセットの帯で .rockmodel / .fbx をダブルクリックすると候補に加わる");
+            ui::PropertyLabel("モデル", "シーンに読み込んだモデル。アセットの帯で .model / .fbx をダブルクリックすると候補に加わる");
             ImGui::SetNextItemWidth(std::min(ui::Scaled(ui::kComboMaxWidth), ImGui::GetContentRegionAvail().x));
             if (ImGui::BeginCombo("##model", model ? model->name.c_str() : "なし")) {
                 if (ImGui::Selectable("なし", settings->model == 0)) {
