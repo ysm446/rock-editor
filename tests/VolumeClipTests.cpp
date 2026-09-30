@@ -38,6 +38,29 @@ void RunVolumeClipTests() {
     Check(std::abs(info.maximum.x - boxInfo.maximum.x) < 1e-4f && std::abs(info.minimum.z - boxInfo.minimum.z) < 1e-4f,
           "横の広がりは変わらない");
 
+    // 接地: 原点中心の形を持ち上げずに地面へ据える。底から高さの embed の位置で切り、切り口を height に置く。
+    geometry::VolumeClipSettings ground;
+    ground.mode = geometry::VolumeClipMode::Ground;
+    ground.embed = .25f;
+    const auto grounded = geometry::ClipVolume(box, ground, error);
+    geometry::MeshInfo groundInfo;
+    Check(error.empty() && Measure(grounded, groundInfo) && groundInfo.components == 1, "接地で閉じた1つの塊になる");
+    Check(std::abs(groundInfo.minimum.y) < box.spacing * .6f, "接地の切り口が高さ 0（地面）に来る");
+    Check(std::abs((groundInfo.maximum.y - groundInfo.minimum.y) - (boxInfo.maximum.y - boxInfo.minimum.y) * .75f) < box.spacing * 1.5f,
+          "形の高さの 25% が地面の下に埋まって捨てられる");
+    Check(grounded.dimensions == box.dimensions && grounded.spacing == box.spacing && grounded.origin.x == box.origin.x,
+          "接地は格子を上下に動かすだけ（値は補間しない）");
+    ground.embed = 0;
+    ground.height = 3;
+    const auto groundRaised = geometry::ClipVolume(box, ground, error);
+    geometry::MeshInfo raisedInfo;
+    Check(error.empty() && Measure(groundRaised, raisedInfo) && std::abs(raisedInfo.minimum.y - 3) < box.spacing * .6f &&
+              std::abs(raisedInfo.volume - boxInfo.volume) < boxInfo.volume * .02,
+          "埋める割合 0 なら底をそのまま指定の高さへ据え、体積は変わらない");
+    ground.embed = .95f;
+    geometry::ClipVolume(box, ground, error);
+    Check(!error.empty(), "埋める割合が範囲外なら診断する");
+
     geometry::VolumeClipSettings raised;
     raised.height = .5f;
     const auto upper = geometry::ClipVolume(box, raised, error);
@@ -95,6 +118,6 @@ void RunVolumeClipTests() {
     std::get<geometry::VolumeClipSettings>(g.FindMutableNode(node)->settings).invert = true;
     const auto changed = graph::EvaluateRocks(g, node, &cache);
     Check(changed.error.empty() && changed.rocks[0].volume != first.rocks[0].volume, "設定の変更で作り直す");
-    std::get<geometry::VolumeClipSettings>(g.FindMutableNode(node)->settings) = {1000, false};
+    std::get<geometry::VolumeClipSettings>(g.FindMutableNode(node)->settings) = {.height = 1000};
     Check(!graph::EvaluateRocks(g, node, &cache).error.empty(), "何も残らない設定を診断する");
 }

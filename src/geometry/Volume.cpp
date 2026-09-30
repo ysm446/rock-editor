@@ -1403,6 +1403,12 @@ VolumeGrid EdgeWearVolume(const VolumeGrid& g, const VolumeEdgeWearSettings& s, 
     FillNewVoids(out, g.values);
     return out;
 }
+const char* VolumeClipModeName(VolumeClipMode mode) {
+    return mode == VolumeClipMode::Ground ? "ground" : "world";
+}
+VolumeClipMode ParseVolumeClipMode(std::string_view name) {
+    return name == "ground" ? VolumeClipMode::Ground : VolumeClipMode::World;
+}
 VolumeGrid ClipVolume(const VolumeGrid& g, const VolumeClipSettings& s, std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {
@@ -1413,12 +1419,38 @@ VolumeGrid ClipVolume(const VolumeGrid& g, const VolumeClipSettings& s, std::str
         error = "高さは -100000～100000 m にしてください";
         return {};
     }
+    if (s.mode != VolumeClipMode::World && s.mode != VolumeClipMode::Ground) {
+        error = "モードが不正です";
+        return {};
+    }
+    if (!std::isfinite(s.embed) || s.embed < 0 || s.embed > .9f) {
+        error = "埋める割合は 0～0.9 にしてください";
+        return {};
+    }
     VolumeGrid out = g;
+    if (s.mode == VolumeClipMode::Ground) {
+        // 内部の格子点の高さの範囲から切る高さを決め、そこが s.height に来るように格子ごと上下に動かす。
+        // 原点をずらすだけなので値は補間しない。
+        uint32_t lowest = g.dimensions[1], highest = 0;
+        for (uint32_t z = 0; z < g.dimensions[2]; ++z)
+            for (uint32_t y = 0; y < g.dimensions[1]; ++y)
+                for (uint32_t x = 0; x < g.dimensions[0]; ++x)
+                    if (g.values[g.Index(x, y, z)] < 0) {
+                        lowest = std::min(lowest, y);
+                        highest = std::max(highest, y);
+                    }
+        if (lowest > highest) {
+            error = "入力に内部がありません";
+            return {};
+        }
+        const float bottom = g.Position(0, lowest, 0).y, top = g.Position(0, highest, 0).y;
+        out.origin.y += s.height - (bottom + s.embed * (top - bottom));
+    }
     const float threshold = g.spacing * 1e-4f;
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
         const size_t index = out.Index(x, y, z);
         // 捨てる側で正になる平面までの距離。半空間との交差なので最大値を取る。
-        const float above = g.Position(x, y, z).y - s.height;
+        const float above = out.Position(x, y, z).y - s.height;
         const float value = std::max(g.values[index], s.invert ? above : -above);
         // 等値面が格子頂点に一致する場合も同じ符号に寄せ、ゼロ長の交点辺を避ける。
         out.values[index] = std::abs(value) < threshold ? threshold : value;

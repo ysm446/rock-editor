@@ -75,7 +75,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (node->kind == NodeKind::VolumeClip) {
         const auto* s = std::get_if<geometry::VolumeClipSettings>(&node->settings);
         if (!s) return std::nullopt;
-        add(s->height); add(s->invert);
+        add(s->height); add(s->invert); add(int(s->mode)); add(s->embed);
     } else if (node->kind == NodeKind::VolumeClose) {
         const auto* s = std::get_if<geometry::VolumeCloseSettings>(&node->settings);
         if (!s) return std::nullopt;

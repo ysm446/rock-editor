@@ -23,7 +23,7 @@
       {"id": 12, "kind": "volumeCrack", "note": "片理とほぼ直交する節理",
        "volumeCrack": {"width": 0.035, "depth": 0.35, "variation": 0.6, "noise": 0.5, "noiseScale": 3, "seed": 3}},
       {"id": 13, "kind": "volumeClose",
-       "note": "溝で分かれた塊を繋ぎ直し、板の隙間の空洞を埋める。Edge Wear は最大の塊だけ残すので必須",
+       "note": "溝で分かれた塊を繋ぎ直して 1 つの岩にし、板の隙間の空洞を埋める",
        "volumeClose": {"mode": "occlusion", "distance": 0.2, "threshold": 0.905, "softness": 0.1, "samples": 32}},
       {"id": 14, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.06, "radius": 0.025, "noise": 0.6}},
       {"id": 15, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},

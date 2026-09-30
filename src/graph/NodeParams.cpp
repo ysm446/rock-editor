@@ -40,6 +40,8 @@ constexpr ParamOption kShapeMaskTypes[] = {{"occlusion", 0, "遮蔽（窪み）"
 constexpr ParamOption kCombineOps[] = {{"multiply", 0, "積"}, {"maximum", 1, "大きい方"}, {"minimum", 2, "小さい方"},
                                        {"subtract", 3, "A − B"}, {"mix", 4, "mix で混ぜる"}};
 constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"}};
+constexpr ParamOption kClipModes[] = {{"world", 0, "指定した高さで切る"},
+                                     {"ground", 1, "形の底から embed の位置で切り、切り口を height（地面）に置く"}};
 constexpr ParamOption kHeightmapSources[] = {{"noise", 0, "ノイズの山"}, {"image", 1, "画像（image のパス）"}};
 constexpr ParamOption kMappingMethods[] = {{"uv", 0, "UV"}, {"triplanar", 1, "Triplanar（UV 不要。岩の下地に向く）"}};
 constexpr ParamOption kValueSources[] = {{"constant", 0, "一定"}, {"noise", 1, "ノイズ"}, {"texture", 2, "テクスチャ"}};
@@ -185,7 +187,12 @@ constexpr ParamDefinition kParams[] = {
     {K::VolumeEdgeWear, "volumeEdgeWear.noiseScale", T::Float, 0.5, 16, "最長辺あたりの山の数", "ばらつきの細かさ", "", C::Error},
     {K::VolumeEdgeWear, "volumeEdgeWear.upwardFocus", T::Float, 0, 1, "比", "上向きに集中", "", C::Error},
     {K::VolumeEdgeWear, "volumeEdgeWear.seed", T::Int, 0, N, "", "Seed", "", C::None},
-    {K::VolumeClip, "volumeClip.height", T::Float, -100000, 100000, "m", "高さ", "この高さ（ワールド Y）の水平面で切る。接地面を作る", C::Error},
+    {K::VolumeClip, "volumeClip.mode", T::Enum, N, N, "", "モード",
+     "ground にすると原点中心の形（Random Boxes・Base Shape）も持ち上げずに地面へ据えられる", C::Clamp, kClipModes},
+    {K::VolumeClip, "volumeClip.height", T::Float, -100000, 100000, "m", "高さ",
+     "world はこの高さ（ワールド Y）の水平面で切る。ground は切り口（底面）をこの高さに置く", C::Error},
+    {K::VolumeClip, "volumeClip.embed", T::Float, 0, 0.9, "形の高さに対する比", "埋める割合",
+     "ground 用。形の底からこの割合の高さで切って捨てる（地面に埋まった部分）。0 で底をそのまま据える", C::Error},
     {K::VolumeClip, "volumeClip.invert", T::Bool, N, N, "", "反転", "false で下を捨てる、true で上を捨てる", C::None},
     // --- メッシュ ---
     {K::Decimate, "decimate.targetTriangles", T::Int, 64, 500000, "三角形", "目標の三角形数", "入力全体に対する数。評価で範囲へ丸める", C::Clamp},
@@ -354,7 +361,8 @@ constexpr NodeSummary kSummaries[] = {
     {K::NoiseMask, "表面の 3D 座標からムラのマスクを作る", "UV 付きの Mesh が要る"},
     {K::DepositionMask, "土が溜まりそうな所（窪み・緩い面）のマスクを作る", "UV 付きの Mesh が要る"},
     {K::MaskFilter, "マスクをぼかす・シャープにする・レベル補正する", ""},
-    {K::VolumeClip, "水平面でボリュームを切り、片側を捨てる（接地面を作る）", "分かれた塊は残す"},
+    {K::VolumeClip, "水平面でボリュームを切り、片側を捨てる（接地面を作る）",
+     "mode: ground で、原点中心の形を持ち上げずに地面へ据えられる。分かれた塊は残す"},
     {K::RockAsset, "岩グラフの最終段。LOD を作り、岩アセットにする", "Material Bake の後に置く"},
     {K::Heightmap, "山グラフの地形（ハイトマップの格子メッシュ）", "山グラフ専用"},
     {K::Rock, "山グラフ。岩グラフ（焼いた岩アセット）を 1 つ読む", "山グラフ専用。先に岩グラフで岩アセットを焼く"},

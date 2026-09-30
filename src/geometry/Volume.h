@@ -213,9 +213,17 @@ struct VolumeCloseSettings {
     float softness = .1f;
 };
 // Volume Clip。水平な平面（高さ Y）で切り、片側を捨てる。既定は平面より下を捨てる。
+// ワールド: 高さ height の水平面で切る。接地: 形の底から高さの embed の位置で切り、その切り口が height に
+// 来るように形を上下に動かす（原点中心の形を地面に据える。先に持ち上げなくてよい）。
+enum class VolumeClipMode { World, Ground };
+const char* VolumeClipModeName(VolumeClipMode mode);
+// 知らない名前は World（従来の動作）。
+VolumeClipMode ParseVolumeClipMode(std::string_view name);
 struct VolumeClipSettings {
-    float height = 0;     // 切る平面の高さ (m)。-100000～100000。
+    VolumeClipMode mode = VolumeClipMode::World;
+    float height = 0;     // 切る平面の高さ (m)。接地では切り口（地面）の高さ。-100000～100000。
     bool invert = false;  // 真なら平面より上を捨てる。
+    float embed = .25f;   // 接地で埋める割合（形の高さに対する比）。0～0.9。
 };
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);

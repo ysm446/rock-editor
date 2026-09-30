@@ -302,7 +302,8 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             item["volumeEdgeWear"] = {{"radius", wear->radius}, {"amount", wear->amount}, {"noise", wear->noise},
                                       {"noiseScale", wear->noiseScale}, {"upwardFocus", wear->upwardFocus}, {"seed", wear->seed}};
         } else if (const auto* clip = std::get_if<geometry::VolumeClipSettings>(&node.settings)) {
-            item["volumeClip"] = {{"height", clip->height}, {"invert", clip->invert}};
+            item["volumeClip"] = {{"mode", geometry::VolumeClipModeName(clip->mode)}, {"height", clip->height},
+                                  {"invert", clip->invert}, {"embed", clip->embed}};
         } else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node.settings)) {
             item["volumeClose"] = {{"mode", geometry::VolumeCloseModeName(close->mode)}, {"width", close->width},
                                    {"distance", close->distance}, {"threshold", close->threshold},
@@ -935,8 +936,10 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
             } else if (created.kind == graph::NodeKind::VolumeClip) {
                 geometry::VolumeClipSettings settings;
                 if (const json* v = FindMember(item, "volumeClip"); v && v->is_object()) {
+                    settings.mode = geometry::ParseVolumeClipMode(ReadString(*v, "mode", "world"));
                     settings.height = ReadFloat(*v, "height", settings.height);
                     settings.invert = ReadBool(*v, "invert", settings.invert);
+                    settings.embed = ReadFloat(*v, "embed", settings.embed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeClose) {

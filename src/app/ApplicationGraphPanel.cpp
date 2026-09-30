@@ -1761,9 +1761,22 @@ void Application::DrawGraphPanel() {
     } else if (auto* clip = std::get_if<geometry::VolumeClipSettings>(&selected->settings)) {
         auto edited = *clip;
         bool changed = false;
+        const bool ground = edited.mode == geometry::VolumeClipMode::Ground;
         if (ui::BeginPropertyTable("volumeClipRows")) {
-            changed |= ui::PropertyFloat("高さ (m)", &edited.height, -10, 10, 0,
-                                         "切る水平な平面の高さ（ワールドの Y）です。");
+            const char* modes[] = {"ワールド", "接地"};
+            int mode = std::clamp(static_cast<int>(edited.mode), 0, 1);
+            if (ui::PropertyCombo("モード", &mode, modes, 2, 0,
+                                  "ワールドは指定した高さで切ります。接地は形の底から「埋める割合」の位置で切り、"
+                                  "その切り口が指定した高さ（既定 0 = 地面）に来るように形を上下に動かします。")) {
+                edited.mode = static_cast<geometry::VolumeClipMode>(mode);
+                changed = true;
+            }
+            changed |= ui::PropertyFloat(ground ? "地面の高さ (m)" : "高さ (m)", &edited.height, -10, 10, 0,
+                                         ground ? "切り口（底面）を置く高さ（ワールドの Y）です。"
+                                                : "切る水平な平面の高さ（ワールドの Y）です。");
+            if (ground)
+                changed |= ui::PropertyFloat("埋める割合", &edited.embed, 0, .9f, .25f,
+                                             "形の高さのうち、地面の下に埋めて捨てる割合です。0 で底をそのまま据えます。");
             changed |= ui::PropertyBool("反転", &edited.invert, false,
                                         "オフで平面より下を、オンで平面より上を捨てます。");
             ui::EndPropertyTable();
@@ -1772,6 +1785,7 @@ void Application::DrawGraphPanel() {
                      "切り離された塊もそのまま残します。");
         if (changed) {
             edited.height = std::clamp(edited.height, -100000.0f, 100000.0f);
+            edited.embed = std::clamp(edited.embed, 0.0f, .9f);
             *clip = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

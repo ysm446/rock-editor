@@ -34,8 +34,8 @@ catalog の各ノード: `kind`（保存名）、`inputs` / `outputs`（ピン�
     "nodes": [
       {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 10, "seed": 7}},
       {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
-      {"id": 3, "kind": "volumeTransform", "volumeTransform": {"position": [0, 0.55, 0]}},
-      {"id": 4, "kind": "volumeClip"},
+      {"id": 3, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.04}},
+      {"id": 4, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
       {"id": 5, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
       {"id": 6, "kind": "surface", "layer": {"material": "Materials/rough-rock.rockmat", "mapping": {"method": "triplanar", "repeatMeters": 2}}},
       {"id": 7, "kind": "meshOutput"}
@@ -88,7 +88,7 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 - **To Volume の解像度は 16〜128**。セル ≒ 最長辺 ÷ 解像度。これより細い割れ目・隙間・薄片は消える。
 - **比の単位**: Volume 系の幅・深さ・量の多くは「最長辺に対する比」で、メートルではない（catalog の `unit`）。
 - **小片を捨てるノード**（Plane Cuts / Volume Noise / Smooth / Edge Wear / Terrace）。そのノードが削って切り離した小片と、最大の塊の 1% 未満の破片を捨てる（入力の時点で分かれていた大きな塊は残る）。割れ目で分かれた岩を 1 つの塊にしたいなら、先に Volume Close（occlusion）で繋ぐ。
-- **原点中心の形**: Random Boxes・Base Shape は原点中心。Volume Clip（高さ 0）の前に Volume Transform で持ち上げる。
+- **原点中心の形**: Random Boxes・Base Shape は原点中心。Volume Clip を `"mode": "ground"`（`embed` で埋める割合）にすると、持ち上げずに地面へ据えられる。`world` のまま高さ 0 で切ると下半分が消える。
 - **Volume Crack** は Points か Planes のどちらか一方だけを繋ぐ。深さ 1 や外面に近い面は岩を分ける。
 - **ピース系**: Scatter Points の点数は Pieces 入力で 1 片あたり 2〜512、片の数との積が 1024 以下。Scatter Points は凸な Mesh を要る。Peel は Voronoi 直後（Piece Transform より前）に使う。Piece Filter には Pieces と Selection の両方を繋ぐ。
 - **Parallel Planes** は評価範囲に 512 面まで（岩の大きさ ÷ 間隔）。片理なら Layered Boxes・Voronoi と同じ `rotation` を書く。

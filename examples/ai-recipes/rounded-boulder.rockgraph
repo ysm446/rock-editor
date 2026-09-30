@@ -3,24 +3,18 @@
   "version": 1,
   "graph": {
     "nodes": [
-      {"id": 1, "kind": "randomBoxes",
-       "randomBoxes": {"count": 5, "size": [1.7, 1.2, 1.4], "sizeVariation": 0.4, "spread": 0.6, "rotation": 35, "seed": 11}},
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 5, "size": [1.7, 1.2, 1.4], "sizeVariation": 0.4, "spread": 0.6, "rotation": 35, "seed": 11}},
       {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 96}},
-      {"id": 3, "kind": "volumeTransform", "note": "少し埋まった転石にするため、半分より上へ持ち上げる",
-       "volumeTransform": {"position": [0, 0.45, 0]}},
-      {"id": 4, "kind": "planeCuts", "note": "丸める前に大きな面をいくつか作ると、ただの楕円体にならない",
-       "planeCuts": {"count": 7, "depthMin": 0.05, "depthMax": 0.18, "seed": 3}},
-      {"id": 5, "kind": "volumeSmooth", "note": "角を落として丸める。半径を上げるほど丸い",
-       "volumeSmooth": {"mode": "smooth", "radius": 0.05, "amount": 1}},
-      {"id": 6, "kind": "volumeNoise", "note": "セル状のノイズで表面に浅いくぼみを付ける",
-       "volumeNoise": {"type": "cellular", "amount": 0.015, "scale": 7, "octaves": 2}},
-      {"id": 7, "kind": "volumeClip"},
+      {"id": 4, "kind": "planeCuts", "note": "丸める前に大きな面をいくつか作ると、ただの楕円体にならない", "planeCuts": {"count": 7, "depthMin": 0.05, "depthMax": 0.18, "seed": 3}},
+      {"id": 5, "kind": "volumeSmooth", "note": "角を落として丸める。半径を上げるほど丸い", "volumeSmooth": {"mode": "smooth", "radius": 0.05, "amount": 1}},
+      {"id": 6, "kind": "volumeNoise", "note": "セル状のノイズで表面に浅いくぼみを付ける", "volumeNoise": {"type": "cellular", "amount": 0.015, "scale": 7, "octaves": 2}},
+      {"id": 7, "kind": "volumeClip", "note": "接地: 形の底から embed の位置で切り、切り口を地面（高さ 0）に置く。原点中心の形を持ち上げなくてよい", "volumeClip": {"mode": "ground", "embed": 0.2}},
       {"id": 8, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
       {"id": 9, "kind": "meshOutput"}
     ],
     "links": [
-      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
-      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9:Geometry"}
+      {"from": "1", "to": "2"}, {"from": "2", "to": "4"}, {"from": "4", "to": "5"}, {"from": "5", "to": "6"}, {"from": "6", "to": "7"},
+      {"from": "7", "to": "8"}, {"from": "8", "to": "9:Geometry"}
     ]
   }
 }
