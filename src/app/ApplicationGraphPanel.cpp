@@ -2066,6 +2066,17 @@ void Application::DrawGraphPanel() {
             changed |= ui::PropertyFloat("ゆらぎ", &edited.noise, 0, 1, .5f,
                                          "割れ目に沿った幅の変化。大きいほど途中で細くなり、途切れます。");
             changed |= ui::PropertyFloat("ゆらぎの細かさ", &edited.noiseScale, .5f, 16, 3);
+            if (!shells) {
+                changed |= ui::PropertyFloat("割れ目の長さ", &edited.extent, 0, 1, 0,
+                                             "Planes 入力のとき。0 なら面全体が割れ目で、端から端まで続きます。"
+                                             "正なら面をこの長さ（形の最長辺に対する比）のセルに分け、先端の閉じた割れ目を置きます。");
+                if (edited.extent > 0) {
+                    changed |= ui::PropertyFloat("割れている割合", &edited.coverage, 0, 1, .6f,
+                                                 "割れ目を置くセルの割合です。");
+                    changed |= ui::PropertyFloat("段違い", &edited.stagger, 0, 1, 0,
+                                                 "割れ目ごとに面の法線方向へずらします（最大で面の間隔の±45%）。段違いの節理になります。");
+                }
+            }
             changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
             ui::EndPropertyTable();
         }
@@ -2083,6 +2094,9 @@ void Application::DrawGraphPanel() {
             edited.shellCount = std::clamp(edited.shellCount, 1, 32);
             edited.shellSmoothing = std::clamp(edited.shellSmoothing, 0.0f, .3f);
             edited.shellPeel = std::clamp(edited.shellPeel, 0.0f, 1.0f);
+            edited.extent = std::clamp(edited.extent, 0.0f, 1.0f);
+            edited.coverage = std::clamp(edited.coverage, 0.0f, 1.0f);
+            edited.stagger = std::clamp(edited.stagger, 0.0f, 1.0f);
             *crack = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

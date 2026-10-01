@@ -1018,6 +1018,10 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
         error = "ゆらぎの細かさは 0.5～16 にしてください";
         return {};
     }
+    if (!range(s.extent, 0, 1) || !range(s.coverage, 0, 1) || !range(s.stagger, 0, 1)) {
+        error = "割れ目の長さ・割合・段違いは 0～1 にしてください";
+        return {};
+    }
     const float longest = InteriorLongestSide(g);
     if (longest <= 0) {
         error = "入力のボリュームに内部がありません";
@@ -1060,14 +1064,56 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
     }
     if (planes) {
         const auto last = g.Position(g.dimensions[0]-1, g.dimensions[1]-1, g.dimensions[2]-1);
+        // 段違いでずれた割れ目が範囲の外の面から入ってくる分も展開する。
+        const float margin = halfWidth + (s.extent > 0 ? .45f * s.stagger * planes->spacing : 0);
         expanded = ExpandParallelPlanes(*planes,
-            {g.origin.x-halfWidth, g.origin.y-halfWidth, g.origin.z-halfWidth},
-            {last.x+halfWidth, last.y+halfWidth, last.z+halfWidth}, error);
+            {g.origin.x-margin, g.origin.y-margin, g.origin.z-margin},
+            {last.x+margin, last.y+margin, last.z+margin}, error);
         if (!error.empty()) return {};
         for (const auto& plane : expanded)
             planeFactors.push_back(std::clamp(1 - s.variation * 2 *
                 float(HashUnit(seed ^ uint64_t(plane.index))), 0.f, 1.f));
     }
+    // 有限の割れ目: 面の上の座標 (u, v) を一辺 cell のセルに分け、セルごとに楕円の割れ目を 1 つ置くかを決める。
+    // 楕円の中心はセルの中で ±0.3 セル、半径は 0.35～0.75 セルなので、届くのは隣のセルまで（3×3 を見ればよい）。
+    const bool finite = planes && s.extent > 0;
+    const float cell = s.extent * longest;
+    const float maxShift = planes ? .45f * s.stagger * planes->spacing : 0;
+    Vec3 axisU{1, 0, 0}, axisV{0, 0, 1};
+    if (finite) {
+        const Vec3 n = planes->normal;
+        const Vec3 up = std::abs(n.y) < .9f ? Vec3{0, 1, 0} : Vec3{1, 0, 0};
+        axisU = {n.y * up.z - n.z * up.y, n.z * up.x - n.x * up.z, n.x * up.y - n.y * up.x};
+        const float length = std::sqrt(Dot(axisU, axisU));
+        axisU = {axisU.x / length, axisU.y / length, axisU.z / length};
+        axisV = {n.y * axisU.z - n.z * axisU.y, n.z * axisU.x - n.x * axisU.z, n.x * axisU.y - n.y * axisU.x};
+    }
+    // 面 plane の割れ目のうち、点 (u, v, 法線方向の位置 t) に最も深く届くものの「幅 − 距離」。届かなければ -最大。
+    const auto finiteCarve = [&](const StructurePlane& plane, float width, float u, float v, float t) {
+        float best = -std::numeric_limits<float>::max();
+        const int64_t cu = int64_t(std::floor(u / cell)), cv = int64_t(std::floor(v / cell));
+        const uint64_t planeKey = seed ^ (uint64_t(plane.index) * 0x9E3779B97F4A7C15ull);
+        for (int64_t j = cv - 1; j <= cv + 1; ++j)
+            for (int64_t i = cu - 1; i <= cu + 1; ++i) {
+                const uint64_t key = planeKey ^ (uint64_t(i) * 0xC2B2AE3D27D4EB4Full) ^ (uint64_t(j) * 0x165667B19E3779F9ull);
+                const auto unit = [&](uint64_t salt) { return float(HashUnit(key ^ salt)); };
+                if (unit(0x11) >= s.coverage) continue;
+                const float centerU = (float(i) + .5f + (unit(0x22) - .5f) * .6f) * cell;
+                const float centerV = (float(j) + .5f + (unit(0x33) - .5f) * .6f) * cell;
+                const float a = (.35f + .4f * unit(0x44)) * cell, b = (.35f + .4f * unit(0x55)) * cell;
+                const float angle = unit(0x66) * 3.14159265f;
+                const float du = u - centerU, dv = v - centerV;
+                const float ru = (du * std::cos(angle) + dv * std::sin(angle)) / a;
+                const float rv = (dv * std::cos(angle) - du * std::sin(angle)) / b;
+                const float r2 = ru * ru + rv * rv;
+                if (r2 >= 1) continue;
+                // 楕円の開口: 中心で最も広く、縁で 0（先端が閉じる）。
+                const float open = width * std::sqrt(1 - r2);
+                const float shift = (2 * unit(0x77) - 1) * maxShift;
+                best = std::max(best, open - std::abs(t - (plane.offset + shift)));
+            }
+        return best;
+    };
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
         const size_t index = out.Index(x, y, z);
         float value = g.values[index];
@@ -1092,11 +1138,16 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
                 }
             } else if (planes) {
                 const float projected = Dot(planes->normal, p);
+                const float u = finite ? Dot(axisU, p) : 0, v = finite ? Dot(axisV, p) : 0;
                 for (size_t i = 0; i < expanded.size(); ++i) {
                     const float width = reach * planeFactors[i];
                     // 閉じた面は彫らない。幅0の面をゼロ距離で評価すると、格子上に偽の隙間ができる。
-                    if (width > 0)
+                    if (!(width > 0)) continue;
+                    if (!finite) {
                         value = std::max(value, width - std::abs(projected - expanded[i].offset));
+                    } else if (std::abs(projected - expanded[i].offset) < width + maxShift) {
+                        value = std::max(value, finiteCarve(expanded[i], width, u, v, projected));
+                    }
                 }
             } else {
                 size_t nearest = 0;

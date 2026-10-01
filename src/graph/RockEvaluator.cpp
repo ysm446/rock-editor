@@ -104,6 +104,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         if (!s) return std::nullopt;
         add(s->width); add(s->depth); add(s->variation); add(s->noise); add(s->noiseScale); add(s->seed);
         add(int(s->source)); add(s->shellSpacing); add(s->shellCount); add(s->shellSmoothing); add(s->shellPeel);
+        add(s->extent); add(s->coverage); add(s->stagger);
     } else if (node->kind == NodeKind::PlaneCuts) {
         const auto* s = std::get_if<geometry::PlaneCutsSettings>(&node->settings);
         if (!s) return std::nullopt;

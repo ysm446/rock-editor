@@ -12,6 +12,7 @@ using namespace rock;
 namespace {
 void TestParallelPlanes();
 void TestShells();
+void TestFiniteCracks();
 bool Measure(const geometry::VolumeGrid& grid, geometry::MeshInfo& info,
              geometry::VolumeMeshingMethod method = geometry::VolumeMeshingMethod::MarchingTetrahedra) {
     std::string error;
@@ -220,11 +221,67 @@ void RunVolumeCrackTests() {
     const auto deeper = graph::EvaluateRocks(g, crack, &cache);
     Check(deeper.error.empty() && deeper.rocks[0].volume != rescattered.rocks[0].volume, "設定の変更で作り直す");
     TestParallelPlanes();
+    TestFiniteCracks();
     TestShells();
 }
 
 namespace {
 // 表面に沿う殻（シーティング・玉ねぎ状の風化）。外側の板がまだらに剥がれ落ちた段と、殻に沿う割れ目。
+void TestFiniteCracks() {
+    using namespace geometry;
+    Section("Volume Crack: 有限の割れ目（Planes）");
+    std::string error;
+    const auto box = MeshToVolume(MakeBox({2, 2, 2}), {64}, error);
+    MeshInfo boxInfo;
+    Check(Measure(box, boxInfo), "入力の立方体");
+    ParallelPlanesSettings ps; ps.spacing = .4f; ps.rotationDegrees = {0, 0, 80};
+    const auto planes = MakeParallelPlanes(ps, error);
+    VolumeCrackSettings infinite; infinite.width = .06f; infinite.depth = 1; infinite.noise = 0; infinite.variation = 0;
+    const auto full = CrackVolumeWithPlanes(box, planes, infinite, error);
+    VolumeCrackSettings legacy = infinite; legacy.coverage = .2f; legacy.stagger = 1;
+    Check(error.empty() && CrackVolumeWithPlanes(box, planes, legacy, error).values == full.values,
+          "長さ 0 では割合・段違いに関係なく従来の無限の面と同じ");
+    MeshInfo fullInfo, finiteInfo, denseInfo;
+    Measure(full, fullInfo);
+    VolumeCrackSettings finite = infinite; finite.extent = .25f; finite.coverage = .5f;
+    const auto patches = CrackVolumeWithPlanes(box, planes, finite, error);
+    Check(error.empty() && Measure(patches, finiteInfo) && Measure(patches, finiteInfo, VolumeMeshingMethod::DualContouring),
+          "有限の割れ目でも閉じた表面にできる");
+    Check(fullInfo.components > 1 && finiteInfo.components < fullInfo.components,
+          "貫く深さでも割れ目が途中で止まり、無限の面ほど形が分かれない");
+    Check(finiteInfo.volume > fullInfo.volume + .01 && finiteInfo.volume < boxInfo.volume - .01,
+          "彫る量は無限の面より少なく、0 ではない");
+    Check(patches.dimensions == box.dimensions && patches.origin == box.origin, "格子は入力のまま");
+    bool neverGrows = true;
+    for (size_t i = 0; i < box.values.size(); ++i) neverGrows &= patches.values[i] >= box.values[i];
+    Check(neverGrows, "有限の割れ目は形を広げない");
+    VolumeCrackSettings none = finite; none.coverage = 0;
+    Check(CrackVolumeWithPlanes(box, planes, none, error).values == box.values && error.empty(),
+          "割合 0 では何も彫らない");
+    VolumeCrackSettings dense = finite; dense.coverage = 1;
+    Check(Measure(CrackVolumeWithPlanes(box, planes, dense, error), denseInfo) && denseInfo.volume < finiteInfo.volume,
+          "割合を上げると彫る量が増える");
+    Check(CrackVolumeWithPlanes(box, planes, finite, error).values == patches.values, "同じ設定なら同じ結果");
+    VolumeCrackSettings reseeded = finite; ++reseeded.seed;
+    Check(CrackVolumeWithPlanes(box, planes, reseeded, error).values != patches.values, "Seed を変えると割れ目の配置が変わる");
+    VolumeCrackSettings staggered = finite; staggered.stagger = 1;
+    MeshInfo staggeredInfo;
+    const auto stepped = CrackVolumeWithPlanes(box, planes, staggered, error);
+    Check(error.empty() && stepped.values != patches.values && Measure(stepped, staggeredInfo),
+          "段違いで割れ目が面からずれ、閉じた表面を保つ");
+    VolumeCrackSettings longCracks = finite; longCracks.extent = .6f;
+    MeshInfo longInfo;
+    Check(Measure(CrackVolumeWithPlanes(box, planes, longCracks, error), longInfo) && longInfo.volume != finiteInfo.volume,
+          "長さを変えると割れ目の大きさが変わる");
+    const auto rejects = [&](auto change) {
+        VolumeCrackSettings bad = finite; change(bad);
+        const auto result = CrackVolumeWithPlanes(box, planes, bad, error);
+        return !error.empty() && result.values.empty();
+    };
+    Check(rejects([](auto& c) { c.extent = 1.1f; }), "長さが範囲外なら拒否する");
+    Check(rejects([](auto& c) { c.coverage = -.1f; }), "割合が範囲外なら拒否する");
+    Check(rejects([](auto& c) { c.stagger = std::numeric_limits<float>::quiet_NaN(); }), "非有限の段違いを拒否する");
+}
 void TestShells() {
     Section("Volume Crack: 表面に沿う殻");
     std::string error;

@@ -142,6 +142,13 @@ struct VolumeCrackSettings {
     // 割れ目に沿った幅のゆらぎ。0～1。noiseScale は最長辺あたりのノイズの山の数。0.5～16。
     float noise = .5f;
     float noiseScale = 3;
+    // Planes 入力の有限の割れ目。面を一辺 extent（最長辺に対する比）のセルに分け、セルごとに楕円の割れ目を
+    // 置くかを coverage の割合で決める。幅は楕円の縁へ向かって 0 に細り、先端が閉じる。
+    // stagger は割れ目ごとに面の法線方向へずらす量（面の間隔 × ±0.45 に対する比）で、段違いの節理になる。
+    // extent 0 なら面全体が割れ目（従来の無限の面）。
+    float extent = 0;     // 0～1。
+    float coverage = .6f; // 0～1。
+    float stagger = 0;    // 0～1。
     int seed = 1;
 };
 // Volume Noise。表面をノイズで削り、サンプル位置をずらして直線的な面や割れ目を崩す。

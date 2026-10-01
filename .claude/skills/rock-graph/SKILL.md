@@ -96,5 +96,6 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 - **Volume Crack** は Points か Planes のどちらか一方だけを繋ぐ。深さ 1 や外面に近い面は岩を分ける。
 - **ピース系**: Scatter Points の点数は Pieces 入力で 1 片あたり 2〜512、片の数との積が 1024 以下。Scatter Points は凸な Mesh を要る。Peel は Voronoi 直後（Piece Transform より前）に使う。Piece Filter には Pieces と Selection の両方を繋ぐ。
 - **Parallel Planes** は評価範囲に 512 面まで（岩の大きさ ÷ 間隔）。片理なら Layered Boxes・Voronoi と同じ `rotation` を書く。
+- **割れ目が格子・石積みに見える**: Parallel Planes の割れ目は既定で端から端まで続く。Volume Crack の `extent`（割れ目の長さ）・`coverage`（割合）・`stagger`（段違い）で途中で止まる節理にする。`noise` を上げて途切れさせると点線になる。
 - **Pieces to Mesh の後の空洞**: 板の隙間が閉じた空洞として大量に残る。Volume Close で埋まる。
 - **Debug ビルドの Remesh** はスタックオーバーフローで落ちることがある。撮影・評価は Release を使う。

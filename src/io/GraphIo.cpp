@@ -351,7 +351,8 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                    {"noiseScale", crack->noiseScale}, {"seed", crack->seed},
                                    {"source", geometry::VolumeCrackSourceName(crack->source)},
                                    {"shellSpacing", crack->shellSpacing}, {"shellCount", crack->shellCount},
-                                   {"shellSmoothing", crack->shellSmoothing}, {"shellPeel", crack->shellPeel}};
+                                   {"shellSmoothing", crack->shellSmoothing}, {"shellPeel", crack->shellPeel},
+                                   {"extent", crack->extent}, {"coverage", crack->coverage}, {"stagger", crack->stagger}};
         } else if (const auto* cuts = std::get_if<geometry::PlaneCutsSettings>(&node.settings)) {
             item["planeCuts"] = {{"count", cuts->count},
                                  {"scope", geometry::PlaneCutsScopeName(cuts->scope)},
@@ -1071,6 +1072,9 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.shellCount = ReadInt(*v, "shellCount", settings.shellCount);
                     settings.shellSmoothing = ReadFloat(*v, "shellSmoothing", settings.shellSmoothing);
                     settings.shellPeel = ReadFloat(*v, "shellPeel", settings.shellPeel);
+                    settings.extent = ReadFloat(*v, "extent", settings.extent);
+                    settings.coverage = ReadFloat(*v, "coverage", settings.coverage);
+                    settings.stagger = ReadFloat(*v, "stagger", settings.stagger);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::PlaneCuts) {
