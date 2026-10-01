@@ -119,6 +119,14 @@ std::optional<Host> MakeHost(graph::NodeKind kind, bool bareCrack = false) {
         host.evaluate = crack;
         return host;
     }
+    case K::VolumeDiffMask: {
+        const auto uv = Add(g, K::UvUnwrap);
+        Connect(g, SmallBox(g), uv, 0);
+        host.target = host.evaluate = Add(g, kind);
+        Connect(g, uv, host.target, 0);
+        Connect(g, SmallVolume(g), host.target, 1);
+        return host;
+    }
     case K::ShapeMask: case K::NoiseMask: case K::DepositionMask: case K::StructureMask: {
         const auto uv = Add(g, K::UvUnwrap);
         Connect(g, SmallBox(g), uv, 0);

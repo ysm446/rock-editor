@@ -263,6 +263,9 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                      {"fill", structure->fill}, {"softness", structure->softness}, {"scale", structure->scale},
                                      {"width", structure->width}, {"warp", structure->warp}, {"warpScale", structure->warpScale},
                                      {"seed", structure->seed}, {"invert", structure->invert}};
+        } else if (const auto* diff = std::get_if<geometry::VolumeDiffMaskSettings>(&node.settings)) {
+            item["volumeDiffMask"] = {{"mode", geometry::VolumeDiffModeName(diff->mode)}, {"distance", diff->distance},
+                                      {"softness", diff->softness}, {"resolution", diff->resolution}, {"invert", diff->invert}};
         } else if (const auto* noiseMask = std::get_if<geometry::NoiseMaskSettings>(&node.settings)) {
             item["noiseMask"] = {{"size", noiseMask->size}, {"contrast", noiseMask->contrast}, {"seed", noiseMask->seed},
                 {"detail", noiseMask->detail}, {"warp", noiseMask->warp}, {"resolution", noiseMask->resolution}, {"invert", noiseMask->invert}};
@@ -817,6 +820,16 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.recessPreference = ReadFloat(*v, "recessPreference", settings.recessPreference);
                     settings.resolution = ReadInt(*v, "resolution", settings.resolution);
                     settings.samples = ReadInt(*v, "samples", settings.samples);
+                    settings.invert = ReadBool(*v, "invert", settings.invert);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeDiffMask) {
+                geometry::VolumeDiffMaskSettings settings;
+                if (const json* v = FindMember(item, "volumeDiffMask"); v && v->is_object()) {
+                    settings.mode = geometry::ParseVolumeDiffMode(ReadString(*v, "mode", "added"));
+                    settings.distance = ReadFloat(*v, "distance", settings.distance);
+                    settings.softness = ReadFloat(*v, "softness", settings.softness);
+                    settings.resolution = ReadInt(*v, "resolution", settings.resolution);
                     settings.invert = ReadBool(*v, "invert", settings.invert);
                 }
                 created.settings = settings;

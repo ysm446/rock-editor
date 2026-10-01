@@ -113,6 +113,8 @@ enum class NodeKind : uint32_t {
     VolumeUndercut = 77,
     // 岩の構造から素材の模様のマスクを作る（構造面に沿う縞、網目の脈）。UV付きの Mesh と、縞なら Planes を受ける。
     StructureMask = 78,
+    // 後から足した所（削った所）のマスク。UV付きの Mesh と、比べる元（足す・削る前）の Volume を受ける。
+    VolumeDiffMask = 79,
     // 岩グラフの最終段。入力のメッシュから段階的な LOD を作り、この岩グラフの岩アセットにする。
     // 出力は LOD0（Mesh Output へ繋いで表示できる）。選ぶとビューポートで LOD を切り替えて見られる。
     RockAsset = 72,
@@ -278,7 +280,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeEdgeWearSettings, geometry::VolumeClipSettings, geometry::VolumeScatterSettings, geometry::VolumeUndercutSettings,
                                   geometry::DecimateSettings, geometry::RemeshSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
-                                  geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::StructureMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
+                                  geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::StructureMaskSettings, geometry::VolumeDiffMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
                                   geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, RockNodeSettings,

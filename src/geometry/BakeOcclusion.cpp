@@ -595,4 +595,35 @@ MaskImage StructureMask(const Mesh& mesh, const StructureMaskSettings& s, const 
     raster.high = 1;
     return SurfaceMask(mesh, raster, error, stop, progress, nullptr, nullptr, &pattern);
 }
+const char* VolumeDiffModeName(VolumeDiffMode mode) { return mode == VolumeDiffMode::Removed ? "removed" : "added"; }
+VolumeDiffMode ParseVolumeDiffMode(std::string_view name) {
+    return name == "removed" ? VolumeDiffMode::Removed : VolumeDiffMode::Added;
+}
+MaskImage VolumeDiffMask(const Mesh& mesh, const VolumeGrid& before, const VolumeDiffMaskSettings& s, std::string& error,
+                         std::stop_token stop, const std::function<void(int)>& progress) {
+    error.clear();
+    if ((s.mode != VolumeDiffMode::Added && s.mode != VolumeDiffMode::Removed) || !std::isfinite(s.distance) ||
+        s.distance < 0 || s.distance > 100 || !std::isfinite(s.softness) || s.softness < .001f || s.softness > 100 ||
+        s.resolution < kMinShapeMaskResolution || s.resolution > kMaxShapeMaskResolution || (s.resolution & (s.resolution - 1))) {
+        error = "Volume Diff Maskの設定が不正です";
+        return {};
+    }
+    if (before.spacing <= 0 || before.values.empty()) {
+        error = "比べる元の Volume が空です";
+        return {};
+    }
+    const double sign = s.mode == VolumeDiffMode::Added ? 1 : -1;
+    // 表面の点で、元の形からどれだけ外（削った所なら内）にあるか。distance から distance + softness で黒から白へ。
+    std::function<double(V)> pattern = [&](V p) {
+        const double d = sign * SampleVolumeDistance(before, Vec3{float(p.x), float(p.y), float(p.z)});
+        const double t = std::clamp((d - s.distance) / s.softness, 0., 1.);
+        return t * t * (3 - 2 * t);
+    };
+    ShapeMaskSettings raster;
+    raster.type = ShapeMaskType::Height;
+    raster.resolution = s.resolution;
+    raster.low = 0;
+    raster.high = 1;
+    return SurfaceMask(mesh, raster, error, stop, progress, nullptr, nullptr, &pattern);
+}
 } // namespace rock::geometry

@@ -788,6 +788,46 @@ void RunMaskFilterTests() {
     Check(!r.error.empty() && r.error.find("Mask Filter") != std::string::npos, "invalid settings are diagnosed on the filter node");
 }
 
+void RunVolumeDiffMaskTests() {
+    using tests::Check;
+    tests::Section("Volume Diff Mask");
+    std::string error;
+    // 2 m 四方の水平な面（x 0～2）。UV の u は x / 2。
+    geometry::Mesh mesh;
+    mesh.positions = {{0, 0, 0}, {2, 0, 0}, {2, 0, 2}, {0, 0, 2}};
+    mesh.triangles = {{0, 2, 1}, {0, 3, 2}};
+    mesh.cornerUvs = {{{{0, 0}, {1, 1}, {1, 0}}}, {{{0, 0}, {0, 1}, {1, 1}}}};
+    mesh.uvCharts = {0, 0};
+    mesh.uvWidth = mesh.uvHeight = 128;
+    // 比べる元: x < 1 が内部の形（距離 = x - 1）。面の右半分（x > 1）は後から足した所になる。
+    geometry::VolumeGrid before;
+    before.origin = {-1, -1, -1};
+    before.spacing = .1f;
+    before.dimensions = {41, 21, 41};
+    before.values.resize(size_t(41) * 21 * 41);
+    for (uint32_t z = 0; z < 41; ++z)
+        for (uint32_t y = 0; y < 21; ++y)
+            for (uint32_t x = 0; x < 41; ++x) before.values[before.Index(x, y, z)] = before.Position(x, y, z).x - 1;
+    geometry::VolumeDiffMaskSettings added;
+    added.resolution = 128;
+    added.distance = .05f;
+    added.softness = .05f;
+    const auto image = geometry::VolumeDiffMask(mesh, before, added, error);
+    Check(error.empty() && image.pixels.size() == 128 * 128, "差のマスクを生成");
+    if (image.pixels.size() != 128 * 128) return;
+    // 画素 20（x ≈ 0.3）は元の形の内側、画素 110（x ≈ 1.7）は外。
+    Check(image.pixels[64 * 128 + 20] < 5 && image.pixels[64 * 128 + 110] > 250, "足した所: 元の形の外にある表面だけ白い");
+    geometry::VolumeDiffMaskSettings removed = added;
+    removed.mode = geometry::VolumeDiffMode::Removed;
+    const auto carved = geometry::VolumeDiffMask(mesh, before, removed, error);
+    Check(error.empty() && carved.pixels[64 * 128 + 20] > 250 && carved.pixels[64 * 128 + 110] < 5,
+          "削った所: 元の形の内側にある表面だけ白い");
+    geometry::VolumeDiffMaskSettings bad = added;
+    bad.softness = 0;
+    geometry::VolumeDiffMask(mesh, before, bad, error);
+    Check(!error.empty(), "範囲外の設定を拒否する");
+}
+
 void RunStructureMaskTests() {
     using tests::Check;
     tests::Section("Structure Mask");

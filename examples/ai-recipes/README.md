@@ -2,7 +2,7 @@
 
 LLM に岩を作らせるときの出発点。どれも手で書きやすい表記（ピン ID・位置を省き、リンクをノード ID とピン名で書く）で書いてある。書き方は [LLM による岩グラフの作成](../../docs/reference/ai-authoring.md)、手順は [skill](../../.agents/skills/rock-graph/SKILL.md)。
 
-アプリの「ファイル」→「テンプレートから作成…」（アセット欄の右クリックにもある）から、表示中のフォルダへ複製して開ける。一覧は `templates.json`（日本語名・分類・状態・説明）。または、このフォルダをルートとして開くか、`rock_cli eval` / `python tools/rock_shot.py` で確かめる。形だけのグラフ（マテリアルは付けていない。`gneiss` / `marble` だけは Surface の定数色で模様を塗る）。どれも `rock_cli eval` で塊 1 つ・空洞 0・閉じたメッシュになることを確かめてある。
+アプリの「ファイル」→「テンプレートから作成…」（アセット欄の右クリックにもある）から、未保存の文書として開ける（保存したときにファイルを作る）。一覧は `templates.json`（日本語名・分類・状態・説明）。または、このフォルダをルートとして開くか、`rock_cli eval` / `python tools/rock_shot.py` で確かめる。形だけのグラフ（マテリアルは付けていない。`gneiss` / `marble` だけは Surface の定数色で模様を塗る）。どれも `rock_cli eval` で塊 1 つ・空洞 0・閉じたメッシュになることを確かめてある。
 
 | ファイル | 岩 | 組み方の要点 | 評価 |
 | --- | --- | --- | --- |
@@ -28,6 +28,12 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `gneiss.rockgraph` | 片麻岩（縞） | 同じ Parallel Planes で浅い割れ目と Structure Mask の縞を作り、暗い下地に明るい層を塗る（Surface の定数色） | 約 9 秒（UV 展開を含む） |
 | `marble.rockgraph` | 大理石（脈） | 丸めた塊の白い下地に、Structure Mask の脈で暗い線を塗る。網目の感じが少し残る | 約 4 秒（UV 展開を含む） |
 | `river-pebble.rockgraph` | 河原の丸石 | 平たい楕円体を弱いノイズで歪ませ、Marching Tetrahedra でなめらかに | 約 0.1 秒 |
+
+使い方の例（チュートリアル）。ノードの組み方を見せる例で、ノードの note に手順を書いてある。テンプレートの一覧では「使い方の例」の分類に出る。
+
+| ファイル | 内容 | 組み方の要点 | 評価 |
+| --- | --- | --- | --- |
+| `soil-filled-gaps.rockgraph` | 岩の隙間を土で埋める | 割ってずらしたブロックを接地させ（ここが Before）、Volume Close（occlusion）で奥まった隙間を埋める。Volume Diff Mask（足した所）で詰めた土だけを別の色で塗る | 約 2 分（UV 展開を含む） |
 
 種類ごとのスクリーンショットと改善の履歴は [岩の研究ページ](../../docs/research/rocks.md)。作れる岩・作れない岩の一覧と足りないノードは [岩の種類の網羅](../../docs/reference/rock-catalog.md)。
 

@@ -44,6 +44,8 @@ constexpr ParamOption kCombineOps[] = {{"multiply", 0, "積"}, {"maximum", 1, "�
 constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"}};
 constexpr ParamOption kClipModes[] = {{"world", 0, "指定した高さで切る"},
                                      {"ground", 1, "形の底から embed の位置で切り、切り口を height（地面）に置く"}};
+constexpr ParamOption kVolumeDiffModes[] = {{"added", 0, "足した所: 比べる元の形の外にある表面（隙間を埋めた土・足した礫）"},
+                                           {"removed", 1, "削った所: 比べる元の形の内側にある表面（割れ目・欠けた跡）"}};
 constexpr ParamOption kStructureTypes[] = {{"bands", 0, "縞: Planes の構造面の層ごとに塗る（片麻岩の縞・砂岩の色の層）"},
                                           {"veins", 1, "脈: 3D の網目の細い線（大理石・石英の脈）"}};
 constexpr ParamOption kCrackSources[] = {{"inputs", 0, "Points（Voronoi 境界）か Planes（構造面）の入力に沿う"},
@@ -310,6 +312,12 @@ constexpr ParamDefinition kParams[] = {
     {K::StructureMask, "structureMask.warpScale", T::Float, 0.01, 100, "m", "ゆがみの大きさ", "", C::Error},
     {K::StructureMask, "structureMask.seed", T::Int, 0, N, "", "Seed", "", C::None},
     {K::StructureMask, "structureMask.invert", T::Bool, N, N, "", "反転", "", C::None},
+    {K::VolumeDiffMask, "volumeDiffMask.mode", T::Enum, N, N, "", "比べ方", "", C::Clamp, kVolumeDiffModes},
+    {K::VolumeDiffMask, "volumeDiffMask.distance", T::Float, 0, 100, "m", "しきい値",
+     "比べる元の表面からこれより離れた所から白くする。後段の Volume Noise・Edge Wear の揺れより大きくする", C::Error},
+    {K::VolumeDiffMask, "volumeDiffMask.softness", T::Float, 0.001, 100, "m", "ぼかし", "黒から白へ移る幅", C::Error},
+    {K::VolumeDiffMask, "volumeDiffMask.resolution", T::Int, 128, 4096, "px（2 のべき乗）", "マスク解像度", "", C::Error},
+    {K::VolumeDiffMask, "volumeDiffMask.invert", T::Bool, N, N, "", "反転", "", C::None},
     {K::NoiseMask, "noiseMask.size", T::Float, 0.001, 1000, "m", "ムラの大きさ", "", C::Clamp},
     {K::NoiseMask, "noiseMask.contrast", T::Float, 0, 1, "比", "コントラスト", "", C::Clamp},
     {K::NoiseMask, "noiseMask.detail", T::Float, 0, 1, "比", "細部", "", C::Clamp},
@@ -447,6 +455,8 @@ constexpr NodeSummary kSummaries[] = {
     {K::StructureMask, "岩の構造から素材の模様のマスクを作る（構造面に沿う縞、網目の脈）",
      "UV 付きの Mesh が要る。縞は形の割れ目に使ったのと同じ Parallel Planes を Planes に繋ぐと向きが揃う。Apply Material の Mask へ"},
     {K::DepositionMask, "土が溜まりそうな所（窪み・緩い面）のマスクを作る", "UV 付きの Mesh が要る"},
+    {K::VolumeDiffMask, "後から足した所（削った所）のマスクを作る（隙間を埋めた土・足した礫・割れ目）",
+     "Mesh に UV 付きの最後のメッシュ、Before に足す・削る前の Volume を繋ぐ。両者は同じ位置にそろえる（Volume Clip の接地で動かすなら、動かした後から Before を取る）"},
     {K::MaskFilter, "マスクをぼかす・シャープにする・レベル補正する", ""},
     {K::VolumeUndercut, "形の高さの帯を内側へ削り、くびれを作る（きのこ岩・フードゥー・波食ノッチ）",
      "高さは形に対する位置（接地の前後で意味が変わらない）。削り落とされた小片は捨てる"},

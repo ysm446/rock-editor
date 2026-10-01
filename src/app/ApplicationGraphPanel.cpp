@@ -1456,6 +1456,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::DepositionMask, "Deposition Mask — 隙間や上向きの面に堆積する土のマスク");
         addNodeMenuItem(graph::NodeKind::NoiseMask, "Noise Mask — 3Dノイズでムラのマスクを作る");
         addNodeMenuItem(graph::NodeKind::StructureMask, "Structure Mask — 構造面に沿う縞・網目の脈のマスクを作る");
+        addNodeMenuItem(graph::NodeKind::VolumeDiffMask, "Volume Diff Mask — 後から足した所（隙間の土・礫）・削った所のマスク");
         addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（遮蔽 / 上向き度 / 高さ / 曲率）");
         addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
         addNodeMenuItem(graph::NodeKind::MaskFilter, "Mask Filter — マスクを加工（ぼかし / シャープ / レベル）");
@@ -1768,6 +1769,39 @@ void Application::DrawGraphPanel() {
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *wear = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* diff = std::get_if<geometry::VolumeDiffMaskSettings>(&selected->settings)) {
+        auto edited = *diff;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeDiffMaskRows")) {
+            const char* modes[] = {"足した所", "削った所"};
+            int mode = std::clamp(static_cast<int>(edited.mode), 0, 1);
+            if (ui::PropertyCombo("比べ方", &mode, modes, 2, 0,
+                                  "足した所は Before の形の外にある表面（隙間を埋めた土・足した礫）、"
+                                  "削った所は Before の形の内側にある表面（割れ目・欠けた跡）を白くします。")) {
+                edited.mode = static_cast<geometry::VolumeDiffMode>(mode);
+                changed = true;
+            }
+            changed |= ui::PropertyFloat("しきい値 (m)", &edited.distance, 0, 100, .03f,
+                                         "Before の表面からこれより離れた所から白くします。後段の Volume Noise・Edge Wear の揺れより大きくします。");
+            changed |= ui::PropertyFloat("ぼかし (m)", &edited.softness, .001f, 100, .05f, "黒から白へ移る幅です。");
+            const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+            int resolution = std::clamp(static_cast<int>(std::log2(std::max(edited.resolution, 128))) - 7, 0, 5);
+            if (ui::PropertyCombo("マスク解像度", &resolution, resolutions, 6, 3)) {
+                edited.resolution = 128 << resolution;
+                changed = true;
+            }
+            changed |= ui::PropertyBool("反転", &edited.invert, false);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("後から足した所（または削った所）のマスクを作ります。Mesh に UV Unwrap の出力、Before に足す・削る前の Volume を繋ぎます"
+                     "（例: Volume Close で隙間を埋める前）。両者は同じ位置にそろえます。Volume Clip の接地で動かすなら、動かした後から Before を取ります。");
+        if (changed) {
+            edited.distance = std::clamp(edited.distance, 0.0f, 100.0f);
+            edited.softness = std::clamp(edited.softness, .001f, 100.0f);
+            *diff = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

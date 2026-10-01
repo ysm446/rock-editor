@@ -294,6 +294,8 @@ struct VolumeClipSettings {
 // 内部の値を使う処理が崩れるので、内外の境目（格子の辺の交点）から最も近い表面までの距離で置き換える。
 // 外側の値と内外の符号は変えない。内側で 1 セル以上深くなる所だけを置き換える。
 void RedistanceInterior(VolumeGrid& grid, std::stop_token stop = {});
+// 位置 p の距離（負が内部）を線形補間で読む。格子の外は外周の値に外へ出た距離を足す（符号は正のまま）。
+float SampleVolumeDistance(const VolumeGrid& grid, Vec3 p);
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
 // 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。

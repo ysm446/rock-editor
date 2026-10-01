@@ -2565,4 +2565,5 @@ Mesh VolumeSurface(const VolumeGrid& g, std::string& error, VolumeMeshingMethod 
     }
     return mesh;
 }
+float SampleVolumeDistance(const VolumeGrid& grid, Vec3 p) { return SampleVolume(grid, p); }
 }  // namespace rock::geometry

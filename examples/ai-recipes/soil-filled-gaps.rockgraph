@@ -1,0 +1,39 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "手順 1: 岩体。この箱を節理でブロックに割る", "baseRock": {"shape": "box", "size": [5, 3.5, 4]}},
+      {"id": 2, "kind": "scatterPoints", "pieces": {"count": 70, "seed": 4, "clustering": 0.5}, "note": "手順 1: ブロックの母点"},
+      {"id": 5, "kind": "voronoiFracture", "note": "手順 1: 点の Voronoi で角張ったブロックに割る", "pieces": {"rotation": [0, 15, 8], "stretch": [1, 1.2, 1]}},
+      {"id": 6, "kind": "pieceSelect", "note": "手順 2: 外周からブロックを欠く（接地: 根元は残す）", "pieces": {"mode": "peel", "fraction": 0.4, "peelNoise": 0.6, "protectCore": false, "grounded": true, "seed": 2, "peelSize": 0.3, "stability": 0.3}},
+      {"id": 7, "kind": "pieceFilter", "pieces": {"keep": false}, "note": "手順 2: 選んだブロックを消す"},
+      {"id": 17, "kind": "pieceTransform", "note": "手順 3: ブロックを少しずつずらして傾け、間に隙間を開ける（ここに土が詰まる）", "pieces": {"individual": true, "jitterPosition": [0.18, 0.08, 0.18], "jitterRotation": 8, "jitterSeed": 3}},
+      {"id": 8, "kind": "piecesToMesh", "note": "手順 3: ブロックを 1 つのメッシュにまとめる"},
+      {"id": 9, "kind": "toVolume", "toVolume": {"resolution": 128}, "note": "手順 3: ボリュームにする"},
+      {"id": 11, "kind": "planeCuts", "note": "手順 3: ブロックの角を欠く", "planeCuts": {"count": 40, "scope": "local", "radius": 0.06, "depthMin": 0.2, "depthMax": 0.45, "seed": 12}},
+      {"id": 12, "kind": "volumeNoise", "volumeNoise": {"type": "facet", "amount": 0.005, "scale": 16, "octaves": 2}, "note": "手順 3: 割れ肌の凹凸"},
+      {"id": 13, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.012, "radius": 0.01, "noise": 0.6}, "note": "手順 3: 角の摩耗"},
+      {"id": 14, "kind": "volumeClip", "note": "手順 4: 接地。ここが「土を詰める前の岩」。Volume Diff Mask の Before へも繋ぐ（形を動かした後から取る）", "volumeClip": {"mode": "ground", "embed": 0.1}},
+      {"id": 30, "kind": "volumeClose", "note": "手順 5: ブロックの間の奥まった所を土で埋める（occlusion）。距離を伸ばす・しきい値を下げると土が増える", "volumeClose": {"mode": "occlusion", "distance": 0.25, "threshold": 0.52, "samples": 48, "softness": 0.1}},
+      {"id": 15, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}, "note": "手順 6: メッシュに戻す"},
+      {"id": 19, "kind": "decimate", "decimate": {"targetTriangles": 120000, "creaseWeight": 2}, "note": "手順 6: 三角形を減らす"},
+      {"id": 20, "kind": "uvUnwrap", "uvUnwrap": {"resolution": 2048}, "note": "手順 6: マスクを作るための UV"},
+      {"id": 21, "kind": "surface", "note": "手順 7: 岩の色", "layer": {"material": null, "baseColor": [0.27, 0.24, 0.21], "roughness": 0.8, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 22, "kind": "applyMaterial", "note": "手順 7: 全体に岩の色を塗る"},
+      {"id": 23, "kind": "surface", "note": "手順 7: 土の色", "layer": {"material": null, "baseColor": [0.52, 0.32, 0.14], "roughness": 0.95, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 24, "kind": "volumeDiffMask", "note": "手順 7: 土を詰める前の岩（Before）の外にある表面 = 詰めた土。しきい値は手順 3 の凹凸より大きく", "volumeDiffMask": {"mode": "added", "distance": 0.03, "softness": 0.05, "resolution": 2048}},
+      {"id": 25, "kind": "applyMaterial", "note": "手順 7: マスクの所に土の色を塗る"},
+      {"id": 16, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "1", "to": "5:Geometry"}, {"from": "2", "to": "5:Points"}, {"from": "5", "to": "6"},
+      {"from": "5", "to": "7:Pieces"}, {"from": "6", "to": "7:Selection"}, {"from": "7", "to": "17:Pieces"}, {"from": "17", "to": "8"},
+      {"from": "8", "to": "9"}, {"from": "9", "to": "11"}, {"from": "11", "to": "12"}, {"from": "12", "to": "13"},
+      {"from": "13", "to": "14"}, {"from": "14", "to": "30"}, {"from": "30", "to": "15"}, {"from": "15", "to": "19"},
+      {"from": "19", "to": "20"}, {"from": "20", "to": "22:Mesh"}, {"from": "21", "to": "22:Material"}, {"from": "20", "to": "24:Mesh"},
+      {"from": "14", "to": "24:Before"}, {"from": "22", "to": "25:Mesh"}, {"from": "23", "to": "25:Material"}, {"from": "24", "to": "25:Mask"},
+      {"from": "25", "to": "16:Geometry"}
+    ]
+  }
+}

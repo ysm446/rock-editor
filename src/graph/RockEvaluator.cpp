@@ -173,6 +173,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* structure = std::get_if<geometry::StructureMaskSettings>(&node->settings)) {
         add(int(structure->type)); add(structure->resolution); add(structure->fill); add(structure->softness); add(structure->scale);
         add(structure->width); add(structure->warp); add(structure->warpScale); add(structure->seed);
+    } else if (const auto* diff = std::get_if<geometry::VolumeDiffMaskSettings>(&node->settings)) {
+        add(diff->mode); add(diff->distance); add(diff->softness); add(diff->resolution);
     } else if (const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node->settings)) {
         add(noise->size); add(noise->contrast); add(noise->seed); add(noise->detail); add(noise->warp); add(noise->resolution);
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
@@ -328,6 +330,27 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 else persistent->pieceOutputs.erase(id);
             }
             return finish(std::move(pieces));
+        } else if (node->kind == NodeKind::VolumeDiffMask) {
+            const auto* settings = std::get_if<geometry::VolumeDiffMaskSettings>(&node->settings);
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            const auto* beforeNode = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
+            if (!settings || !upstream) return finish(Failure(id, "Volume Diff Mask", "UV付きのMeshを接続してください"));
+            if (!beforeNode) return finish(Failure(id, "Volume Diff Mask", "Before に比べる元（足す・削る前）の Volume を接続してください"));
+            const auto before = evaluate(beforeNode->id, depth + 1);
+            if (!before.error.empty()) return finish(before);
+            if (before.hasModels || before.rocks.size() != 1 || !before.rocks[0].volume)
+                return finish(Failure(id, "Volume Diff Mask", "Before には Volume を 1 つ接続してください"));
+            result = evaluate(upstream->id, depth + 1);
+            report(id, 0, 0);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.size() != 1 || result.rocks[0].volume)
+                return finish(Failure(id, "Volume Diff Mask", "UV付きの生成メッシュを1つ接続してください（UV Unwrapの出力）"));
+            std::string error;
+            auto image = geometry::VolumeDiffMask(result.rocks[0].mesh, *before.rocks[0].volume, *settings, error, stop,
+                                                  [&](int p) { report(id, 0, p); });
+            if (!error.empty()) return finish(Failure(id, "Volume Diff Mask", error));
+            result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
+            result.rocks[0].previewMaskInvert = ImageMaskInvert(*node);
         } else if (node->kind == NodeKind::StructureMask) {
             const auto* settings = std::get_if<geometry::StructureMaskSettings>(&node->settings);
             const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);

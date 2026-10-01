@@ -1,5 +1,5 @@
 {
-  "note": "岩のテンプレートの一覧。アプリの「テンプレートから作成」に出す。グラフは同じフォルダの <id>.rockgraph、画像は docs/research/images/<id>.jpg（研究ページと共有）。状態と説明は docs/research/rocks.md と合わせる。",
+  "note": "岩のテンプレートの一覧。アプリの「テンプレートから作成」に出す。グラフは同じフォルダの <id>.rockgraph、画像は docs/research/images/<id>.jpg（研究ページと共有）。状態と説明は docs/research/rocks.md と合わせる。分類「使い方の例」はノードの組み方を見せる例（チュートリアル）で、ノードの note に手順を書く。",
   "templates": [
     {
       "id": "blocky",
@@ -154,6 +154,13 @@
       "category": "表面・色",
       "status": "△",
       "description": "白い下地に暗い脈（Surface の定数色）。"
+    },
+    {
+      "id": "soil-filled-gaps",
+      "name": "岩の隙間を土で埋める",
+      "category": "使い方の例",
+      "status": "○",
+      "description": "割ってずらしたブロックの隙間を Volume Close で土で埋め、Volume Diff Mask で詰めた土だけを別の色で塗る。ノードの note に手順を書いてある。"
     }
   ]
 }

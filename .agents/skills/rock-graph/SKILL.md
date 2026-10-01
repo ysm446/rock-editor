@@ -104,4 +104,5 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 - **ノードの C++ を変えたら `rock_editor` も作り直す**: 撮影（`rock_shot.py`）はアプリで評価する。`rock_cli` だけ作り直すと、古いアプリが知らない設定を無視した形が写り、効果を見誤る。
 - **板に割れた岩は「扁平な点の Voronoi」**: 伸長の Y を小さく（0.45 など）すると不規則な板になる（`platy-joints`）。傾いた板を Piece Transform でずらすと、継ぎ目が格子 1 つ分の隙間になり縁がのこぎり状になる。薄い板は表面積が大きく、Volume Noise の量が大きいと板を削り切る。三角形が多い（数十万）ので Decimate で減らす。
 - **Peel の欠ける順序は Voronoi Fracture のノード ID にも依存する**: レシピを写して ID を振り直すと形が変わる（全て崩れることもある）。写すときは ID を保つ。
+- **後から足した所・削った所を別の素材で塗る**: Volume Diff Mask の Before に足す・削る前の Volume、Mesh に UV Unwrap の出力を繋ぐ（隙間を Volume Close で埋めた土、Volume Scatter で足した礫、割れ目）。Before はメッシュと同じ位置にそろえる（Volume Clip の接地の後から取る）。しきい値は後段の Noise・Edge Wear の揺れより大きく。
 - **Debug ビルドの Remesh** はスタックオーバーフローで落ちることがある。撮影・評価は Release を使う。

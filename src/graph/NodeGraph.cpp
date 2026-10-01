@@ -99,13 +99,17 @@ constexpr std::array<PinDefinition, 4> kRockScatterPins = {{{PinKind::Input, Val
 // Structure Mask。UV付きの Mesh と、縞に使う構造面（Planes）を受ける。
 constexpr std::array<PinDefinition, 3> kStructureMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Planes, "Planes"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 47> kNodeDefinitions = {{
+// Volume Diff Mask。UV付きの Mesh と、比べる元（足す・削る前）の Volume を受ける。
+constexpr std::array<PinDefinition, 3> kVolumeDiffMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
+    {PinKind::Input, ValueType::Volume, "Before"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
+constexpr std::array<NodeDefinition, 48> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
     {NodeKind::MaterialMask, "materialMask", "Material Mask", kMaskPins},
     {NodeKind::DepositionMask, "depositionMask", "Deposition Mask", kShapeMaskPins},
     {NodeKind::StructureMask, "structureMask", "Structure Mask", kStructureMaskPins},
+    {NodeKind::VolumeDiffMask, "volumeDiffMask", "Volume Diff Mask", kVolumeDiffMaskPins},
     {NodeKind::NoiseMask, "noiseMask", "Noise Mask", kShapeMaskPins},
     {NodeKind::ShapeMask, "shapeMask", "Shape Mask", kShapeMaskPins},
     {NodeKind::MaskCombine, "maskCombine", "Mask Combine", kMaskCombinePins},
@@ -195,7 +199,7 @@ bool IsMeshNodeKind(NodeKind kind) {
 
 bool IsImageMaskNodeKind(NodeKind kind) {
     return kind == NodeKind::ShapeMask || kind == NodeKind::NoiseMask || kind == NodeKind::DepositionMask ||
-           kind == NodeKind::StructureMask || kind == NodeKind::MaskCombine ||
+           kind == NodeKind::StructureMask || kind == NodeKind::VolumeDiffMask || kind == NodeKind::MaskCombine ||
            kind == NodeKind::MaskFilter;
 }
 
@@ -204,6 +208,7 @@ bool ImageMaskInvert(const Node& node) {
     if (const auto* deposition = std::get_if<geometry::DepositionMaskSettings>(&node.settings)) return deposition->invert;
     if (const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node.settings)) return noise->invert;
     if (const auto* structure = std::get_if<geometry::StructureMaskSettings>(&node.settings)) return structure->invert;
+    if (const auto* diff = std::get_if<geometry::VolumeDiffMaskSettings>(&node.settings)) return diff->invert;
     if (const auto* shape = std::get_if<geometry::ShapeMaskSettings>(&node.settings)) return shape->invert;
     return false;
 }
@@ -597,6 +602,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::NoiseMaskSettings{};
     } else if (kind == NodeKind::StructureMask) {
         node.settings = geometry::StructureMaskSettings{};
+    } else if (kind == NodeKind::VolumeDiffMask) {
+        node.settings = geometry::VolumeDiffMaskSettings{};
     } else if (kind == NodeKind::ShapeMask) {
         node.settings = geometry::ShapeMaskSettings{};
     } else if (kind == NodeKind::MaskCombine) {

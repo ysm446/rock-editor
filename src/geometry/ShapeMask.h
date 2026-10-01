@@ -83,6 +83,26 @@ struct NoiseMaskSettings {
 MaskImage NoiseMask(const Mesh&, const NoiseMaskSettings&, std::string&,
                     std::stop_token = {}, const std::function<void(int)>& progress = {});
 
+// Volume Diff Mask。後から足した所（または削った所）のマスク。最後のメッシュの表面の各点で、比べる元の
+// ボリューム（足す・削る前）の距離を読む。足した所: 元の形の外にある表面（隙間を埋めた土・足した礫）。
+// 削った所: 元の形の内側にある表面（割れ目・欠けた跡）。比べる元とメッシュは同じ位置にそろえる
+// （Volume Clip の接地・Volume Transform で動かすなら、動かした後から比べる元を取る）。
+enum class VolumeDiffMode : uint32_t { Added = 0, Removed = 1 };
+const char* VolumeDiffModeName(VolumeDiffMode mode);
+// 知らない名前は Added。
+VolumeDiffMode ParseVolumeDiffMode(std::string_view name);
+struct VolumeDiffMaskSettings {
+    VolumeDiffMode mode = VolumeDiffMode::Added;
+    float distance = .03f;  // これより離れた所から白くする (m)。元の形の表面の小さな揺れ（ノイズ・摩耗）を除く。0～100
+    float softness = .05f;  // 黒から白へ移る幅 (m)。0.001～100
+    int resolution = 1024;
+    bool invert = false;    // 使う側で 1 - mask にする。画像には掛けない。
+    bool operator==(const VolumeDiffMaskSettings&) const = default;
+};
+struct VolumeGrid;
+MaskImage VolumeDiffMask(const Mesh&, const VolumeGrid& before, const VolumeDiffMaskSettings&, std::string&,
+                         std::stop_token = {}, const std::function<void(int)>& progress = {});
+
 // 上向きの受け面・近傍の遮蔽・上方の開口から土の堆積候補を作る。
 struct DepositionMaskSettings {
     float amount = 1, distance = .3f, maxSlopeDegrees = 60;
