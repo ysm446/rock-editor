@@ -2937,6 +2937,19 @@ void Application::DrawGraphPanel() {
         auto& bake = std::get<graph::MaterialBakeSettings>(selected->settings);
         bool changed = false;
         const bool highConnected = selected->inputs.size() > 2 && m_graph.FindUpstreamNodeForPin(selected->inputs[2].id) != nullptr;
+        if (ui::BeginPropertyTable("bakeResolution")) {
+            const char* resolutions[] = {"UV と同じ", "512", "1024", "2048", "4096"};
+            int index = 0;
+            for (int i = 0; i < IM_ARRAYSIZE(graph::kMaterialBakeResolutions); ++i)
+                if (graph::kMaterialBakeResolutions[i] == bake.resolution) index = i;
+            if (ui::PropertyCombo("解像度", &index, resolutions, IM_ARRAYSIZE(resolutions), 0,
+                                  "焼く画像の長い辺です。「UV と同じ」は UV Unwrap の解像度のまま焼きます。"
+                                  "UV を展開し直さずに変えられます。UV より大きくすると島の間の余白が広がり、小さくすると狭まります。")) {
+                bake.resolution = graph::kMaterialBakeResolutions[index];
+                changed = true;
+            }
+            ui::EndPropertyTable();
+        }
         if (ui::BeginPropertyTable("highDetail")) {
             changed |= ui::PropertyFloat("ケージ距離 (m)", &bake.cageDistance, 0.001f, 1.0f, 0.1f,
                                          "High（ハイポリ）を探す距離です。ローポリの面から内外へこの距離までを探します。"
@@ -2978,7 +2991,7 @@ void Application::DrawGraphPanel() {
             if (!exportable && m_materialLibrary.Find(bake.bakedLayer.material) != nullptr)
                 ui::HintText("このベイク結果は旧版がファイルへ保存したものです。もう一度ベイクすると出力できます。");
         }
-        ui::HintText("UV Unwrapのアトラス寸法で4枚の画像（Base Color / Normal / Roughness・Metallic・AO / Height）を作ります。結果は一時的なもので、ファイルにもシーンにも保存しません。残すには「テクスチャを出力…」でフォルダへ書き出します。シーンを開き直したら、もう一度ベイクしてください。形状・材質・スムーズシェーディングを変えたときも再ベイクが必要です。");
+        ui::HintText("設定の解像度（既定は UV Unwrap のアトラス寸法）で4枚の画像（Base Color / Normal / Roughness・Metallic・AO / Height）を作ります。結果は一時的なもので、ファイルにもシーンにも保存しません。残すには「テクスチャを出力…」でフォルダへ書き出します。シーンを開き直したら、もう一度ベイクしてください。形状・材質・スムーズシェーディングを変えたときも再ベイクが必要です。");
     } else if (selected->kind == graph::NodeKind::MeshOutput) {
         ui::HintText("メッシュ・モデル・Volumeを接続すると表示する。複数のMesh Outputを同時に表示できる。");
         ui::HintText("MaterialにSurfaceを接続すると、生成メッシュに材質を適用します。UVのない岩にはSurfaceでTriplanarを選びます。モデルの材質はモデル側で設定します。");

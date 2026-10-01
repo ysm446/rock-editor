@@ -90,6 +90,8 @@ constexpr ParamDefinition kParams[] = {
     {K::MaterialBake, "materialBake.aoDistance", T::Float, 0.001, 1000, "m", "AO距離", "", C::Clamp},
     {K::MaterialBake, "materialBake.aoStrength", T::Float, 0, 1, "比", "AO強度", "", C::Clamp},
     {K::MaterialBake, "materialBake.aoSamples", T::Int, 8, 128, "本", "AOサンプル数", "", C::Clamp},
+    {K::MaterialBake, "materialBake.resolution", T::Int, 0, 4096, "px", "解像度",
+     "焼く画像の長い辺。0 は UV Unwrap の解像度のまま。0 / 512 / 1024 / 2048 / 4096", C::Error},
     {K::MaterialBake, "materialBake.cageDistance", T::Float, 0.0001, 100, "m", "ケージ距離", "High 入力のハイポリを探す距離（ローポリの面から内外へ）", C::Clamp},
     // --- ピース ---
     {K::LayeredBoxes, "pieces.count", T::Int, 1, 32, "枚", "枚数", "積む板の数。下から層 0, 1, …", C::Error},

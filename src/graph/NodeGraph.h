@@ -193,6 +193,9 @@ struct MaterialBakeSettings {
     int aoSamples = 32;
     // High（ハイポリ）を探す距離（m）。ローポリの面から内外へこの距離までを探す。High 未接続なら使わない。
     float cageDistance = 0.1f;
+    // 焼く画像の長い辺（px）。0 なら UV Unwrap の解像度のまま。UV は 0～1 なので、UV を展開し直さずに変えられる。
+    // 縦横比は UV のアトラスに合わせる。512 / 1024 / 2048 / 4096。
+    int resolution = 0;
     compositor::MaterialLayer bakedLayer;
     std::string fingerprint;
 };
@@ -201,6 +204,12 @@ struct MaterialBakeSettings {
 // LOD1 以降は 1 つ前の段を Decimate で減らす。LOD0 の UV を共有する段は UV の島の境界を固定して減らし、
 // 同じテクスチャ（Material Bake の結果など）をそのまま使う。共有しない段は UV を捨てて減らし、その段だけで
 // UV を展開し直す（テクスチャは LOD0 から転写する）。
+inline constexpr int kMaterialBakeResolutions[] = {0, 512, 1024, 2048, 4096};
+inline bool ValidMaterialBakeResolution(int resolution) {
+    for (int value : kMaterialBakeResolutions)
+        if (value == resolution) return true;
+    return false;
+}
 inline constexpr int kMaxRockAssetLods = 6;
 inline constexpr int kMinRockAssetTriangles = 64;
 inline constexpr int kMaxRockAssetTriangles = 500000;

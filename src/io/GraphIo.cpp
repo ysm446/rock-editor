@@ -293,7 +293,7 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             // 旧版が Bakes/ へ保存した結果（一時でない材質）は、従来どおり書く。
             const bool keepBake = !writeMaterial(bake->bakedLayer.material).is_null();
             item["materialBake"] = {{"geometryAo", bake->geometryAo}, {"aoDistance", bake->aoDistance}, {"aoStrength", bake->aoStrength}, {"aoSamples", bake->aoSamples},
-                                    {"cageDistance", bake->cageDistance}};
+                                    {"cageDistance", bake->cageDistance}, {"resolution", bake->resolution}};
             if (keepBake) {
                 item["materialBake"]["layer"] = WriteLayer(bake->bakedLayer, writeMaterial);
                 item["materialBake"]["fingerprint"] = bake->fingerprint;
@@ -925,6 +925,8 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.aoSamples = std::clamp(ReadInt(*v, "aoSamples", 32), 8, 128);
                     settings.cageDistance = std::clamp(ReadFloat(*v, "cageDistance", settings.cageDistance),
                                                        geometry::kMinCageDistance, geometry::kMaxCageDistance);
+                    settings.resolution = ReadInt(*v, "resolution", 0);
+                    if (!graph::ValidMaterialBakeResolution(settings.resolution)) settings.resolution = 0;
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeToMesh) {

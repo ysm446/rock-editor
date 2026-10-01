@@ -28,6 +28,8 @@ std::string Application::BakeFingerprint(const renderer::SceneMesh &mesh, const 
             add(settings->geometryAo); add(settings->aoDistance); add(settings->aoStrength); add(settings->aoSamples);
             // ハイポリの転写。繋いでいないときは含めない（従来の指紋と変えない）。
             if (detail) { add(detail); add(settings->cageDistance); }
+            // 解像度の指定。指定しないときは含めない（従来の指紋と変えない）。
+            if (settings->resolution) add(settings->resolution);
         }
     const uint32_t version = 3;
     add(version);
@@ -477,14 +479,25 @@ void Application::ProcessPendingBake() {
         return;
     }
     const auto fingerprint = BakeFingerprint(mesh, rock.mesh, rock.bakeSource, rock.bakeDetail);
+    const auto& bakeSettings = std::get<graph::MaterialBakeSettings>(node->settings);
+    // 焼く解像度。指定があれば長い辺をその値にし、UV のアトラスの縦横比を保つ。UV は 0～1 なので、そのまま使える。
+    uint32_t width = rock.mesh.uvWidth, height = rock.mesh.uvHeight;
+    if (!graph::ValidMaterialBakeResolution(bakeSettings.resolution)) {
+        fail("解像度は UV と同じ・512・1024・2048・4096 のどれかにしてください");
+        return;
+    }
+    if (bakeSettings.resolution > 0 && width > 0 && height > 0) {
+        const double scale = double(bakeSettings.resolution) / double(std::max(width, height));
+        width = std::max(1u, uint32_t(std::lround(width * scale)));
+        height = std::max(1u, uint32_t(std::lround(height * scale)));
+    }
     std::array<LdrImage, 4> images;
     std::string error;
     if (!renderer::BakeMaterial(m_device, m_pipelineCache, mesh, m_textureLibrary, m_materialLibrary,
-                                rock.mesh.uvWidth, rock.mesh.uvHeight, images, error)) {
+                                width, height, images, error)) {
         fail(error);
         return;
     }
-    const auto& bakeSettings = std::get<graph::MaterialBakeSettings>(node->settings);
     // High（ハイポリ）を繋いでいれば、法線とハイトをそこから転写して、素材の法線とハイトに重ねる。
     if (rock.bakeDetail) {
         if (!TransferHighDetail(*node, rock, mesh, bakeSettings, images, error)) {
@@ -496,7 +509,11 @@ void Application::ProcessPendingBake() {
         auto& job = m_bakeJob.emplace();
         job.id = id; job.epoch = m_pieceEpoch; job.revision = m_graph.Revision();
         job.root = m_workspace.Root(); job.fingerprint = fingerprint; job.images = std::move(images);
-        if (!job.ao.Create(m_device, rock.mesh, bakeSettings.aoDistance, bakeSettings.aoSamples,
+        // 形状 AO は焼く画像と同じ寸法で作る（UV は同じまま、画素の数だけ変える）。
+        geometry::Mesh sized = rock.mesh;
+        sized.uvWidth = width;
+        sized.uvHeight = height;
+        if (!job.ao.Create(m_device, sized, bakeSettings.aoDistance, bakeSettings.aoSamples,
                            bakeSettings.aoStrength, error)) {
             fail(error); job.ao.Release(m_device); m_bakeJob.reset();
         }
