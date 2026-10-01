@@ -3,23 +3,28 @@
   "version": 1,
   "graph": {
     "nodes": [
-      {"id": 1, "kind": "randomBoxes", "note": "不規則な外形から始める（Box から始めると直方体が透けて見える）", "randomBoxes": {"count": 6, "size": [2.6, 1.4, 2.0], "sizeVariation": 0.35, "spread": 0.7, "rotation": 12, "seed": 8}},
-      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
-      {"id": 4, "kind": "planeCuts", "note": "外周を少し切って角張らせる", "planeCuts": {"count": 10, "depthMin": 0.04, "depthMax": 0.16, "seed": 2}},
-      {"id": 5, "kind": "volumeClip", "note": "接地: 形の底から embed の位置で切り、切り口を地面（高さ 0）に置く。原点中心の形を持ち上げなくてよい", "volumeClip": {"mode": "ground", "embed": 0.15}},
-      {"id": 6, "kind": "parallelPlanes", "note": "緩く傾いた板状節理。間隔 ≒ 板の厚さ。variation で厚さをばらつかせる", "parallelPlanes": {"rotation": [3, 0, 7], "spacing": 0.26, "variation": 0.6, "seed": 4}},
-      {"id": 7, "kind": "volumeCrack", "note": "浅く彫る。板の割れ目は長く（extent 0.6）、ところどころ途切れさせる。深さを 1 近くにすると板が分離して塊が増える", "volumeCrack": {"width": 0.02, "depth": 0.07, "variation": 0.7, "noise": 0.15, "noiseScale": 4, "seed": 1, "extent": 0.6, "coverage": 0.85, "stagger": 0.3}},
-      {"id": 8, "kind": "parallelPlanes", "parallelPlanes": {"rotation": [90, 35, 0], "spacing": 0.5, "variation": 0.5, "seed": 8}},
-      {"id": 9, "kind": "volumeCrack", "note": "板と直交する縦の節理。短い有限の割れ目（extent 0.2）にして、段違いで縦に揃わないようにする", "volumeCrack": {"width": 0.022, "depth": 0.15, "variation": 0.8, "noise": 0.15, "noiseScale": 3, "seed": 2, "extent": 0.2, "coverage": 0.6, "stagger": 0.6}},
-      {"id": 10, "kind": "volumeClose", "note": "割れ目で分かれた塊を繋ぎ直して 1 つの岩にする", "volumeClose": {"mode": "occlusion", "threshold": 0.9}},
-      {"id": 11, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.035, "radius": 0.02, "noise": 0.6}},
-      {"id": 12, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
-      {"id": 13, "kind": "meshOutput"}
+      {"id": 1, "kind": "baseRock", "note": "節理で割られる前の岩体。侵食で外に見える面が割れ面になる", "baseRock": {"shape": "box", "size": [4.2, 2, 3.2]}},
+      {"id": 2, "kind": "scatterPoints", "note": "板の母点。密度のむらで、割れの多い所（小さな板、先に崩れる）と割れの少ない芯（大きな板、残る）を作る。芯の位置は seed で変わり、箱の端に寄ると元の箱の面が残る", "pieces": {"count": 420, "seed": 1, "clustering": 0.9}},
+      {"id": 5, "kind": "voronoiFracture", "note": "点の Voronoi を扁平に伸ばして（伸長 Y 0.45）、不規則な板に割る。座標系を回して板を 30° 傾ける。構造面（Parallel Planes）で割ると板が煉瓦のように揃い、石積みに見える", "pieces": {"rotation": [0, 30, 18], "stretch": [4, 0.45, 4]}},
+      {"id": 6, "kind": "pieceSelect", "note": "外周からの侵食。接地: 底からは欠かず、支えを失った板は落ちる。大きさの効き 0.5 で大きな板が残り高さが保たれる（下げると上から削れて平たくなる）。安定で頭でっかちの板を落とす", "pieces": {"mode": "peel", "fraction": 0.7, "peelNoise": 0.3, "protectCore": false, "grounded": true, "seed": 3, "peelSize": 0.5, "stability": 0.4}},
+      {"id": 7, "kind": "pieceFilter", "note": "選んだ板を消す", "pieces": {"keep": false}},
+      {"id": 8, "kind": "piecesToMesh", "note": "板どうしはずらさない。傾いた板をずらすと継ぎ目が格子 1 つ分の隙間になり、縁がのこぎり状に見える"},
+      {"id": 9, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 10, "kind": "volumeClose", "note": "板の継ぎ目の細い隙間を埋める", "volumeClose": {"mode": "width", "width": 0.012}},
+      {"id": 11, "kind": "planeCuts", "note": "局所の欠けで板の縁を割る", "planeCuts": {"count": 50, "scope": "local", "radius": 0.05, "depthMin": 0.2, "depthMax": 0.45, "seed": 12}},
+      {"id": 12, "kind": "volumeNoise", "note": "割れ肌の細かい凹凸。薄い板は表面積が大きいので量は控えめ（大きくすると板を削り切る）", "volumeNoise": {"type": "facet", "amount": 0.003, "scale": 18, "octaves": 2}},
+      {"id": 13, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.01, "radius": 0.008, "noise": 0.6}},
+      {"id": 14, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.1}},
+      {"id": 15, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 18, "kind": "decimate", "note": "薄い板の重なりは三角形が多い（約 70 万）ので減らす", "decimate": {"targetTriangles": 120000, "creaseWeight": 2}},
+      {"id": 16, "kind": "meshOutput"}
     ],
     "links": [
-      {"from": "1", "to": "2"}, {"from": "2", "to": "4"}, {"from": "4", "to": "5"}, {"from": "5", "to": "7:Volume"}, {"from": "6", "to": "7:Planes"},
-      {"from": "7", "to": "9:Volume"}, {"from": "8", "to": "9:Planes"}, {"from": "9", "to": "10"}, {"from": "10", "to": "11"},
-      {"from": "11", "to": "12"}, {"from": "12", "to": "13:Geometry"}
+      {"from": "1", "to": "2"}, {"from": "1", "to": "5:Geometry"}, {"from": "2", "to": "5:Points"},
+      {"from": "5", "to": "6"}, {"from": "5", "to": "7:Pieces"}, {"from": "6", "to": "7:Selection"},
+      {"from": "7", "to": "8"}, {"from": "8", "to": "9"}, {"from": "9", "to": "10"}, {"from": "10", "to": "11"},
+      {"from": "11", "to": "12"}, {"from": "12", "to": "13"}, {"from": "13", "to": "14"}, {"from": "14", "to": "15"},
+      {"from": "15", "to": "18"}, {"from": "18", "to": "16:Geometry"}
     ]
   }
 }

@@ -101,4 +101,7 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 - **節理で割れた岩は「割ってから欠く」**: ひびを彫るだけだと後付けに見える。ブロックに割り、Piece Select の Peel（地面から生えた岩は `grounded`）で外周から抜き取る。不規則な割れ方は節理の向きに回して伸ばした Voronoi（Points）、規則的な割れ方は Parallel Planes を連結して Voronoi Fracture の Planes 入力。Piece Transform の `jitterPosition` / `jitterRotation` でブロックをずらすと石積みに見えない（`granite-buttress`）。元の形の平らな面が残ると石垣に見えるので、岩体を大きめにして侵食を進める。 塔・突起として芯を残すには Scatter Points の `clustering`（密度のむら）と Peel の `peelSize`（大きさの効き）。
 - **割れ目が格子・石積みに見える**: Parallel Planes の割れ目は既定で端から端まで続く。Volume Crack の `extent`（割れ目の長さ）・`coverage`（割合）・`stagger`（段違い）で途中で止まる節理にする。`noise` を上げて途切れさせると点線になる。
 - **Pieces to Mesh の後の空洞**: 板の隙間が閉じた空洞として大量に残る。Volume Close で埋まる。
+- **ノードの C++ を変えたら `rock_editor` も作り直す**: 撮影（`rock_shot.py`）はアプリで評価する。`rock_cli` だけ作り直すと、古いアプリが知らない設定を無視した形が写り、効果を見誤る。
+- **板に割れた岩は「扁平な点の Voronoi」**: 伸長の Y を小さく（0.45 など）すると不規則な板になる（`platy-joints`）。傾いた板を Piece Transform でずらすと、継ぎ目が格子 1 つ分の隙間になり縁がのこぎり状になる。薄い板は表面積が大きく、Volume Noise の量が大きいと板を削り切る。三角形が多い（数十万）ので Decimate で減らす。
+- **Peel の欠ける順序は Voronoi Fracture のノード ID にも依存する**: レシピを写して ID を振り直すと形が変わる（全て崩れることもある）。写すときは ID を保つ。
 - **Debug ビルドの Remesh** はスタックオーバーフローで落ちることがある。撮影・評価は Release を使う。

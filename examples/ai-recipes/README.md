@@ -8,7 +8,7 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | --- | --- | --- | --- |
 | `schist.rockgraph` | 片理（薄く剥がれる変成岩） | Layered Boxes の薄板を急傾斜に積み、同じ向きに伸ばした Voronoi で割って Peel で縁を欠く。片理と同じ向きの Parallel Planes で浅い細溝、直交する面で節理。Volume Close で繋ぎ直してから Edge Wear | 約 0.7 秒 |
 | `blocky.rockgraph` | 塊状・角張った岩 | Random Boxes の塊を Plane Cuts（3 系統の主方向）で切って節理面を作り、Volume Clip の接地で地面へ据える。小面のノイズと Edge Wear | 約 0.1 秒 |
-| `platy-joints.rockgraph` | 板状節理 | 不規則な塊を緩く傾いた Parallel Planes で浅く彫り、直交する縦の節理を足す。どちらも有限の割れ目（`extent`）で途中で止め、縦の節理は段違い（`stagger`）に | 約 0.3 秒 |
+| `platy-joints.rockgraph` | 板状節理 | 箱の岩体を扁平に伸ばした点の Voronoi で不規則な板に割り、接地の Peel（大きさの効き・安定）で外周から抜き取る。To Volume でまとめ、Decimate で三角形を減らす | 約 1 秒 |
 | `rounded-boulder.rockgraph` | 丸い転石 | 塊に大きな面を少し作ってから Volume Smooth で丸め、セル状のノイズでくぼみ | 約 0.1 秒 |
 | `layered-ledges.rockgraph` | 層理の段 | Volume Terrace で水平に近い層の段を作る | 約 0.1 秒 |
 | `columnar.rockgraph` | 柱状節理（玄武岩） | 縦に 16 倍伸ばした Voronoi で多角柱に割り、外周の片を除き、柱を細らせて隙間を作り、一部の柱を下げる。柱は別々の塊のまま | 約 0.5 秒 |
@@ -34,7 +34,7 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 共通の注意:
 
 - Random Boxes・Base Shape は原点中心にできる。Volume Clip の `"mode": "ground"` で地面へ据える（`embed` が埋める割合）。`world` のまま高さ 0 で切ると半分が消えて平たくなる。
-- 割れ目で岩が複数の塊に分かれると、そのまま最後まで分かれて残る（Plane Cuts などは小片だけを捨てる）。1 つの塊にしたいなら、先に Volume Close で繋ぐ（`schist` / `platy-joints`）。
+- 割れ目で岩が複数の塊に分かれると、そのまま最後まで分かれて残る（Plane Cuts などは小片だけを捨てる）。1 つの塊にしたいなら、先に Volume Close で繋ぐ（`schist`）。
 - 岩には Volume to Mesh の `dualContouring` を使う（面と稜線が立つ）。
 - 節理で割れた形は、ひびを彫るより「岩体をブロックに割って外側から抜き取る」方が構造から割れて見える（`granite-buttress`）。不規則な割れ方は節理の向きに伸ばした Voronoi（Points）、規則的な割れ方（層理・板状節理）は Parallel Planes を連結して Voronoi Fracture の Planes 入力で割る。地面から生えた岩は Peel の接地で欠き、Piece Transform のばらつきでずらす。
 - 殻の深さ・割れ目の深さ・Undercut などは距離場の内部の値を使う。To Volume は重なった箱・メッシュの内部を表面から測り直す（2026-10-01）。剥がれた跡など内部の等値面が表に出る形では、Edge Wear を先に置く。
