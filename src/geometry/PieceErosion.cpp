@@ -34,6 +34,12 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     if (weights.size()!=c.pieces.size() || !std::isfinite(s.peelNoise) || s.peelNoise<0 || s.peelNoise>1) {
         error="侵食のばらつきは0〜1にしてください"; return {};
     }
+    if (!std::isfinite(s.peelSize) || s.peelSize<0 || s.peelSize>1) {
+        error="大きさの効きは0〜1にしてください"; return {};
+    }
+    // 大きさの効き: 体積を最大の片で割った値（0～1）を順位に足す。大きな片ほど後まで残る。
+    double largest=0;
+    for (const auto& p:c.pieces) largest=std::max(largest,p.volume);
     struct State {
         std::vector<std::pair<size_t,double>> neighbors;
         struct Vertical { size_t other; double area; int otherSide; };
@@ -147,7 +153,8 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         for (size_t i=0;i<n;++i) {
             if (!candidateAvailable(i)) continue;
             const auto& v=state[i];
-            const double candidate=v.support/v.total+v.noise;
+            const double candidate=v.support/v.total+v.noise+
+                (largest>0 ? s.peelSize*c.pieces[i].volume/largest : 0);
             if (best==n || candidate<score-1e-12 ||
                 (std::abs(candidate-score)<=1e-12 && c.pieces[i].id<c.pieces[best].id)) {
                 best=i;score=candidate;

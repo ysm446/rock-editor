@@ -51,6 +51,23 @@ struct Hash {
         Add(std::bit_cast<uint32_t>(v));
     }
 };
+// 0～1 のなめらかな値ノイズ（整数格子のハッシュを三線形にならす）。点の密度のむらに使う。
+double SmoothNoise(D p, uint64_t seed) {
+    const auto hash = [&](int64_t x, int64_t y, int64_t z) {
+        uint64_t h = seed ^ (uint64_t(x) * 0x9E3779B97F4A7C15ull) ^ (uint64_t(y) * 0xC2B2AE3D27D4EB4Full) ^
+                     (uint64_t(z) * 0x165667B19E3779F9ull);
+        h = (h ^ (h >> 30)) * 0xbf58476d1ce4e5b9ull;
+        h = (h ^ (h >> 27)) * 0x94d049bb133111ebull;
+        return double((h ^ (h >> 31)) >> 11) * 0x1.0p-53;
+    };
+    const double fx = std::floor(p.x), fy = std::floor(p.y), fz = std::floor(p.z);
+    const auto smooth = [](double t) { return t * t * (3 - 2 * t); };
+    const double tx = smooth(p.x - fx), ty = smooth(p.y - fy), tz = smooth(p.z - fz);
+    const int64_t x = int64_t(fx), y = int64_t(fy), z = int64_t(fz);
+    const auto mix = [](double a, double b, double t) { return a + (b - a) * t; };
+    return mix(mix(mix(hash(x, y, z), hash(x + 1, y, z), tx), mix(hash(x, y + 1, z), hash(x + 1, y + 1, z), tx), ty),
+               mix(mix(hash(x, y, z + 1), hash(x + 1, y, z + 1), tx), mix(hash(x, y + 1, z + 1), hash(x + 1, y + 1, z + 1), tx), ty), tz);
+}
 uint64_t Random(uint64_t &state) {
     state += 0x9e3779b97f4a7c15ull;
     auto z = state;
@@ -447,6 +464,13 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
         error = "点数は2〜" + std::to_string(MaxScatterPoints) + "、アルゴリズムはversion 1が必要です";
         return {};
     }
+    if (!std::isfinite(s.clustering) || s.clustering < 0 || s.clustering > 1 || !std::isfinite(s.clusterScale) ||
+        s.clusterScale < .5f || s.clusterScale > 16) {
+        error = "密度のむらは 0～1、むらの細かさは 0.5～16 にしてください";
+        return {};
+    }
+    // むらの間引きは別の乱数で行い、むら 0 では従来と同じ点の並びにする。
+    uint64_t thinning = uint64_t(s.seed) ^ 0x6C75737465720000ull;
     Poly poly;
     std::vector<Plane> planes;
     D origin;
@@ -476,6 +500,12 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
             }
         if (!valid)
             continue;
+        if (s.clustering > 0) {
+            // 受け入れる確率: むらの低い所ほど下げる（ノイズの 2 乗で、疎な所をはっきり疎にする）。
+            const double n = SmoothNoise(p * double(s.clusterScale), uint64_t(s.seed) * 0x2545F4914F6CDD1Dull);
+            if (Uniform(thinning) > (1 - s.clustering) + s.clustering * n * n)
+                continue;
+        }
         // 出力はfloatへ丸める。Voronoi Fractureは丸めた値から局所座標を求め直して内外を調べるので、
         // 原点から遠い入力でも「点が入力の外」とならないよう、同じ値・同じ許容差で確かめておく。
         const Vec3 stored = F(origin + p * scale);
@@ -506,6 +536,10 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
     h.Add(s.count);
     h.Add(s.version);
     if (s.planar) h.Add(0x504c414e4152ull);
+    if (s.clustering > 0) {
+        h.Float(s.clustering);
+        h.Float(s.clusterScale);
+    }
     out.fingerprint = h.value;
     return out;
 }
@@ -518,6 +552,7 @@ PointSet ScatterPiecePoints(const PieceCollection& pieces, const ScatterSettings
     }
     PointSet out; out.grouped=true; out.source=pieces.fingerprint;
     Hash hash; hash.Add(out.source); hash.Add(s.count); hash.Add(s.seed); hash.Add(s.planar);
+    if (s.clustering > 0) { hash.Float(s.clustering); hash.Float(s.clusterScale); }
     std::set<uint32_t> seen;
     for (const auto& p:pieces.pieces) {
         if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}

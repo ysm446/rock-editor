@@ -13,7 +13,8 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
                 {"thicknessVariation",s->thicknessVariation},{"sizeVariation",s->sizeVariation},
                 {"offset",s->offset},{"seed",s->seed}};
     if (auto *s = std::get_if<ScatterSettings>(&node.settings))
-        return {{"count", s->count}, {"seed", s->seed}, {"version", s->version}, {"planar",s->planar}};
+        return {{"count", s->count}, {"seed", s->seed}, {"version", s->version}, {"planar",s->planar},
+                {"clustering", s->clustering}, {"clusterScale", s->clusterScale}};
     if (auto *s = std::get_if<VoronoiSettings>(&node.settings))
         return {{"rotation", s->rotation}, {"stretch", s->stretch}, {"version", s->version}};
     if (auto *s = std::get_if<PieceFilterSettings>(&node.settings))
@@ -30,7 +31,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
                 {"invert", s->invert},
                 {"layer",s->layer},
                 {"rimLayers",s->rimLayers}, {"rimSide",s->rimSide}, {"rimFalloff",s->rimFalloff},
-                {"peelNoise",s->peelNoise}, {"protectCore",s->protectCore}, {"grounded",s->grounded},
+                {"peelNoise",s->peelNoise}, {"protectCore",s->protectCore}, {"grounded",s->grounded}, {"peelSize",s->peelSize},
                 {"producer", s->producer},
                 {"generation", std::to_string(s->generation)},
                 {"ids", s->ids}};
@@ -105,6 +106,8 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "seed", s->seed);
         read(value, "version", s->version);
         read(value, "planar", s->planar);
+        read(value, "clustering", s->clustering);
+        read(value, "clusterScale", s->clusterScale);
     }
     if (auto *s = std::get_if<VoronoiSettings>(&node.settings)) {
         read(value, "rotation", s->rotation);
@@ -133,6 +136,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "peelNoise",s->peelNoise);
         read(value, "protectCore",s->protectCore);
         read(value, "grounded",s->grounded);
+        read(value, "peelSize",s->peelSize);
         read(value, "producer", s->producer);
         generation(s->generation);
         read(value, "ids", s->ids);

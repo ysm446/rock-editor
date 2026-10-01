@@ -597,6 +597,48 @@ static void RunPlaneFractureTests() {
         Check(!error.empty(), "ばらつき: 範囲外の回転を拒否する");
     }
 
+    // 密度のむらと大きさの効き。
+    {
+        const auto tall = MakeBox({4, 4, 4});
+        ScatterSettings even{200, 3};
+        ScatterSettings clustered = even;
+        clustered.clustering = 1;
+        clustered.clusterScale = 1.5f;
+        const auto uniform = ScatterPoints(tall, even, error);
+        const auto lumpy = ScatterPoints(tall, clustered, error);
+        Check(error.empty() && lumpy.positions.size() == 200 && lumpy.positions != uniform.positions &&
+                  lumpy.fingerprint != uniform.fingerprint, "密度のむら: 同じ点数で別の配置になる");
+        ScatterSettings none = even;
+        none.clusterScale = 5;
+        Check(ScatterPoints(tall, none, error).positions == uniform.positions, "密度のむら 0 では従来と同じ配置");
+        const auto spread = [&](const PointSet& points) {
+            const auto pieces = FractureVoronoi(tall, points, {}, 9, error);
+            double small = 1e9, large = 0;
+            for (const auto& p : pieces.pieces) { small = std::min(small, p.volume); large = std::max(large, p.volume); }
+            return large / small;
+        };
+        Check(spread(lumpy) > spread(uniform), "密度のむら: 片の大きさの差が広がる");
+        ScatterSettings bad = even;
+        bad.clustering = 1.5f;
+        ScatterPoints(tall, bad, error);
+        Check(!error.empty(), "密度のむら: 範囲外を拒否する");
+        const auto pieces = FractureVoronoi(tall, lumpy, {}, 9, error);
+        PieceSelectSettings sized;
+        sized.mode = PieceSelectMode::Peel;
+        sized.fraction = .3f;
+        sized.peelNoise = 0;
+        sized.protectCore = false;
+        const auto mean = [&](const PieceSelection& selection) {
+            double total = 0;
+            for (auto id : selection.ids) total += pieces.pieces[id].volume;
+            return total / std::max<size_t>(1, selection.ids.size());
+        };
+        const auto plain = SelectPieces(pieces, sized, error);
+        sized.peelSize = 1;
+        const auto biased = SelectPieces(pieces, sized, error);
+        Check(error.empty() && mean(biased) < mean(plain), "大きさの効き: 小さな片から先に欠ける");
+    }
+
     // グラフ: Parallel Planes を連結して系統を足し、Voronoi Fracture の Planes 入力へ。
     graph::NodeGraph g;
     const auto shape = g.CreateNode(graph::NodeKind::BaseRock), first = g.CreateNode(graph::NodeKind::ParallelPlanes),

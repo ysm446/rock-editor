@@ -20,7 +20,7 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `breccia.rockgraph` | 角礫岩 | Volume Scatter（箱・和）で角張った礫を浅く埋める。礫と基質の色の違いが無いと弱い | 約 0.3 秒 |
 | `vesicular-basalt.rockgraph` | 多孔質の溶岩 | Volume Scatter（楕円体・差）で気泡の穴を多数抜く | 約 0.2 秒 |
 | `granite-sheeting.rockgraph` | 花崗岩のシーティング・剥離 | Volume Crack の割り方「表面に沿う殻」で、外側の板がまだらに剥がれた段を作る。Edge Wear は殻より前に置く（後ろに置くと剥がれた跡に細かい縞） | 約 0.3 秒 |
-| `granite-buttress.rockgraph` | 花崗岩の岩峰（岩稜） | 大きめの箱を、節理の向き（76°）に回して伸長した Voronoi で不規則な多面体のブロックに割り、Piece Select の Peel（接地）で外周から抜き取る。Piece Transform のばらつきでブロックをずらして傾け、To Volume でまとめる。局所の欠け・小面のノイズ・角の摩耗 | 約 0.7 秒 |
+| `granite-buttress.rockgraph` | 花崗岩の岩峰（岩稜） | 縦長の箱を、密度のむらのある点で、節理の向き（76°）に回して伸長した Voronoi の多面体に割る。Piece Select の Peel（接地・大きさの効き）で外周の小さなブロックから抜き取り、割れの少ない芯を塔として残す。Piece Transform のばらつきでずらし、To Volume でまとめる | 約 0.3 秒 |
 | `mushroom-rock.rockgraph` | きのこ岩（台座岩） | 接地させてから Volume Undercut で底の近くを削り、細い台座にする | 約 0.2 秒 |
 | `hoodoo.rockgraph` | フードゥー | 縦長の塊に Volume Undercut の帯を 4 段重ね、Volume Terrace で層の筋 | 約 0.1 秒 |
 | `roche-moutonnee.rockgraph` | 羊背岩（氷河の研磨） | 角張った塊の上流側（-X と上）だけを Volume Smooth と Edge Wear の「集中する向き」で丸める | 約 0.2 秒 |

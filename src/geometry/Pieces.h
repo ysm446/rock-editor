@@ -16,6 +16,10 @@ struct ScatterSettings {
     uint32_t seed = 1;
     int version = 1;
     bool planar = false; // ローカルXZ面内に配置。Yは形の中央に固定する。
+    // 密度のむら（0～1）。大きなノイズで点を間引き、点の密な所（割れの多い帯・小さな片）と疎な所（割れの少ない芯・
+    // 大きな片）を作る。clusterScale は形の最長辺あたりのむらの数（0.5～16）。0 なら従来と同じ配置。
+    float clustering = 0;
+    float clusterScale = 2;
     bool operator==(const ScatterSettings &) const = default;
 };
 struct VoronoiSettings {
@@ -101,6 +105,8 @@ struct PieceSelectSettings {
     float rimFalloff = 0; // 内側の選択率を下げる強さ。
     float peelNoise = .15f;
     bool protectCore = true;
+    // peel 用。大きさの効き（0～1）。小さな片ほど先に欠ける（崩れやすい）。大きな片の芯が残る。
+    float peelSize = 0;
     // peel 用。下向きの外面（地面に埋まった側）は露出ではなく支持として数える。地面から生えた岩（岩峰・露頭・崖）が
     // 上と横から欠け、根元が最後まで残る。
     bool grounded = false;

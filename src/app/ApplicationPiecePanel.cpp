@@ -30,6 +30,12 @@ void Application::DrawPieceSettings(graph::Node &node) {
             changed |= ui::PropertyInt("点数", &scatter->count, 2, geometry::MaxScatterPoints, 24);
             changed |= ui::PropertyBool("面内配置 (XZ)",&scatter->planar,false,
                                        "ローカルYを中央に固定します。Voronoiの方向0・伸長1なら板の厚さを通して分割できます。");
+            changed |= ui::PropertyFloat("密度のむら", &scatter->clustering, 0, 1, 0,
+                "大きなノイズで点を間引き、割れの多い帯（小さな片）と割れの少ない芯（大きな片）を作ります。0では一様です。");
+            changed |= ui::PropertyFloat("むらの細かさ", &scatter->clusterScale, .5f, 16, 2,
+                "形の最長辺あたりのむらの数です。");
+            scatter->clustering = std::clamp(scatter->clustering, 0.f, 1.f);
+            scatter->clusterScale = std::clamp(scatter->clusterScale, .5f, 16.f);
             int seed = int(scatter->seed);
             if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
                 scatter->seed = uint32_t(seed);
@@ -88,6 +94,9 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 }
                 changed |= ui::PropertyFloat("ばらつき", &selection->peelNoise, 0, 1, .15f,
                     "大きいほど欠ける順序に揺らぎを加えます。0では支持面積だけで決まり、Seedは影響しません。");
+                changed |= ui::PropertyFloat("大きさの効き", &selection->peelSize, 0, 1, 0,
+                    "小さな片ほど先に欠けます（崩れやすい）。大きな片の芯が残ります。");
+                selection->peelSize = std::clamp(selection->peelSize, 0.f, 1.f);
                 changed |= ui::PropertyBool("接地", &selection->grounded, false,
                     "下向きの外面を地面に支えられた面として扱い、そこからは欠きません。"
                     "地面から生えた岩（岩峰・露頭・崖）が上と横から欠け、根元が最後まで残ります。");

@@ -170,6 +170,7 @@ const std::vector<EdgeRule>& EdgeRules() {
         {"pieceSelect:pieces.rimLayers", {{"pieces.mode", 5}}},
         {"pieceSelect:pieces.rimFalloff", {{"pieces.mode", 5}}},
         {"pieceSelect:pieces.peelNoise", {{"pieces.mode", 6}}},
+        {"pieceSelect:pieces.peelSize", {{"pieces.mode", 6}}},
         {"pieceSelect:pieces.minVolume", {{"pieces.mode", 3}}},
         {"pieceSelect:pieces.maxVolume", {{"pieces.mode", 3}, {"pieces.minVolume", 0}}},
         {"volumeClose:volumeClose.width", {{"volumeClose.mode", "width"}}},

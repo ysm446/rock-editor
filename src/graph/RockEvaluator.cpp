@@ -123,14 +123,14 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(layers->count); add(layers->size); add(layers->rotation); add(layers->position); add(layers->gap);
         add(layers->thicknessVariation); add(layers->sizeVariation); add(layers->offset); add(layers->seed);
     } else if (const auto* scatter = std::get_if<geometry::ScatterSettings>(&node->settings)) {
-        add(scatter->count); add(scatter->seed); add(scatter->version); add(scatter->planar);
+        add(scatter->count); add(scatter->seed); add(scatter->version); add(scatter->planar); add(scatter->clustering); add(scatter->clusterScale);
     } else if (const auto* voronoi = std::get_if<geometry::VoronoiSettings>(&node->settings)) {
         add(voronoi->rotation); add(voronoi->stretch); add(voronoi->version);
     } else if (const auto* selection = std::get_if<geometry::PieceSelectSettings>(&node->settings)) {
         add(selection->mode); add(selection->outerFaces); add(selection->seed); add(selection->minimum); add(selection->maximum);
         add(selection->minVolume); add(selection->maxVolume); add(selection->fraction); add(selection->invert); add(selection->producer); add(selection->generation); add(selection->layer);
         add(selection->rimLayers); add(selection->rimSide); add(selection->rimFalloff);
-        add(selection->peelNoise); add(selection->protectCore); add(selection->grounded);
+        add(selection->peelNoise); add(selection->protectCore); add(selection->grounded); add(selection->peelSize);
         add(selection->ids.size()); for (auto value : selection->ids) add(value);
     } else if (const auto* filter = std::get_if<geometry::PieceFilterSettings>(&node->settings)) {
         add(filter->keep);
