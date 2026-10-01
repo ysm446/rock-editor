@@ -34,7 +34,10 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 "大きなノイズで点を間引き、割れの多い帯（小さな片）と割れの少ない芯（大きな片）を作ります。0では一様です。");
             changed |= ui::PropertyFloat("むらの細かさ", &scatter->clusterScale, .5f, 16, 2,
                 "形の最長辺あたりのむらの数です。");
+            changed |= ui::PropertyFloat("高さの勾配", &scatter->heightGradient, -1, 1, 0,
+                "正で上ほど点を密に（上ほど小さな片）、負で下ほど密にします。地表に近いほど節理が密になる様子です。0では一様です。");
             scatter->clustering = std::clamp(scatter->clustering, 0.f, 1.f);
+            scatter->heightGradient = std::clamp(scatter->heightGradient, -1.f, 1.f);
             scatter->clusterScale = std::clamp(scatter->clusterScale, .5f, 16.f);
             int seed = int(scatter->seed);
             if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
@@ -97,6 +100,10 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 changed |= ui::PropertyFloat("大きさの効き", &selection->peelSize, 0, 1, 0,
                     "小さな片ほど先に欠けます（崩れやすい）。大きな片の芯が残ります。");
                 selection->peelSize = std::clamp(selection->peelSize, 0.f, 1.f);
+                changed |= ui::PropertyFloat("側面の後退 (m)", &selection->peelRetreat, 0, 1000, 0,
+                    "元の側面から横へ削れる深さの上限です。頂でこの深さ、底で 0 になり、上ほど細くなります。"
+                    "上ほど長く側面から削られた様子です。0 では上限がありません。");
+                selection->peelRetreat = std::clamp(selection->peelRetreat, 0.f, 1000.f);
                 changed |= ui::PropertyBool("接地", &selection->grounded, false,
                     "下向きの外面を地面に支えられた面として扱い、そこからは欠きません。"
                     "地面から生えた岩（岩峰・露頭・崖）が上と横から欠け、根元が最後まで残ります。");

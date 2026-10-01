@@ -469,6 +469,10 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
         error = "密度のむらは 0～1、むらの細かさは 0.5～16 にしてください";
         return {};
     }
+    if (!std::isfinite(s.heightGradient) || s.heightGradient < -1 || s.heightGradient > 1) {
+        error = "高さの勾配は -1～1 にしてください";
+        return {};
+    }
     // むらの間引きは別の乱数で行い、むら 0 では従来と同じ点の並びにする。
     uint64_t thinning = uint64_t(s.seed) ^ 0x6C75737465720000ull;
     Poly poly;
@@ -500,10 +504,19 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
             }
         if (!valid)
             continue;
-        if (s.clustering > 0) {
+        if (s.clustering > 0 || s.heightGradient != 0) {
             // 受け入れる確率: むらの低い所ほど下げる（ノイズの 2 乗で、疎な所をはっきり疎にする）。
-            const double n = SmoothNoise(p * double(s.clusterScale), uint64_t(s.seed) * 0x2545F4914F6CDD1Dull);
-            if (Uniform(thinning) > (1 - s.clustering) + s.clustering * n * n)
+            double keep = 1;
+            if (s.clustering > 0) {
+                const double n = SmoothNoise(p * double(s.clusterScale), uint64_t(s.seed) * 0x2545F4914F6CDD1Dull);
+                keep = (1 - s.clustering) + s.clustering * n * n;
+            }
+            // 高さの勾配: 密にしない側ほど受け入れる確率を下げる。
+            if (s.heightGradient != 0 && hi.y > lo.y) {
+                const double t = std::clamp((p.y - lo.y) / (hi.y - lo.y), 0.0, 1.0);
+                keep *= s.heightGradient > 0 ? 1 - s.heightGradient * (1 - t) : 1 + s.heightGradient * t;
+            }
+            if (Uniform(thinning) > keep)
                 continue;
         }
         // 出力はfloatへ丸める。Voronoi Fractureは丸めた値から局所座標を求め直して内外を調べるので、
@@ -540,6 +553,8 @@ PointSet ScatterPoints(const Mesh &mesh, const ScatterSettings &s, std::string &
         h.Float(s.clustering);
         h.Float(s.clusterScale);
     }
+    if (s.heightGradient != 0)
+        h.Float(s.heightGradient);
     out.fingerprint = h.value;
     return out;
 }
@@ -553,6 +568,7 @@ PointSet ScatterPiecePoints(const PieceCollection& pieces, const ScatterSettings
     PointSet out; out.grouped=true; out.source=pieces.fingerprint;
     Hash hash; hash.Add(out.source); hash.Add(s.count); hash.Add(s.seed); hash.Add(s.planar);
     if (s.clustering > 0) { hash.Float(s.clustering); hash.Float(s.clusterScale); }
+    if (s.heightGradient != 0) hash.Float(s.heightGradient);
     std::set<uint32_t> seen;
     for (const auto& p:pieces.pieces) {
         if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}

@@ -20,6 +20,10 @@ struct ScatterSettings {
     // 大きな片）を作る。clusterScale は形の最長辺あたりのむらの数（0.5～16）。0 なら従来と同じ配置。
     float clustering = 0;
     float clusterScale = 2;
+    // 高さの勾配（-1～1）。正で上（ローカル +Y）ほど点を密に、負で下ほど密にする。地表に近いほど節理が密になる
+    // （深い所ほど割れの間隔が広い）ことを表す。受け入れる確率を、高さ t（0 が底、1 が頂）で 1 − g × (1 − t)
+    // （負なら 1 − |g| × t）にする。0 なら従来と同じ配置。
+    float heightGradient = 0;
     bool operator==(const ScatterSettings &) const = default;
 };
 struct VoronoiSettings {
@@ -112,6 +116,9 @@ struct PieceSelectSettings {
     bool grounded = false;
     // peel・接地用。安定（0～1）。下で支える片に載る面積が片の大きさに足りないと転げ落ちる（頭でっかちの片が残らない）。
     float stability = 0;
+    // peel 用。側面の後退（m、0 で無効）。元の側面から横へ削れる深さを「後退 × 高さ（0 が底、1 が頂）」までにする。
+    // 周りの地面が下がるにつれ上ほど早く地表に出て長く側面から削られたことを表し、上ほど細くなる。芯は削り切らない。
+    float peelRetreat = 0;
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;

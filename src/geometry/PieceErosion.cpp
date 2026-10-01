@@ -40,6 +40,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     if (!std::isfinite(s.peelSize) || s.peelSize<0 || s.peelSize>1) {
         error="大きさの効きは0〜1にしてください"; return {};
     }
+    if (!std::isfinite(s.peelRetreat) || s.peelRetreat<0 || s.peelRetreat>1000) {
+        error="側面の後退は0〜1000 mにしてください"; return {};
+    }
     // 大きさの効き: 体積を最大の片で割った値（0～1）を順位に足す。大きな片ほど後まで残る。
     double largest=0;
     for (const auto& p:c.pieces) largest=std::max(largest,p.volume);
@@ -49,7 +52,7 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         std::vector<Vertical> vertical;
         std::array<double,2> cap{}, covered{};
         double total=0, support=0, noise=0;
-        bool exposed=false, removed=false, protectedCore=false, grounded=false;
+        bool exposed=false, removed=false, protectedCore=false, grounded=false, tooDeep=false;
     };
     const size_t n=c.pieces.size();
     std::vector<State> state(n);
@@ -110,6 +113,48 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         v.noise=(double(hash>>11)*0x1.0p-53-.5)*s.peelNoise;
     }
 
+    // 側面の後退: 周りの地面が下がるにつれて上から順に崖の面が地表に出て、出た時から横へ削られる。高い所ほど長く
+    // 削られるので、元の側面から横へ削れる深さを「後退 × 高さ（0 が底、1 が頂）」までにする。深さは片の重心から、
+    // 元の外面のうち横を向いた面（法線が水平から 45° 以内）までの距離。上ほど細くなり、芯は削り切らない。
+    // 上限の深さはばらつき（±半分）で片ごとに揺らす。
+    if (s.peelRetreat>0) {
+        const auto apply=[](const Piece& p,const Vec3& v) {
+            const auto& m=p.transform;
+            return std::array<double,3>{m[0]*v.x+m[1]*v.y+m[2]*v.z+m[3],m[4]*v.x+m[5]*v.y+m[6]*v.z+m[7],
+                                        m[8]*v.x+m[9]*v.y+m[10]*v.z+m[11]};
+        };
+        std::vector<std::array<double,3>> sides, centers(n);
+        double low=std::numeric_limits<double>::infinity(), high=-low;
+        for (size_t i=0;i<n;++i) {
+            const auto& p=c.pieces[i];
+            centers[i]=apply(p,p.centroid);
+            low=std::min(low,centers[i][1]);high=std::max(high,centers[i][1]);
+            if (!p.mesh || !p.faceOrigins || p.faceOrigins->size()!=p.mesh->triangles.size()) continue;
+            for (size_t k=0;k<p.mesh->triangles.size();++k) {
+                if (!(*p.faceOrigins)[k]) continue;
+                const auto& t=p.mesh->triangles[k];
+                const auto a=apply(p,p.mesh->positions[t[0]]), b=apply(p,p.mesh->positions[t[1]]),
+                           d=apply(p,p.mesh->positions[t[2]]);
+                const std::array<double,3> u{b[0]-a[0],b[1]-a[1],b[2]-a[2]}, w{d[0]-a[0],d[1]-a[1],d[2]-a[2]};
+                const std::array<double,3> normal{u[1]*w[2]-u[2]*w[1],u[2]*w[0]-u[0]*w[2],u[0]*w[1]-u[1]*w[0]};
+                const double length=std::sqrt(normal[0]*normal[0]+normal[1]*normal[1]+normal[2]*normal[2]);
+                if (length>0 && std::abs(normal[1])<.7071*length)
+                    sides.push_back({(a[0]+b[0]+d[0])/3,(a[1]+b[1]+d[1])/3,(a[2]+b[2]+d[2])/3});
+            }
+        }
+        if (!sides.empty())
+            for (size_t i=0;i<n;++i) {
+                if (stop.stop_requested()) {error="評価をキャンセルしました";return {};}
+                double nearest=std::numeric_limits<double>::infinity();
+                for (const auto& q:sides) {
+                    const double x=q[0]-centers[i][0], y=q[1]-centers[i][1], z=q[2]-centers[i][2];
+                    nearest=std::min(nearest,x*x+y*y+z*z);
+                }
+                const double height=high>low ? (centers[i][1]-low)/(high-low) : 0;
+                state[i].tooDeep=std::sqrt(nearest)>s.peelRetreat*height*(1+state[i].noise);
+            }
+    }
+
     // 各連結部分の、露出面からグラフ距離が最も遠い片を1つ保護する。
     // 同距離なら大きい片、さらに同じなら小さいIDを選ぶ。保護は量とは独立。
     if (s.protectCore) {
@@ -145,7 +190,7 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         const auto& v=state[i];
         const bool sandwiched=v.cap[0]>0 && v.cap[1]>0 &&
             v.covered[0]>=v.cap[0]*(1-1e-6) && v.covered[1]>=v.cap[1]*(1-1e-6);
-        return weights[i]>0 && v.exposed && !v.removed && !v.protectedCore && v.total>0 && !sandwiched;
+        return weights[i]>0 && v.exposed && !v.removed && !v.protectedCore && !v.tooDeep && v.total>0 && !sandwiched;
     };
     const size_t eligible=std::count_if(weights.begin(),weights.end(),[](float w){return w>=0;});
     const size_t budget=size_t(std::floor(double(eligible)*s.fraction+1e-8));

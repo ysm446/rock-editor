@@ -641,6 +641,46 @@ static void RunPlaneFractureTests() {
         bad.clustering = 1.5f;
         ScatterPoints(tall, bad, error);
         Check(!error.empty(), "密度のむら: 範囲外を拒否する");
+        // 高さの勾配: 正で上半分に点が多く、負で下半分に多い。
+        const auto upper = [](const PointSet& points) {
+            int n = 0;
+            for (auto p : points.positions) n += p.y > 0;
+            return n;
+        };
+        ScatterSettings rising = even;
+        rising.heightGradient = 1;
+        ScatterSettings sinking = even;
+        sinking.heightGradient = -1;
+        const auto top = ScatterPoints(tall, rising, error);
+        Check(error.empty() && top.positions.size() == 200 && upper(top) > 140 && top.fingerprint != uniform.fingerprint,
+              "高さの勾配: 正で上ほど密になる");
+        Check(upper(ScatterPoints(tall, sinking, error)) < 60, "高さの勾配: 負で下ほど密になる");
+        bad = even;
+        bad.heightGradient = -1.5f;
+        ScatterPoints(tall, bad, error);
+        Check(!error.empty(), "高さの勾配: 範囲外を拒否する");
+        // 側面の後退: 横へ削れる深さが高さに比例し、上ほど多く欠けて、芯は残る。
+        {
+            const auto cells = FractureVoronoi(tall, uniform, {}, 9, error);
+            PieceSelectSettings retreat;
+            retreat.mode = PieceSelectMode::Peel;
+            retreat.fraction = 1;
+            retreat.peelNoise = 0;
+            retreat.protectCore = false;
+            retreat.peelRetreat = 1.2f;
+            const auto shaved = SelectPieces(cells, retreat, error);
+            int upperRemoved = 0, lowerRemoved = 0;
+            for (auto id : shaved.ids)
+                for (const auto& p : cells.pieces)
+                    if (p.id == id) (p.centroid.y > 0 ? upperRemoved : lowerRemoved) += 1;
+            Check(error.empty() && upperRemoved > 2 * lowerRemoved && shaved.ids.size() < cells.pieces.size() / 2,
+                  "側面の後退: 上ほど多く欠け、芯は削り切らない");
+            retreat.peelRetreat = 0;
+            Check(SelectPieces(cells, retreat, error).ids.size() == cells.pieces.size(), "側面の後退 0 では上限が無い");
+            retreat.peelRetreat = -1;
+            SelectPieces(cells, retreat, error);
+            Check(!error.empty(), "側面の後退: 範囲外を拒否する");
+        }
         const auto pieces = FractureVoronoi(tall, lumpy, {}, 9, error);
         PieceSelectSettings sized;
         sized.mode = PieceSelectMode::Peel;

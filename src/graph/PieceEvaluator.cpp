@@ -55,6 +55,7 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
             add(s.planar);
             add(s.clustering);
             add(s.clusterScale);
+            add(s.heightGradient);
         } else {
             const bool hasPoints = node.inputs.size() > 1 && graph.FindUpstreamNodeForPin(node.inputs[1].id);
             const bool hasPlanes = node.inputs.size() > 2 && graph.FindUpstreamNodeForPin(node.inputs[2].id);

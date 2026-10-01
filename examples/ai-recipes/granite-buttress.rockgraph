@@ -4,9 +4,9 @@
   "graph": {
     "nodes": [
       {"id": 1, "kind": "baseRock", "note": "節理で割られる前の岩体。縦長の箱。侵食で外に見える面が全て割れ面になる", "baseRock": {"shape": "box", "size": [10, 15, 8]}},
-      {"id": 2, "kind": "scatterPoints", "note": "ブロックの母点。密度のむらで、割れの多い帯（小さなブロック、先に崩れて沢になる）と割れの少ない芯（大きなブロック、塔として残る）を作る", "pieces": {"count": 420, "seed": 3, "clustering": 0.9, "clusterScale": 2.0}},
+      {"id": 2, "kind": "scatterPoints", "note": "ブロックの母点。密度のむらで、割れの多い帯（小さなブロック、先に崩れて沢になる）と割れの少ない芯（大きなブロック、塔として残る）を作る。高さの勾配: 地表に近い上ほど節理が密で、頂は小さなブロックに割れる", "pieces": {"count": 420, "seed": 3, "clustering": 0.9, "clusterScale": 2.0, "heightGradient": 0.4}},
       {"id": 5, "kind": "voronoiFracture", "note": "点の Voronoi で不規則な多面体のブロックに割る。座標系を主な節理の向き（76°）に回し、伸長で節理面の方向に細長く・節理面に垂直に薄くする", "pieces": {"rotation": [0, 0, 76], "stretch": [2.5, 1, 1.6]}},
-      {"id": 6, "kind": "pieceSelect", "note": "外周からの侵食（凍結破砕）。大きさの効きで小さなブロックから欠け、芯が残る。接地: 底からは欠かず、下のブロックに載っていない片は落ちる。安定: 狭い面で載った大きなブロック（頭でっかち）も転げ落ち、上ほど細く尖る", "pieces": {"mode": "peel", "fraction": 0.76, "peelNoise": 0.6, "protectCore": false, "grounded": true, "seed": 3, "peelSize": 0.4, "stability": 0.45}},
+      {"id": 6, "kind": "pieceSelect", "note": "外周からの侵食（凍結破砕）。大きさの効きで小さなブロックから欠け、芯が残る。接地: 底からは欠かず、下のブロックに載っていない片は落ちる。安定: 狭い面で載った大きなブロック（頭でっかち）も転げ落ち、上ほど細く尖る。側面の後退: 周りの地面が下がるにつれ上ほど長く側面から削られる。横へ削れる深さを頂で 4 m、底で 0 までにし、上ほど細く、芯は残す（進行は 1 で、上限まで削る）", "pieces": {"mode": "peel", "fraction": 1.0, "peelNoise": 1.0, "protectCore": false, "grounded": true, "seed": 3, "peelSize": 0.4, "stability": 0.45, "peelRetreat": 4}},
       {"id": 7, "kind": "pieceFilter", "note": "選んだブロックを消す", "pieces": {"keep": false}},
       {"id": 17, "kind": "pieceTransform", "note": "ブロックごとのずれ・傾き（ばらつき）。継ぎ目が段違いに開き、そろった石積みに見えなくなる", "pieces": {"individual": true, "jitterPosition": [0.06, 0.04, 0.06], "jitterRotation": 2.5, "jitterSeed": 4}},
       {"id": 8, "kind": "piecesToMesh"},

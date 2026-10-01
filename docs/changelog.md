@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-02 00:30
+更新日時: 2026-10-02 01:55
 
 ## 未リリース
+
+- Scatter Points に「高さの勾配」を足した（上ほど、または下ほど点を密にする）。Piece Select の Peel に「側面の後退」を足した（元の側面から横へ削れる深さを高さに比例させ、上ほど細くする）。どちらも既定 0 で従来と同じ。`granite-buttress` は裾が広く上ほど細い尖塔になった（高さ 12.5 m）。仕様は [ピースの侵食](reference/piece-erosion.md#側面の後退2026-10-02-追加)。
 
 - 板状節理のレシピ（`platy-joints`）を作り直した。扁平な点の Voronoi で不規則な板に割り、接地の Peel で外周から欠く。板が段になって張り出し、石積みの壁に見えなくなった。
 - 岩グラフを組む手順（skill `rock-graph`）を `.agents/skills/rock-graph/SKILL.md` へ移し、Codex からも使えるようにした。Claude Code の skill はそこを指す入口にし、AGENTS.md から案内する。
