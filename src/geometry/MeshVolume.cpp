@@ -230,6 +230,8 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
     std::iota(rows.begin(), rows.end(), size_t(0));
     std::atomic<size_t> firstFailure{rowCount};
     std::atomic<bool> cancelled{false};
+    // 巻き数が 2 以上の所がある = 重なった立体（Random Boxes など）。内部に隠れた面が残る。
+    std::atomic<bool> overlapping{false};
     std::for_each(std::execution::par, rows.begin(), rows.end(), [&](size_t rowIndex) {
         if (cancelled.load(std::memory_order_relaxed) || rowIndex > firstFailure.load(std::memory_order_relaxed))
             return;
@@ -263,6 +265,8 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
             total += crossing.direction;
             if (total < 0)
                 return fail(RowOrientation);
+            if (total > 1)
+                overlapping.store(true, std::memory_order_relaxed);
         }
         if (total != 0)
             return fail(RowUndetermined);
@@ -303,6 +307,13 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
     const bool hasInside = std::find(rowInside.begin(), rowInside.end(), uint8_t(1)) != rowInside.end();
     if (!hasInside) {
         error = "形がセルより薄いため内部を捉えられません。解像度を上げるか寸法を調整してください";
+        return {};
+    }
+    // 重なった立体は、内部の距離が隠れた面までになって浅く歪むので、表面から測り直す。
+    if (overlapping.load())
+        RedistanceInterior(grid, stop);
+    if (stop.stop_requested()) {
+        error = "評価をキャンセルしました";
         return {};
     }
     return grid;

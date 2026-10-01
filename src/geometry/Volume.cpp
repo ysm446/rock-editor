@@ -269,7 +269,126 @@ VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSett
         error = "形がセルより薄いため内部を捉えられません。解像度を上げるか寸法を調整してください";
         return {};
     }
+    // 箱の距離の最小は、重なった所の内部で一つの箱の中での深さになり、表面からの深さより浅い。
+    if (boxes.size() > 1) RedistanceInterior(grid);
     return grid;
+}
+void RedistanceInterior(VolumeGrid& grid, std::stop_token stop) {
+    if (!ValidGrid(grid)) return;
+    const size_t nx = grid.dimensions[0], ny = grid.dimensions[1], nz = grid.dimensions[2];
+    const size_t stride[3] = {1, nx, nx * ny};
+    // 表面の標本点: 内外が切り替わる格子の辺の交点（値の線形補間）。外側の値は正確なので交点もほぼ正確。
+    struct Sample { Vec3 position, normal; };
+    const auto gradient = [&](size_t x, size_t y, size_t z) {
+        const auto at = [&](size_t i, size_t j, size_t k) { return grid.values[(k * ny + j) * nx + i]; };
+        const auto diff = [&](size_t i, size_t n, auto read) {
+            const size_t lo = i > 0 ? i - 1 : i, hi = i + 1 < n ? i + 1 : i;
+            return (read(hi) - read(lo)) / float(std::max<size_t>(hi - lo, 1));
+        };
+        return Vec3{diff(x, nx, [&](size_t i) { return at(i, y, z); }), diff(y, ny, [&](size_t j) { return at(x, j, z); }),
+                    diff(z, nz, [&](size_t k) { return at(x, y, k); })};
+    };
+    std::vector<std::vector<Sample>> perSlice(nz);
+    std::vector<size_t> slices(nz);
+    std::iota(slices.begin(), slices.end(), size_t(0));
+    std::for_each(std::execution::par, slices.begin(), slices.end(), [&](size_t z) {
+        for (size_t y = 0; y < ny; ++y)
+            for (size_t x = 0; x < nx; ++x) {
+                const size_t index = (z * ny + y) * nx + x;
+                const float a = grid.values[index];
+                const size_t at[3] = {x, y, z};
+                for (int axis = 0; axis < 3; ++axis) {
+                    if (at[axis] + 1 >= grid.dimensions[axis]) continue;
+                    const float b = grid.values[index + stride[axis]];
+                    if ((a < 0) == (b < 0)) continue;
+                    const float t = a / (a - b);
+                    Vec3 p = grid.Position(uint32_t(x), uint32_t(y), uint32_t(z));
+                    (axis == 0 ? p.x : axis == 1 ? p.y : p.z) += t * grid.spacing;
+                    // 法線: 辺の両端の中心差分の勾配を補間する。表面の近くの値は正確なので向きも正確。
+                    const Vec3 ga = gradient(x, y, z), gb = gradient(x + (axis == 0), y + (axis == 1), z + (axis == 2));
+                    Vec3 n{ga.x + (gb.x - ga.x) * t, ga.y + (gb.y - ga.y) * t, ga.z + (gb.z - ga.z) * t};
+                    const float length = std::sqrt(Dot(n, n));
+                    n = length > 0 ? Vec3{n.x / length, n.y / length, n.z / length} : Vec3{0, 0, 0};
+                    perSlice[z].push_back({p, n});
+                }
+            }
+    });
+    std::vector<Sample> found;
+    for (const auto& points : perSlice) found.insert(found.end(), points.begin(), points.end());
+    if (found.empty() || stop.stop_requested()) return;
+    std::vector<Vec3> samples(found.size());
+    for (size_t i = 0; i < found.size(); ++i) samples[i] = found[i].position;
+    const auto squared = [](Vec3 a, Vec3 b) { return Dot({a.x - b.x, a.y - b.y, a.z - b.z}, {a.x - b.x, a.y - b.y, a.z - b.z}); };
+    // 種: 標本点を最も近い格子点に置く（同じ格子点に複数あれば近いほう）。
+    std::vector<int32_t> nearest(grid.values.size(), -1);
+    std::vector<float> best(grid.values.size(), std::numeric_limits<float>::max());
+    for (size_t i = 0; i < samples.size(); ++i) {
+        const Vec3& s = samples[i];
+        const auto cell = [&](float v, float origin, uint32_t n) {
+            return uint32_t(std::clamp(std::lround((v - origin) / grid.spacing), 0l, long(n) - 1));
+        };
+        const uint32_t cx = cell(s.x, grid.origin.x, grid.dimensions[0]), cy = cell(s.y, grid.origin.y, grid.dimensions[1]),
+                       cz = cell(s.z, grid.origin.z, grid.dimensions[2]);
+        const size_t index = grid.Index(cx, cy, cz);
+        const float d = squared(s, grid.Position(cx, cy, cz));
+        if (d < best[index]) {
+            best[index] = d;
+            nearest[index] = int32_t(i);
+        }
+    }
+    // Jump Flooding: 幅を半分ずつにして、周りの 26 点が持つ種のうち最も近いものを引き継ぐ。最後に幅 1 をもう一度。
+    std::vector<int32_t> next(nearest.size());
+    size_t step = 1;
+    while (step * 2 < std::max({nx, ny, nz})) step *= 2;
+    std::vector<size_t> steps;
+    for (size_t s = step; s >= 1; s /= 2) steps.push_back(s);
+    steps.push_back(1);
+    for (const size_t s : steps) {
+        if (stop.stop_requested()) return;
+        const long long w = (long long)s;
+        std::for_each(std::execution::par, slices.begin(), slices.end(), [&](size_t z) {
+            for (size_t y = 0; y < ny; ++y)
+                for (size_t x = 0; x < nx; ++x) {
+                    const Vec3 p = grid.Position(uint32_t(x), uint32_t(y), uint32_t(z));
+                    int32_t chosen = nearest[(z * ny + y) * nx + x];
+                    float chosenDistance = chosen >= 0 ? squared(samples[size_t(chosen)], p) : std::numeric_limits<float>::max();
+                    for (long long dz = -w; dz <= w; dz += w)
+                        for (long long dy = -w; dy <= w; dy += w)
+                            for (long long dx = -w; dx <= w; dx += w) {
+                                const long long qx = (long long)x + dx, qy = (long long)y + dy, qz = (long long)z + dz;
+                                if (qx < 0 || qy < 0 || qz < 0 || qx >= (long long)nx || qy >= (long long)ny || qz >= (long long)nz)
+                                    continue;
+                                const int32_t candidate = nearest[(size_t(qz) * ny + size_t(qy)) * nx + size_t(qx)];
+                                if (candidate < 0 || candidate == chosen) continue;
+                                const float d = squared(samples[size_t(candidate)], p);
+                                if (d < chosenDistance) {
+                                    chosenDistance = d;
+                                    chosen = candidate;
+                                }
+                            }
+                    next[(z * ny + y) * nx + x] = chosen;
+                }
+        });
+        std::swap(nearest, next);
+    }
+    // 内側だけ、標本点までの距離が深ければそれを使う（元の値は真の深さ以下、標本点までの距離は以上）。
+    // 表面の近くは標本点の間隔ぶん深めに出るので元の値を残し、1～3 セルの深さで少しずつ移す。
+    // 判定で置き換えると、隣り合う格子点で値が跳び、その面を通る殻の底などが縞になる。
+    for (size_t i = 0; i < grid.values.size(); ++i) {
+        float& value = grid.values[i];
+        if (value >= 0 || nearest[i] < 0) continue;
+        const size_t x = i % nx, y = (i / nx) % ny, z = i / (nx * ny);
+        // 最も近い標本点の接平面までの距離（平らな面で正確）。点の間隔ぶんの誤差を見込んで、点までの距離から
+        // 0.87 セル引いた値を下限にする（曲がった面で接平面が近すぎる分を抑える）。
+        const Vec3 p = grid.Position(uint32_t(x), uint32_t(y), uint32_t(z));
+        const Sample& sample = found[size_t(nearest[i])];
+        const Vec3 offset{p.x - sample.position.x, p.y - sample.position.y, p.z - sample.position.z};
+        const float point = std::sqrt(Dot(offset, offset));
+        const float surface = point;
+        const float depth = -value;
+        const float weight = std::clamp((depth - grid.spacing) / (2 * grid.spacing), 0.f, 1.f);
+        value = -(depth + weight * std::max(0.f, surface - depth));
+    }
 }
 VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s, std::string& error) {
     error.clear();
@@ -1341,6 +1460,9 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
     const float frequency = s.scale / longest, warpFrequency = s.warpScale / longest;
     // 表面からこれより離れた点は、どう加工しても同じ側に残り、隣の点も同じ側にある。
     const float band = warp * 1.75f + amount + 2 * g.spacing;
+    // 帯の外側で効きを 0 まで弱める幅。帯の境で値が「量」だけ跳ぶと、内部の値を使う後段（殻の底など）が縞になる。
+    // 弱める傾き（量 ÷ 幅）が距離場を急にするので、幅を量の 3 倍にして 1/3 以下に抑える。帯の中は従来どおり。
+    const float fade = 3 * (warp * 1.75f + amount) + 2 * g.spacing;
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
         const size_t index = out.Index(x, y, z);
         const auto p = out.Position(x, y, z);
@@ -1348,7 +1470,9 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
                              y - pad < g.dimensions[1] && z - pad < g.dimensions[2];
         float value = onInput ? g.values[g.Index(x - pad, y - pad, z - pad)] : SampleVolume(g, p);
         before[index] = value;
-        if (std::abs(value) < band) {
+        const float original = value;
+        const float strength = std::clamp((band + fade - std::abs(value)) / fade, 0.f, 1.f);
+        if (strength > 0) {
             if (warp > 0) {
                 const float wx = p.x * warpFrequency, wy = p.y * warpFrequency, wz = p.z * warpFrequency;
                 const Vec3 moved{p.x + (ValueNoise(wx, wy, wz, seed ^ 0x11ull) - .5f) * 2 * warp,
@@ -1369,6 +1493,7 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
                 // 削る方向にだけ効かせる。形は広がらない。
                 value += amount * noise / weight;
             }
+            value = original + (value - original) * strength;
         }
         out.values[index] = std::abs(value) < threshold ? threshold : value;
         return value < 0;

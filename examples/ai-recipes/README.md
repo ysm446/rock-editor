@@ -19,7 +19,7 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `conglomerate.rockgraph` | 礫岩 | 丸めた塊に Volume Scatter（楕円体・和）で大小の礫を半分ほど埋める | 約 0.6 秒 |
 | `breccia.rockgraph` | 角礫岩 | Volume Scatter（箱・和）で角張った礫を浅く埋める。礫と基質の色の違いが無いと弱い | 約 0.3 秒 |
 | `vesicular-basalt.rockgraph` | 多孔質の溶岩 | Volume Scatter（楕円体・差）で気泡の穴を多数抜く | 約 0.2 秒 |
-| `granite-sheeting.rockgraph` | 花崗岩のシーティング・剥離 | Volume Crack の割り方「表面に沿う殻」で、外側の板がまだらに剥がれた段を作る。剥がれた跡に斜めの縞が出る（重なった箱の内部の距離の歪み） | 約 0.3 秒 |
+| `granite-sheeting.rockgraph` | 花崗岩のシーティング・剥離 | Volume Crack の割り方「表面に沿う殻」で、外側の板がまだらに剥がれた段を作る。Edge Wear は殻より前に置く（後ろに置くと剥がれた跡に細かい縞） | 約 0.3 秒 |
 | `granite-buttress.rockgraph` | 花崗岩の岩峰（岩稜） | 高さの違う塔 3 本を別々に作って大きな平面で尖らせ、同じ傾きで Volume Boolean の和にする。根元の塊は大半を地面の下へ埋める。急傾斜と緩い横の Parallel Planes で浅い節理（有限の割れ目で途中で止めて段違いに）、3 方向の局所の欠け。山グラフで斜面に撒く部品向け | 約 0.3 秒 |
 | `mushroom-rock.rockgraph` | きのこ岩（台座岩） | 接地させてから Volume Undercut で底の近くを削り、細い台座にする | 約 0.2 秒 |
 | `hoodoo.rockgraph` | フードゥー | 縦長の塊に Volume Undercut の帯を 4 段重ね、Volume Terrace で層の筋 | 約 0.1 秒 |
@@ -36,5 +36,5 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 - Random Boxes・Base Shape は原点中心にできる。Volume Clip の `"mode": "ground"` で地面へ据える（`embed` が埋める割合）。`world` のまま高さ 0 で切ると半分が消えて平たくなる。
 - 割れ目で岩が複数の塊に分かれると、そのまま最後まで分かれて残る（Plane Cuts などは小片だけを捨てる）。1 つの塊にしたいなら、先に Volume Close で繋ぐ（`schist` / `platy-joints`）。
 - 岩には Volume to Mesh の `dualContouring` を使う（面と稜線が立つ）。
-- 殻の深さ・割れ目の深さ・Undercut などは距離場の内部の値を使う。Random Boxes（重なった箱）は内部に隠れた面があり、内部の距離がその面までになって歪む。殻を使うなら Base Shape から始めるか、先に大きく丸める。
+- 殻の深さ・割れ目の深さ・Undercut などは距離場の内部の値を使う。To Volume は重なった箱・メッシュの内部を表面から測り直す（2026-10-01）。剥がれた跡など内部の等値面が表に出る形では、Edge Wear を先に置く。
 - Parallel Planes の割れ目は既定で岩の端から端まで続き、並ぶと石積みの格子に見える。Volume Crack の `extent`（割れ目の長さ）・`coverage`（割合）・`stagger`（段違い）で途中で止まる節理にする。

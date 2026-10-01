@@ -34,6 +34,23 @@ void RunVolumeNoiseTests() {
               same.origin.x == box.origin.x,
           "量も歪みも 0 なら入力と完全に同じ結果になる");
 
+    // 帯の境で効きを弱める: なめらかなノイズは内部でも値が跳ばない。以前は表面の近くの帯の中だけ量を足し、
+    // 帯の外は元の値のままだったので、帯の境で値が「量」だけ跳び、後段の殻の底などが縞になっていた。
+    {
+        geometry::VolumeNoiseSettings s;
+        s.type = geometry::VolumeNoiseType::Smooth;
+        s.amount = .05f;
+        s.scale = 3;
+        const auto noisy = geometry::NoiseVolume(box, s, error);
+        const size_t nx = noisy.dimensions[0], ny = noisy.dimensions[1];
+        const size_t stride[3] = {1, nx, nx * ny};
+        bool smooth = error.empty();
+        for (size_t i = 0; i + nx * ny < noisy.values.size(); ++i)
+            for (int a = 0; a < 3; ++a)
+                smooth &= std::abs(noisy.values[i] - noisy.values[i + stride[a]]) <= 1.5f * noisy.spacing;
+        Check(smooth, "なめらかなノイズは帯の境でも隣の格子点と 1.5 セル以上跳ばない");
+    }
+
     for (const auto type : {geometry::VolumeNoiseType::Smooth, geometry::VolumeNoiseType::Cellular,
                             geometry::VolumeNoiseType::Facet, geometry::VolumeNoiseType::Pits}) {
         geometry::VolumeNoiseSettings s;

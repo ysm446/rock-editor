@@ -149,6 +149,25 @@ void RunVolumeTests() {
     Check(error.empty() && geometry::InspectMesh(surface, info) && info.closed &&
               std::abs(info.volume - 12) < .4,
           "重なる2個の Box は重複体積を加算せず和集合になる");
+    // 再距離化: 重なった所の内部は、一つの箱の中での深さ（箱の距離の最小）ではなく表面からの深さになる。
+    // 和は x が -1～2、y と z が -1～1。(0.5, 0, 0) の表面からの深さは 1（箱の距離の最小では 0.5）。
+    {
+        const auto cell = [&](float v, float origin, uint32_t n) {
+            return uint32_t(std::clamp(std::lround((v - origin) / grid.spacing), 0l, long(n) - 1));
+        };
+        const uint32_t cx = cell(.5f, grid.origin.x, grid.dimensions[0]), cy = cell(0, grid.origin.y, grid.dimensions[1]),
+                       cz = cell(0, grid.origin.z, grid.dimensions[2]);
+        const auto p = grid.Position(cx, cy, cz);
+        const float expected = -(1 - std::max(std::abs(p.y), std::abs(p.z)));
+        Check(std::abs(grid.values[grid.Index(cx, cy, cz)] - expected) < 1.5f * grid.spacing,
+              "重なった Box の内部の値は表面からの深さになる（再距離化）");
+        const size_t nx = grid.dimensions[0], ny = grid.dimensions[1];
+        const size_t stride[3] = {1, nx, nx * ny};
+        bool smooth = true;
+        for (size_t i = 0; i + nx * ny < grid.values.size(); ++i)
+            for (int a = 0; a < 3; ++a) smooth &= std::abs(grid.values[i] - grid.values[i + stride[a]]) <= 1.5f * grid.spacing;
+        Check(smooth, "再距離化した値は隣の格子点と 1.5 セル以上跳ばない");
+    }
     const auto repeated = geometry::BoxesToVolume(overlap, {48}, error);
     Check(grid.values == repeated.values && grid.dimensions == repeated.dimensions, "ボリュームを完全再現");
     s.count = 0;

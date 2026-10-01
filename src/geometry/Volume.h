@@ -289,6 +289,11 @@ struct VolumeClipSettings {
     bool invert = false;  // 真なら平面より上を捨てる。
     float embed = .25f;   // 接地で埋める割合（形の高さに対する比）。0～0.9。
 };
+// 内部の距離を表面から測り直す（再距離化）。重なった立体（Random Boxes、重なったメッシュ）の距離場は、
+// 内部の値が隠れた面や一つの箱の中での深さになり、表面からの深さより浅く歪む。殻・割れ目の深さ・Undercut など
+// 内部の値を使う処理が崩れるので、内外の境目（格子の辺の交点）から最も近い表面までの距離で置き換える。
+// 外側の値と内外の符号は変えない。内側で 1 セル以上深くなる所だけを置き換える。
+void RedistanceInterior(VolumeGrid& grid, std::stop_token stop = {});
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
                          std::string& error);
 // 閉じた向き付きメッシュを変換。重複成分は和集合、内向きの内殻は空洞として扱う。

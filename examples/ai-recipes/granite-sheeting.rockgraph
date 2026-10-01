@@ -9,14 +9,14 @@
       {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.02, "amount": 1}},
       {"id": 5, "kind": "volumeNoise", "volumeNoise": {"type": "smooth", "amount": 0.015, "scale": 5, "octaves": 2, "seed": 4}},
       {"id": 6, "kind": "volumeCrack", "note": "表面に沿う殻: 外側の板がまだらに剥がれた段（シーティング）。Points・Planes は繋がない", "volumeCrack": {"source": "shells", "shellSpacing": 0.05, "shellCount": 2, "shellSmoothing": 0.02, "shellPeel": 0.6, "width": 0.015, "depth": 0.1, "variation": 0.3, "noise": 0, "noiseScale": 2.5, "seed": 3}},
-      {"id": 7, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.04, "radius": 0.02}},
+      {"id": 7, "kind": "volumeEdgeWear", "note": "角の摩耗は剥がれより先に掛ける。剥がれた跡の面は内部の距離場の等値面で、Edge Wear がわずかな粗さを強めて細かい縞になる", "volumeEdgeWear": {"amount": 0.04, "radius": 0.02}},
       {"id": 8, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
       {"id": 9, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
       {"id": 10, "kind": "meshOutput"}
     ],
     "links": [
       {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
-      {"from": "5", "to": "6:Volume"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9"},
+      {"from": "5", "to": "7"}, {"from": "7", "to": "6:Volume"}, {"from": "6", "to": "8"}, {"from": "8", "to": "9"},
       {"from": "9", "to": "10:Geometry"}
     ]
   }
