@@ -72,6 +72,13 @@
       "description": "外側の板がまだらに剥がれ落ちた段。"
     },
     {
+      "id": "granite-buttress",
+      "name": "花崗岩の岩峰",
+      "category": "形の骨格",
+      "status": "△",
+      "description": "急傾斜の節理で割れた塔が 2〜3 本並び、根元でつながる（木曽駒ケ岳の稜線）。"
+    },
+    {
       "id": "obsidian",
       "name": "黒曜石・フリント",
       "category": "形の骨格",
