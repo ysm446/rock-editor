@@ -1,0 +1,20 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "丸い母岩（核石）。Base Shape の楕円体は内部に隠れた面が無いので、殻の深さが正しく測れる", "baseRock": {"shape": "ellipsoid", "size": [1.8, 1.3, 1.5], "subdivisions": 32, "noiseStrength": 0.08, "noiseScale": 1.5, "seed": 4}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 3, "kind": "volumeNoise", "volumeNoise": {"type": "smooth", "amount": 0.015, "scale": 3, "octaves": 2, "seed": 2}},
+      {"id": 5, "kind": "volumeCrack", "note": "表面に沿う殻: 薄い殻を 3 枚、外側ほどよく剥がれる。剥がれの縁に下の殻の割れ目が線として見える", "volumeCrack": {"source": "shells", "shellSpacing": 0.03, "shellCount": 3, "shellSmoothing": 0.04, "shellPeel": 0.6, "width": 0.012, "depth": 0.2, "variation": 0.3, "noise": 0, "noiseScale": 2.2, "seed": 3}},
+      {"id": 6, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.01, "radius": 0.008}},
+      {"id": 7, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 8, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 9, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "5:Volume"}, {"from": "5", "to": "6"},
+      {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9:Geometry"}
+    ]
+  }
+}

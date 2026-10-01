@@ -298,14 +298,40 @@ void TestShells() {
     geometry::MeshInfo info, dual;
     Check(error.empty() && Measure(peeled, info) && info.volume < boxInfo.volume * .97, "外側の板が剥がれて体積が減る");
     Check(Measure(peeled, dual, geometry::VolumeMeshingMethod::DualContouring), "Dual Contouring でも閉じた表面にできる");
+    // 1 枚目を全面剥がす（剥がれ 1）。底の上下の格子点は「元の値 + 間隔」になる。底のすぐ下が元の深い値のまま
+    // 残ると、底をまたぐセルの補間がずれてボクセルの段（等高線のような縞）になっていた。
+    geometry::VolumeCrackSettings flat = shells;
+    flat.shellCount = 1; flat.shellPeel = 1; flat.shellSmoothing = 0; flat.width = 0;
+    const auto offset = geometry::CrackVolumeWithShells(box, flat, error);
+    const float spacing = flat.shellSpacing * 2, cell = box.spacing;
+    // 間隔は格子の内部の最長辺に対する比なので、足される量は 0.1 m に近い一定値になる。
+    bool exact = error.empty();
+    float shift = std::numeric_limits<float>::quiet_NaN();
+    for (size_t i = 0; i < box.values.size(); ++i)
+        if (box.values[i] < -spacing + cell && box.values[i] > -spacing - 2 * cell) {
+            const float d = offset.values[i] - box.values[i];
+            if (std::isnan(shift)) shift = d;
+            exact &= std::abs(d - shift) < 1e-5f;
+        }
+    Check(exact && std::abs(shift - spacing) < .1f * spacing,
+          "剥がれた底の上下の格子点は、元の値に一定の間隔を足した値になる（段にならない）");
+    // 2 枚目の殻の剥がれは、1 枚目より深い所まで効く（以前はループが 1 枚目で打ち切られていた）。
+    geometry::VolumeCrackSettings twoShells = flat;
+    twoShells.shellCount = 2;
+    const auto deeper = geometry::CrackVolumeWithShells(box, twoShells, error);
+    bool reachesSecond = false;
+    for (size_t i = 0; i < box.values.size(); ++i)
+        if (box.values[i] < -spacing * 1.5f && box.values[i] > -spacing * 2) reachesSecond |= deeper.values[i] >= 0;
+    Check(error.empty() && reachesSecond, "2 枚目の殻が剥がれた所は 1 枚目の底より深くまで外になる");
     Check(peeled.dimensions == box.dimensions, "格子は入力のまま");
-    // 剥がれるのは殻の枚数 × 間隔の深さまで（0.05 × 2 m × 3 枚 = 0.3 m）。それより内側は変わらない。
+    // 剥がれるのは殻の枚数 × 間隔の深さまで（0.05 × 2 m × 3 枚 = 0.3 m）。剥がれた底の下は 3 セル（約 0.1 m）まで
+    // 値を直す（底をまたぐ補間を正しくするため）。それより内側は変わらない。
     bool deepKept = true;
     for (uint32_t z = 0; z < box.dimensions[2]; ++z)
         for (uint32_t y = 0; y < box.dimensions[1]; ++y)
             for (uint32_t x = 0; x < box.dimensions[0]; ++x) {
                 const size_t i = box.Index(x, y, z);
-                if (box.values[i] < -.4f) deepKept &= peeled.values[i] == box.values[i];
+                if (box.values[i] < -.5f) deepKept &= peeled.values[i] == box.values[i];
             }
     Check(deepKept, "殻より深い内部は変わらない");
     geometry::VolumeCrackSettings none = shells;

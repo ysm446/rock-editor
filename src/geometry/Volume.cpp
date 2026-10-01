@@ -1114,6 +1114,19 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
             }
         return best;
     };
+    // 剥がれ: 殻 k の板は、殻ごとのノイズがしきい値（内側の殻ほど低い）を下回る所で剥がれ落ちる。正なら剥がれている。
+    const auto peelMargin = [&](Vec3 p, int k) {
+        const float n = ValueNoise(p.x * frequency, p.y * frequency, p.z * frequency, seed ^ (uint64_t(k) * 0xA5A5ull));
+        return s.shellPeel * std::pow(.6f, float(k - 1)) - n;
+    };
+    // その位置で剥がれ落ちた最も深い殻の番号（無ければ 0）。殻 k が剥がれると、それより外の殻もない。
+    const auto peelLevel = [&](Vec3 p) {
+        int level = 0;
+        if (s.shellPeel > 0)
+            for (int k = 1; k <= s.shellCount; ++k)
+                if (peelMargin(p, k) > 0) level = k;
+        return level;
+    };
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
         const size_t index = out.Index(x, y, z);
         float value = g.values[index];
@@ -1130,9 +1143,11 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
             }
             if (shells) {
                 // 殻 k は深さ（ならした距離場）が 間隔 × k の面。殻に沿う割れ目（V 字の断面は表面からの深さで狭める）。
+                // 剥がれ落ちた殻には彫らない。剥がれた跡の底はその殻の面そのもので、セルより細い割れ目の板が
+                // 底に重なると格子と干渉して等高線のような縞になる。下の殻の割れ目は段の壁に線として見える。
                 const float depthAlong = -smoothed[index];
                 const int k0 = int(std::round(depthAlong / shellSpacing));
-                if (k0 >= 1 && k0 <= s.shellCount) {
+                if (k0 >= 1 && k0 <= s.shellCount && k0 > peelLevel(p)) {
                     const float width = reach * shellFactors[size_t(k0 - 1)];
                     if (width > 0) value = std::max(value, width - std::abs(depthAlong - float(k0) * shellSpacing));
                 }
@@ -1176,14 +1191,18 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
         if (shells && s.shellPeel > 0) {
             // 剥がれ: 殻 k より外の板がまだらに剥がれ落ちた所を外部にする。剥がれた跡の底は殻 k、縁は段の壁になる。
             // まだらはノイズのしきい値で決め、内側の殻ほど剥がれにくくする。
+            // 剥がれた跡の底より少し奥（数セル）まで値を直す。底の面までで止めると、底のすぐ下の格子点が
+            // 元の深い値のまま残り、底をまたぐセルの補間がずれて、ボクセルの段（等高線のような縞）になる。
             const float depthAlong = -smoothed[index];
-            if (depthAlong > -shellSpacing && depthAlong < shellSpacing * float(s.shellCount)) {
+            const float below = 3 * out.spacing;
+            if (depthAlong > -shellSpacing && depthAlong < shellSpacing * float(s.shellCount) + below) {
                 const auto p = out.Position(x, y, z);
                 const float wall = .35f / frequency;  // ノイズの差を距離へ直す目安（まだら 1 つの大きさの 3 割）
-                for (int k = 1; k <= s.shellCount && depthAlong < shellSpacing * float(k); ++k) {
-                    const float n = ValueNoise(p.x * frequency, p.y * frequency, p.z * frequency, seed ^ (uint64_t(k) * 0xA5A5ull));
-                    const float limit = s.shellPeel * std::pow(.6f, float(k - 1));
-                    const float carve = std::min(shellSpacing * float(k) - depthAlong, (limit - n) * wall);
+                // 殻 k の剥がれは、殻 k より外（と底の少し奥）の点にだけ効く。深い点ほど外側の殻は飛ばす
+                // （ループの条件に書くと、1 枚目で打ち切られて内側の殻が剥がれなくなる）。
+                for (int k = 1; k <= s.shellCount; ++k) {
+                    if (depthAlong >= shellSpacing * float(k) + below) continue;
+                    const float carve = std::min(shellSpacing * float(k) - depthAlong, peelMargin(p, k) * wall);
                     value = std::max(value, carve);
                 }
             }

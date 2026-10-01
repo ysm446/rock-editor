@@ -114,6 +114,13 @@
       "description": "表面の丸いくぼみの群れ。"
     },
     {
+      "id": "spheroidal-weathering",
+      "name": "玉ねぎ状風化",
+      "category": "風化・侵食の形",
+      "status": "△",
+      "description": "丸い核石の表面に沿う薄い殻が、外側から段々に剥がれる。"
+    },
+    {
       "id": "mushroom-rock",
       "name": "きのこ岩",
       "category": "風化・侵食の形",
