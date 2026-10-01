@@ -53,6 +53,7 @@ struct EditorContext;
 namespace rock {
 
 struct TextureChoices;  // ApplicationUiHelpers.h
+struct MaterialFileChoices;  // ApplicationUiHelpers.h
 
 // コマンドラインから渡せる起動オプション。
 struct StartupOptions {
@@ -171,7 +172,11 @@ private:
     void DrawGraphNodeNotes();
     // グラフのノード 1 枚。カード・ピン・リンクの当たり判定を描く。
     void DrawGraphNode(const graph::Node& node);
-    bool DrawLayerSettings(compositor::MaterialLayer& layer);
+    // nodeId は Surface ノード（未読み込みのマテリアルを選んだとき、読み込み後に割り当てる先）。
+    bool DrawLayerSettings(compositor::MaterialLayer& layer, graph::GraphId nodeId);
+    // マテリアルのコンボに出す未読み込みのマテリアル。選ぶと読み込みを予約し、読めたら assign で割り当てる。
+    MaterialFileChoices MaterialFilesForUi(std::function<void(compositor::MaterialAssetId)> assign);
+    void ProcessPendingMaterialLoads();
     // グラフの変更をメッシュシーンへ反映する。フレームの頭（フレームの外）で呼ぶ。
     void SyncMeshGraph();
     void DrawPieceSettings(graph::Node&);
@@ -897,6 +902,8 @@ private:
     std::unordered_map<std::wstring, std::vector<std::filesystem::path>> m_assetFolders;
     // ルート内の画像ファイル（全フォルダ）。テクスチャのコンボに未読み込みの候補として出す。フォルダ階層と同時に作り直す。
     std::vector<std::filesystem::path> m_workspaceImages;
+    // ルート内のマテリアル（.rockmat / .tglayer）。マテリアルのコンボに未読み込みの候補として出す。
+    std::vector<std::filesystem::path> m_workspaceMaterials;
     // 一覧で選んでいるファイル・フォルダ。クリックで単独、Ctrl+クリックで追加 / 除外、Shift+クリックで起点からの範囲。
     std::vector<std::filesystem::path> m_selectedAssets;
     std::filesystem::path m_assetSelectionAnchor;
@@ -986,6 +993,12 @@ private:
         std::filesystem::path path;
     };
     std::vector<TextureRelink> m_pendingTextureRelinks;
+    // コンボで選んだ未読み込みのマテリアル。フレームの外で読み込み、assign で割り当て先へ入れる。
+    struct MaterialLoadRequest {
+        std::filesystem::path path;
+        std::function<void(compositor::MaterialAssetId)> assign;
+    };
+    std::vector<MaterialLoadRequest> m_pendingMaterialLoads;
     // 削除要求のあったマテリアル。一覧の描画中に消すと、描画側が erase 済みの
     // 要素を読んでしまうため、フレームの外で処理する。
     compositor::MaterialAssetId m_pendingMaterialRemove = compositor::kNoMaterialAsset;

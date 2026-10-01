@@ -2955,7 +2955,7 @@ void Application::DrawGraphPanel() {
                                         "無効にすると合成から外れる");
             ui::EndPropertyTable();
         }
-        changed |= DrawLayerSettings(settings->layer);
+        changed |= DrawLayerSettings(settings->layer, selected->id);
         if (changed) {
             m_graph.MarkDirty();
             MarkDocumentChanged();

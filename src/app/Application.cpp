@@ -448,6 +448,8 @@ int Application::Run() {
 
         // リンク切れの繋ぎ直しも読み込みなので、同じくフレームの外で行う。
         ProcessPendingTextureRelinks();
+        // コンボで選んだ未読み込みのマテリアル。
+        ProcessPendingMaterialLoads();
 
         // サムネイルの生成も GPU 待機を伴う。
         m_materialLibrary.ProcessPendingWork(m_device, m_pipelineCache, m_textureLibrary);

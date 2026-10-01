@@ -14,7 +14,7 @@ namespace rock {
 
 // レイヤー 1 枚ぶんのプロパティ行。グラフパネルの下段から使う。
 // 変更の記録（アンドゥ / グラフの再コンパイル）は呼び出し側で行う。
-bool Application::DrawLayerSettings(compositor::MaterialLayer& layer) {
+bool Application::DrawLayerSettings(compositor::MaterialLayer& layer, graph::GraphId nodeId) {
     // 既定値マーカーは追加時の初期値と揃える。
     const compositor::MaterialLayer& defaults = kDefaultLayer;
     bool changed = false;
@@ -51,7 +51,16 @@ bool Application::DrawLayerSettings(compositor::MaterialLayer& layer) {
     // マテリアルの割り当て。
     ui::SectionHeader("マテリアル");
     if (ui::BeginPropertyTable("layerMaterialRows")) {
-        changed |= DrawMaterialSlotRow("マテリアル", layer.material, m_materialLibrary);
+        // 未読み込みのマテリアルは、読み込んだ後でこの Surface ノードへ割り当てる（ノードが消えていれば何もしない）。
+        changed |= DrawMaterialSlotRow("マテリアル", layer.material, m_materialLibrary, false,
+                                       "「なし」ならレイヤーの定数値だけで塗る。ルートの未読み込みのマテリアルも選べる",
+                                       MaterialFilesForUi([this, nodeId](compositor::MaterialAssetId id) {
+                                           graph::Node* node = m_graph.FindMutableNode(nodeId);
+                                           auto* settings = node ? std::get_if<graph::LayerNodeSettings>(&node->settings) : nullptr;
+                                           if (settings == nullptr) return;
+                                           settings->layer.material = id;
+                                           m_graph.MarkDirty();
+                                       }));
         ui::EndPropertyTable();
     }
     if (const compositor::MaterialAsset* material = m_materialLibrary.Find(layer.material);

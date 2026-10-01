@@ -340,7 +340,11 @@ void Application::DrawModelPreviewWindow() {
                 const std::string& slotName = asset.geometry->slots[i].name;
                 const std::string label = slotName.empty() ? "スロット " + std::to_string(i + 1) : slotName;
                 changed |= DrawMaterialSlotRow(label.c_str(), asset.materials[i], m_materialLibrary, true,
-                                               "FBX のマテリアル名。「なし」は灰色で描く。マテリアルをドラッグして割り当てもできる");
+                                               "FBX のマテリアル名。「なし」は灰色で描く。マテリアルをドラッグして割り当てもできる",
+                                               MaterialFilesForUi([this, model = asset.id, i](compositor::MaterialAssetId id) {
+                                                   for (auto& entry : m_models)
+                                                       if (entry.id == model && i < entry.materials.size()) entry.materials[i] = id;
+                                               }));
                 ImGui::PopID();
             }
             ui::EndPropertyTable();

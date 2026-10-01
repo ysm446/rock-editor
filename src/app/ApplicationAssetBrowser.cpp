@@ -300,6 +300,40 @@ void Application::DrawAssetDeleteDialog() {
     ImGui::EndPopup();
 }
 
+MaterialFileChoices Application::MaterialFilesForUi(std::function<void(compositor::MaterialAssetId)> assign) {
+    if (!m_workspace.IsOpen()) return {};
+    return {&m_workspaceMaterials, m_workspace.Root(), [this, assign = std::move(assign)](const fs::path& path) {
+                m_pendingMaterialLoads.push_back({path, assign});
+            }};
+}
+
+// コンボで選んだ未読み込みのマテリアルを読み込んで割り当てる。**フレームの外で呼ぶこと**（画像の読み込みを伴う）。
+void Application::ProcessPendingMaterialLoads() {
+    if (m_pendingMaterialLoads.empty()) return;
+    std::vector<MaterialLoadRequest> requests;
+    requests.swap(m_pendingMaterialLoads);
+    const auto find = [this](const fs::path& path) {
+        for (const auto& entry : m_materialLibrary.Entries())
+            if (!entry.assetPath.empty() && SameFile(entry.assetPath, path)) return entry.id;
+        return compositor::kNoMaterialAsset;
+    };
+    for (const auto& request : requests) {
+        compositor::MaterialAssetId id = find(request.path);
+        if (id == compositor::kNoMaterialAsset &&
+            io::LoadSharedAsset(m_workspace, request.path, m_device, m_pipelineCache, m_textureLibrary, m_materialLibrary,
+                                m_skyLibrary))
+            id = find(request.path);
+        if (id == compositor::kNoMaterialAsset) {
+            ROCK_LOG_ERROR("マテリアルを読み込めません: %s", ToUtf8Display(request.path).c_str());
+            continue;
+        }
+        request.assign(id);
+        m_renderer.InvalidateSceneMaterials();
+        MarkDocumentChanged();
+    }
+    m_assetRefresh = true;
+}
+
 void Application::ResumeSceneSwitch() {
     m_pendingRoot = std::move(m_deferredRoot);
     m_deferredRoot.clear();
@@ -367,6 +401,7 @@ void Application::RefreshAssetBrowser() {
     // 同じ走査で画像ファイルも集める（テクスチャのコンボに未読み込みの候補として出す）。
     m_assetFolders.clear();
     m_workspaceImages.clear();
+    m_workspaceMaterials.clear();
     const auto collect = [&](auto&& self, const fs::path& directory, int depth) -> void {
         if (depth > 32) return;
         auto& children = m_assetFolders[directory.wstring()];
@@ -375,13 +410,17 @@ void Application::RefreshAssetBrowser() {
         for (; child != childEnd && !scanError; child.increment(scanError)) {
             if (child->is_symlink(scanError) || child->path().filename().wstring().starts_with(L".")) continue;
             if (child->is_directory(scanError)) children.push_back(child->path());
-            else if (IsImage(Extension(child->path()))) m_workspaceImages.push_back(child->path());
+            else if (const auto ext = Extension(child->path()); IsImage(ext)) m_workspaceImages.push_back(child->path());
+            else if (ext == ".rockmat" || ext == ".tglayer") m_workspaceMaterials.push_back(child->path());
         }
         std::sort(children.begin(), children.end());
         for (const auto& path : children) self(self, path, depth + 1);
     };
     collect(collect, m_workspace.Root(), 0);
     std::sort(m_workspaceImages.begin(), m_workspaceImages.end(), [](const fs::path& a, const fs::path& b) {
+        return _wcsicmp(a.filename().c_str(), b.filename().c_str()) < 0;
+    });
+    std::sort(m_workspaceMaterials.begin(), m_workspaceMaterials.end(), [](const fs::path& a, const fs::path& b) {
         return _wcsicmp(a.filename().c_str(), b.filename().c_str()) < 0;
     });
     std::error_code stampError;

@@ -135,10 +135,20 @@ inline bool AcceptMaterialDrop(compositor::MaterialAssetId& slot) {
     return changed;
 }
 
-// マテリアルを選ぶ行。サムネイル付きの一覧から選ぶ。
+// マテリアルのコンボの、ルートにある未読み込みのマテリアル（.rockmat / .tglayer）。
+// 選ぶと request を呼ぶ。読み込みは GPU の待機を伴うので、割り当ては読み込んだ後（フレームの外）で行う。
+struct MaterialFileChoices {
+    const std::vector<std::filesystem::path>* files = nullptr;
+    // ツールチップに出す相対パスの基準。
+    std::filesystem::path root;
+    std::function<void(const std::filesystem::path&)> request;
+};
+
+// マテリアルを選ぶ行。サムネイル付きの一覧から選ぶ。unloaded を渡すと、未読み込みのマテリアルも候補に出す。
 inline bool DrawMaterialSlotRow(const char* label, compositor::MaterialAssetId& slot,
                          const compositor::MaterialLibrary& library, bool showThumbnail = false,
-                         const char* hint = "「なし」ならレイヤーの定数値だけで塗る") {
+                         const char* hint = "「なし」ならレイヤーの定数値だけで塗る",
+                         const MaterialFileChoices& unloaded = {}) {
     ui::PropertyLabel(label, hint);
 
     std::string preview = "なし";
@@ -182,6 +192,35 @@ inline bool DrawMaterialSlotRow(const char* label, compositor::MaterialAssetId& 
             if (ImGui::Selectable(asset.name.c_str(), slot == asset.id)) {
                 slot = asset.id;
                 changed = true;
+            }
+            ImGui::PopID();
+        }
+        // 未読み込みのマテリアル。突き合わせはファイルシステムに触らない比較で行う（開いている間は毎フレーム回るため）。
+        if (unloaded.files != nullptr && unloaded.request) {
+            const auto key = [](const std::filesystem::path& path) {
+                std::wstring text = path.lexically_normal().wstring();
+                for (wchar_t& c : text) c = c == L'/' ? L'\\' : static_cast<wchar_t>(std::towlower(c));
+                return text;
+            };
+            std::unordered_set<std::wstring> loaded;
+            for (const compositor::MaterialAsset& asset : library.Entries())
+                if (!asset.assetPath.empty()) loaded.insert(key(asset.assetPath));
+            bool header = false;
+            // 読み込み済みの行は ID を数値で積むので、別の名前空間に入れて衝突させない。
+            ImGui::PushID("unloaded");
+            for (size_t i = 0; i < unloaded.files->size(); ++i) {
+                const std::filesystem::path& file = (*unloaded.files)[i];
+                if (loaded.contains(key(file))) continue;
+                if (!header) {
+                    ImGui::SeparatorText("未読み込み");
+                    header = true;
+                }
+                ImGui::PushID(static_cast<int>(i));
+                if (ImGui::Selectable(ToUtf8Display(file.stem()).c_str(), false)) unloaded.request(file);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s\n選ぶと読み込んで割り当てる", ToUtf8Display(file.lexically_relative(unloaded.root)).c_str());
+                }
+                ImGui::PopID();
             }
             ImGui::PopID();
         }
