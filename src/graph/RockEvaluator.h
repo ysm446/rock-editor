@@ -58,7 +58,8 @@ struct RockInstanceSet {
     std::vector<geometry::RockInstance> instances;
 };
 struct RockEvaluation {
-    std::shared_ptr<const geometry::StructurePlanes> planes;
+    // 構造面の系統（Parallel Planes を連結した順）。
+    std::shared_ptr<const std::vector<geometry::StructurePlanes>> planes;
     std::shared_ptr<const geometry::PointSet> points;
     std::shared_ptr<const geometry::PieceCollection> pieces;
     std::shared_ptr<const geometry::PieceSelection> selection;

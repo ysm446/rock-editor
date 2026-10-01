@@ -45,6 +45,8 @@ void Application::DrawPieceSettings(graph::Node &node) {
             changed |= ui::PropertyFloat3Input("伸長 XYZ", voronoi->stretch.data(), one) != 0;
             ui::EndPropertyTable();
         }
+        ui::HintText("Points（Scatter Points）か Planes（Parallel Planes）のどちらか一方を接続します。"
+                     "Planes は連結した全系統の面で節理のブロックに割ります（方向と伸長は使いません）。");
         ui::HintText("Yの伸長を4にすると縦に長い分割片になります。倍率の最大/"
                      "最小比は16以下。最初はノイズ0のBoxを使用してください。");
         ui::SectionHeader("表示");
@@ -86,6 +88,9 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 }
                 changed |= ui::PropertyFloat("ばらつき", &selection->peelNoise, 0, 1, .15f,
                     "大きいほど欠ける順序に揺らぎを加えます。0では支持面積だけで決まり、Seedは影響しません。");
+                changed |= ui::PropertyBool("接地", &selection->grounded, false,
+                    "下向きの外面を地面に支えられた面として扱い、そこからは欠きません。"
+                    "地面から生えた岩（岩峰・露頭・崖）が上と横から欠け、根元が最後まで残ります。");
                 ui::PropertyLabelEmpty("peelRetry");
                 ImGui::BeginDisabled(selection->peelNoise == 0);
                 if (ImGui::Button("別の欠け方を試す")) {

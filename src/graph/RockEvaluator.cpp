@@ -130,7 +130,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(selection->mode); add(selection->outerFaces); add(selection->seed); add(selection->minimum); add(selection->maximum);
         add(selection->minVolume); add(selection->maxVolume); add(selection->fraction); add(selection->invert); add(selection->producer); add(selection->generation); add(selection->layer);
         add(selection->rimLayers); add(selection->rimSide); add(selection->rimFalloff);
-        add(selection->peelNoise); add(selection->protectCore);
+        add(selection->peelNoise); add(selection->protectCore); add(selection->grounded);
         add(selection->ids.size()); for (auto value : selection->ids) add(value);
     } else if (const auto* filter = std::get_if<geometry::PieceFilterSettings>(&node->settings)) {
         add(filter->keep);
@@ -307,7 +307,17 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             std::string error;
             auto planes = geometry::MakeParallelPlanes(*settings, error);
             if (!error.empty()) return finish(Failure(id, "Parallel Planes", error));
-            result.planes = std::make_shared<const geometry::StructurePlanes>(planes);
+            // 上流の系統にこの系統を足す。
+            std::vector<geometry::StructurePlanes> sets;
+            if (const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id)) {
+                const auto previous = evaluate(upstream->id, depth + 1);
+                if (!previous.error.empty()) return finish(previous);
+                if (!previous.planes) return finish(Failure(id, "Parallel Planes", "Planes 入力には Parallel Planes を接続してください"));
+                sets = *previous.planes;
+            }
+            if (sets.size() >= 8) return finish(Failure(id, "Parallel Planes", "構造面の系統は 8 つまでです"));
+            sets.push_back(planes);
+            result.planes = std::make_shared<const std::vector<geometry::StructurePlanes>>(std::move(sets));
             return finish(std::move(result));
         } else if (IsPieceNodeKind(node->kind)) {
             auto pieces = EvaluatePieceNode(graph, *node, persistent, [&](GraphId upstream) { return evaluate(upstream, depth+1); }, stop);
@@ -326,14 +336,16 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (!result.error.empty()) return finish(result);
             if (result.hasModels || result.rocks.size() != 1 || result.rocks[0].volume)
                 return finish(Failure(id, "Structure Mask", "UV付きの生成メッシュを1つ接続してください（UV Unwrapの出力）"));
-            std::shared_ptr<const geometry::StructurePlanes> planes;
+            std::shared_ptr<const std::vector<geometry::StructurePlanes>> planes;
             if (planesNode) {
                 const auto planeResult = evaluate(planesNode->id, depth + 1);
                 if (!planeResult.error.empty()) return finish(planeResult);
                 planes = planeResult.planes;
             }
             std::string error;
-            auto image = geometry::StructureMask(result.rocks[0].mesh, *settings, planes.get(), error, stop,
+            // 縞は最初の系統（連結の先頭）の層で塗る。
+            const geometry::StructurePlanes* first = planes && !planes->empty() ? &planes->front() : nullptr;
+            auto image = geometry::StructureMask(result.rocks[0].mesh, *settings, first, error, stop,
                                                  [&](int p) { report(id, 0, p); });
             if (!error.empty()) return finish(Failure(id, "Structure Mask", error));
             result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));

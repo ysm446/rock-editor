@@ -46,7 +46,7 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
         add(node.kind);
         add(bool(first.pieces));
         add(first.pieces ? first.pieces->fingerprint : geometry::MeshFingerprint(*mesh));
-        RockEvaluation points;
+        RockEvaluation points, planes;
         if (node.kind == NodeKind::ScatterPoints) {
             const auto &s = std::get<geometry::ScatterSettings>(node.settings);
             add(s.count);
@@ -54,16 +54,34 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
             add(s.version);
             add(s.planar);
         } else {
-            points = input(1);
-            if (!points.error.empty())
-                return points;
-            if (!points.points)
-                return fail("Points入力がありません");
-            add(points.points->fingerprint);
-            const auto &s = std::get<geometry::VoronoiSettings>(node.settings);
-            add(s.rotation);
-            add(s.stretch);
-            add(s.version);
+            const bool hasPoints = node.inputs.size() > 1 && graph.FindUpstreamNodeForPin(node.inputs[1].id);
+            const bool hasPlanes = node.inputs.size() > 2 && graph.FindUpstreamNodeForPin(node.inputs[2].id);
+            if (hasPoints && hasPlanes)
+                return fail("Points と Planes はどちらか一方だけを接続してください");
+            if (hasPlanes) {
+                planes = input(2);
+                if (!planes.error.empty())
+                    return planes;
+                if (!planes.planes || planes.planes->empty())
+                    return fail("Planes 入力には Parallel Planes を接続してください");
+                if (first.pieces)
+                    return fail("構造面で割るのは Mesh だけです（Pieces の再分割は未対応）");
+                for (const auto &set : *planes.planes) {
+                    add(set.normal.x); add(set.normal.y); add(set.normal.z);
+                    add(set.spacing); add(set.offset); add(set.variation); add(set.seed);
+                }
+            } else {
+                points = input(1);
+                if (!points.error.empty())
+                    return points;
+                if (!points.points)
+                    return fail("Points か Planes を接続してください");
+                add(points.points->fingerprint);
+                const auto &s = std::get<geometry::VoronoiSettings>(node.settings);
+                add(s.rotation);
+                add(s.stretch);
+                add(s.version);
+            }
         }
         if (cache)
             if (auto it = cache->pieceEntries.find(node.id);
@@ -76,7 +94,9 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
                 : geometry::ScatterPoints(*mesh,s,error,stop));
         } else {
             const auto& s=std::get<geometry::VoronoiSettings>(node.settings);
-            out.pieces = std::make_shared<const geometry::PieceCollection>(first.pieces
+            out.pieces = std::make_shared<const geometry::PieceCollection>(planes.planes
+                ? geometry::FracturePlanes(*mesh,*planes.planes,node.id,error,stop)
+                : first.pieces
                 ? geometry::FracturePieces(*first.pieces,*points.points,s,node.id,error,stop)
                 : geometry::FractureVoronoi(*mesh,*points.points,s,node.id,error,stop));
         }

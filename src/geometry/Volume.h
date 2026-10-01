@@ -323,6 +323,9 @@ std::vector<int> CutFaceAssignments(const Mesh& mesh, const PlaneCutsGuide& guid
 // 点は2～512個。形の外にあってもよい。格子（範囲・セル間隔）は入力のまま。
 VolumeGrid CrackVolume(const VolumeGrid& grid, const std::vector<Vec3>& points,
                        const VolumeCrackSettings& settings, std::string& error);
+// 構造面の系統（Parallel Planes を連結したもの）を全て 1 回で彫る。系統 0 の乱数は 1 系統のときと同じ。
+VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& grid, const std::vector<StructurePlanes>& planes,
+                                 const VolumeCrackSettings& settings, std::string& error);
 VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& grid, const StructurePlanes& planes,
                        const VolumeCrackSettings& settings, std::string& error);
 // settings.source が Shells のときの割れ目。面は入力の形から作る（点・構造面は使わない）。

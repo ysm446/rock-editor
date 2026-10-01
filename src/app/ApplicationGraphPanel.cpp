@@ -2023,8 +2023,9 @@ void Application::DrawGraphPanel() {
             ui::PropertyBool("平面を表示", &m_parallelPlanesShowFrames, true);
             ui::EndPropertyTable();
         }
-        ui::HintText("Planes を Volume Crack の Planes 入力につなぎます。向き0は水平面です。"
-                     "別方向の平行面と Volume Crack を追加すると複数系統で割れます。枠の大きさは表示範囲で、面自体は無限です。");
+        ui::HintText("Planes 出力を Volume Crack・Voronoi Fracture・Structure Mask の Planes 入力につなぎます。向き0は水平面です。"
+                     "Planes 入力に別の Parallel Planes をつなぐと、上流の系統にこの系統を足して渡します（節理系 1 → 2 → 3）。"
+                     "枠の大きさは表示範囲で、面自体は無限です。");
         if (changed) {
             edited.spacing = std::clamp(edited.spacing, .001f, 1000.f);
             edited.offset = std::clamp(edited.offset, -100000.f, 100000.f);

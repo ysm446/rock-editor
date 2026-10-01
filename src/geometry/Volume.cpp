@@ -1098,7 +1098,7 @@ static std::vector<float> BlurField(const VolumeGrid& g, float radius) {
     return field;
 }
 static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& points,
-                                  const StructurePlanes* planes, const VolumeCrackSettings& s,
+                                  const std::vector<StructurePlanes>* planes, const VolumeCrackSettings& s,
                                   std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {
@@ -1110,6 +1110,10 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
     if (shells && (!range(s.shellSpacing, .01f, .5f) || s.shellCount < 1 || s.shellCount > 32 ||
                    !range(s.shellSmoothing, 0, .3f) || !range(s.shellPeel, 0, 1))) {
         error = "殻の間隔は 0.01～0.5、枚数は 1～32、なめらかさは 0～0.3、剥がれは 0～1 にしてください";
+        return {};
+    }
+    if (planes && planes->empty()) {
+        error = "構造面がありません";
         return {};
     }
     if (!shells && !planes && (points.size() < 2 || points.size() > size_t(MaxCrackPoints))) {
@@ -1171,8 +1175,6 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
     const float threshold = out.spacing * 1e-4f;
     const float halfWidth = s.width * longest * .5f, depth = s.depth * longest;
     const float frequency = s.noiseScale / longest;
-    std::vector<StructurePlane> expanded;
-    std::vector<float> planeFactors;
     // 殻: なめらかにした距離場の等値面（深さ = 間隔 × k）。殻ごとの幅の倍率は k で決める。
     std::vector<float> smoothed, shellFactors;
     const float shellSpacing = s.shellSpacing * longest;
@@ -1181,37 +1183,53 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
         for (int k = 1; k <= s.shellCount; ++k)
             shellFactors.push_back(std::clamp(1 - s.variation * 2 * float(HashUnit(seed ^ (uint64_t(k) * 0x51Dull))), 0.f, 1.f));
     }
-    if (planes) {
-        const auto last = g.Position(g.dimensions[0]-1, g.dimensions[1]-1, g.dimensions[2]-1);
-        // 段違いでずれた割れ目が範囲の外の面から入ってくる分も展開する。
-        const float margin = halfWidth + (s.extent > 0 ? .45f * s.stagger * planes->spacing : 0);
-        expanded = ExpandParallelPlanes(*planes,
-            {g.origin.x-margin, g.origin.y-margin, g.origin.z-margin},
-            {last.x+margin, last.y+margin, last.z+margin}, error);
-        if (!error.empty()) return {};
-        for (const auto& plane : expanded)
-            planeFactors.push_back(std::clamp(1 - s.variation * 2 *
-                float(HashUnit(seed ^ uint64_t(plane.index))), 0.f, 1.f));
-    }
+    // 構造面の系統ごとの展開。系統 0 の乱数は 1 系統だけのときと同じ（既存のグラフの結果を変えない）。
     // 有限の割れ目: 面の上の座標 (u, v) を一辺 cell のセルに分け、セルごとに楕円の割れ目を 1 つ置くかを決める。
     // 楕円の中心はセルの中で ±0.3 セル、半径は 0.35～0.75 セルなので、届くのは隣のセルまで（3×3 を見ればよい）。
+    struct PlaneSet {
+        Vec3 normal, axisU{1, 0, 0}, axisV{0, 0, 1};
+        std::vector<StructurePlane> expanded;
+        std::vector<float> factors;
+        float maxShift = 0;
+        uint64_t seed = 0;
+    };
+    std::vector<PlaneSet> sets;
     const bool finite = planes && s.extent > 0;
     const float cell = s.extent * longest;
-    const float maxShift = planes ? .45f * s.stagger * planes->spacing : 0;
-    Vec3 axisU{1, 0, 0}, axisV{0, 0, 1};
-    if (finite) {
-        const Vec3 n = planes->normal;
-        const Vec3 up = std::abs(n.y) < .9f ? Vec3{0, 1, 0} : Vec3{1, 0, 0};
-        axisU = {n.y * up.z - n.z * up.y, n.z * up.x - n.x * up.z, n.x * up.y - n.y * up.x};
-        const float length = std::sqrt(Dot(axisU, axisU));
-        axisU = {axisU.x / length, axisU.y / length, axisU.z / length};
-        axisV = {n.y * axisU.z - n.z * axisU.y, n.z * axisU.x - n.x * axisU.z, n.x * axisU.y - n.y * axisU.x};
+    if (planes) {
+        const auto last = g.Position(g.dimensions[0]-1, g.dimensions[1]-1, g.dimensions[2]-1);
+        for (size_t k = 0; k < planes->size(); ++k) {
+            const StructurePlanes& source = (*planes)[k];
+            PlaneSet set;
+            set.normal = source.normal;
+            set.seed = seed ^ (uint64_t(k) * 0xD1B54A32D192ED03ull);
+            set.maxShift = finite ? .45f * s.stagger * source.spacing : 0;
+            // 段違いでずれた割れ目が範囲の外の面から入ってくる分も展開する。
+            const float margin = halfWidth + set.maxShift;
+            set.expanded = ExpandParallelPlanes(source,
+                {g.origin.x-margin, g.origin.y-margin, g.origin.z-margin},
+                {last.x+margin, last.y+margin, last.z+margin}, error);
+            if (!error.empty()) return {};
+            for (const auto& plane : set.expanded)
+                set.factors.push_back(std::clamp(1 - s.variation * 2 *
+                    float(HashUnit(set.seed ^ uint64_t(plane.index))), 0.f, 1.f));
+            if (finite) {
+                const Vec3 n = source.normal;
+                const Vec3 up = std::abs(n.y) < .9f ? Vec3{0, 1, 0} : Vec3{1, 0, 0};
+                const Vec3 u{n.y * up.z - n.z * up.y, n.z * up.x - n.x * up.z, n.x * up.y - n.y * up.x};
+                const float length = std::sqrt(Dot(u, u));
+                set.axisU = {u.x / length, u.y / length, u.z / length};
+                set.axisV = {n.y * set.axisU.z - n.z * set.axisU.y, n.z * set.axisU.x - n.x * set.axisU.z,
+                             n.x * set.axisU.y - n.y * set.axisU.x};
+            }
+            sets.push_back(std::move(set));
+        }
     }
     // 面 plane の割れ目のうち、点 (u, v, 法線方向の位置 t) に最も深く届くものの「幅 − 距離」。届かなければ -最大。
-    const auto finiteCarve = [&](const StructurePlane& plane, float width, float u, float v, float t) {
+    const auto finiteCarve = [&](const PlaneSet& set, const StructurePlane& plane, float width, float u, float v, float t) {
         float best = -std::numeric_limits<float>::max();
         const int64_t cu = int64_t(std::floor(u / cell)), cv = int64_t(std::floor(v / cell));
-        const uint64_t planeKey = seed ^ (uint64_t(plane.index) * 0x9E3779B97F4A7C15ull);
+        const uint64_t planeKey = set.seed ^ (uint64_t(plane.index) * 0x9E3779B97F4A7C15ull);
         for (int64_t j = cv - 1; j <= cv + 1; ++j)
             for (int64_t i = cu - 1; i <= cu + 1; ++i) {
                 const uint64_t key = planeKey ^ (uint64_t(i) * 0xC2B2AE3D27D4EB4Full) ^ (uint64_t(j) * 0x165667B19E3779F9ull);
@@ -1228,7 +1246,7 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
                 if (r2 >= 1) continue;
                 // 楕円の開口: 中心で最も広く、縁で 0（先端が閉じる）。
                 const float open = width * std::sqrt(1 - r2);
-                const float shift = (2 * unit(0x77) - 1) * maxShift;
+                const float shift = (2 * unit(0x77) - 1) * set.maxShift;
                 best = std::max(best, open - std::abs(t - (plane.offset + shift)));
             }
         return best;
@@ -1271,16 +1289,18 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
                     if (width > 0) value = std::max(value, width - std::abs(depthAlong - float(k0) * shellSpacing));
                 }
             } else if (planes) {
-                const float projected = Dot(planes->normal, p);
-                const float u = finite ? Dot(axisU, p) : 0, v = finite ? Dot(axisV, p) : 0;
-                for (size_t i = 0; i < expanded.size(); ++i) {
-                    const float width = reach * planeFactors[i];
-                    // 閉じた面は彫らない。幅0の面をゼロ距離で評価すると、格子上に偽の隙間ができる。
-                    if (!(width > 0)) continue;
-                    if (!finite) {
-                        value = std::max(value, width - std::abs(projected - expanded[i].offset));
-                    } else if (std::abs(projected - expanded[i].offset) < width + maxShift) {
-                        value = std::max(value, finiteCarve(expanded[i], width, u, v, projected));
+                for (const PlaneSet& set : sets) {
+                    const float projected = Dot(set.normal, p);
+                    const float u = finite ? Dot(set.axisU, p) : 0, v = finite ? Dot(set.axisV, p) : 0;
+                    for (size_t i = 0; i < set.expanded.size(); ++i) {
+                        const float width = reach * set.factors[i];
+                        // 閉じた面は彫らない。幅0の面をゼロ距離で評価すると、格子上に偽の隙間ができる。
+                        if (!(width > 0)) continue;
+                        if (!finite) {
+                            value = std::max(value, width - std::abs(projected - set.expanded[i].offset));
+                        } else if (std::abs(projected - set.expanded[i].offset) < width + set.maxShift) {
+                            value = std::max(value, finiteCarve(set, set.expanded[i], width, u, v, projected));
+                        }
                     }
                 }
             } else {
@@ -1343,9 +1363,13 @@ VolumeGrid CrackVolume(const VolumeGrid& g, const std::vector<Vec3>& points,
                        const VolumeCrackSettings& s, std::string& error) {
     return CrackVolumeImpl(g, points, nullptr, s, error);
 }
-VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& g, const StructurePlanes& planes,
+VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& g, const std::vector<StructurePlanes>& planes,
                        const VolumeCrackSettings& s, std::string& error) {
     return CrackVolumeImpl(g, {}, &planes, s, error);
+}
+VolumeGrid CrackVolumeWithPlanes(const VolumeGrid& g, const StructurePlanes& planes,
+                       const VolumeCrackSettings& s, std::string& error) {
+    return CrackVolumeWithPlanes(g, std::vector<StructurePlanes>{planes}, s, error);
 }
 VolumeGrid CrackVolumeWithShells(const VolumeGrid& g, const VolumeCrackSettings& s, std::string& error) {
     VolumeCrackSettings shells = s;

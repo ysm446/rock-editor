@@ -451,8 +451,10 @@ void TestParallelPlanes() {
         source=g.CreateNode(graph::NodeKind::ParallelPlanes), cut=g.CreateNode(graph::NodeKind::VolumeCrack),
         scatter=g.CreateNode(graph::NodeKind::ScatterPoints);
     const auto link=[&](auto a,auto b,int pin){return g.CreateLink(g.FindNode(a)->outputs[0].id,g.FindNode(b)->inputs[pin].id);};
-    Check(g.FindNode(source)->inputs.empty() && g.FindNode(source)->outputs[0].valueType==graph::ValueType::Planes,
-          "平行面は母岩に依存せず専用Planes型を出力する");
+    // 入力は上流の系統（Planes）だけで、母岩には依存しない。
+    Check(g.FindNode(source)->inputs.size()==1 && g.FindNode(source)->inputs[0].valueType==graph::ValueType::Planes &&
+          g.FindNode(source)->outputs[0].valueType==graph::ValueType::Planes,
+          "平行面は母岩に依存せず専用Planes型を出力する（入力は上流の系統だけ）");
     Check(!g.CanCreateLink(g.FindNode(source)->outputs[0].id,g.FindNode(cut)->inputs[1].id), "PlanesはPoints入力には接続できない");
     Check(link(base,volume,0) && link(volume,cut,0) && link(source,cut,2), "平行面を割れ目ノードへ接続できる");
     std::get<VolumeSettings>(g.FindMutableNode(volume)->settings).resolution=32;

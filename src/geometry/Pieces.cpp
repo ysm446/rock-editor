@@ -1,4 +1,5 @@
 #include "geometry/Pieces.h"
+#include "geometry/Volume.h"
 #include <algorithm>
 #include <atomic>
 #include <bit>
@@ -121,6 +122,121 @@ struct Built {
     double volume = 0;
     PieceError error = PieceOk;
 };
+// 切り出した凸多面体 1 つからピースを作る（メッシュ・隣接面の面積・体積・重心）。
+// 面の neighbor は隣のピースの番号（Voronoi では点の番号、構造面では仮のセル番号）。
+void BuildPiece(const Poly &poly, D origin, double scale, uint32_t pieceId, Built &out) {
+    Mesh result;
+    std::map<uint32_t, uint32_t> remap;
+    std::vector<uint8_t> origins;
+    uint32_t outer = 0;
+    auto neighborhood = std::make_shared<PieceNeighborhood>();
+    const auto vertex = [&](uint32_t id) {
+        auto [it, added] = remap.emplace(id, uint32_t(result.positions.size()));
+        if (added)
+            result.positions.push_back(F(origin + poly.vertices[id] * scale));
+        return it->second;
+    };
+    for (const auto &face : poly.faces) {
+        D center{};
+        for (auto id : face.ids)
+            center = center + poly.vertices[id];
+        center = center * (1.0 / face.ids.size());
+        auto c = uint32_t(result.positions.size());
+        result.positions.push_back(F(origin + center * scale));
+        for (size_t k = 0; k < face.ids.size(); ++k) {
+            auto a = vertex(face.ids[k]), b = vertex(face.ids[(k + 1) % face.ids.size()]);
+            result.triangles.push_back({c, a, b});
+            origins.push_back(face.original ? 1 : 0);
+        }
+        D area{};
+        for (size_t k=0;k<face.ids.size();++k)
+            area = area + Cross(poly.vertices[face.ids[k]]-center,
+                                poly.vertices[face.ids[(k+1)%face.ids.size()]]-center)*(.5*scale*scale);
+        if (Length(area) > scale*scale*1e-12) {
+            const std::array<double,3> vector{area.x,area.y,area.z};
+            if (face.neighbor >= 0) neighborhood->contacts.push_back({uint32_t(face.neighbor),vector});
+            else neighborhood->boundary.push_back(vector);
+        }
+        outer |= face.outer;
+    }
+    MeshInfo info;
+    if (!InspectMesh(result, info) || !info.closed || info.components != 1 ||
+        info.volume <= scale * scale * scale * 1e-14) {
+        out.error = PieceTooSmall;
+        return;
+    }
+    D center{}, base = V(result.positions[0]);
+    double volume = 0;
+    for (auto t : result.triangles) {
+        auto a = V(result.positions[t[0]]) - base, b = V(result.positions[t[1]]) - base,
+             c = V(result.positions[t[2]]) - base;
+        double v = Dot(a, Cross(b, c)) / 6;
+        volume += v;
+        center = center + (a + b + c) * (v / 4);
+    }
+    auto &piece = out.piece;
+    piece.id = pieceId;
+    piece.neighborhood = std::move(neighborhood);
+    piece.centroid = F(base + center * (1 / volume));
+    piece.volume = info.volume;
+    piece.outerFaces = outer;
+    piece.mesh = std::make_shared<const Mesh>(std::move(result));
+    piece.faceOrigins = std::make_shared<const std::vector<uint8_t>>(std::move(origins));
+    out.volume = info.volume;
+}
+// 並列に切り出した片をID順にまとめる。診断・三角形数の上限・分割前後の体積の一致を確かめ、
+// 両側の切断計算に由来する隣接面の面積の微小な差を揃える。
+bool CollectPieces(std::vector<Built> &built, const Mesh &mesh, PieceCollection &out, std::string &error) {
+    double total = 0;
+    size_t triangles = 0;
+    for (auto &item : built) {
+        if (item.error == PieceCancelled || (item.error == PieceOk && !item.piece.mesh)) {
+            error = "評価をキャンセルしました";
+            return false;
+        }
+        if (item.error == PieceOpenCut) {
+            error = "切断境界を閉じられません。Seedを変更してください";
+            return false;
+        }
+        if (item.error == PieceTooSmall) {
+            error = "微小片または精度不足の面を検出しました。Seed・寸法・伸長倍率を調整してください";
+            return false;
+        }
+        triangles += item.piece.mesh->triangles.size();
+        if (triangles > 250000) {
+            error = "出力が25万三角形を超えました";
+            return false;
+        }
+        total += item.volume;
+        out.pieces.push_back(std::move(item.piece));
+    }
+    MeshInfo source;
+    InspectMesh(mesh, source);
+    if (std::abs(total - source.volume) > source.volume * 2e-5) {
+        error = "分割前後の体積が一致しません";
+        return false;
+    }
+    // 両側の切断計算に由来する微小な差を揃え、面積ゼロの接触を除く。
+    std::vector<std::shared_ptr<PieceNeighborhood>> neighborhoods;
+    for (const auto& p : out.pieces) neighborhoods.push_back(std::make_shared<PieceNeighborhood>(*p.neighborhood));
+    for (size_t i=0;i<neighborhoods.size();++i) {
+        auto& contacts=neighborhoods[i]->contacts;
+        std::erase_if(contacts,[&](const auto& contact) {
+            const auto& other=neighborhoods[contact.neighbor]->contacts;
+            return std::none_of(other.begin(),other.end(),[&](const auto& back){return back.neighbor==i;});
+        });
+        for (auto& contact : contacts) if (contact.neighbor>i) {
+            auto& other=neighborhoods[contact.neighbor]->contacts;
+            auto back=std::find_if(other.begin(),other.end(),[&](const auto& v){return v.neighbor==i;});
+            for (int k=0;k<3;++k) {
+                const double area=(contact.areaVector[k]-back->areaVector[k])*.5;
+                contact.areaVector[k]=area; back->areaVector[k]=-area;
+            }
+        }
+    }
+    for (size_t i=0;i<out.pieces.size();++i) out.pieces[i].neighborhood=neighborhoods[i];
+    return true;
+}
 // 同じ辺の交点を一度だけ生成し、切断面は境界辺の逆向きの閉路から作る。
 bool Clip(Poly &poly, Plane plane, int neighbor) {
     // 片ごとに点数−1回呼ばれる。距離の配列は使い回し、呼び出しごとの確保を避ける。
@@ -558,112 +674,152 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
                 reach = 2 * radius();
             }
         }
-        Mesh result;
-        std::map<uint32_t, uint32_t> remap;
-        std::vector<uint8_t> origins;
-        uint32_t outer = 0;
-        auto neighborhood = std::make_shared<PieceNeighborhood>();
-        const auto vertex = [&](uint32_t id) {
-            auto [it, added] = remap.emplace(id, uint32_t(result.positions.size()));
-            if (added)
-                result.positions.push_back(F(origin + poly.vertices[id] * scale));
-            return it->second;
-        };
-        for (const auto &face : poly.faces) {
-            D center{};
-            for (auto id : face.ids)
-                center = center + poly.vertices[id];
-            center = center * (1.0 / face.ids.size());
-            auto c = uint32_t(result.positions.size());
-            result.positions.push_back(F(origin + center * scale));
-            for (size_t k = 0; k < face.ids.size(); ++k) {
-                auto a = vertex(face.ids[k]), b = vertex(face.ids[(k + 1) % face.ids.size()]);
-                result.triangles.push_back({c, a, b});
-                origins.push_back(face.original ? 1 : 0);
-            }
-            D area{};
-            for (size_t k=0;k<face.ids.size();++k)
-                area = area + Cross(poly.vertices[face.ids[k]]-center,
-                                    poly.vertices[face.ids[(k+1)%face.ids.size()]]-center)*(.5*scale*scale);
-            if (Length(area) > scale*scale*1e-12) {
-                const std::array<double,3> vector{area.x,area.y,area.z};
-                if (face.neighbor >= 0) neighborhood->contacts.push_back({uint32_t(face.neighbor),vector});
-                else neighborhood->boundary.push_back(vector);
-            }
-            outer |= face.outer;
-        }
-        MeshInfo info;
-        if (!InspectMesh(result, info) || !info.closed || info.components != 1 ||
-            info.volume <= scale * scale * scale * 1e-14)
-            return fail(PieceTooSmall);
-        D center{}, base = V(result.positions[0]);
-        double volume = 0;
-        for (auto t : result.triangles) {
-            auto a = V(result.positions[t[0]]) - base, b = V(result.positions[t[1]]) - base,
-                 c = V(result.positions[t[2]]) - base;
-            double v = Dot(a, Cross(b, c)) / 6;
-            volume += v;
-            center = center + (a + b + c) * (v / 4);
-        }
-        auto &piece = built[i].piece;
-        piece.id = uint32_t(i);
-        piece.neighborhood = std::move(neighborhood);
-        piece.centroid = F(base + center * (1 / volume));
-        piece.volume = info.volume;
-        piece.outerFaces = outer;
-        piece.mesh = std::make_shared<const Mesh>(std::move(result));
-        piece.faceOrigins = std::make_shared<const std::vector<uint8_t>>(std::move(origins));
-        built[i].volume = info.volume;
+        BuildPiece(poly, origin, scale, uint32_t(i), built[i]);
     });
-    double total = 0;
-    size_t triangles = 0;
-    for (auto &item : built) {
-        if (item.error == PieceCancelled || (item.error == PieceOk && !item.piece.mesh)) {
-            error = "評価をキャンセルしました";
-            return {};
-        }
-        if (item.error == PieceOpenCut) {
-            error = "切断境界を閉じられません。Seedを変更してください";
-            return {};
-        }
-        if (item.error == PieceTooSmall) {
-            error = "微小片または精度不足の面を検出しました。Seed・寸法・伸長倍率を調整してください";
-            return {};
-        }
-        triangles += item.piece.mesh->triangles.size();
-        if (triangles > 250000) {
-            error = "出力が25万三角形を超えました";
-            return {};
-        }
-        total += item.volume;
-        out.pieces.push_back(std::move(item.piece));
-    }
-    MeshInfo source;
-    InspectMesh(mesh, source);
-    if (std::abs(total - source.volume) > source.volume * 2e-5) {
-        error = "分割前後の体積が一致しません";
+    if (!CollectPieces(built, mesh, out, error))
+        return {};
+    out.adjacencyComplete=true;
+    RefreshPieceFingerprint(out);
+    return out;
+}
+// 構造面（節理・層理）の系統で割る。系統ごとに隣り合う面のあいだの板（スラブ）を作り、全系統の板の重なりを
+// 1 つのピースにする（セル）。隣のセルは系統の板の番号が 1 つだけ違うもの。ピースは凸のまま。
+PieceCollection FracturePlanes(const Mesh &mesh, const std::vector<StructurePlanes> &sets, int producer,
+                               std::string &error, std::stop_token stop) {
+    error.clear();
+    if (sets.empty()) {
+        error = "構造面を接続してください";
         return {};
     }
-    // 両側の切断計算に由来する微小な差を揃え、面積ゼロの接触を除く。
-    std::vector<std::shared_ptr<PieceNeighborhood>> neighborhoods;
-    for (const auto& p : out.pieces) neighborhoods.push_back(std::make_shared<PieceNeighborhood>(*p.neighborhood));
-    for (size_t i=0;i<neighborhoods.size();++i) {
-        auto& contacts=neighborhoods[i]->contacts;
-        std::erase_if(contacts,[&](const auto& contact) {
-            const auto& other=neighborhoods[contact.neighbor]->contacts;
-            return std::none_of(other.begin(),other.end(),[&](const auto& back){return back.neighbor==i;});
-        });
-        for (auto& contact : contacts) if (contact.neighbor>i) {
-            auto& other=neighborhoods[contact.neighbor]->contacts;
-            auto back=std::find_if(other.begin(),other.end(),[&](const auto& v){return v.neighbor==i;});
-            for (int k=0;k<3;++k) {
-                const double area=(contact.areaVector[k]-back->areaVector[k])*.5;
-                contact.areaVector[k]=area; back->areaVector[k]=-area;
-            }
+    Poly initial;
+    std::vector<Plane> sourcePlanes;
+    D origin;
+    double scale;
+    if (!Source(mesh, initial, sourcePlanes, origin, scale, error, stop))
+        return {};
+    MeshInfo info;
+    InspectMesh(mesh, info);
+    // 系統ごとに、形の範囲を通る面の位置（法線方向）。
+    struct Slabs {
+        D normal;
+        std::vector<double> offsets;
+    };
+    std::vector<Slabs> slabs;
+    size_t cells = 1;
+    for (const auto &set : sets) {
+        std::string expandError;
+        const auto planes = ExpandParallelPlanes(set, info.minimum, info.maximum, expandError);
+        if (!expandError.empty()) {
+            error = expandError;
+            return {};
         }
+        Slabs item{V(set.normal), {}};
+        // 形の端に（ほぼ）重なる面は割らない。単精度の向きでは形の面とわずかにずれ、紙のように薄い切れ端ができる。
+        double low = std::numeric_limits<double>::max(), high = -low;
+        for (const auto &p : mesh.positions) {
+            low = std::min(low, Dot(item.normal, V(p)));
+            high = std::max(high, Dot(item.normal, V(p)));
+        }
+        const double tolerance = scale * 1e-5;
+        for (const auto &plane : planes)
+            if (plane.offset > low + tolerance && plane.offset < high - tolerance)
+                item.offsets.push_back(plane.offset);
+        std::sort(item.offsets.begin(), item.offsets.end());
+        cells *= item.offsets.size() + 1;
+        if (cells > 65536) {
+            error = "構造面で割るセルが多すぎます。平行面の間隔を広げてください";
+            return {};
+        }
+        slabs.push_back(std::move(item));
     }
-    for (size_t i=0;i<out.pieces.size();++i) out.pieces[i].neighborhood=neighborhoods[i];
-    out.adjacencyComplete=true;
+    std::vector<size_t> stride(slabs.size(), 1);
+    for (size_t k = 1; k < slabs.size(); ++k)
+        stride[k] = stride[k - 1] * (slabs[k - 1].offsets.size() + 1);
+    // 面 n·p = o を正規化した座標（Source と同じ q = (p − origin) / scale）へ写す。
+    const auto local = [&](D n, double offset) { return (offset - Dot(n, origin)) / scale; };
+    std::vector<Built> built(cells);
+    std::vector<uint8_t> present(cells, 0);
+    std::vector<size_t> order(cells);
+    std::iota(order.begin(), order.end(), size_t(0));
+    std::atomic<bool> cancelled{false};
+    std::for_each(std::execution::par, order.begin(), order.end(), [&](size_t cell) {
+        if (cancelled.load(std::memory_order_relaxed) || stop.stop_requested()) {
+            cancelled.store(true, std::memory_order_relaxed);
+            return;
+        }
+        auto poly = initial;
+        for (size_t k = 0; k < slabs.size(); ++k) {
+            const size_t index = (cell / stride[k]) % (slabs[k].offsets.size() + 1);
+            const D n = slabs[k].normal;
+            // 上の面: n·p ≤ offsets[index]。下の面: n·p ≥ offsets[index − 1]。切り口の隣は板の番号 ±1 のセル。
+            if (index < slabs[k].offsets.size() &&
+                !Clip(poly, Plane{n, local(n, slabs[k].offsets[index])}, int(cell + stride[k]))) {
+                built[cell].error = PieceOpenCut;
+                return;
+            }
+            if (index > 0 && !Clip(poly, Plane{n * -1, -local(n, slabs[k].offsets[index - 1])}, int(cell - stride[k]))) {
+                built[cell].error = PieceOpenCut;
+                return;
+            }
+            if (poly.faces.empty())
+                return;
+            Compact(poly);
+        }
+        if (poly.faces.empty())
+            return;
+        BuildPiece(poly, origin, scale, uint32_t(cell), built[cell]);
+        // 面や頂点にかすっただけの薄すぎるセルは捨てる（体積が残れば、分割前後の体積の比較で診断される）。
+        if (built[cell].error == PieceTooSmall)
+            built[cell] = {};
+        else
+            present[cell] = 1;
+    });
+    if (cancelled.load()) {
+        error = "評価をキャンセルしました";
+        return {};
+    }
+    // 空のセルを詰め、ピースの番号を 0 から振り直す。隣接面の相手も新しい番号へ写す。
+    std::vector<int64_t> remap(cells, -1);
+    std::vector<Built> kept;
+    for (size_t cell = 0; cell < cells; ++cell)
+        if (present[cell] || built[cell].error != PieceOk) {
+            remap[cell] = int64_t(kept.size());
+            kept.push_back(std::move(built[cell]));
+        }
+    if (kept.size() > size_t(MaxScatterPoints)) {
+        error = "構造面で割ったピースは" + std::to_string(MaxScatterPoints) + "個までです。平行面の間隔を広げてください";
+        return {};
+    }
+    for (size_t i = 0; i < kept.size(); ++i) {
+        auto &item = kept[i];
+        if (!item.piece.mesh)
+            continue;
+        item.piece.id = uint32_t(i);
+        auto neighborhood = std::make_shared<PieceNeighborhood>(*item.piece.neighborhood);
+        std::erase_if(neighborhood->contacts, [&](const auto &contact) {
+            return contact.neighbor >= cells || remap[contact.neighbor] < 0;
+        });
+        for (auto &contact : neighborhood->contacts)
+            contact.neighbor = uint32_t(remap[contact.neighbor]);
+        item.piece.neighborhood = std::move(neighborhood);
+    }
+    PieceCollection out;
+    out.producer = producer;
+    Hash hash;
+    hash.Add(MeshFingerprint(mesh));
+    for (const auto &set : sets) {
+        hash.Float(set.normal.x);
+        hash.Float(set.normal.y);
+        hash.Float(set.normal.z);
+        hash.Float(set.spacing);
+        hash.Float(set.offset);
+        hash.Float(set.variation);
+        hash.Add(uint64_t(uint32_t(set.seed)));
+    }
+    out.generation = hash.value;
+    if (!CollectPieces(kept, mesh, out, error))
+        return {};
+    out.adjacencyComplete = true;
     RefreshPieceFingerprint(out);
     return out;
 }

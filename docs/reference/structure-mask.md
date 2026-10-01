@@ -1,7 +1,7 @@
 # Structure Mask — 岩の構造から素材の模様を作る
 
 作成日時: 2026-10-01 12:46
-更新日時: 2026-10-01 12:46
+更新日時: 2026-10-01 16:55
 
 ## 位置付け
 
@@ -44,3 +44,7 @@ Noise Mask と同じく、UV の画素ごとに表面の 3D 位置を求め、�
 ## 検証とサンプル
 
 `tests/ShapeMaskTests.cpp` の「Structure Mask」（Planes が無い縞の診断、縞が構造面に沿う、白と黒の層、塗る割合 0、脈は細い線、脈の残す割合 0、保存名、解像度）。範囲の端は `tests/NodeParamsTests.cpp`（テストの組み立てで Parallel Planes を繋ぐ）。レシピは `examples/ai-recipes/gneiss.rockgraph`（片麻岩）と `marble.rockgraph`（大理石）。どちらも素材ファイルを使わず、Surface の定数色で塗る。
+
+## 系統の連結との関係（2026-10-01）
+
+Parallel Planes を連結した系統を繋いだときは、最初の系統（連結の先頭）の層で縞を塗る。

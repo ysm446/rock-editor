@@ -1,5 +1,6 @@
 #include "TestSupport.h"
 #include "geometry/Pieces.h"
+#include "geometry/Volume.h"
 #include "graph/RockEvaluator.h"
 #include "io/PieceSettings.h"
 #include "geometry/UvUnwrap.h"
@@ -8,6 +9,7 @@
 #include <limits>
 #include "app/UndoHistory.h"
 static void RunLayeredPieceTests();
+static void RunPlaneFractureTests();
 void RunPieceErosionTests();
 void RunPieceTests() {
     using namespace rock::geometry;
@@ -260,6 +262,7 @@ void RunPieceTests() {
     }
     Check(farAccepted, "scattered points stay inside for Voronoi far from the origin");
     RunLayeredPieceTests();
+    RunPlaneFractureTests();
     RunPieceErosionTests();
 }
 
@@ -465,4 +468,138 @@ static void RunLayeredPieceTests() {
     std::get<VolumeSettings>(graph.FindMutableNode(volume)->settings).resolution=32;
     const auto voxel=EvaluateRocks(graph,volume,&cache);
     Check(voxel.error.empty() && voxel.rocks.size()==1 && voxel.rocks[0].volume,"欠けた板の集合を後段でボリューム化できる");
+}
+
+// 構造面（Parallel Planes の系統）でブロックに割る。
+static void RunPlaneFractureTests() {
+    using namespace rock;
+    using namespace rock::geometry;
+    using namespace rock::tests;
+    Section("構造面で割る（Voronoi Fracture の Planes 入力）");
+    std::string error;
+    const auto box = MakeBox({2, 2, 2});
+    ParallelPlanesSettings horizontal;
+    horizontal.spacing = .5f;
+    const auto layers = MakeParallelPlanes(horizontal, error);
+    auto slabs = FracturePlanes(box, {layers}, 7, error);
+    double total = 0;
+    bool closed = true, equal = true;
+    for (const auto& piece : slabs.pieces) {
+        MeshInfo info;
+        closed &= InspectMesh(*piece.mesh, info) && info.closed && info.components == 1;
+        total += piece.volume;
+        equal &= std::abs(piece.volume - 2) < 1e-4;
+    }
+    // 面は y = -1, -0.5, 0, 0.5, 1。形の上下面と重なる面は厚さ 0 の板になるので捨てる。
+    Check(error.empty() && slabs.pieces.size() == 4 && closed && equal && std::abs(total - 8) < 1e-4,
+          "水平な面の系統で、厚さ 0.5 m の閉じた板 4 枚に割る");
+    ParallelPlanesSettings vertical;
+    vertical.spacing = 1;
+    vertical.rotationDegrees = {0, 0, 90};
+    const auto joints = MakeParallelPlanes(vertical, error);
+    const auto blocks = FracturePlanes(box, {layers, joints}, 7, error);
+    total = 0;
+    for (const auto& piece : blocks.pieces) total += piece.volume;
+    Check(error.empty() && blocks.pieces.size() == 8 && std::abs(total - 8) < 1e-4, "2 系統の重なりで 8 個のブロックに割る");
+    Check(blocks.adjacencyComplete, "1 回の分割で隣接情報が揃う");
+    bool symmetric = true;
+    size_t contacts = 0;
+    for (const auto& piece : blocks.pieces)
+        for (const auto& contact : piece.neighborhood->contacts) {
+            ++contacts;
+            const auto& other = blocks.pieces[contact.neighbor].neighborhood->contacts;
+            symmetric &= std::any_of(other.begin(), other.end(), [&](const auto& back) { return back.neighbor == piece.id; });
+        }
+    // 4 段 × 2 列: 上下の接触 3 × 2 列 + 左右の接触 4 段 = 10 組（両側で 20）。
+    Check(symmetric && contacts == 20, "隣のブロックとの接触面は両側で揃う");
+    PieceSelectSettings peel;
+    peel.mode = PieceSelectMode::Peel;
+    peel.fraction = .5f;
+    const auto peeled = SelectPieces(blocks, peel, error);
+    Check(error.empty() && !peeled.ids.empty() && peeled.ids.size() < blocks.pieces.size(),
+          "外周からの侵食（Peel）でブロックを選べる");
+    ParallelPlanesSettings oblique;
+    oblique.spacing = .37f;
+    oblique.rotationDegrees = {20, 0, 35};
+    oblique.variation = .5f;
+    const auto tilted = FracturePlanes(box, {MakeParallelPlanes(oblique, error), joints}, 7, error);
+    total = 0;
+    closed = true;
+    for (const auto& piece : tilted.pieces) {
+        MeshInfo info;
+        closed &= InspectMesh(*piece.mesh, info) && info.closed;
+        total += piece.volume;
+    }
+    Check(error.empty() && tilted.pieces.size() > 8 && closed && std::abs(total - 8) < 1e-3,
+          "斜めでばらつきのある系統でも、閉じたブロックに割れて体積が保たれる");
+    Check(FracturePlanes(box, {layers, joints}, 7, error).generation == blocks.generation &&
+              FracturePlanes(box, {layers}, 7, error).generation != blocks.generation,
+          "系統が同じなら同じ分割、変えれば別の分割として扱う");
+    FracturePlanes(box, {}, 7, error);
+    Check(!error.empty(), "構造面が無ければ診断する");
+    ParallelPlanesSettings dense, denseCross;
+    dense.spacing = denseCross.spacing = .05f;
+    denseCross.rotationDegrees = {0, 0, 90};
+    // 40 × 40 = 1600 個で、ピースの上限 1024 を超える。
+    FracturePlanes(box, {MakeParallelPlanes(dense, error), MakeParallelPlanes(denseCross, error)}, 7, error);
+    Check(!error.empty(), "多すぎるブロックは間隔を広げるよう診断する");
+
+    // 接地: 下向きの外面からは欠かず、支えを失った片は落ちる。4 段 × 2 列のブロックで確かめる。
+    {
+        PieceSelectSettings grounded = peel;
+        grounded.grounded = true;
+        grounded.protectCore = false;
+        grounded.peelNoise = 0;
+        grounded.fraction = .25f;
+        const auto picked = SelectPieces(blocks, grounded, error);
+        bool bottomKept = true, floating = false;
+        std::set<uint32_t> removed(picked.ids.begin(), picked.ids.end());
+        for (const auto& piece : blocks.pieces) {
+            const bool bottom = piece.centroid.y < -.5f;
+            if (bottom) bottomKept &= !removed.contains(piece.id);
+        }
+        // 残った片は、地面か、残った片の上に載っている（下の段が残っている）。
+        for (const auto& piece : blocks.pieces) {
+            if (removed.contains(piece.id) || piece.centroid.y < -.5f) continue;
+            bool supported = false;
+            for (const auto& other : blocks.pieces)
+                supported |= !removed.contains(other.id) && std::abs(other.centroid.x - piece.centroid.x) < .1f &&
+                             std::abs(other.centroid.y - (piece.centroid.y - .5f)) < .1f;
+            floating |= !supported;
+        }
+        Check(error.empty() && !picked.ids.empty() && bottomKept, "接地: 地面に接した段は欠かない（上と横から欠ける）");
+        Check(!floating, "接地: 支えを失った片は落ちて、宙に浮いた片が残らない");
+        grounded.fraction = 0;
+        Check(SelectPieces(blocks, grounded, error).ids.empty(), "接地: 進行 0 では何も選ばない");
+    }
+
+    // グラフ: Parallel Planes を連結して系統を足し、Voronoi Fracture の Planes 入力へ。
+    graph::NodeGraph g;
+    const auto shape = g.CreateNode(graph::NodeKind::BaseRock), first = g.CreateNode(graph::NodeKind::ParallelPlanes),
+               second = g.CreateNode(graph::NodeKind::ParallelPlanes), fracture = g.CreateNode(graph::NodeKind::VoronoiFracture),
+               scatter = g.CreateNode(graph::NodeKind::ScatterPoints);
+    std::get<ParallelPlanesSettings>(g.FindMutableNode(first)->settings) = horizontal;
+    std::get<ParallelPlanesSettings>(g.FindMutableNode(second)->settings) = vertical;
+    const auto link = [&](auto a, auto b, int pin) { return g.CreateLink(g.FindNode(a)->outputs[0].id, g.FindNode(b)->inputs[pin].id); };
+    Check(link(first, second, 0) && link(shape, fracture, 0) && link(second, fracture, 2), "系統を連結して Planes 入力へつなげる");
+    const auto chained = graph::EvaluateRocks(g, second);
+    Check(chained.error.empty() && chained.planes && chained.planes->size() == 2, "連結すると上流の系統にこの系統が足される");
+    const auto evaluated = graph::EvaluateRocks(g, fracture);
+    Check(evaluated.error.empty() && evaluated.pieces && evaluated.pieces->pieces.size() == 8, "グラフで 2 系統のブロックに割る");
+    link(shape, scatter, 0);
+    link(scatter, fracture, 1);
+    Check(!graph::EvaluateRocks(g, fracture).error.empty(), "Points と Planes の同時接続を診断する");
+
+    // Volume Crack: 連結した系統を 1 回で彫る。1 系統だけなら従来の結果と同じ。
+    const auto volume = MeshToVolume(box, {48}, error);
+    VolumeCrackSettings crack;
+    crack.width = .04f;
+    crack.depth = .1f;
+    const auto single = CrackVolumeWithPlanes(volume, layers, crack, error);
+    Check(error.empty() && CrackVolumeWithPlanes(volume, std::vector<StructurePlanes>{layers}, crack, error).values == single.values,
+          "1 系統の並びは従来の 1 系統と同じ結果");
+    const auto both = CrackVolumeWithPlanes(volume, std::vector<StructurePlanes>{layers, joints}, crack, error);
+    bool deeper = error.empty();
+    for (size_t i = 0; i < both.values.size(); ++i) deeper &= both.values[i] >= single.values[i];
+    Check(deeper && both.values != single.values, "2 系統では両方の系統の割れ目を彫る");
 }

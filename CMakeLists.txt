@@ -457,6 +457,13 @@ target_compile_definitions(rock_cli PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN
 target_compile_options(rock_cli PRIVATE /W4 /permissive- /utf-8 /Zc:preprocessor)
 target_link_libraries(rock_cli PRIVATE rock_xatlas nlohmann_json::nlohmann_json unofficial::tinyexr::tinyexr ufbx::ufbx ole32)
 
+# グラフの評価は上流のノードを再帰でたどり、1 段のスタックが大きい（ノードの種類ごとの処理が 1 つの関数にある）。
+# 30 段ほどの岩グラフで既定の 1 MB を超えて黙って落ちたので、評価を走らせる 3 つの実行ファイルは 16 MB にする。
+# 既定のスタックの大きさは std::thread で作る評価のスレッドにも効く。
+foreach(target rock_editor rock_editor_tests rock_cli)
+    target_link_options(${target} PRIVATE /STACK:16777216)
+endforeach()
+
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT rock_editor)
 set_target_properties(rock_editor PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:rock_editor>"

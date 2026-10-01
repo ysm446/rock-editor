@@ -15,6 +15,12 @@ double PieceFaceArea(const Piece& p, const std::array<double,3>& a) {
     return std::sqrt(x*x+y*y+z*z);
 }
 
+// 面積ベクトルを変換したときの Y 成分（面の向きの判定用。長さは PieceFaceArea と同じ尺度）。
+double PieceFaceNormalY(const Piece& p, const std::array<double,3>& a) {
+    const auto& m=p.transform;
+    return (m[2]*m[9]-m[1]*m[10])*a[0]+(m[0]*m[10]-m[2]*m[8])*a[1]+(m[1]*m[8]-m[0]*m[9])*a[2];
+}
+
 PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s,
                           const std::vector<float>& weights, std::string& error, std::stop_token stop) {
     error.clear();
@@ -34,7 +40,7 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         std::vector<Vertical> vertical;
         std::array<double,2> cap{}, covered{};
         double total=0, support=0, noise=0;
-        bool exposed=false, removed=false, protectedCore=false;
+        bool exposed=false, removed=false, protectedCore=false, grounded=false;
     };
     const size_t n=c.pieces.size();
     std::vector<State> state(n);
@@ -58,10 +64,17 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
                 v.vertical.push_back({it->second,contact.area,1-contact.side});
             }
         }
-        double boundary=0;
-        for (const auto& area:p.neighborhood->boundary) boundary+=PieceFaceArea(p,area);
+        double boundary=0, ground=0;
+        for (const auto& area:p.neighborhood->boundary) {
+            const double size=PieceFaceArea(p,area);
+            // 接地: 下向き（法線が下から 45° 以内）の外面は地面に支えられている。
+            if (s.grounded && PieceFaceNormalY(p,area)<-.7071*size) ground+=size;
+            else boundary+=size;
+        }
         v.exposed=boundary>0;
-        v.total+=boundary;
+        v.grounded=ground>0;
+        v.total+=boundary+ground;
+        v.support+=ground;
         for (const auto& contact:p.neighborhood->contacts) {
             const double area=PieceFaceArea(p,contact.areaVector);
             if (!std::isfinite(area) || area<=0) {error="共有面積が不正です";return {};}
@@ -150,6 +163,37 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         for (auto [other,area,side]:state[best].vertical) {
             state[other].support=std::max(0.,state[other].support-area);
             state[other].covered[side]=std::max(0.,state[other].covered[side]-area);
+        }
+    }
+    // 接地: 片は地面か、支えられた片の上に載っているときだけ支えられる（下向きの接触面。法線が下から 60° 以内）。
+    // 急な節理の側面で横に接するだけでは支えにならず、支えを失った片は落ちる（一緒に選ぶ）。
+    // 地面に接した片が 1 つも無い形（下向きの面が無い）では落とさない。
+    if (s.grounded && std::any_of(state.begin(),state.end(),[](const State& v){return v.grounded;})) {
+        // 片 i が片 other の上に載っているか（i から見た接触面が下を向く）。
+        const auto restsOn=[&](size_t i,uint32_t otherId) {
+            const auto& p=c.pieces[i];
+            for (const auto& contact:p.neighborhood->contacts)
+                if (contact.neighbor==otherId) {
+                    const double area=PieceFaceArea(p,contact.areaVector);
+                    return area>0 && PieceFaceNormalY(p,contact.areaVector)<-.5*area;
+                }
+            return false;
+        };
+        std::vector<bool> held(n,false);
+        std::queue<size_t> pending;
+        for (size_t i=0;i<n;++i) if (state[i].grounded && !state[i].removed) {held[i]=true;pending.push(i);}
+        while (!pending.empty()) {
+            const auto below=pending.front();pending.pop();
+            for (auto [other,area]:state[below].neighbors) {
+                (void)area;
+                if (!held[other] && !state[other].removed && restsOn(other,c.pieces[below].id)) {
+                    held[other]=true;pending.push(other);
+                }
+            }
+        }
+        for (size_t i=0;i<n;++i) if (!held[i] && !state[i].removed && weights[i]>=0) {
+            state[i].removed=true;
+            out.ids.push_back(c.pieces[i].id);
         }
     }
     for (size_t i=0;i<n;++i) if (candidateAvailable(i)) out.frontier.push_back(c.pieces[i].id);

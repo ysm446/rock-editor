@@ -54,7 +54,9 @@ constexpr std::array<PinDefinition, 2> kVolumeTransformPins = {
     {{PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
 constexpr std::array<PinDefinition, 3> kVolumeBooleanPins = {{{PinKind::Input, ValueType::Volume, "A"},
     {PinKind::Input, ValueType::Volume, "B"}, {PinKind::Output, ValueType::Volume, "Volume"}}};
-constexpr std::array<PinDefinition, 1> kParallelPlanesPins = {{{PinKind::Output, ValueType::Planes, "Planes"}}};
+// 入力の Planes は上流の系統。つなぐと、上流の系統にこのノードの系統を足して渡す（節理系 1 → 2 → 3）。
+constexpr std::array<PinDefinition, 2> kParallelPlanesPins = {{{PinKind::Input, ValueType::Planes, "Planes"},
+    {PinKind::Output, ValueType::Planes, "Planes"}}};
 constexpr std::array<PinDefinition, 4> kVolumeCrackPins = {{{PinKind::Input, ValueType::Volume, "Volume"},
     {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Input, ValueType::Planes, "Planes"},
     {PinKind::Output, ValueType::Volume, "Volume"}}};
@@ -66,7 +68,8 @@ constexpr std::array<PinDefinition, 4> kBakePins = {{{PinKind::Input, ValueType:
     {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 constexpr std::array<PinDefinition, 1> kLayeredBoxesPins = {{{PinKind::Output, ValueType::Pieces, "Pieces"}}};
 constexpr std::array<PinDefinition, 2> kScatterPins = {{{PinKind::Input, ValueType::MeshOrPieces, "Geometry"}, {PinKind::Output, ValueType::Points, "Points"}}};
-constexpr std::array<PinDefinition, 3> kVoronoiPins = {{{PinKind::Input, ValueType::MeshOrPieces, "Geometry"}, {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
+// Points（Voronoi 境界）か Planes（構造面の系統）のどちらか一方で割る。
+constexpr std::array<PinDefinition, 4> kVoronoiPins = {{{PinKind::Input, ValueType::MeshOrPieces, "Geometry"}, {PinKind::Input, ValueType::Points, "Points"}, {PinKind::Input, ValueType::Planes, "Planes"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
 constexpr std::array<PinDefinition, 2> kSelectPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Selection, "Selection"}}};
 constexpr std::array<PinDefinition, 3> kPieceFilterPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Input, ValueType::Selection, "Selection"}, {PinKind::Output, ValueType::Pieces, "Pieces"}}};
 constexpr std::array<PinDefinition, 2> kPiecesMeshPins = {{{PinKind::Input, ValueType::Pieces, "Pieces"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};

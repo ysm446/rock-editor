@@ -101,6 +101,9 @@ struct PieceSelectSettings {
     float rimFalloff = 0; // 内側の選択率を下げる強さ。
     float peelNoise = .15f;
     bool protectCore = true;
+    // peel 用。下向きの外面（地面に埋まった側）は露出ではなく支持として数える。地面から生えた岩（岩峰・露頭・崖）が
+    // 上と横から欠け、根元が最後まで残る。
+    bool grounded = false;
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;
@@ -135,6 +138,11 @@ PointSet ScatterPoints(const Mesh &, const ScatterSettings &, std::string &, std
 PointSet ScatterPiecePoints(const PieceCollection&, const ScatterSettings&, std::string&, std::stop_token = {});
 PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSettings &, int producer,
                                 std::string &, std::stop_token = {});
+struct StructurePlanes;
+// 構造面（Parallel Planes を連結した系統）で凸な Mesh を割る。全系統の板の重なりが 1 ピース（節理で区切られた
+// ブロック）。隣接情報は 1 回の分割で揃うので、Piece Select の外周からの侵食（Peel）に使える。
+PieceCollection FracturePlanes(const Mesh &, const std::vector<StructurePlanes> &, int producer, std::string &,
+                               std::stop_token = {});
 PieceCollection FracturePieces(const PieceCollection&, const PointSet&, const VoronoiSettings&, int producer,
                               std::string&, std::stop_token = {});
 PieceSelection SelectPieces(const PieceCollection &, const PieceSelectSettings &, std::string &, std::stop_token = {});
