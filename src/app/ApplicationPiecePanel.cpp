@@ -100,6 +100,11 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 changed |= ui::PropertyBool("接地", &selection->grounded, false,
                     "下向きの外面を地面に支えられた面として扱い、そこからは欠きません。"
                     "地面から生えた岩（岩峰・露頭・崖）が上と横から欠け、根元が最後まで残ります。");
+                ImGui::BeginDisabled(!selection->grounded);
+                changed |= ui::PropertyFloat("安定", &selection->stability, 0, 1, 0,
+                    "下で支える片に載る面積が片の大きさに足りないと転げ落ちます。頭でっかちの片が残らず、上ほど細く尖ります。");
+                ImGui::EndDisabled();
+                selection->stability = std::clamp(selection->stability, 0.f, 1.f);
                 ui::PropertyLabelEmpty("peelRetry");
                 ImGui::BeginDisabled(selection->peelNoise == 0);
                 if (ImGui::Button("別の欠け方を試す")) {

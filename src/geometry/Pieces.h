@@ -110,6 +110,8 @@ struct PieceSelectSettings {
     // peel 用。下向きの外面（地面に埋まった側）は露出ではなく支持として数える。地面から生えた岩（岩峰・露頭・崖）が
     // 上と横から欠け、根元が最後まで残る。
     bool grounded = false;
+    // peel・接地用。安定（0～1）。下で支える片に載る面積が片の大きさに足りないと転げ落ちる（頭でっかちの片が残らない）。
+    float stability = 0;
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;

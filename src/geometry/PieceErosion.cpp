@@ -26,6 +26,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     error.clear();
     PieceSelection out{c.producer,c.generation,c.fingerprint,{}};
     if (stop.stop_requested()) { error="評価をキャンセルしました"; return {}; }
+    if (!std::isfinite(s.stability) || s.stability<0 || s.stability>1) {
+        error="安定は0〜1にしてください"; return {};
+    }
     if (c.pieces.empty()) return out;
     if (!c.adjacencyComplete) {
         error="Peelには初回のVoronoi分割による隣接情報が必要です。再分割をまたぐ隣接面は未対応です";
@@ -176,16 +179,21 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     // 急な節理の側面で横に接するだけでは支えにならず、支えを失った片は落ちる（一緒に選ぶ）。
     // 地面に接した片が 1 つも無い形（下向きの面が無い）では落とさない。
     if (s.grounded && std::any_of(state.begin(),state.end(),[](const State& v){return v.grounded;})) {
-        // 片 i が片 other の上に載っているか（i から見た接触面が下を向く）。
-        const auto restsOn=[&](size_t i,uint32_t otherId) {
+        // 片 i が片 other の上に載る面の、水平に投影した面積（i から見た接触面が下を向くときだけ。0 なら載っていない）。
+        const auto bearing=[&](size_t i,uint32_t otherId) {
             const auto& p=c.pieces[i];
             for (const auto& contact:p.neighborhood->contacts)
                 if (contact.neighbor==otherId) {
                     const double area=PieceFaceArea(p,contact.areaVector);
-                    return area>0 && PieceFaceNormalY(p,contact.areaVector)<-.5*area;
+                    const double down=-PieceFaceNormalY(p,contact.areaVector);
+                    return area>0 && down>.5*area ? down : 0.;
                 }
-            return false;
+            return 0.;
         };
+        // 安定: 支えられた片に載る面積の合計が、片の大きさ（体積^(2/3) × 安定 × 0.5）に足りないと転げ落ちる。
+        // 狭い面で載った大きな片（頭でっかち）が落ち、上ほど小さく尖る。0 なら少しでも載れば支えられる。
+        std::vector<double> carried(n,0), required(n,0);
+        for (size_t i=0;i<n;++i) required[i]=s.stability*.5*std::pow(std::max(c.pieces[i].volume,0.),2./3);
         std::vector<bool> held(n,false);
         std::queue<size_t> pending;
         for (size_t i=0;i<n;++i) if (state[i].grounded && !state[i].removed) {held[i]=true;pending.push(i);}
@@ -193,9 +201,11 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
             const auto below=pending.front();pending.pop();
             for (auto [other,area]:state[below].neighbors) {
                 (void)area;
-                if (!held[other] && !state[other].removed && restsOn(other,c.pieces[below].id)) {
-                    held[other]=true;pending.push(other);
-                }
+                if (held[other] || state[other].removed) continue;
+                const double rest=bearing(other,c.pieces[below].id);
+                if (rest<=0) continue;
+                carried[other]+=rest;
+                if (carried[other]>=required[other]*(1-1e-9)) {held[other]=true;pending.push(other);}
             }
         }
         for (size_t i=0;i<n;++i) if (!held[i] && !state[i].removed && weights[i]>=0) {

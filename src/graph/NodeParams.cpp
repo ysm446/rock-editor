@@ -129,6 +129,8 @@ constexpr ParamDefinition kParams[] = {
     {K::PieceSelect, "pieces.protectCore", T::Bool, N, N, "", "中心の片を保護", "peel 用。上下を覆われた中間層を守る", C::None},
     {K::PieceSelect, "pieces.peelSize", T::Float, 0, 1, "比", "大きさの効き",
      "peel 用。小さな片ほど先に欠ける（崩れやすい）。大きな片の芯が残る", C::Error},
+    {K::PieceSelect, "pieces.stability", T::Float, 0, 1, "比", "安定",
+     "peel・接地用。下で支える片に載る面積が片の大きさ（体積の 2/3 乗）に足りないと転げ落ちる。頭でっかちの片が残らず、上ほど細く尖る", C::Error},
     {K::PieceSelect, "pieces.grounded", T::Bool, N, N, "", "接地",
      "peel 用。下向きの外面を地面に支えられた面として扱い、そこからは欠かない（岩峰・露頭・崖の根元が残る）", C::None},
     {K::PieceSelect, "pieces.producer", T::Int, N, N, "", "", "manual の選択が指す分割", C::None, {}, true},

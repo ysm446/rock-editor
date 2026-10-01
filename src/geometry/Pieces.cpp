@@ -748,7 +748,13 @@ PieceCollection FracturePlanes(const Mesh &mesh, const std::vector<StructurePlan
             error = expandError;
             return {};
         }
-        Slabs item{V(set.normal), {}};
+        // 回転の単精度の誤差（cos 90° ≈ −4e−8）を法線から除く。誤差が残ると、別の系統の面との交点がわずかにずれて
+        // 長さ 1e−9 ほどの辺ができ、閉じた形として扱えない片が出る（間隔 0.25 m の縦の面で起きた）。
+        D normal = V(set.normal);
+        const auto clean = [](double v) { return std::abs(v) < 1e-6 ? 0.0 : v; };
+        normal = {clean(normal.x), clean(normal.y), clean(normal.z)};
+        normal = normal * (1 / Length(normal));
+        Slabs item{normal, {}};
         // 形の端に（ほぼ）重なる面は割らない。単精度の向きでは形の面とわずかにずれ、紙のように薄い切れ端ができる。
         double low = std::numeric_limits<double>::max(), high = -low;
         for (const auto &p : mesh.positions) {

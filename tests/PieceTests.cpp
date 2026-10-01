@@ -571,6 +571,25 @@ static void RunPlaneFractureTests() {
         Check(!floating, "接地: 支えを失った片は落ちて、宙に浮いた片が残らない");
         grounded.fraction = 0;
         Check(SelectPieces(blocks, grounded, error).ids.empty(), "接地: 進行 0 では何も選ばない");
+        // 安定: 上の段の片は下の片に 1 m² で載る（体積 2 m³ → 2^(2/3) ≈ 1.59）。安定 1 でも要る面積は 0.79 m² なので載ったまま。
+        grounded.fraction = .25f;
+        grounded.stability = 1;
+        const auto stable = SelectPieces(blocks, grounded, error);
+        Check(error.empty() && stable.ids == picked.ids, "安定: 十分な面で載った片は落ちない");
+        ParallelPlanesSettings thin;
+        thin.spacing = .25f;
+        thin.rotationDegrees = {0, 0, 90};
+        const auto narrow = FracturePlanes(box, {layers, MakeParallelPlanes(thin, error)}, 7, error);
+        PieceSelectSettings topple = grounded;
+        topple.fraction = 0;
+        topple.stability = 0;
+        // 縦の面（90° 回転）の法線の単精度の誤差で、以前は片が閉じずに捨てられ、体積の比較で失敗していた。
+        Check(error.empty() && narrow.pieces.size() == 32, "90° 回した細い間隔の系統でも全てのブロックに割れる");
+        Check(SelectPieces(narrow, topple, error).ids.empty(), "安定 0 では、載っていれば何も落ちない");
+        topple.stability = 1.5f;
+        topple.fraction = .25f;
+        SelectPieces(narrow, topple, error);
+        Check(!error.empty(), "安定: 範囲外を拒否する");
     }
 
     // Piece Transform のばらつき: 片ごとに自分の重心を中心に乱数で動かして回す。
