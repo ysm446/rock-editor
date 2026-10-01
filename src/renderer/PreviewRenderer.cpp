@@ -739,9 +739,21 @@ bool PreviewRenderer::UploadMeshScene(rhi::Device& device, const MeshScene& inpu
             minimum.y = std::min(minimum.y, vertex.position.y);
             minimum.z = std::min(minimum.z, vertex.position.z);
             maximum.x = std::max(maximum.x, vertex.position.x);
+            maximum.y = std::max(maximum.y, vertex.position.y);
             maximum.z = std::max(maximum.z, vertex.position.z);
         }
     }
+    // 全体表示の注視点と半径: 範囲の中心と、そこから最も遠い頂点まで。接地した岩は原点より上にあるので、
+    // 原点を注視点にすると背の高い形の頂が画面から切れる。
+    m_frameCenter = hasVertex ? XMFLOAT3{(minimum.x + maximum.x) * 0.5f, (minimum.y + maximum.y) * 0.5f,
+                                         (minimum.z + maximum.z) * 0.5f}
+                              : XMFLOAT3{0.0f, 0.0f, 0.0f};
+    m_frameRadius = 0.1f;
+    for (const auto& mesh : m_meshScene.meshes)
+        for (const auto& vertex : mesh.geometry.vertices)
+            m_frameRadius = std::max(m_frameRadius, std::hypot(vertex.position.x - m_frameCenter.x,
+                                                               vertex.position.y - m_frameCenter.y,
+                                                               vertex.position.z - m_frameCenter.z));
     m_humanScaleAnchor = hasVertex
         ? XMFLOAT3{maximum.x + 0.65f, minimum.y, (minimum.z + maximum.z) * 0.5f}
         : XMFLOAT3{3.0f, 0.0f, 0.0f};

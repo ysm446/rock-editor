@@ -533,9 +533,11 @@ void Application::HandleCameraInput(renderer::PreviewRenderer& preview, bool ite
             SelectedMeshFocusTarget(target);
         camera.Focus(target);
     } else if (ImGui::IsKeyPressed(ImGuiKey_A, false)) {
-        camera.Frame(kMeshCenter, includeReferenceGrid
-            ? std::max(preview.BoundingRadius(), renderer::PreviewRenderer::kReferenceGridRadius)
-            : preview.BoundingRadius());
+        // 範囲の中心を見る。作業グリッドも入れるときは、グリッドが原点中心なので従来どおり原点を見る。
+        if (includeReferenceGrid)
+            camera.Frame(kMeshCenter, std::max(preview.BoundingRadius(), renderer::PreviewRenderer::kReferenceGridRadius));
+        else
+            camera.Frame(preview.FrameCenter(), preview.FrameRadius());
     }
 }
 

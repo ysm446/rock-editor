@@ -292,6 +292,9 @@ public:
     // シーンを包む球の半径（原点中心）。カメラの Frame() が使う。シーンが無ければ作業グリッドの半径。
     // 配置したモデル（SetExtraSceneRadius）も含む。
     float BoundingRadius() const;
+    // 全体表示（A キー・--frame-all）の注視点と半径。メッシュの範囲の中心を基準にする（シーンが無ければ原点と作業グリッド）。
+    DirectX::XMFLOAT3 FrameCenter() const { return m_meshSceneEnabled ? m_frameCenter : DirectX::XMFLOAT3{0.0f, 0.0f, 0.0f}; }
+    float FrameRadius() const { return m_meshSceneEnabled ? std::max(m_frameRadius, m_extraSceneRadius) : BoundingRadius(); }
     // メッシュシーンの外で描くもの（配置したモデル）。本描画の不透明メッシュの直後と、
     // 各シャドウカスケードで呼ぶ。シェーディング表示（DebugView::Shaded / Clay 以外は呼ばない）でだけ描く。
     std::function<void(ID3D12GraphicsCommandList*, const SceneDrawContext&)> drawSceneExtras;
@@ -401,6 +404,8 @@ private:
     std::vector<SceneMaterial> m_sceneMaterials;
     bool m_meshSceneEnabled = false;
     float m_meshSceneRadius = 0.1f;
+    DirectX::XMFLOAT3 m_frameCenter{0.0f, 0.0f, 0.0f};
+    float m_frameRadius = 0.1f;
     float m_extraSceneRadius = 0.0f;
     std::vector<OverlayLineSet> m_overlayLines;
     bool m_meshSceneHidden = false;
