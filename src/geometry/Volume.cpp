@@ -1411,6 +1411,11 @@ VolumeGrid SmoothVolume(const VolumeGrid& g, const VolumeSmoothSettings& s, std:
     VolumeGrid out = g;
     if (s.amount <= 0) return out;
     const std::vector<float> blurred = BlurGrid(g, s.radius * longest / g.spacing);
+    VolumeGrid blurredGrid;
+    if (s.upwardFocus > 0) {
+        blurredGrid = g;
+        blurredGrid.values = blurred;
+    }
     const float threshold = g.spacing * 1e-4f;
     const bool sharpen = s.mode == VolumeSmoothMode::Sharpen;
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
@@ -1420,7 +1425,8 @@ VolumeGrid SmoothVolume(const VolumeGrid& g, const VolumeSmoothSettings& s, std:
         if (x == 0 || y == 0 || z == 0 || x + 1 == g.dimensions[0] || y + 1 == g.dimensions[1] || z + 1 == g.dimensions[2])
             return value < 0;
         float weight = s.amount;
-        if (s.upwardFocus > 0) weight *= 1 - s.upwardFocus * (1 - Upwardness(g, x, y, z, focus));
+        // 向きの重みはぼかした場の法線で決める。元の場の法線は稜線で急に変わり、効く面と効かない面の境に薄いヒレが出る。
+        if (s.upwardFocus > 0) weight *= 1 - s.upwardFocus * (1 - Upwardness(blurredGrid, x, y, z, focus));
         float result = sharpen ? value + 2 * weight * (value - blurred[index]) : value + weight * (blurred[index] - value);
         if (std::abs(result) < threshold) result = threshold;
         out.values[index] = result;
@@ -1525,7 +1531,19 @@ VolumeGrid EdgeWearVolume(const VolumeGrid& g, const VolumeEdgeWearSettings& s, 
         const Vec3 surface{p.x - value * gx, p.y - value * gy, p.z - value * gz};
         float weight = SampleGridValues(g, edge, surface) * s.amount;
         if (s.upwardFocus > 0)
-            weight *= 1 - s.upwardFocus * (1 - std::clamp(gx * focus.x + gy * focus.y + gz * focus.z, 0.f, 1.f));
+        {
+            // 向きの重みはぼかした場の法線で決める（稜線をまたいで重みが飛ぶと薄いヒレが出る）。
+            const auto blurAt = [&](int bx, int by, int bz) {
+                return blurred[g.Index(uint32_t(std::clamp(bx, 0, int(g.dimensions[0]) - 1)),
+                                       uint32_t(std::clamp(by, 0, int(g.dimensions[1]) - 1)),
+                                       uint32_t(std::clamp(bz, 0, int(g.dimensions[2]) - 1)))];
+            };
+            const float bx = blurAt(ix + 1, iy, iz) - blurAt(ix - 1, iy, iz), by = blurAt(ix, iy + 1, iz) - blurAt(ix, iy - 1, iz),
+                        bz = blurAt(ix, iy, iz + 1) - blurAt(ix, iy, iz - 1);
+            const float bl = std::sqrt(bx * bx + by * by + bz * bz);
+            const float facing = bl > 0 ? (bx * focus.x + by * focus.y + bz * focus.z) / bl : 0.f;
+            weight *= 1 - s.upwardFocus * (1 - std::clamp(facing, 0.f, 1.f));
+        }
         if (s.noise > 0) {
             const float n = ValueNoise(surface.x * frequency, surface.y * frequency, surface.z * frequency, seed);
             weight *= std::clamp(1 - s.noise * (1 - n) * 2, 0.f, 1.f);
