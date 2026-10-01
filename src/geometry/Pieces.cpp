@@ -1062,6 +1062,12 @@ PieceCollection TransformPieces(const PieceCollection &c, const PieceSelection *
         error = "位置・回転は有限値、倍率は正の有限値が必要です";
         return {};
     }
+    if (std::any_of(s.jitterPosition.begin(), s.jitterPosition.end(), [](float v) { return !std::isfinite(v) || v < 0 || v > 100; }) ||
+        !std::isfinite(s.jitterRotation) || s.jitterRotation < 0 || s.jitterRotation > 180) {
+        error = "ばらつきは移動 0～100 m、回転 0～180 度にしてください";
+        return {};
+    }
+    const bool jitter = s.jitterRotation > 0 || s.jitterPosition[0] > 0 || s.jitterPosition[1] > 0 || s.jitterPosition[2] > 0;
     D pivot{};
     double weight = 0;
     for (const auto &p : c.pieces)
@@ -1096,6 +1102,15 @@ PieceCollection TransformPieces(const PieceCollection &c, const PieceSelection *
             for (const auto &item : s.overrides)
                 if (item.id == p.id)
                     apply(p, item.pose, center);
+            if (jitter) {
+                // 片の ID と Seed だけで決まる乱数。片を増減しても、ほかの片のずれは変わらない。
+                uint64_t state = (uint64_t(p.id) << 32) ^ (uint64_t(s.jitterSeed) * 0x9E3779B97F4A7C15ull);
+                const auto signedUnit = [&] { return Uniform(state) * 2 - 1; };
+                PiecePose shake;
+                for (int k = 0; k < 3; ++k) shake.position[k] = float(signedUnit() * s.jitterPosition[k]);
+                for (int k = 0; k < 3; ++k) shake.rotation[k] = float(signedUnit() * s.jitterRotation);
+                apply(p, shake, center);
+            }
             apply(p, s.pose, s.individual ? center : pivot);
             if (!std::isfinite(Determinant(p.transform)) || Determinant(p.transform) <= 0) {
                 error = "変換の倍率が表現可能な範囲を超えています";

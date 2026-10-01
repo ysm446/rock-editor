@@ -573,6 +573,30 @@ static void RunPlaneFractureTests() {
         Check(SelectPieces(blocks, grounded, error).ids.empty(), "接地: 進行 0 では何も選ばない");
     }
 
+    // Piece Transform のばらつき: 片ごとに自分の重心を中心に乱数で動かして回す。
+    {
+        PieceTransformSettings shake;
+        shake.jitterPosition = {.1f, .05f, .1f};
+        shake.jitterRotation = 5;
+        const auto moved = TransformPieces(blocks, nullptr, shake, error);
+        bool bounded = error.empty() && moved.pieces.size() == blocks.pieces.size(), varied = false;
+        for (size_t i = 0; i < moved.pieces.size(); ++i) {
+            const auto a = PieceCenter(blocks.pieces[i]), b = PieceCenter(moved.pieces[i]);
+            // 重心のまわりに回すので、重心は移動のばらつきの範囲（各軸）しか動かない。
+            bounded &= std::abs(b.x - a.x) <= .1f + 1e-4f && std::abs(b.y - a.y) <= .05f + 1e-4f && std::abs(b.z - a.z) <= .1f + 1e-4f;
+            varied |= moved.pieces[i].transform != blocks.pieces[i].transform;
+        }
+        Check(bounded && varied, "ばらつき: 片ごとに重心のまわりで動かして回し、移動は指定の範囲に収まる");
+        Check(TransformPieces(blocks, nullptr, shake, error).pieces[3].transform == moved.pieces[3].transform,
+              "ばらつき: 同じ Seed なら同じずれ");
+        shake.jitterSeed = 2;
+        Check(TransformPieces(blocks, nullptr, shake, error).pieces[3].transform != moved.pieces[3].transform,
+              "ばらつき: Seed を変えると別のずれ");
+        shake.jitterRotation = 200;
+        TransformPieces(blocks, nullptr, shake, error);
+        Check(!error.empty(), "ばらつき: 範囲外の回転を拒否する");
+    }
+
     // グラフ: Parallel Planes を連結して系統を足し、Voronoi Fracture の Planes 入力へ。
     graph::NodeGraph g;
     const auto shape = g.CreateNode(graph::NodeKind::BaseRock), first = g.CreateNode(graph::NodeKind::ParallelPlanes),

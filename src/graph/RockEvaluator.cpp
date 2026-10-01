@@ -135,7 +135,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     } else if (const auto* filter = std::get_if<geometry::PieceFilterSettings>(&node->settings)) {
         add(filter->keep);
     } else if (const auto* transform = std::get_if<geometry::PieceTransformSettings>(&node->settings)) {
-        pose(transform->pose); add(transform->individual); add(transform->producer); add(transform->generation); add(transform->overrides.size());
+        pose(transform->pose); add(transform->individual); add(transform->jitterPosition); add(transform->jitterRotation); add(transform->jitterSeed); add(transform->producer); add(transform->generation); add(transform->overrides.size());
         for (const auto& value : transform->overrides) { add(value.id); pose(value.pose); }
     } else if (const auto* displace = std::get_if<geometry::DisplaceSettings>(&node->settings)) {
         add(displace->amount); add(displace->midpoint); usesHeight = true;

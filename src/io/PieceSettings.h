@@ -37,6 +37,9 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
     if (auto *s = std::get_if<PieceTransformSettings>(&node.settings)) {
         nlohmann::json out = {{"pose", WritePiecePose(s->pose)},
                               {"individual", s->individual},
+                              {"jitterPosition", s->jitterPosition},
+                              {"jitterRotation", s->jitterRotation},
+                              {"jitterSeed", s->jitterSeed},
                               {"producer", s->producer},
                               {"generation", std::to_string(s->generation)},
                               {"overrides", nlohmann::json::array()}};
@@ -138,6 +141,9 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         if (value.contains("pose"))
             pose(value["pose"], s->pose);
         read(value, "individual", s->individual);
+        read(value, "jitterPosition", s->jitterPosition);
+        read(value, "jitterRotation", s->jitterRotation);
+        read(value, "jitterSeed", s->jitterSeed);
         read(value, "producer", s->producer);
         generation(s->generation);
         if (value.contains("overrides") && value["overrides"].is_array())

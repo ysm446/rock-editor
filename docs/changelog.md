@@ -1,13 +1,14 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-01 16:55
+更新日時: 2026-10-01 17:40
 
 ## 未リリース
 
 - 節理で岩体をブロックに割れるようにした。Voronoi Fracture に Planes 入力を足し、構造面の系統で凸な Mesh を節理のブロックに割る（隣接情報が揃うので Peel が使える）。Parallel Planes に Planes 入力を足し、別の Parallel Planes を繋ぐと系統を足して渡す（節理系 1 → 2 → 3）。Volume Crack は連結した全系統を 1 回で彫る（1 系統なら従来と同じ結果）。仕様は [Parallel Planes](reference/parallel-planes.md#系統の連結2026-10-01-追加)、[Voronoi とピース操作](reference/voronoi-pieces.md#構造面で割る2026-10-01-追加)。
 - Piece Select の Peel に「接地」を足した。下向きの外面からは欠かず、下のブロックに載っていない片は支えを失って落ちる（地面から生えた岩峰・露頭・崖）。既定はオフ。仕様は [ピースの侵食](reference/piece-erosion.md#接地2026-10-01-追加)。
-- レシピ `granite-buttress` を作り直した。ひびを彫るのをやめ、節理のブロックに割って外側から抜き取る形にした。
+- レシピ `granite-buttress` を作り直した。ひびを彫るのをやめ、ブロックに割って外側から抜き取る形にした。ブロックは節理の向きに伸ばした Voronoi の多面体で、少しずつずらしてある。
+- Piece Transform に片ごとのばらつき（ずれ・傾き。`jitterPosition` / `jitterRotation` / `jitterSeed`）を足した。各片を自分の重心を中心に、乱数で動かして回す。仕様は [Voronoi とピース操作](reference/voronoi-pieces.md#piece-transform-のばらつき2026-10-01-追加)。
 - グラフの評価が深い岩グラフ（30 段ほど）でスタックを使い切り、`rock_cli` が何も出力せずに落ちることがあったので、アプリ・テスト・`rock_cli` のスタックを 16 MB にした。
 - To Volume が、重なった立体（Random Boxes、重なったメッシュ）の内部の距離を表面から測り直すようにした。これまでは内部の値が隠れた面や一つの箱の中での深さになり浅く歪んでいたので、殻・割れ目の深さ・Undercut など内部の値を使うノードの結果が内部の面に沿って崩れていた。表面の形は変わらないが、Random Boxes を使うグラフは後段の結果が少し変わる（多くは体積の差 1% 未満）。仕様は [直方体の塊とボリューム](reference/box-volume.md#to-volume)。
 - Volume Noise が、表面の近くの帯の境で内部の値を跳ばさないようにした（後段の殻の底などが縞になっていた）。表面の形は変わらない。

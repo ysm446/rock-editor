@@ -128,6 +128,11 @@ struct PieceOverride {
 struct PieceTransformSettings {
     PiecePose pose;
     bool individual = false;
+    // 片ごとのばらつき。各片を自分の重心を中心に、乱数で動かして（各軸 ±jitterPosition m）回す（各軸 ±jitterRotation 度）。
+    // 節理で割れた岩のブロックのずれ・傾き（クリープ・転倒）、崩れた岩屑。乱数は片の ID と jitterSeed で決まる。
+    std::array<float, 3> jitterPosition{0, 0, 0};
+    float jitterRotation = 0;
+    uint32_t jitterSeed = 1;
     int producer = 0;
     uint64_t generation = 0;
     std::vector<PieceOverride> overrides;

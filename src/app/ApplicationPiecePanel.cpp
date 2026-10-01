@@ -363,6 +363,19 @@ void Application::DrawPieceSettings(graph::Node &node) {
         };
         changed |= ImGui::Checkbox("各片の重心を中心に変換", &transform->individual);
         changed |= pose(transform->pose, "pieceGroupPose");
+        if (ui::BeginPropertyTable("pieceJitter")) {
+            changed |= ui::PropertyFloat3Input("ばらつき 移動 (m)", transform->jitterPosition.data(), zero) != 0;
+            changed |= ui::PropertyFloat("ばらつき 回転 (度)", &transform->jitterRotation, 0, 180, 0,
+                "片ごとに自分の重心を中心に、各軸 ± この角度で乱数で回します（ブロックの傾き）。");
+            int seed = int(transform->jitterSeed);
+            if (ui::PropertyInt("ばらつき Seed", &seed, 0, 1000000, 1)) {
+                transform->jitterSeed = uint32_t(seed);
+                changed = true;
+            }
+            ui::EndPropertyTable();
+        }
+        for (float& v : transform->jitterPosition) v = std::clamp(v, 0.f, 100.f);
+        transform->jitterRotation = std::clamp(transform->jitterRotation, 0.f, 180.f);
         if (ImGui::Button("全体のギズモ")) {
             m_pieceGizmoId = -1;
             SetPreviewGraphNode(node.id);
