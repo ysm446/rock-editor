@@ -199,6 +199,10 @@ void Application::DrawFileMenu() {
         m_pendingNewKind = DocumentKind::Rock;
         m_pendingNewPath.clear();
     }
+    if (ImGui::MenuItem("テンプレートから作成…")) {
+        // アセット欄で表示中のフォルダへ作る。
+        OpenTemplateWindow(m_assetDirectory);
+    }
     if (ImGui::MenuItem("新規山グラフ")) {
         m_pendingProjectNew = true;
         m_pendingNewKind = DocumentKind::Mountain;
@@ -351,6 +355,7 @@ void Application::ProcessPendingFileWork() {
     }
     m_allowSceneSwitch = false;
     ProcessAssetWork();
+    ProcessTemplateWork();
 
     // 別の文書でコピーしたノードの貼り付け。アセットの読み込みを伴うのでここで行う。
     if (const std::optional<ImVec2> paste = std::exchange(m_pendingGraphPaste, std::nullopt)) {

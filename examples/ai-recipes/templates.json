@@ -1,0 +1,145 @@
+{
+  "note": "岩のテンプレートの一覧。アプリの「テンプレートから作成」に出す。グラフは同じフォルダの <id>.rockgraph、画像は docs/research/images/<id>.jpg（研究ページと共有）。状態と説明は docs/research/rocks.md と合わせる。",
+  "templates": [
+    {
+      "id": "blocky",
+      "name": "塊状・節理で割れた岩",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "大きな平らな節理面で割れた、角張った塊。"
+    },
+    {
+      "id": "platy-joints",
+      "name": "板状節理",
+      "category": "形の骨格",
+      "status": "△",
+      "description": "緩く傾いた板状の割れ目と、直交する縦の節理。"
+    },
+    {
+      "id": "columnar",
+      "name": "柱状節理（玄武岩）",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "多角柱の束。柱ごとに高さが違う。"
+    },
+    {
+      "id": "schist",
+      "name": "片理（結晶片岩）",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "急傾斜の薄い剥がれと細溝、細長い破片。"
+    },
+    {
+      "id": "slate",
+      "name": "スレート・頁岩",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "水平に近い薄板の積み重ね、剥がれた縁。"
+    },
+    {
+      "id": "layered-ledges",
+      "name": "層理の段",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "水平な層の棚が重なる。"
+    },
+    {
+      "id": "talus-fragment",
+      "name": "崖錐の角張った岩片",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "鋭い割れ面と小さな欠けの岩片。"
+    },
+    {
+      "id": "river-pebble",
+      "name": "河原の丸石",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "平たく丸い、なめらかな石。"
+    },
+    {
+      "id": "rounded-boulder",
+      "name": "丸い転石",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "丸いが大きな面が残る転石。"
+    },
+    {
+      "id": "granite-sheeting",
+      "name": "花崗岩のシーティング",
+      "category": "形の骨格",
+      "status": "△",
+      "description": "外側の板がまだらに剥がれ落ちた段。"
+    },
+    {
+      "id": "obsidian",
+      "name": "黒曜石・フリント",
+      "category": "形の骨格",
+      "status": "○",
+      "description": "えぐれた貝殻状の剥離痕が重なる。"
+    },
+    {
+      "id": "conglomerate",
+      "name": "礫岩",
+      "category": "堆積・火山の組織",
+      "status": "○",
+      "description": "丸い礫が半分ほど埋まって突き出る。"
+    },
+    {
+      "id": "breccia",
+      "name": "角礫岩",
+      "category": "堆積・火山の組織",
+      "status": "△",
+      "description": "角張った礫が浅く埋まる。"
+    },
+    {
+      "id": "vesicular-basalt",
+      "name": "多孔質の溶岩",
+      "category": "堆積・火山の組織",
+      "status": "○",
+      "description": "気泡の丸い穴が多数ある。"
+    },
+    {
+      "id": "honeycomb",
+      "name": "蜂の巣状の風化（タフォニ）",
+      "category": "風化・侵食の形",
+      "status": "○",
+      "description": "表面の丸いくぼみの群れ。"
+    },
+    {
+      "id": "mushroom-rock",
+      "name": "きのこ岩",
+      "category": "風化・侵食の形",
+      "status": "○",
+      "description": "細い台座の上に傘が載る。"
+    },
+    {
+      "id": "hoodoo",
+      "name": "フードゥー",
+      "category": "風化・侵食の形",
+      "status": "○",
+      "description": "くびれが段に重なる縦長の柱。"
+    },
+    {
+      "id": "roche-moutonnee",
+      "name": "羊背岩",
+      "category": "風化・侵食の形",
+      "status": "○",
+      "description": "上流側が研磨されて丸く、下流側が角張る。"
+    },
+    {
+      "id": "gneiss",
+      "name": "片麻岩",
+      "category": "表面・色",
+      "status": "○",
+      "description": "割れ目と同じ向きの明暗の縞（Surface の定数色）。"
+    },
+    {
+      "id": "marble",
+      "name": "大理石",
+      "category": "表面・色",
+      "status": "△",
+      "description": "白い下地に暗い脈（Surface の定数色）。"
+    }
+  ]
+}

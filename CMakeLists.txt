@@ -152,6 +152,8 @@ set(rock_sources
     src/io/GraphIo.cpp
     src/io/GraphIo.h
     src/io/JsonUtil.h
+    src/io/RockTemplates.cpp
+    src/io/RockTemplates.h
     src/graph/NodeParams.cpp
     src/graph/NodeParams.h
     src/io/ProjectWorkspace.cpp
@@ -222,6 +224,7 @@ set_source_files_properties(${rock_shaders} PROPERTIES HEADER_FILE_ONLY TRUE)
 source_group("shaders" FILES ${rock_shaders})
 
 add_executable(rock_editor WIN32 ${rock_sources} ${rock_shaders})
+target_sources(rock_editor PRIVATE src/app/ApplicationTemplates.cpp)
 target_sources(rock_editor PRIVATE src/geometry/UvUnwrap.cpp src/app/ApplicationUvPanel.cpp src/app/ApplicationBake.cpp src/renderer/BakePadding.cpp)
 target_link_libraries(rock_editor PRIVATE rock_xatlas)
 
@@ -296,6 +299,22 @@ add_custom_command(TARGET rock_editor POST_BUILD
     COMMENT "dxil.dll を配置"
 )
 
+# --- 岩のテンプレート -------------------------------------------------------
+# examples/ai-recipes/ のレシピと一覧（templates.json）、研究ページの画像を実行ファイルの横の templates/ に置く。
+# アプリの「テンプレートから作成」が読む。コピーが無いとき（開発中）はソースのフォルダを使う。
+file(GLOB rock_template_files CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes/*.rockgraph"
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes/templates.json"
+    "${CMAKE_CURRENT_SOURCE_DIR}/docs/research/images/*.jpg")
+add_custom_command(TARGET rock_editor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:rock_editor>/templates"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${rock_template_files} "$<TARGET_FILE_DIR:rock_editor>/templates"
+    COMMENT "岩のテンプレートを配置"
+)
+target_compile_definitions(rock_editor PRIVATE
+    ROCK_TEMPLATE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes"
+    ROCK_TEMPLATE_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/docs/research/images")
+
 # --- プレビュー用の同梱画像 -----------------------------------------------
 add_custom_command(TARGET rock_editor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:rock_editor>/assets/textures"
@@ -350,6 +369,9 @@ add_executable(rock_editor_tests
     src/io/ProjectWorkspace.h
     src/io/GraphIo.cpp
     src/io/GraphIo.h
+    src/io/RockTemplates.cpp
+    src/io/RockTemplates.h
+    tests/RockTemplatesTests.cpp
     src/io/ThumbnailStore.cpp
     src/io/ThumbnailStore.h
     src/io/AssetRelations.cpp
@@ -467,3 +489,8 @@ target_sources(rock_editor_tests PRIVATE tests/ShapeMaskTests.cpp)
 # terrain-graphから移植した共有レイヤーマテリアル。
 target_sources(rock_editor PRIVATE src/graph/SurfacePresetGraph.cpp src/io/LayerMaterialIo.cpp src/app/ApplicationLayerMaterial.cpp)
 target_sources(rock_editor_tests PRIVATE src/graph/SurfacePresetGraph.cpp src/io/LayerMaterialIo.cpp tests/LayerMaterialTests.cpp)
+
+# テストはソースのテンプレート（examples/ai-recipes/）が全部読めることを確かめる。
+target_compile_definitions(rock_editor_tests PRIVATE
+    ROCK_TEMPLATE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes"
+    ROCK_TEMPLATE_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/docs/research/images")

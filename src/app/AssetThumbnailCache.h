@@ -55,6 +55,10 @@ public:
         renderer::TonemapMode tonemap{};
     };
     void SetModelLighting(const ModelLighting& lighting) { m_modelLighting = lighting; }
+    // 画像ファイルを一辺 size の正方形（縦横比を保って中央に置く）に縮めたテクスチャにする。
+    // GPU の待機を伴うのでフレームの外で呼ぶ。テンプレートの一覧のサムネイルにも使う。
+    static bool BuildImage(rhi::Device& device, const std::filesystem::path& path, rhi::GpuTexture& output,
+                           uint32_t size = 128);
 
 private:
     struct Entry {
@@ -63,7 +67,6 @@ private:
         bool failed = false;
     };
     void ClearScratch(rhi::Device& device, bool textures = true);
-    bool BuildImage(rhi::Device& device, const std::filesystem::path& path, rhi::GpuTexture& output);
     bool BuildModel(rhi::Device& device, rhi::PipelineCache& pipelines, io::ProjectWorkspace& workspace,
                     const std::filesystem::path& path, rhi::GpuTexture& output);
     void Store(rhi::Device& device, const std::filesystem::path& path, rhi::GpuTexture texture, bool persist = true);

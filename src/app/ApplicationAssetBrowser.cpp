@@ -951,6 +951,7 @@ void Application::DrawAssetBrowser() {
                 m_pendingNewPath = m_workspace.UniquePath(m_assetDirectory, name, extension);
             };
             if (ImGui::MenuItem("岩グラフを作成")) createDocument(DocumentKind::Rock, "新規岩グラフ", ".rockgraph");
+            if (ImGui::MenuItem("テンプレートから岩グラフを作成…")) OpenTemplateWindow(m_assetDirectory);
             if (ImGui::MenuItem("山グラフを作成")) createDocument(DocumentKind::Mountain, "新規山グラフ", ".mountaingraph");
             if (ImGui::MenuItem("天球を作成")) {
                 const auto id = m_skyLibrary.Add("新規天球");

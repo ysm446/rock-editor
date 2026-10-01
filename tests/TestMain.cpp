@@ -37,6 +37,7 @@ void RunMeshSceneTests();
 void RunFrameLimiterTests();
 void RunNodeGraphTests();
 void RunGraphIoTests();
+void RunRockTemplatesTests();
 void RunNodeParamsTests();
 void RunUiInteractionTests();
 void RunUndoHistoryTests();
@@ -100,6 +101,7 @@ int main(int argc, char** argv) {
     RunFrameLimiterTests();
     RunNodeGraphTests();
     RunGraphIoTests();
+    RunRockTemplatesTests();
     RunNodeParamsTests();
 
     std::printf("\n%s\n", (rock::tests::g_failures == 0) ? "すべて成功" : "失敗あり");

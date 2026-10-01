@@ -105,7 +105,7 @@ void AssetThumbnailCache::Store(rhi::Device& device, const fs::path& path, rhi::
     m_entries.emplace(path, std::move(entry));
 }
 
-bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, rhi::GpuTexture& output) {
+bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, rhi::GpuTexture& output, uint32_t size) {
     const auto extension = Extension(path);
     const bool hdr = extension == ".hdr", linear = hdr || extension == ".exr";
     LdrImage ldrImage;
@@ -115,11 +115,11 @@ bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, 
     const uint32_t width = linear ? hdrImage.width : ldrImage.width;
     const uint32_t height = linear ? hdrImage.height : ldrImage.height;
     if (!width || !height) return false;
-    const float scale = float(ThumbnailSize) / float(std::max(width, height));
+    const float scale = float(size) / float(std::max(width, height));
     const uint32_t scaledWidth = std::max(1u, uint32_t(float(width) * scale));
     const uint32_t scaledHeight = std::max(1u, uint32_t(float(height) * scale));
-    const uint32_t offsetX = (ThumbnailSize - scaledWidth) / 2, offsetY = (ThumbnailSize - scaledHeight) / 2;
-    std::vector<uint8_t> pixels(ThumbnailSize * ThumbnailSize * 4, 0);
+    const uint32_t offsetX = (size - scaledWidth) / 2, offsetY = (size - scaledHeight) / 2;
+    std::vector<uint8_t> pixels(size * size * 4, 0);
     // HDRI だけ代表輝度で露出を揃える。EXR の通常テクスチャはリニア→sRGB のみ。
     const float exposure = hdr ? 0.18f / std::max(MedianSkyLuminance(hdrImage), 0.0001f) : 1.0f;
     for (uint32_t y = 0; y < scaledHeight; ++y) for (uint32_t x = 0; x < scaledWidth; ++x) {
@@ -136,7 +136,7 @@ bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, 
             }
         }
         const float count = float(uint64_t(x1 - x0) * (y1 - y0));
-        const size_t target = (size_t(y + offsetY) * ThumbnailSize + x + offsetX) * 4;
+        const size_t target = (size_t(y + offsetY) * size + x + offsetX) * 4;
         for (size_t c = 0; c < 4; ++c) {
             float value = sum[c] / count;
             if (linear && c < 3) {
@@ -148,11 +148,11 @@ bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, 
         }
     }
     rhi::TextureDesc desc;
-    desc.width = desc.height = ThumbnailSize;
+    desc.width = desc.height = size;
     desc.initialState = D3D12_RESOURCE_STATE_COPY_DEST;
     desc.debugName = L"AssetImageThumbnail";
     if (!device.Allocator().CreateTexture2D(desc, output)) return false;
-    const uint32_t rowPitch = ThumbnailSize * 4;
+    const uint32_t rowPitch = size * 4;
     rhi::GpuBuffer staging;
     if (!device.Allocator().CreateUploadBuffer(pixels.size(), L"AssetThumbnailUpload", staging)) return false;
     void* mapped = nullptr;
@@ -163,7 +163,7 @@ bool AssetThumbnailCache::BuildImage(rhi::Device& device, const fs::path& path, 
     const bool result = device.ExecuteImmediate([&](ID3D12GraphicsCommandList* list) {
         PIXBeginEvent(list, PIX_COLOR_DEFAULT, "AssetImageThumbnail");
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
-        footprint.Footprint = {DXGI_FORMAT_R8G8B8A8_UNORM, ThumbnailSize, ThumbnailSize, 1, rowPitch};
+        footprint.Footprint = {DXGI_FORMAT_R8G8B8A8_UNORM, size, size, 1, rowPitch};
         const CD3DX12_TEXTURE_COPY_LOCATION source(staging.resource.Get(), footprint), target(output.resource.Get(), 0);
         list->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
         rhi::TransitionIfNeeded(list, output, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);

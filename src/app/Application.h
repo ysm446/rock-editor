@@ -18,6 +18,7 @@
 #include "io/RockAssetIo.h"
 #include "io/AppSettings.h"
 #include "io/RecentFiles.h"
+#include "io/RockTemplates.h"
 #include "renderer/MaterialSphere.h"
 #include "renderer/OcclusionBake.h"
 #include "renderer/ModelAsset.h"
@@ -82,6 +83,9 @@ struct StartupOptions {
     // 開発用。グラフの評価が終わるたびに、カメラを形全体が入るように引く（キーの A と同じ。グリッドは含めない）。
     // 撮影で被写体が画面からはみ出さないようにする（LLM が見た目を確かめるときなど）。
     bool frameAll = false;
+    // 開発用。起動時に「テンプレートから作成」を開く / テンプレート（id）から作成して開く（アセット欄で表示中のフォルダへ）。
+    bool openTemplates = false;
+    std::string templateId;
     // 開発用。カメラの向き（度）。NaN なら変えない。撮影で正面・側面などを撮り分けるのに使う。
     // yaw は注視点のまわりの水平の角度、pitch は見下ろす角度（正で上から）。
     float cameraYawDegrees = std::numeric_limits<float>::quiet_NaN();
@@ -489,6 +493,12 @@ private:
     void ProcessAssetWork();
     void DrawSceneSwitchDialog();
     void DrawAssetDeleteDialog();
+    // 「テンプレートから作成」。岩のテンプレートを選び、directory（空ならルート）へ複製して開く。ApplicationTemplates.cpp。
+    void OpenTemplateWindow(const std::filesystem::path& directory);
+    void DrawTemplateWindow();
+    void ProcessTemplateWork();
+    void DestroyTemplateThumbnails();
+    void CreateFromTemplate(const io::RockTemplate& source);
     // 現在のシーンがそのファイルを使っているか（削除の可否）。
     bool IsAssetLoaded(const std::filesystem::path& path) const;
     void ResumeSceneSwitch();
@@ -872,6 +882,11 @@ private:
     AssetThumbnailCache m_assetThumbnails;
     std::filesystem::path m_assetDirectory;
     std::vector<std::filesystem::directory_entry> m_assetEntries;
+    // 「テンプレートから作成」の状態。一覧とサムネイルは初めて開いたときに読む。
+    bool m_templateWindow = false, m_templatesLoaded = false;
+    std::filesystem::path m_templateDirectory;
+    std::vector<io::RockTemplate> m_rockTemplates;
+    std::vector<rhi::GpuTexture> m_templateThumbnails;
     // フォルダ階層（親 → 子フォルダの一覧）。毎フレーム列挙せず、更新のときに作り直す。
     std::unordered_map<std::wstring, std::vector<std::filesystem::path>> m_assetFolders;
     // ルート内の画像ファイル（全フォルダ）。テクスチャのコンボに未読み込みの候補として出す。フォルダ階層と同時に作り直す。

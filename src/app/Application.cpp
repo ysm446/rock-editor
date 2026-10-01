@@ -231,6 +231,7 @@ void Application::Shutdown() {
     if (m_bakeJob) { m_bakeJob->ao.Release(m_device); m_bakeJob.reset(); }
     // ImGui のコンテキストより先に破棄する（エディタが ImGui に依存している）。
     m_assetThumbnails.Destroy(m_device);
+    DestroyTemplateThumbnails();
     DestroyGraphEditor();
     m_materialSphere.Destroy(m_device);
     m_skySphere.Destroy(m_device);
@@ -362,6 +363,18 @@ int Application::Run() {
             m_options.exportBakeDirectory.clear();
         }
         ProcessPendingBake();
+        if ((m_options.openTemplates || !m_options.templateId.empty()) && m_frameCounter >= 2) {
+            OpenTemplateWindow(m_assetDirectory);
+            m_options.openTemplates = false;
+            ProcessTemplateWork();
+            if (!m_options.templateId.empty()) {
+                const auto found = std::find_if(m_rockTemplates.begin(), m_rockTemplates.end(),
+                                                [&](const io::RockTemplate& entry) { return entry.id == m_options.templateId; });
+                if (found != m_rockTemplates.end()) CreateFromTemplate(*found);
+                else ROCK_LOG_ERROR("テンプレートがありません: %s", m_options.templateId.c_str());
+                m_options.templateId.clear();
+            }
+        }
         if (m_options.bakeAssetNode && m_frameCounter >= 2) { m_pendingAssetBake = m_options.bakeAssetNode; m_options.bakeAssetNode = 0; }
         ProcessPendingAssetBake();
 
@@ -686,6 +699,7 @@ void Application::DrawUi() {
     DrawModelPreviewWindow();
     DrawSceneSwitchDialog();
     DrawAssetDeleteDialog();
+    DrawTemplateWindow();
     DrawInfoWindow();
     DrawSettingsWindow();
 

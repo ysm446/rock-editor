@@ -121,6 +121,10 @@ rock::StartupOptions ParseCommandLine() {
             ++i;
         } else if (argument == L"--test-gpu-ao") {
             options.testGpuAo = true;
+        } else if (argument == L"--open-templates") {
+            options.openTemplates = true;
+        } else if (argument == L"--template" && (i + 1) < argc) {
+            options.templateId = rock::ToUtf8Display(std::filesystem::path(argv[++i]));
         } else if (argument == L"--frame-all") {
             options.frameAll = true;
         } else if (argument == L"--camera-yaw" && (i + 1) < argc) {
