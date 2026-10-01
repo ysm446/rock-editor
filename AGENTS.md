@@ -52,6 +52,11 @@
 - 例では具体的な実ファイル名ではなく、必要に応じて `path/to/file.ext` のような一般的なパスを使う。
 - ファイル検索は `rg` / `rg --files` を優先する。
 
+## 岩グラフの作成
+
+- 「〇〇な岩を作って」「この岩グラフを調整して」のように、岩グラフ（`.rockgraph`）をノードで組む・直す依頼では、skill `rock-graph`（`.agents/skills/rock-graph/SKILL.md`）の手順に従う。
+- 手順の正本は `.agents/skills/rock-graph/SKILL.md` に置き、Claude Code（`.claude/skills/rock-graph/SKILL.md`）と Codex で共有する。手順を直すときは正本だけを直す。
+
 ## UIのレイアウト
 
 - 処理中・完了・エラーの切り替えで、パラメータ欄へテキストや進捗バーを挿入・削除しない。設定の位置とスクロール範囲を動かさない。

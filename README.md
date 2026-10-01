@@ -117,7 +117,7 @@ rock_cli catalog [--pretty]
 終了コードは 0 = 成功、1 = 評価エラーか読み込みで捨てたものがある、2 = 読み込めない・引数の誤り。
 グラフは手で書きやすい表記でも書ける（ピン ID・位置を省き、リンクを `{"from": "3", "to": "6:Geometry"}` のようにノード ID とピン名で書く、列挙を名前で書く、マテリアルをパスで書く）。
 見た目は `python tools/rock_shot.py <graph> <out.png> [--node <id>] [--views 4]` で撮る（評価の完了を待ち、形全体が入るようにカメラを引く。`--views 4` は 4 方向を 1 枚に）。
-岩の種類ごとのレシピは `examples/ai-recipes/`、LLM（Claude Code）向けの手順は `.claude/skills/rock-graph/SKILL.md`。
+岩の種類ごとのレシピは `examples/ai-recipes/`、LLM（Claude Code・Codex など）向けの手順は `.agents/skills/rock-graph/SKILL.md`。
 仕様は [LLM による岩グラフの作成](docs/reference/ai-authoring.md)。
 
 ## ドキュメント

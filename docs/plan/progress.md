@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-01 19:20
+更新日時: 2026-10-01 23:40
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,11 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-10-01 手順を Codex と共有する
+
+- ユーザー判断で、アプリ内の対話パネル（案 B）は作らず、VSCode から Claude Code または Codex に指示を出して処理させる運用にした。
+- skill `rock-graph` の正本を `.agents/skills/rock-graph/SKILL.md`（Codex が読む場所）へ移し、`.claude/skills/rock-graph/SKILL.md` はそこを読む入口にした。AGENTS.md に「岩グラフの作成」の節を足した。Codex での動作はユーザーの手元で確認する。
 
 ### 2026-10-01 岩峰の頭でっかちを直す
 

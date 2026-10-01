@@ -1,6 +1,6 @@
 # 岩の種類ごとのレシピ（LLM・手書き向け）
 
-LLM に岩を作らせるときの出発点。どれも手で書きやすい表記（ピン ID・位置を省き、リンクをノード ID とピン名で書く）で書いてある。書き方は [LLM による岩グラフの作成](../../docs/reference/ai-authoring.md)、手順は [skill](../../.claude/skills/rock-graph/SKILL.md)。
+LLM に岩を作らせるときの出発点。どれも手で書きやすい表記（ピン ID・位置を省き、リンクをノード ID とピン名で書く）で書いてある。書き方は [LLM による岩グラフの作成](../../docs/reference/ai-authoring.md)、手順は [skill](../../.agents/skills/rock-graph/SKILL.md)。
 
 アプリの「ファイル」→「テンプレートから作成…」（アセット欄の右クリックにもある）から、表示中のフォルダへ複製して開ける。一覧は `templates.json`（日本語名・分類・状態・説明）。または、このフォルダをルートとして開くか、`rock_cli eval` / `python tools/rock_shot.py` で確かめる。形だけのグラフ（マテリアルは付けていない。`gneiss` / `marble` だけは Surface の定数色で模様を塗る）。どれも `rock_cli eval` で塊 1 つ・空洞 0・閉じたメッシュになることを確かめてある。
 
