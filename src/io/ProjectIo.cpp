@@ -674,12 +674,12 @@ bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
 
 bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
                  rhi::PipelineCache& pipelineCache, const ProjectRefs& refs,
-                 ProjectWorkspace* workspace) {
+                 ProjectWorkspace* workspace, bool outsideRoot) {
     json document;
     if (workspace != nullptr) {
         // シーンは参照する共有アセットを展開してから、従来の読み込み器に渡す。
         // 欠けたアセットがあればここで止まり、現在の文書は保持される。
-        if (!workspace->ReadScene(path, document)) {
+        if (!workspace->ReadScene(path, document, !outsideRoot)) {
             ROCK_LOG_ERROR("シーンまたは参照アセットを開けません: %s", ToUtf8Display(path).c_str());
             return false;
         }

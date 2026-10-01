@@ -335,6 +335,7 @@ void Application::DrawSceneSwitchDialog() {
         m_deferredScene.clear();
         m_deferredNew = false;
         m_pendingNewPath.clear();
+        m_pendingTemplateOpen = false;
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();

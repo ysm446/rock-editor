@@ -47,10 +47,13 @@ void Application::RequestSaveProject(bool saveAs) {
         m_pendingProjectSave = m_projectPath;
         return;
     }
+    // テンプレートから開いた未保存の文書は、選んだときに表示していたフォルダとテンプレート名を初期値にする。
     const std::filesystem::path initial =
         isScene ? m_projectPath
-                : m_workspace.Root() / L"Scenes" /
-                      ((m_projectPath.empty() ? std::wstring(L"Untitled") : m_projectPath.stem().wstring()) + extension);
+        : !m_untitledName.empty() && m_workspace.Contains(m_untitledDirectory)
+            ? m_workspace.UniquePath(m_untitledDirectory, m_untitledName, mountain ? ".mountaingraph" : ".rockgraph")
+            : m_workspace.Root() / L"Scenes" /
+                  ((m_projectPath.empty() ? std::wstring(L"Untitled") : m_projectPath.stem().wstring()) + extension);
     std::filesystem::path path =
         mountain ? ShowSaveFileDialog(L"山グラフを保存", {{L"Rock Editor 山グラフ", L"*.mountaingraph"}}, L"mountaingraph", initial)
                  : ShowSaveFileDialog(L"シーンを保存", {{L"Rock Editor シーン", L"*.rockgraph"}}, L"rockgraph", initial);
@@ -275,6 +278,8 @@ void Application::HandleDroppedFiles(const std::vector<std::filesystem::path>& p
 }
 
 void Application::ResetProject() {
+    m_untitledName.clear();
+    m_untitledDirectory.clear();
     // どれも GPU 待機を伴う。フレームの外から呼ぶこと。
     // 岩アセットの一時の材質・テクスチャは、ライブラリを空にする前に捨てる。
     ReleaseRockAssets();
@@ -333,6 +338,8 @@ void Application::UpdateWindowTitle() {
     std::wstring title;
     if (!m_projectPath.empty()) {
         title = m_projectPath.filename().wstring() + L" - ";
+    } else if (!m_untitledName.empty()) {
+        title = FromUtf8(m_untitledName).wstring() + L"（未保存） - ";
     }
     title += L"Rock Editor";
     m_window.SetTitle(title.c_str());
@@ -409,6 +416,8 @@ void Application::ProcessPendingFileWork() {
     if (!m_pendingProjectOpen.empty()) {
         const std::filesystem::path path = m_pendingProjectOpen;
         m_pendingProjectOpen.clear();
+        // テンプレートはルートの外から読み、パスを持たない未保存の文書にする。
+        const bool fromTemplate = std::exchange(m_pendingTemplateOpen, false);
 
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                              m_renderer, m_graph, &m_models};
@@ -416,12 +425,19 @@ void Application::ProcessPendingFileWork() {
         const bool isScene = io::IsSceneFile(path);
         // 岩アセットの一時の材質・テクスチャは、読み込みがライブラリを入れ替える前に捨てる。
         ReleaseRockAssets();
-        if (io::LoadProject(path, m_device, m_pipelineCache, refs, isScene ? &m_workspace : nullptr)) {
+        if (io::LoadProject(path, m_device, m_pipelineCache, refs, isScene ? &m_workspace : nullptr, fromTemplate)) {
             m_documentKind = io::IsMountainFile(path) ? DocumentKind::Mountain : DocumentKind::Rock;
             m_newDocumentSavePath.clear();
             m_meshHighlight = MeshHighlightState{};
-            if (isScene) m_recentProjects.Add(m_workspace.Root(), path);
-            m_projectPath = path;
+            if (isScene && !fromTemplate) m_recentProjects.Add(m_workspace.Root(), path);
+            if (fromTemplate) {
+                m_projectPath.clear();
+                ROCK_LOG_INFO("テンプレート「%s」を未保存のまま開きました", m_untitledName.c_str());
+            } else {
+                m_projectPath = path;
+                m_untitledName.clear();
+                m_untitledDirectory.clear();
+            }
             m_assetRefresh = true;
             if (const size_t pruned = PruneMissingTextures(false); pruned > 0)
                 ROCK_LOG_INFO("ファイルが無く、どこからも使われていないテクスチャを %zu 件外しました", pruned);
@@ -459,7 +475,7 @@ void Application::ProcessPendingFileWork() {
             m_pendingHistoryStep = 0;
             m_committed = CaptureDocument();
             UpdateWindowTitle();
-        } else {
+        } else if (!fromTemplate) {
             // 消えた / 壊れたシーンを履歴に残しても、選べるだけで意味がない。
             m_recentProjects.Remove(m_workspace.Root(), path);
         }
@@ -476,6 +492,8 @@ void Application::ProcessPendingFileWork() {
             m_assetRefresh = true;
             m_recentProjects.Add(m_workspace.Root(), path);
             m_projectPath = path;
+            m_untitledName.clear();
+            m_untitledDirectory.clear();
             UpdateWindowTitle();
             if (m_saveThenSwitch) {
                 m_saveThenSwitch = false;

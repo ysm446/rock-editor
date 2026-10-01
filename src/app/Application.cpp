@@ -370,7 +370,7 @@ int Application::Run() {
             if (!m_options.templateId.empty()) {
                 const auto found = std::find_if(m_rockTemplates.begin(), m_rockTemplates.end(),
                                                 [&](const io::RockTemplate& entry) { return entry.id == m_options.templateId; });
-                if (found != m_rockTemplates.end()) CreateFromTemplate(*found);
+                if (found != m_rockTemplates.end()) OpenTemplate(*found);
                 else ROCK_LOG_ERROR("テンプレートがありません: %s", m_options.templateId.c_str());
                 m_options.templateId.clear();
             }
@@ -1062,7 +1062,9 @@ void Application::DrawInfoWindow() {
 
     const ImGuiIO& io = ImGui::GetIO();
 
-    const std::string project = m_projectPath.empty() ? "未保存のプロジェクト" : ToUtf8Display(m_projectPath.filename());
+    const std::string project = !m_projectPath.empty()    ? ToUtf8Display(m_projectPath.filename())
+                                : !m_untitledName.empty() ? m_untitledName + "（未保存）"
+                                                          : "未保存のプロジェクト";
     if (ui::BeginPropertyTable("infoRows")) {
         ui::PropertyValue("プロジェクト", "%s", project.c_str());
         ui::PropertyValue("ノード", "%zu", m_graph.Nodes().size());

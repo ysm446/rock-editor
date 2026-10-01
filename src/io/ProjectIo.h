@@ -41,9 +41,10 @@ struct ProjectRefs {
 // 渡さなければ従来の `.reproj`（埋め込み・相対パス）をそのまま読み書きする。
 bool SaveProject(const std::filesystem::path& path, const ProjectRefs& refs,
                  ProjectWorkspace* workspace = nullptr);
+// outsideRoot が真なら、ルートの外のシーン（テンプレート）も読む（workspace が要る）。
 bool LoadProject(const std::filesystem::path& path, rhi::Device& device,
                  rhi::PipelineCache& pipelineCache, const ProjectRefs& refs,
-                 ProjectWorkspace* workspace = nullptr);
+                 ProjectWorkspace* workspace = nullptr, bool outsideRoot = false);
 
 // --- 共有アセット（ルート内の .rockmat / .rocksky / .model） ---------------
 //

@@ -95,7 +95,7 @@ rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
 `--screenshot` はビュー、`--screenshot-ui` は UI を含む PNG を出力して終了する（素材とグラフの評価の完了を待つ）。
 `--frame-all` はグラフの評価が終わるたびに、形全体が入るようにカメラを引く。
 `--camera-yaw` / `--camera-pitch` はカメラの向き（度）、`--light-azimuth` は作業用ライトの方位（度）を指定する。
-`--open-templates` は「テンプレートから作成」を開き、`--template <id>` はそのテンプレート（`examples/ai-recipes/templates.json` の id）から作成して開く。
+`--open-templates` は「テンプレートから作成」を開き、`--template <id>` はそのテンプレート（`examples/ai-recipes/templates.json` の id）を未保存の文書として開く。
 `--test-gpu-ao` は GPU の AO ベイクを CPU 版と比べ、結果を終了コードで返す（CTest には入れていない。GPU が要るため）。
 `--test-copy-to` は先頭以外のノードをコピーして指定シーンへ貼る（`--save-project` と併用）。
 検証素材・プロジェクト・スクリーンショットは Git 対象外の `data/` に置く。

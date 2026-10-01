@@ -122,6 +122,13 @@ void TestWorkspace() {
     Check(fs::exists(root / "Imported" / "external.png"), "ルート外の画像を Imported/ へ取り込む");
     json loaded;
     Check(workspace.ReadScene(scene, loaded), "シーンを読む");
+    // テンプレートはルートの外にあり、未保存の文書として開く。既定ではルートの外は読まない。
+    const fs::path outsideScene = outside.parent_path() / "template.rockgraph";
+    fs::copy_file(scene, outsideScene, fs::copy_options::overwrite_existing);
+    json outsideLoaded;
+    Check(!workspace.ReadScene(outsideScene, outsideLoaded), "ルートの外のシーンは既定では読まない");
+    Check(workspace.ReadScene(outsideScene, outsideLoaded, false) && outsideLoaded["version"] == 26,
+          "ルートの外のシーン（テンプレート）も許せば読む");
     Check(loaded["version"] == 26, "既存の保存器の版を戻す");
     Check(loaded["textures"][0]["path"] == rock::ToUtf8Portable(movedImage), "ルート内の画像は元の場所のまま");
     Check(loaded["textures"][1]["path"] == rock::ToUtf8Portable(root / "Imported" / "external.png"), "取り込んだ画像を指す");

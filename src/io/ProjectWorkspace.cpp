@@ -462,8 +462,8 @@ bool ProjectWorkspace::SaveScene(const fs::path& path, json& document) {
     return SetStartupScene(path);
 }
 
-bool ProjectWorkspace::ReadScene(const fs::path& path, json& document) {
-    if (!Contains(path) || !Scan() || !ReadJson(path, document) ||
+bool ProjectWorkspace::ReadScene(const fs::path& path, json& document, bool insideRoot) {
+    if ((insideRoot && !Contains(path)) || !Scan() || !ReadJson(path, document) ||
         String(document, "format") != kSceneFormat || document["version"] != 1) return false;
     return Expand(document);
 }

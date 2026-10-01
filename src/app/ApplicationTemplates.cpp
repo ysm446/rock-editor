@@ -1,5 +1,5 @@
 // 「テンプレートから作成」。岩のテンプレート（examples/ai-recipes/ のレシピ）を一覧から選び、
-// 表示中のフォルダへ複製して開く。一覧とサムネイルは研究ページ（docs/research/rocks.md）と共有する。
+// 未保存の文書として開く（中身を見るだけのことが多いので、保存するまでファイルを作らない）。一覧とサムネイルは研究ページ（docs/research/rocks.md）と共有する。
 
 #include "app/Application.h"
 #include "app/ApplicationUiHelpers.h"
@@ -41,18 +41,12 @@ void Application::DestroyTemplateThumbnails() {
     m_templateThumbnails.clear();
 }
 
-void Application::CreateFromTemplate(const io::RockTemplate& source) {
-    const std::filesystem::path directory = m_templateDirectory.empty() ? m_workspace.Root() : m_templateDirectory;
-    const std::filesystem::path destination = m_workspace.UniquePath(directory, source.name, ".rockgraph");
-    std::string error;
-    if (!io::CopyRockTemplate(source, destination, error)) {
-        ROCK_LOG_ERROR("テンプレートから作成できません: %s", error.c_str());
-        return;
-    }
-    ROCK_LOG_INFO("テンプレート「%s」から作成しました: %s", source.name.c_str(), ToUtf8Display(destination).c_str());
-    m_assetRefresh = true;
-    // 開く。今の文書の保存の確認（シーンの切り替え）を通る。
-    m_pendingProjectOpen = destination;
+void Application::OpenTemplate(const io::RockTemplate& source) {
+    // 開く。今の文書の保存の確認（シーンの切り替え）を通る。読み込めたら未保存の文書にする（ProcessPendingFileWork）。
+    m_pendingProjectOpen = source.graph;
+    m_pendingTemplateOpen = true;
+    m_untitledName = source.name;
+    m_untitledDirectory = m_templateDirectory.empty() ? m_workspace.Root() : m_templateDirectory;
     m_templateWindow = false;
 }
 
@@ -71,8 +65,8 @@ void Application::DrawTemplateWindow() {
     }
     std::error_code error;
     const auto relative = std::filesystem::relative(directory, m_workspace.Root(), error);
-    ui::HintText(("作成先: " + (error || relative.empty() || relative == "." ? std::string("ルート") : ToUtf8Display(relative)) +
-                  "（選ぶと複製して開きます。状態 ○ はそれらしく作れる、△ は改善中）").c_str());
+    ui::HintText(("保存先: " + (error || relative.empty() || relative == "." ? std::string("ルート") : ToUtf8Display(relative)) +
+                  "（選ぶと未保存のまま開き、保存したときに初めてファイルを作ります。状態 ○ はそれらしく作れる、△ は改善中）").c_str());
     if (!m_templatesLoaded) {
         ImGui::TextDisabled("読み込み中…");
         ImGui::End();
@@ -120,7 +114,7 @@ void Application::DrawTemplateWindow() {
         if (column == 0) ImGui::Spacing();
     }
     ImGui::End();
-    if (chosen) CreateFromTemplate(*chosen);
+    if (chosen) OpenTemplate(*chosen);
 }
 
 }  // namespace rock

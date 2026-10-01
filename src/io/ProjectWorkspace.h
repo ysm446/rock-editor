@@ -41,7 +41,8 @@ public:
     // 既存の保存器が作った文書（埋め込みのマテリアル・天球、相対パスの画像）を
     // 共有アセットへ分離してシーンを書く。
     bool SaveScene(const std::filesystem::path& path, nlohmann::json& document);
-    bool ReadScene(const std::filesystem::path& path, nlohmann::json& document);
+    // insideRoot が偽ならルートの外のシーン（テンプレート）も読む。参照する共有アセットはルートから探す。
+    bool ReadScene(const std::filesystem::path& path, nlohmann::json& document, bool insideRoot = true);
     // 共有アセットの参照を、既存の読み込み器が扱う埋め込み文書へ展開する。
     bool Expand(nlohmann::json& document);
     static bool ReadJson(const std::filesystem::path& path, nlohmann::json& document);
