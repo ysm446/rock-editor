@@ -58,7 +58,15 @@ void RunVolumeErodeTests() {
     Check(Measure(blown, dual, geometry::VolumeMeshingMethod::DualContouring), "さらされた面: Dual Contouring でも閉じた表面にできる");
     Check(blown.dimensions == box.dimensions && blown.spacing == box.spacing, "格子は入力のまま");
     const float windward = CarvedAtFace(box, blown, 0, -1), leeward = CarvedAtFace(box, blown, 0, 1), top = CarvedAtFace(box, blown, 1, 1);
-    Check(windward > .06f && leeward < 1e-4f && top < 1e-4f, "さらされた面: 風上の面だけ削れ、風下と上面は変わらない");
+    Check(windward > .06f && leeward < 1e-4f && top < windward * .5f && top > 0,
+          "さらされた面: 風上の面が最も削れ、横向きの上面は弱く削れ、風下（陰）は変わらない");
+    {
+        geometry::VolumeErodeSettings narrow = wind;
+        narrow.sharpness = 8;
+        const auto focused = geometry::ErodeVolume(box, narrow, error);
+        Check(error.empty() && CarvedAtFace(box, focused, 1, 1) < .002f && CarvedAtFace(box, focused, 0, -1) > .06f,
+              "集中 8 では横向きの面はほとんど削れない");
+    }
     Check(windward <= .05f * 2 + 1e-3f, "さらされた面: 削る深さは量（0.05 × 2 m）を超えない");
     // 形を広げない: 入力で外だった格子点は外のまま（回の間の再距離化で内部の値は深くなることがある）。
     bool neverGrows = true;

@@ -2316,33 +2316,37 @@ VolumeGrid ErodeVolume(const VolumeGrid& g, const VolumeErodeSettings& s, std::s
                            SampleGridValues(current, blurred, {surface.x, surface.y, surface.z + h}) - SampleGridValues(current, blurred, {surface.x, surface.y, surface.z - h})};
                     const float bl = std::sqrt(b.x * b.x + b.y * b.y + b.z * b.z);
                     if (bl > 0) b = {b.x / bl, b.y / bl, b.z / bl};
-                    const float facing = std::clamp(b.x * from.x + b.y * from.y + b.z * from.z, 0.f, 1.f);
+                    // 向きの重み: 正面（内積 1）で 1、横向き（内積 0）で 0.5 の集中乗、裏（内積 −1）で 0。
+                    // 横向きの面と縁にも弱く効かせ、風下は陰で守る。こうすると鼻先が最も後退し、側面がゆっくり削れて流線形に寄る。
+                    const float facing = std::clamp((b.x * from.x + b.y * from.y + b.z * from.z) * .5f + .5f, 0.f, 1.f);
                     weight = std::pow(facing, s.sharpness);
                     if (weight > 0 && shadowReach > 0) {
-                        // 風上へ向かって形に当たれば、他の部分の陰（風下）にある。少し広げた 5 本のレイ（中心と 4 方向）の
-                        // スフィアトレーシングで、当たった割合だけ弱める。表面のすぐ近く（3 セル）の当たりは自分の面なので数えない。
+                        // 風上側の開放度: 来る向きを中心に半頂角 50° の円錐へ 16 本のレイ（フィボナッチ格子）をスフィアトレーシングし、
+                        // 形に当たった割合だけ弱める。くぼみの中や風下は閉じていて削れず、凸な鼻先と縁は開けていて削れる
+                        // （1 方向のレイだけでは、くぼみができると底が削れ続けて自己強化する）。
+                        // 表面のすぐ近く（3 セル）の当たりは自分の面なので数えない。
                         const Vec3 start{surface.x + n.x * g.spacing, surface.y + n.y * g.spacing, surface.z + n.z * g.spacing};
                         const Vec3 side = std::abs(from.y) < .9f ? Vec3{-from.z, 0, from.x} : Vec3{1, 0, 0};
                         const float sl = std::sqrt(side.x * side.x + side.y * side.y + side.z * side.z);
                         const Vec3 u{side.x / sl, side.y / sl, side.z / sl};
                         const Vec3 v{from.y * u.z - from.z * u.y, from.z * u.x - from.x * u.z, from.x * u.y - from.y * u.x};
-                        const float spread = .35f;
-                        const Vec3 rays[5] = {from,
-                                              {from.x + u.x * spread, from.y + u.y * spread, from.z + u.z * spread},
-                                              {from.x - u.x * spread, from.y - u.y * spread, from.z - u.z * spread},
-                                              {from.x + v.x * spread, from.y + v.y * spread, from.z + v.z * spread},
-                                              {from.x - v.x * spread, from.y - v.y * spread, from.z - v.z * spread}};
+                        constexpr int kRays = 16;
+                        const float cosCone = std::cos(50.f * std::numbers::pi_v<float> / 180);
                         int hits = 0;
-                        for (const Vec3& ray : rays) {
-                            const float rl = std::sqrt(ray.x * ray.x + ray.y * ray.y + ray.z * ray.z);
+                        for (int i = 0; i < kRays; ++i) {
+                            const float c = 1 - (1 - cosCone) * (float(i) + .5f) / kRays, r = std::sqrt(std::max(0.f, 1 - c * c));
+                            const float phi = float(i) * 2.399963229728653f;
+                            const Vec3 ray{from.x * c + (u.x * std::cos(phi) + v.x * std::sin(phi)) * r,
+                                           from.y * c + (u.y * std::cos(phi) + v.y * std::sin(phi)) * r,
+                                           from.z * c + (u.z * std::cos(phi) + v.z * std::sin(phi)) * r};
                             float t = g.spacing * 3;
                             while (t < shadowReach) {
-                                const float d = SampleVolume(current, {start.x + ray.x / rl * t, start.y + ray.y / rl * t, start.z + ray.z / rl * t});
+                                const float d = SampleVolume(current, {start.x + ray.x * t, start.y + ray.y * t, start.z + ray.z * t});
                                 if (d < 0) { ++hits; break; }
                                 t += std::max(d, minimumStep);
                             }
                         }
-                        weight *= 1 - float(hits) / 5;
+                        weight *= 1 - float(hits) / kRays;
                     }
                 } else {
                     const float f = std::clamp(SampleGridValues(current, flow, surface) / flowScale, 0.f, 1.f);

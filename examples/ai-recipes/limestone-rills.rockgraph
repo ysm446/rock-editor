@@ -8,7 +8,7 @@
       {"id": 3, "kind": "planeCuts", "note": "傾いた大きな面（雨水が流れ下る斜面）", "planeCuts": {"count": 10, "depthMin": 0.05, "depthMax": 0.2, "seed": 4}},
       {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.03, "amount": 1}},
       {"id": 5, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.15}},
-      {"id": 6, "kind": "volumeErode", "note": "溶食の縦溝（リレンカレン）: 表面を雨水が流れ下る筋を追い、流れが集まる所を溝に彫る。回数を重ねると流れが溝に集まる", "volumeErode": {"type": "flow", "amount": 0.05, "sharpness": 3, "length": 0.6, "width": 0.012, "iterations": 4, "noise": 0.3, "noiseScale": 6, "seed": 2}},
+      {"id": 6, "kind": "volumeErode", "note": "溶食の縦溝（リレンカレン）: 表面を雨水が流れ下る筋を追い、流れが集まる所を溝に彫る。回数を重ねると流れが溝に集まる", "volumeErode": {"type": "flow", "amount": 0.06, "sharpness": 4, "length": 0.6, "width": 0.01, "iterations": 5, "noise": 0.6, "noiseScale": 16, "seed": 2}},
       {"id": 7, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.01, "radius": 0.01}},
       {"id": 8, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
       {"id": 9, "kind": "meshOutput"}

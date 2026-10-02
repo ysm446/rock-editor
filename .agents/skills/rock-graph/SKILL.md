@@ -106,6 +106,6 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 - **Peel の欠ける順序は Voronoi Fracture のノード ID にも依存する**: レシピを写して ID を振り直すと形が変わる（全て崩れることもある）。写すときは ID を保つ。
 - **後から足した所・削った所を別の素材で塗る**: Volume Diff Mask の Before に足す・削る前の Volume、Mesh に UV Unwrap の出力を繋ぐ（隙間を Volume Close で埋めた土、Volume Scatter で足した礫、割れ目）。Before はメッシュと同じ位置にそろえる（Volume Clip の接地の後から取る）。しきい値は後段の Noise・Edge Wear の揺れより大きく。
 - **水面・地面の近くなど、ワールドの高さで決まる帯**: Volume Undercut の `"reference": "world"` と `level`（m）。先に Volume Clip の `ground` で接地してから使う（波食ノッチ `wave-cut-notch`、風食の足元 `wind-erosion`）。
-- **向きで削る（風上の面を後退させる・流れの溝）**: Volume Erode。`"type": "exposure"` は `direction`（来る向き）を向く面を削り陰を残す（`wind-erosion`）。`"type": "flow"` は重力で流れ下る筋に沿って溝を彫る（`limestone-rills`）。量 0.1 を超えると平らな面がえぐれて縁が残る。中間ノードのプレビューは段々に見えるので、効果は最終メッシュ（Volume to Mesh の後）で判断する。
+- **向きで削る（風上の面を後退させる・流れの溝）**: Volume Erode。`"type": "exposure"` は `direction`（来る向き）を向く面を削り陰を残す（`wind-erosion`）。`"type": "flow"` は重力で流れ下る筋に沿って溝を彫る（`limestone-rills`）。前段に Volume Smooth の向き集中（大きな半径）を置くと面の中央が皿状にくぼむので、丸めは Erode に任せる。中間ノードのプレビューは段々に見えるので、効果は最終メッシュ（Volume to Mesh の後）で判断する。
 - **扁平な形を積む**（枕状溶岩の枕、寝た礫）: Volume Scatter の `lie`（寝かせる割合）で短い軸を上へ向ける。`blend` を上げすぎると形が溶け合って輪郭が消える（`pillow-lava` は 0.12）。
 - **Debug ビルドの Remesh** はスタックオーバーフローで落ちることがある。撮影・評価は Release を使う。
