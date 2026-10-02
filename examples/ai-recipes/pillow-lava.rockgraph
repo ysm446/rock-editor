@@ -1,0 +1,20 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "枕の下地になる低い台（枕で覆って見せない）", "baseRock": {"shape": "box", "size": [2.6, 0.6, 2.0], "subdivisions": 8}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 96}},
+      {"id": 3, "kind": "volumeScatter", "note": "大きな枕: 自重で扁平になった袋状の塊を寝かせて積む。なじませる幅で下の枕に垂れたように繋ぐ", "volumeScatter": {"shape": "ellipsoid", "operation": "union", "count": 80, "radiusMin": 0.12, "radiusMax": 0.17, "depthMin": -0.1, "depthMax": 0.4, "elongation": 2.2, "blend": 0.12, "lie": 0.85, "seed": 3}},
+      {"id": 4, "kind": "volumeScatter", "note": "小さな枕を隙間に", "volumeScatter": {"shape": "ellipsoid", "operation": "union", "count": 50, "radiusMin": 0.07, "radiusMax": 0.11, "depthMin": 0.0, "depthMax": 0.5, "elongation": 2.0, "blend": 0.12, "lie": 0.85, "seed": 4}},
+      {"id": 5, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.012, "amount": 1}},
+      {"id": 6, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.3}},
+      {"id": 7, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 8, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8:Geometry"}
+    ]
+  }
+}

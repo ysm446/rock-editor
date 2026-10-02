@@ -42,6 +42,8 @@ constexpr ParamOption kShapeMaskTypes[] = {{"occlusion", 0, "遮蔽（窪み）"
 constexpr ParamOption kCombineOps[] = {{"multiply", 0, "積"}, {"maximum", 1, "大きい方"}, {"minimum", 2, "小さい方"},
                                        {"subtract", 3, "A − B"}, {"mix", 4, "mix で混ぜる"}};
 constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"}};
+constexpr ParamOption kUndercutReferences[] = {{"shape", 0, "形: 帯の中心を形の高さに対する位置 height で指定する"},
+                                               {"world", 1, "ワールド: 帯の中心をワールドの高さ level (m) で指定する（波食ノッチの水面）"}};
 constexpr ParamOption kClipModes[] = {{"world", 0, "指定した高さで切る"},
                                      {"ground", 1, "形の底から embed の位置で切り、切り口を height（地面）に置く"}};
 constexpr ParamOption kVolumeDiffModes[] = {{"added", 0, "足した所: 比べる元の形の外にある表面（隙間を埋めた土・足した礫）"},
@@ -248,8 +250,12 @@ constexpr ParamDefinition kParams[] = {
     {K::VolumeClip, "volumeClip.embed", T::Float, 0, 0.9, "形の高さに対する比", "埋める割合",
      "ground 用。形の底からこの割合の高さで切って捨てる（地面に埋まった部分）。0 で底をそのまま据える", C::Error},
     {K::VolumeClip, "volumeClip.invert", T::Bool, N, N, "", "反転", "false で下を捨てる、true で上を捨てる", C::None},
+    {K::VolumeUndercut, "volumeUndercut.reference", T::Enum, N, N, "", "帯の基準",
+     "shape は形の高さに対する位置（height）、world はワールドの高さ（level、m）で帯の中心を決める。帯の幅・間隔はどちらも形の高さに対する比", C::Clamp, kUndercutReferences},
     {K::VolumeUndercut, "volumeUndercut.height", T::Float, 0, 1, "形の高さに対する位置", "高さ",
-     "最初の帯の中心。底 0、上 1（内部の格子点の範囲）。きのこ岩は 0.15〜0.3", C::Error},
+     "shape 用。最初の帯の中心。底 0、上 1（内部の格子点の範囲）。きのこ岩は 0.15〜0.3", C::Error},
+    {K::VolumeUndercut, "volumeUndercut.level", T::Float, -100000, 100000, "m", "高さ (m)",
+     "world 用。最初の帯の中心のワールドの高さ（Y）。波食ノッチなら水面の高さ。接地（Volume Clip の ground）の後に使う", C::Error},
     {K::VolumeUndercut, "volumeUndercut.width", T::Float, 0.02, 1, "形の高さに対する比", "帯の幅", "帯の半分の高さ", C::Error},
     {K::VolumeUndercut, "volumeUndercut.depth", T::Float, 0, 0.4, kLongest, "深さ",
      "帯の中心で内側へ削る深さ。帯の高さでの形の半分の太さを超えると上下に切り離され、エラーになる", C::Error},
@@ -270,6 +276,8 @@ constexpr ParamDefinition kParams[] = {
     {K::VolumeScatter, "volumeScatter.elongation", T::Float, 1, 4, "比", "細長さ", "楕円体・箱の軸の長さの比の最大", C::Error},
     {K::VolumeScatter, "volumeScatter.blend", T::Float, 0, 1, "その形の半径に対する比", "なじませる幅",
      "形の境をなめらかにつなぐ（和では礫の根元が埋まったように、差では穴の縁が丸く）", C::Error},
+    {K::VolumeScatter, "volumeScatter.lie", T::Float, 0, 1, "比", "寝かせる割合",
+     "楕円体・箱の一番短い軸を上へ向ける。0 で向きは一様な乱数、1 で必ず寝る（自重で扁平になった枕状溶岩の枕、水底に寝た礫）", C::Error},
     {K::VolumeScatter, "volumeScatter.seed", T::Int, 0, N, "", "Seed", "", C::None},
     // --- メッシュ ---
     {K::Decimate, "decimate.targetTriangles", T::Int, 64, 500000, "三角形", "目標の三角形数", "入力全体に対する数。評価で範囲へ丸める", C::Clamp},

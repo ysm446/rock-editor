@@ -1921,6 +1921,10 @@ VolumeGrid ScatterVolume(const VolumeGrid& g, const VolumeScatterSettings& s, st
         error = "細長さは 1～4、なじませる幅は 0～1 にしてください";
         return {};
     }
+    if (!range(s.lie, 0, 1)) {
+        error = "寝かせる割合は 0～1 にしてください";
+        return {};
+    }
     const float longest = InteriorLongestSide(g);
     if (longest <= 0) {
         error = "入力のボリュームに内部がありません";
@@ -1999,6 +2003,37 @@ VolumeGrid ScatterVolume(const VolumeGrid& g, const VolumeScatterSettings& s, st
                                {2 * (qa * qc - qb * qd), 2 * (qb * qc + qa * qd), 1 - 2 * (qa * qa + qb * qb)}};
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j) shape.axes[i][j] = m[i][j];
+        if (s.lie > 0 && s.shape != VolumeScatterShape::Sphere) {
+            // 寝かせる: 一番短い軸の向きを、乱数の向きから上（Y）へ寄せる。1 で真上。残りの 2 軸は乱数の向きのまま直交させる。
+            int shortest = 1;
+            for (int i = 2; i < 3; ++i)
+                if (shape.radii[i] < shape.radii[shortest]) shortest = i;
+            Vec3 n{shape.axes[shortest][0], shape.axes[shortest][1], shape.axes[shortest][2]};
+            if (n.y < 0) n = {-n.x, -n.y, -n.z};
+            n = {n.x * (1 - s.lie), n.y * (1 - s.lie) + s.lie, n.z * (1 - s.lie)};
+            const float length = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+            n = {n.x / length, n.y / length, n.z / length};
+            const int a = (shortest + 1) % 3, b = (shortest + 2) % 3;
+            Vec3 u{shape.axes[a][0], shape.axes[a][1], shape.axes[a][2]};
+            const float un = u.x * n.x + u.y * n.y + u.z * n.z;
+            u = {u.x - un * n.x, u.y - un * n.y, u.z - un * n.z};
+            const float ul = std::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+            if (ul > 1e-4f) {
+                u = {u.x / ul, u.y / ul, u.z / ul};
+            } else {
+                u = std::abs(n.y) < .9f ? Vec3{-n.y, n.x, 0} : Vec3{0, -n.z, n.y};
+                const float l = std::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+                u = {u.x / l, u.y / l, u.z / l};
+            }
+            const Vec3 v{n.y * u.z - n.z * u.y, n.z * u.x - n.x * u.z, n.x * u.y - n.y * u.x};
+            const Vec3 axes[3] = {n, u, v};
+            const int order[3] = {shortest, a, b};
+            for (int i = 0; i < 3; ++i) {
+                shape.axes[order[i]][0] = axes[i].x;
+                shape.axes[order[i]][1] = axes[i].y;
+                shape.axes[order[i]][2] = axes[i].z;
+            }
+        }
         shape.bound = std::sqrt(shape.radii[0] * shape.radii[0] + shape.radii[1] * shape.radii[1] + shape.radii[2] * shape.radii[2]) *
                       (1 + s.blend) + g.spacing;
         shapes.push_back(shape);
@@ -2050,8 +2085,22 @@ VolumeGrid ScatterVolume(const VolumeGrid& g, const VolumeScatterSettings& s, st
     FillNewVoids(out, before);
     return out;
 }
+const char* VolumeUndercutReferenceName(VolumeUndercutReference reference) {
+    return reference == VolumeUndercutReference::World ? "world" : "shape";
+}
+VolumeUndercutReference ParseVolumeUndercutReference(std::string_view name) {
+    return name == "world" ? VolumeUndercutReference::World : VolumeUndercutReference::Shape;
+}
 VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, std::string& error) {
     error.clear();
+    if (s.reference != VolumeUndercutReference::Shape && s.reference != VolumeUndercutReference::World) {
+        error = "帯の基準が不正です";
+        return {};
+    }
+    if (!std::isfinite(s.level) || std::abs(s.level) > 100000) {
+        error = "帯の高さ (m) は -100000～100000 にしてください";
+        return {};
+    }
     if (!ValidGrid(g)) {
         error = "ボリュームの格子が不正です";
         return {};
@@ -2087,6 +2136,8 @@ VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, 
                     highest = std::max(highest, y);
                 }
     const float bottom = g.Position(0, lowest, 0).y, tall = std::max(g.Position(0, highest, 0).y - bottom, g.spacing);
+    // 帯の中心（形の高さに対する位置）。ワールド基準ではワールドの高さ level を形の高さに対する位置に直す。
+    const float center = s.reference == VolumeUndercutReference::World ? (s.level - bottom) / tall : s.height;
     const float depth = s.depth * longest, frequency = s.noiseScale / longest;
     const uint64_t seed = uint64_t(uint32_t(s.seed)) << 40;
     VolumeGrid out = g;
@@ -2098,7 +2149,7 @@ VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, 
         const float h = (p.y - bottom) / tall;
         float inset = 0;
         for (int i = 0; i < s.count; ++i) {
-            const float t = (h - (s.height + s.spacing * float(i))) / s.width;
+            const float t = (h - (center + s.spacing * float(i))) / s.width;
             // 帯の断面はなめらかな山（cos の窓）。中心で 1、帯の端（±幅）で 0。
             if (std::abs(t) < 1) inset = std::max(inset, .5f + .5f * std::cos(std::numbers::pi_v<float> * t));
         }

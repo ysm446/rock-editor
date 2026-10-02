@@ -245,12 +245,22 @@ struct VolumeScatterSettings {
     float depthMin = -.3f, depthMax = .5f;
     float elongation = 1.6f;                  // 楕円体・箱の軸の長さの比の最大。1～4
     float blend = .2f;                        // 形の境をなじませる幅。その形の半径に対する比。0～1
+    // 寝かせる割合。楕円体・箱の一番短い軸を上へ向ける（0 で向きは一様な乱数、1 で必ず寝る）。0～1
+    // 自重で扁平になった枕状溶岩の枕、水底に寝た礫。
+    float lie = 0;
     uint32_t seed = 1;
 };
 
 // Volume Undercut。形の高さの帯を内側へ削り、くびれを作る（きのこ岩・フードゥー・波食ノッチ）。
+// 帯の中心の基準。形: 形の高さに対する位置（height）。ワールド: ワールドの高さ level（m。波食ノッチの水面）。
+enum class VolumeUndercutReference { Shape, World };
+const char* VolumeUndercutReferenceName(VolumeUndercutReference reference);
+// 知らない名前は Shape（従来の動作）。
+VolumeUndercutReference ParseVolumeUndercutReference(std::string_view name);
 struct VolumeUndercutSettings {
+    VolumeUndercutReference reference = VolumeUndercutReference::Shape;
     float height = .2f;     // 最初の帯の中心。形の高さ（内部の格子点の範囲）に対する位置。底 0、上 1。0～1
+    float level = 0;        // ワールド基準のときの最初の帯の中心の高さ（ワールド Y、m）。-100000～100000
     float width = .15f;     // 帯の半分の高さ。形の高さに対する比。0.02～1
     float depth = .08f;     // 帯の中心で削る深さ。形の最長辺に対する比。0～0.4
     int count = 1;          // 帯の数（上へ繰り返す）。1～8

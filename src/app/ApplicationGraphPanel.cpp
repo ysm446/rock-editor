@@ -1864,7 +1864,17 @@ void Application::DrawGraphPanel() {
         auto edited = *undercut;
         bool changed = false;
         if (ui::BeginPropertyTable("volumeUndercutRows")) {
-            changed |= ui::PropertyFloat("高さ", &edited.height, 0, 1, .2f, "最初の帯の中心。形の高さに対する位置（底 0、上 1）です。");
+            const char* references[] = {"形の高さに対する位置", "ワールドの高さ (m)"};
+            int reference = std::clamp(static_cast<int>(edited.reference), 0, 1);
+            if (ui::PropertyCombo("帯の基準", &reference, references, 2, 0,
+                                  "帯の中心をどう決めるか。形の高さに対する位置（きのこ岩・フードゥー）か、ワールドの高さ（波食ノッチの水面）です。")) {
+                edited.reference = static_cast<geometry::VolumeUndercutReference>(reference);
+                changed = true;
+            }
+            if (edited.reference == geometry::VolumeUndercutReference::World)
+                changed |= ui::PropertyFloat("高さ (m)", &edited.level, -100000, 100000, 0, "最初の帯の中心のワールドの高さ（Y）です。接地の後に使います。");
+            else
+                changed |= ui::PropertyFloat("高さ", &edited.height, 0, 1, .2f, "最初の帯の中心。形の高さに対する位置（底 0、上 1）です。");
             changed |= ui::PropertyFloat("帯の幅", &edited.width, .02f, 1, .15f, "帯の半分の高さ。形の高さに対する比です。");
             changed |= ui::PropertyFloat("深さ", &edited.depth, 0, .4f, .08f, "帯の中心で削る深さ。形の最長辺に対する比です。");
             changed |= ui::PropertyInt("帯の数", &edited.count, 1, 8, 1, "帯を上へ繰り返す数です（フードゥーの段）。");
@@ -1878,6 +1888,7 @@ void Application::DrawGraphPanel() {
                      "削り落とされた小片は捨てます。");
         if (changed) {
             edited.height = std::clamp(edited.height, 0.0f, 1.0f);
+            edited.level = std::clamp(edited.level, -100000.0f, 100000.0f);
             edited.width = std::clamp(edited.width, .02f, 1.0f);
             edited.depth = std::clamp(edited.depth, 0.0f, .4f);
             edited.count = std::clamp(edited.count, 1, 8);
@@ -1913,6 +1924,8 @@ void Application::DrawGraphPanel() {
             changed |= ui::PropertyFloat("深さ 最大", &edited.depthMax, -1, 4, .5f, "中心を置く深さの最大です。");
             changed |= ui::PropertyFloat("細長さ", &edited.elongation, 1, 4, 1.6f, "楕円体・箱の軸の長さの比の最大です。");
             changed |= ui::PropertyFloat("なじませる幅", &edited.blend, 0, 1, .2f, "形の境をなめらかにつなぐ幅。その形の半径に対する比です。");
+            changed |= ui::PropertyFloat("寝かせる割合", &edited.lie, 0, 1, 0,
+                                         "楕円体・箱の一番短い軸を上へ向けます。0 で向きは一様な乱数、1 で必ず寝ます（扁平な枕状溶岩の枕、水底に寝た礫）。");
             int seed = static_cast<int>(edited.seed);
             if (ui::PropertyInt("Seed", &seed, 0, 1000000, 1)) {
                 edited.seed = static_cast<uint32_t>(std::max(seed, 0));

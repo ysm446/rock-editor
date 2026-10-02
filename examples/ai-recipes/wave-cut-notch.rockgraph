@@ -1,0 +1,22 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 9, "size": [2.6, 3.0, 2.2], "sizeVariation": 0.45, "spread": 0.55, "rotation": 25, "seed": 9}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 3, "kind": "planeCuts", "note": "節理で割れた面", "planeCuts": {"count": 16, "depthMin": 0.05, "depthMax": 0.2, "seed": 3}},
+      {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.03, "amount": 1}},
+      {"id": 5, "kind": "volumeClip", "note": "先に接地してから、ワールドの高さで帯を置く", "volumeClip": {"mode": "ground", "embed": 0.1}},
+      {"id": 6, "kind": "volumeUndercut", "note": "波食ノッチ: 水面（ワールドの高さ 0.9 m）の帯を内側へ削る。帯の基準を world にすると、形の大きさに関係なく水面の高さで決まる", "volumeUndercut": {"reference": "world", "level": 0.9, "width": 0.1, "depth": 0.12, "count": 1, "noise": 0.35, "noiseScale": 2.5, "seed": 2}},
+      {"id": 7, "kind": "volumeNoise", "note": "水面の近くの小さなくぼみ（タフォニ風）", "volumeNoise": {"type": "pits", "amount": 0.006, "scale": 12, "octaves": 2, "seed": 5}},
+      {"id": 8, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.02, "radius": 0.015}},
+      {"id": 9, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 10, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9"}, {"from": "9", "to": "10:Geometry"}
+    ]
+  }
+}

@@ -107,6 +107,13 @@
       "description": "気泡の丸い穴が多数ある。"
     },
     {
+      "id": "pillow-lava",
+      "name": "枕状溶岩",
+      "category": "堆積・火山の組織",
+      "status": "△",
+      "description": "自重で扁平になった袋状の枕が積み重なる。"
+    },
+    {
       "id": "honeycomb",
       "name": "蜂の巣状の風化（タフォニ）",
       "category": "風化・侵食の形",
@@ -140,6 +147,20 @@
       "category": "風化・侵食の形",
       "status": "○",
       "description": "上流側が研磨されて丸く、下流側が角張る。"
+    },
+    {
+      "id": "wave-cut-notch",
+      "name": "波食ノッチ",
+      "category": "風化・侵食の形",
+      "status": "△",
+      "description": "水面の高さ（ワールドの高さ）に 1 本のくびれが入った海岸の岩。"
+    },
+    {
+      "id": "wind-erosion",
+      "name": "風食",
+      "category": "風化・侵食の形",
+      "status": "△",
+      "description": "風上の面が丸く研磨され、地面の近くが砂で削られた岩。"
     },
     {
       "id": "gneiss",

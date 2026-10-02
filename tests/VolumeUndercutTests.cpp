@@ -47,6 +47,38 @@ void RunVolumeUndercutTests() {
     Check(outsideKept, "帯の外（高さ ±0.45 m より外）は変わらない");
     Check(insideCarved, "帯の中心で深さ（0.1 × 2 m = 0.2 m）ほど削る");
 
+    // ワールド基準: 立方体は Y が -1〜1 なので、ワールドの高さ 0 は形の高さ 0.5 と同じ帯になる。
+    geometry::VolumeUndercutSettings world = band;
+    world.reference = geometry::VolumeUndercutReference::World;
+    world.level = 0;
+    world.height = .9f;
+    const auto worldNotched = geometry::UndercutVolume(box, world, error);
+    bool worldOutsideKept = true, worldCenterCarved = false;
+    for (uint32_t z = 0; z < box.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < box.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < box.dimensions[0]; ++x) {
+                const size_t i = box.Index(x, y, z);
+                const float h = box.Position(x, y, z).y;
+                if (std::abs(h) > .45f) worldOutsideKept &= worldNotched.values[i] == box.values[i];
+                if (std::abs(h) < .05f) worldCenterCarved |= worldNotched.values[i] > box.values[i] + .15f;
+            }
+    Check(error.empty() && worldOutsideKept && worldCenterCarved, "ワールドの高さ 0 の帯は Y = 0 を中心に削り、height は使わない");
+    world.level = .6f;
+    const auto raised = geometry::UndercutVolume(box, world, error);
+    bool highCarved = false, lowKept = true;
+    for (uint32_t z = 0; z < box.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < box.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < box.dimensions[0]; ++x) {
+                const size_t i = box.Index(x, y, z);
+                const float h = box.Position(x, y, z).y;
+                if (std::abs(h - .6f) < .05f) highCarved |= raised.values[i] > box.values[i] + .15f;
+                if (h < .1f) lowKept &= raised.values[i] == box.values[i];
+            }
+    Check(error.empty() && highCarved && lowKept, "ワールドの高さ 0.6 m に帯を置くと、その高さだけ削る");
+    Check(geometry::ParseVolumeUndercutReference(geometry::VolumeUndercutReferenceName(geometry::VolumeUndercutReference::World)) ==
+              geometry::VolumeUndercutReference::World && geometry::ParseVolumeUndercutReference("?") == geometry::VolumeUndercutReference::Shape,
+          "帯の基準の保存名を往復できる");
+
     geometry::VolumeUndercutSettings stacked = band;
     stacked.height = .2f;
     stacked.width = .08f;

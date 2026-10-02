@@ -1,0 +1,22 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "note": "風向き（+X へ吹く）に沿って細長い岩体", "randomBoxes": {"count": 7, "size": [3.2, 1.5, 1.3], "sizeVariation": 0.4, "spread": 0.5, "rotation": 15, "seed": 21}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 128}},
+      {"id": 3, "kind": "planeCuts", "note": "節理で割れた面", "planeCuts": {"count": 12, "depthMin": 0.05, "depthMax": 0.18, "seed": 7}},
+      {"id": 4, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.12}},
+      {"id": 5, "kind": "volumeSmooth", "note": "風上（-X 側）の面だけを大きく丸める。風は -X から +X へ", "volumeSmooth": {"radius": 0.14, "amount": 1, "upwardFocus": 0.9, "focusDirection": [-1, 0.25, 0]}},
+      {"id": 6, "kind": "volumeUndercut", "note": "砂が最も当たる地面の近く（高さ 0.3 m）を帯で削る。風食のくびれ・きのこ岩の成因", "volumeUndercut": {"reference": "world", "level": 0.3, "width": 0.12, "depth": 0.075, "count": 1, "noise": 0.4, "noiseScale": 2, "seed": 3}},
+      {"id": 7, "kind": "volumeNoise", "note": "風上に残る細かなくぼみ", "volumeNoise": {"type": "pits", "amount": 0.004, "scale": 14, "octaves": 2, "seed": 5}},
+      {"id": 8, "kind": "volumeEdgeWear", "note": "風上の角を摩耗", "volumeEdgeWear": {"amount": 0.05, "radius": 0.04, "upwardFocus": 0.8, "focusDirection": [-1, 0.25, 0]}},
+      {"id": 9, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 10, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9"}, {"from": "9", "to": "10:Geometry"}
+    ]
+  }
+}

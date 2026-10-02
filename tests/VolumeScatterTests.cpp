@@ -75,6 +75,29 @@ void RunVolumeScatterTests() {
     geometry::MeshInfo floatedInfo;
     Check(error.empty() && Measure(floated, floatedInfo) && floatedInfo.components == 1, "浮いた形は除き、1つの塊のまま");
 
+    // 寝かせる: 平らな板の天面に細長い楕円体を同じ Seed で散らす。寝かせる割合は乱数を消費しないので形と位置は同じで、
+    // 一番短い軸を上へ向けた分だけ、上へ突き出す高さは一様な向きのときを超えない。
+    {
+        const auto slab = geometry::MeshToVolume(geometry::MakeBox({2, .4f, 2}), {64}, error);
+        geometry::VolumeScatterSettings lying;
+        lying.shape = geometry::VolumeScatterShape::Ellipsoid;
+        lying.count = 30;
+        lying.radiusMin = .06f;
+        lying.radiusMax = .1f;
+        lying.depthMin = lying.depthMax = 0;
+        lying.elongation = 3;
+        lying.blend = 0;
+        const auto random = geometry::ScatterVolume(slab, lying, error);
+        geometry::MeshInfo randomInfo;
+        Check(error.empty() && Measure(random, randomInfo), "寝かせる 0: 一様な向きで散らす");
+        lying.lie = 1;
+        const auto flat = geometry::ScatterVolume(slab, lying, error);
+        geometry::MeshInfo flatInfo;
+        Check(error.empty() && Measure(flat, flatInfo) && flat.values != random.values, "寝かせる 1: 向きが変わる");
+        Check(flatInfo.maximum.y <= randomInfo.maximum.y + slab.spacing * .5f && flatInfo.maximum.y < .2f + .1f * 2 * .9f,
+              "寝かせる 1: 短い軸が上を向き、上へ突き出す高さが一様な向きのときを超えない");
+    }
+
     const auto rejects = [&](const char* name, const std::function<void(geometry::VolumeScatterSettings&)>& change) {
         geometry::VolumeScatterSettings bad;
         change(bad);
@@ -85,6 +108,7 @@ void RunVolumeScatterTests() {
     rejects("半径の最小が最大より大きければ診断する", [](auto& s) { s.radiusMin = .2f; s.radiusMax = .1f; });
     rejects("深さが範囲外なら診断する", [](auto& s) { s.depthMax = 5; });
     rejects("細長さが範囲外なら診断する", [](auto& s) { s.elongation = .5f; });
+    rejects("寝かせる割合が範囲外なら診断する", [](auto& s) { s.lie = 1.5f; });
     rejects("不明な形を診断する", [](auto& s) { s.shape = static_cast<geometry::VolumeScatterShape>(9); });
     Check(geometry::ParseVolumeScatterShape(geometry::VolumeScatterShapeName(geometry::VolumeScatterShape::Box)) ==
                   geometry::VolumeScatterShape::Box &&
