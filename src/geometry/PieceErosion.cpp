@@ -3,6 +3,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <numbers>
 #include <queue>
 
 namespace rock::geometry {
@@ -48,6 +49,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     }
     if (!std::isfinite(s.peelEdge) || s.peelEdge<0 || s.peelEdge>1) {
         error="稜の効きは0〜1にしてください"; return {};
+    }
+    if (!std::isfinite(s.supportAngle) || s.supportAngle<0 || s.supportAngle>90) {
+        error="支えの角度は0〜90°にしてください"; return {};
     }
     // 大きさの効き: 体積を最大の片で割った値（0～1）を順位に足す。大きな片ほど後まで残る。
     double largest=0;
@@ -247,14 +251,16 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     // 急な節理の側面で横に接するだけでは支えにならず、支えを失った片は落ちる（一緒に選ぶ）。
     // 地面に接した片が 1 つも無い形（下向きの面が無い）では落とさない。
     if (s.grounded && std::any_of(state.begin(),state.end(),[](const State& v){return v.grounded;})) {
-        // 片 i が片 other の上に載る面の、水平に投影した面積（i から見た接触面が下を向くときだけ。0 なら載っていない）。
+        // 片 i が片 other の上に載る面の、水平に投影した面積（i から見た接触面が真下から「支えの角度」以内を向くときだけ。
+        // 0 なら載っていない）。
+        const double cone=std::cos(s.supportAngle*std::numbers::pi/180);
         const auto bearing=[&](size_t i,uint32_t otherId) {
             const auto& p=c.pieces[i];
             for (const auto& contact:p.neighborhood->contacts)
                 if (contact.neighbor==otherId) {
                     const double area=PieceFaceArea(p,contact.areaVector);
                     const double down=-PieceFaceNormalY(p,contact.areaVector);
-                    return area>0 && down>.5*area ? down : 0.;
+                    return area>0 && down>cone*area && down>0 ? down : 0.;
                 }
             return 0.;
         };

@@ -183,6 +183,7 @@ const std::vector<EdgeRule>& EdgeRules() {
         {"pieceSelect:pieces.peelRetreatBase", {{"pieces.mode", 6}, {"pieces.peelRetreat", 1}}},
         {"pieceSelect:pieces.peelEdge", {{"pieces.mode", 6}}},
         {"pieceSelect:pieces.stability", {{"pieces.mode", 6}, {"pieces.grounded", true}}},
+        {"pieceSelect:pieces.supportAngle", {{"pieces.mode", 6}, {"pieces.grounded", true}}},
         {"pieceSelect:pieces.minVolume", {{"pieces.mode", 3}}},
         {"pieceSelect:pieces.maxVolume", {{"pieces.mode", 3}, {"pieces.minVolume", 0}}},
         {"volumeClose:volumeClose.width", {{"volumeClose.mode", "width"}}},

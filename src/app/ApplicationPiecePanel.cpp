@@ -123,8 +123,12 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 ImGui::BeginDisabled(!selection->grounded);
                 changed |= ui::PropertyFloat("安定", &selection->stability, 0, 1, 0,
                     "下で支える片に載る面積が片の大きさに足りないと転げ落ちます。頭でっかちの片が残らず、上ほど細く尖ります。");
+                changed |= ui::PropertyFloat("支えの角度 (°)", &selection->supportAngle, 0, 90, 60,
+                    "下の片との接触面が真下からこの角度以内を向いていれば「載っている」と数えます。"
+                    "急な節理で割った岩では板の中の片が横に近い面でしか接しないので、80〜85 に広げます。");
                 ImGui::EndDisabled();
                 selection->stability = std::clamp(selection->stability, 0.f, 1.f);
+                selection->supportAngle = std::clamp(selection->supportAngle, 0.f, 90.f);
                 ui::PropertyLabelEmpty("peelRetry");
                 ImGui::BeginDisabled(selection->peelNoise == 0);
                 if (ImGui::Button("別の欠け方を試す")) {

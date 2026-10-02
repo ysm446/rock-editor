@@ -32,7 +32,7 @@
 | [河原の丸石](river-pebble/README.md) | ○ | `river-pebble` | 形が単調 |
 | [丸い転石](rounded-boulder/README.md) | ○ | `rounded-boulder` | — |
 | [花崗岩のシーティング](granite-sheeting/README.md) | △ | `granite-sheeting` | 平らな面のボクセルの格子模様 |
-| [花崗岩の岩峰](granite-buttress/README.md) | △ | `granite-buttress` | 凸岩峰ルートに置き換え（[比較](granite-buttress/joint-study.md)）。幅が狭く碑に近い、裏側のくぼみ、微小な空洞 |
+| [花崗岩の岩峰](granite-buttress/README.md) | △ | `granite-buttress` | 凸岩峰ルートに置き換え（[比較](granite-buttress/joint-study.md)）。幅が狭く碑に近い。裾の角の小さな穴 |
 | [黒曜石・フリント](obsidian/README.md) | ○（形） | `obsidian` | ガラス質の素材 |
 | [礫岩](conglomerate/README.md) | ○ | `conglomerate` | — |
 | [角礫岩](breccia/README.md) | ○ | `breccia` | 礫が基質に浮いて見える（礫どうしが接しない） |

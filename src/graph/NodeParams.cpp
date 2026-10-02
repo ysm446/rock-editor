@@ -162,6 +162,8 @@ constexpr ParamDefinition kParams[] = {
      "peel 用。元の外面が 2 方向以上を向く片（稜・角・張り出した縁）ほど先に欠け、一つの平面しか向かない片（面の中央、隣の削除で露出した片）は後回し。面の途中に穴を開けたくない岩峰・板状の岩で 0.5〜1", C::Error},
     {K::PieceSelect, "pieces.stability", T::Float, 0, 1, "比", "安定",
      "peel・接地用。下で支える片に載る面積が片の大きさ（体積の 2/3 乗）に足りないと転げ落ちる。頭でっかちの片が残らず、上ほど細く尖る", C::Error},
+    {K::PieceSelect, "pieces.supportAngle", T::Float, 0, 90, "度", "支えの角度",
+     "peel・接地用。下の片との接触面の法線が真下からこの角度以内なら載っていると数える。既定 60。急な節理（76° など）で割った岩では板の中の片が横に近い面でしか接しないので 80〜85 に広げる（広げないと中段の片がまとめて落ちて深い穴になる）", C::Error},
     {K::PieceSelect, "pieces.grounded", T::Bool, N, N, "", "接地",
      "peel 用。下向きの外面を地面に支えられた面として扱い、そこからは欠かない（岩峰・露頭・崖の根元が残る）", C::None},
     {K::PieceSelect, "pieces.producer", T::Int, N, N, "", "", "manual の選択が指す分割", C::None, {}, true},

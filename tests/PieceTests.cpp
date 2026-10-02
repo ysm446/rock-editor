@@ -493,6 +493,28 @@ static void RunPlaneFractureTests() {
     // 面は y = -1, -0.5, 0, 0.5, 1。形の上下面と重なる面は厚さ 0 の板になるので捨てる。
     Check(error.empty() && slabs.pieces.size() == 4 && closed && equal && std::abs(total - 8) < 1e-4,
           "水平な面の系統で、厚さ 0.5 m の閉じた板 4 枚に割る");
+    {
+        // 支えの角度: 45° の板に割った縦長の箱。地面に届かない上の板は 45° の接触面でしか下の板に載らない。
+        ParallelPlanesSettings tilted;
+        tilted.spacing = .8f;
+        tilted.rotationDegrees = {0, 0, 45};
+        const auto tall = MakeBox({2, 6, 2});
+        const auto tiltedSlabs = FracturePlanes(tall, {MakeParallelPlanes(tilted, error)}, 7, error);
+        PieceSelectSettings hold;
+        hold.mode = PieceSelectMode::Peel;
+        hold.fraction = 0;
+        hold.grounded = true;
+        hold.supportAngle = 30;
+        const auto dropped = SelectPieces(tiltedSlabs, hold, error);
+        const bool droppedOk = error.empty() && !dropped.ids.empty();
+        hold.supportAngle = 60;
+        const auto kept = SelectPieces(tiltedSlabs, hold, error);
+        Check(droppedOk && error.empty() && kept.ids.empty() && tiltedSlabs.pieces.size() > 2,
+              "支えの角度: 30° では 45° の面で載る板が落ち、60° では残る");
+        hold.supportAngle = 91;
+        SelectPieces(tiltedSlabs, hold, error);
+        Check(!error.empty(), "支えの角度: 範囲外を拒否する");
+    }
     ParallelPlanesSettings vertical;
     vertical.spacing = 1;
     vertical.rotationDegrees = {0, 0, 90};
