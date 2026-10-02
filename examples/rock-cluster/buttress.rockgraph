@@ -1,0 +1,339 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "note": "凸岩峰の母岩。裾・肩・頂の凸包を、頂の稜線（走向に沿った線）と節理面（走向 0・傾き 76°。Parallel Planes と同じ向き）で両側を切った傾いた板にする。肩の幅 0.5 と節理面の裾の広がり 1.0 で、裾は広く厚く、上ほど薄い板に細まる（裾で間隔の 2 倍）。大きな輪郭をここで決める。",
+        "baseRock": {
+          "shape": "convexPeak",
+          "size": [
+            10,
+            15,
+            8
+          ],
+          "seed": 5,
+          "peakSides": 7,
+          "peakTopWidth": 0.06,
+          "peakShoulderHeight": 0.62,
+          "peakLeanX": 0.3,
+          "peakLeanZ": 0.0,
+          "peakVariation": 0.45,
+          "peakRidgeLength": 0.7,
+          "peakStrike": 0,
+          "peakSlabThickness": 0.3,
+          "peakSlabDip": 76,
+          "peakShoulderWidth": 0.5,
+          "peakSlabFlare": 1.0
+        }
+      },
+      {
+        "id": 2,
+        "kind": "scatterPoints",
+        "note": "局所の欠けを作るための 140 点。密度のむらと高さの勾配 0.9 で上ほど小さな片にし、頂の稜線が歯に刻まれる。輪郭は上流の凸岩峰が決める。",
+        "pieces": {
+          "count": 140,
+          "seed": 3,
+          "clustering": 0.9,
+          "clusterScale": 2.0,
+          "heightGradient": 0.9
+        }
+      },
+      {
+        "id": 19,
+        "kind": "parallelPlanes",
+        "note": "主な節理の系統（76°、間隔 2.4 m）。吸着でこの面が複数の片にまたがる一枚の節理面になる。母岩の広い面と平行。",
+        "parallelPlanes": {
+          "rotation": [
+            0,
+            0,
+            76
+          ],
+          "spacing": 2.4,
+          "variation": 0.8,
+          "seed": 5
+        }
+      },
+      {
+        "id": 5,
+        "kind": "voronoiFracture",
+        "note": "点の Voronoi を主な節理の面に吸着させて割る（板 ∩ Voronoi）。",
+        "pieces": {
+          "rotation": [
+            0,
+            0,
+            76
+          ],
+          "stretch": [
+            2.5,
+            1,
+            1.6
+          ],
+          "snap": true
+        }
+      },
+      {
+        "id": 6,
+        "kind": "pieceSelect",
+        "note": "少量だけ欠く（進行 0.1）。稜の効き 1 で、稜・角・張り出した縁に接する片だけが欠け、面の中央には穴を開けない。接地で底からは欠かない。支えの角度 85° で、76° の板の中の片が横に近い面でも支えられたと数える（60° だと中段の片がまとめて落ちて深い穴になる）。",
+        "pieces": {
+          "mode": "peel",
+          "fraction": 0.12,
+          "peelNoise": 1.0,
+          "protectCore": true,
+          "grounded": true,
+          "seed": 3,
+          "peelSize": 0,
+          "stability": 0,
+          "peelRetreat": 0,
+          "peelEdge": 1.0,
+          "supportAngle": 85
+        }
+      },
+      {
+        "id": 7,
+        "kind": "pieceFilter",
+        "note": "選んだ片を消す",
+        "pieces": {
+          "keep": false
+        }
+      },
+      {
+        "id": 8,
+        "kind": "piecesToMesh"
+      },
+      {
+        "id": 17,
+        "kind": "pieceTransform",
+        "note": "わずかなずれ・傾き。接触面は To Volume で消えるので、節理の線はこのずれで付く。",
+        "pieces": {
+          "individual": true,
+          "jitterPosition": [
+            0.015,
+            0.01,
+            0.015
+          ],
+          "jitterRotation": 0.6,
+          "jitterSeed": 4
+        }
+      },
+      {
+        "id": 9,
+        "kind": "toVolume",
+        "note": "片の集合をボリューム化。隙間なく接触する共有面は距離の計算から外れる。",
+        "toVolume": {
+          "resolution": 128
+        }
+      },
+      {
+        "id": 18,
+        "kind": "volumeClose",
+        "note": "ずれで開いた細い継ぎ目を少し閉じる。幅は 0.005 まで（0.02 にすると格子の膨張・収縮で斜めの面全体が階段状の欠けに覆われ、Noise で破片を敷き詰めたように見える）。閉じた泡は To Volume が埋める。",
+        "volumeClose": {
+          "mode": "width",
+          "width": 0.005
+        }
+      },
+      {
+        "id": 11,
+        "kind": "planeCuts",
+        "note": "局所の小さな欠け",
+        "planeCuts": {
+          "count": 70,
+          "scope": "local",
+          "radius": 0.05,
+          "depthMin": 0.2,
+          "depthMax": 0.45,
+          "seed": 12
+        }
+      },
+      {
+        "id": 12,
+        "kind": "volumeNoise",
+        "note": "小面のノイズ",
+        "volumeNoise": {
+          "type": "facet",
+          "amount": 0.006,
+          "scale": 18,
+          "octaves": 2
+        }
+      },
+      {
+        "id": 13,
+        "kind": "volumeEdgeWear",
+        "volumeEdgeWear": {
+          "amount": 0.004,
+          "radius": 0.006,
+          "noise": 0.6
+        },
+        "note": "角の摩耗"
+      },
+      {
+        "id": 14,
+        "kind": "volumeClip",
+        "note": "裾を 8% 埋めて接地する",
+        "volumeClip": {
+          "mode": "ground",
+          "embed": 0.08
+        }
+      },
+      {
+        "id": 15,
+        "kind": "volumeToMesh",
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 16,
+        "kind": "meshOutput"
+      },
+      {
+        "id": 20,
+        "kind": "decimate",
+        "note": "UV 展開の前に減らす",
+        "decimate": {
+          "targetTriangles": 20000,
+          "maxError": 0
+        }
+      },
+      {
+        "id": 21,
+        "kind": "uvUnwrap",
+        "uvUnwrap": {
+          "resolution": 1024,
+          "padding": 4
+        }
+      },
+      {
+        "id": 22,
+        "kind": "materialBake",
+        "note": "High に減らす前の形をつなぎ、法線と AO を焼く"
+      },
+      {
+        "id": 23,
+        "kind": "rockAsset",
+        "note": "python tools/rock_bake.py で焼く。山グラフ（cluster.mountaingraph）の Rock が読む",
+        "rockAsset": {
+          "lodCount": 4,
+          "maxTriangles": 20000
+        }
+      },
+      {
+        "id": 24,
+        "kind": "surface",
+        "note": "マテリアル無しの定数色（例を自己完結にするため）",
+        "layer": {
+          "name": "Rock",
+          "baseColor": [
+            0.46,
+            0.43,
+            0.39
+          ],
+          "roughness": 0.85,
+          "height": {
+            "source": "noise",
+            "base": 0.5,
+            "gain": 0.3
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "from": "1",
+        "to": "2"
+      },
+      {
+        "from": "1",
+        "to": "5:Geometry"
+      },
+      {
+        "from": "2",
+        "to": "5:Points"
+      },
+      {
+        "from": "5",
+        "to": "6"
+      },
+      {
+        "from": "5",
+        "to": "7:Pieces"
+      },
+      {
+        "from": "6",
+        "to": "7:Selection"
+      },
+      {
+        "from": "19",
+        "to": "5:Planes"
+      },
+      {
+        "from": "7",
+        "to": "17:Pieces"
+      },
+      {
+        "from": "17",
+        "to": "8"
+      },
+      {
+        "from": "8",
+        "to": "9"
+      },
+      {
+        "from": "9",
+        "to": "18"
+      },
+      {
+        "from": "18",
+        "to": "11"
+      },
+      {
+        "from": "11",
+        "to": "12"
+      },
+      {
+        "from": "12",
+        "to": "13"
+      },
+      {
+        "from": "13",
+        "to": "14"
+      },
+      {
+        "from": "14",
+        "to": "15"
+      },
+      {
+        "from": "15",
+        "to": "20"
+      },
+      {
+        "from": "20",
+        "to": "21"
+      },
+      {
+        "from": "21",
+        "to": "22:Mesh"
+      },
+      {
+        "from": "24",
+        "to": "22:Material"
+      },
+      {
+        "from": "15",
+        "to": "22:High"
+      },
+      {
+        "from": "22",
+        "to": "23"
+      },
+      {
+        "from": "23",
+        "to": "16:Geometry"
+      }
+    ]
+  }
+}

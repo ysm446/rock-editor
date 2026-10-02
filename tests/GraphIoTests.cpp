@@ -152,4 +152,33 @@ void RunGraphIoTests() {
     Check(placed && written2.FindNode(5)->posX > written2.FindNode(4)->posX &&
               written2.FindNode(4)->posX > written2.FindNode(2)->posX,
           "位置の無いノードを上流からの深さで左から並べる");
+
+    // 入力数が可変のノードは、名前の番号（"Rock 3"、"Input 2"）や番号指定の分だけ入力を足して繋ぐ。
+    const json variable = json::parse(R"({
+      "nodes": [
+        {"id": 1, "kind": "heightmap"},
+        {"id": 2, "kind": "rock", "rock": {"scene": "a.rockgraph"}},
+        {"id": 3, "kind": "rock", "rock": {"scene": "b.rockgraph"}},
+        {"id": 4, "kind": "rock", "rock": {"scene": "c.rockgraph"}},
+        {"id": 5, "kind": "rockScatter"},
+        {"id": 6, "kind": "baseRock"},
+        {"id": 7, "kind": "baseRock"},
+        {"id": 8, "kind": "merge"}
+      ],
+      "links": [
+        {"from": "1", "to": "5:Terrain"},
+        {"from": "2", "to": "5:Rock 1"}, {"from": "3", "to": "5:rock 3"}, {"from": "4", "to": "5:Rock 2"},
+        {"from": "6", "to": "8:Input 1"}, {"from": "7", "to": "8:1"}
+      ]
+    })");
+    graph::NodeGraph written3;
+    issues.clear();
+    Check(io::ReadGraph(variable, written3, kReadMaterial, kReadModel, kReadTexture, baseDir, &issues) && issues.empty() &&
+              written3.Links().size() == 6,
+          "可変の入力は名前の番号の分だけ足して繋ぐ（Rock 2 / rock 3 / Input 1 / 番号）");
+    const graph::Node* scatter3 = written3.FindNode(5);
+    Check(scatter3 && scatter3->inputs.size() == 6 && scatter3->inputs[5].label == "Rock 4" &&
+              written3.FindUpstreamNodeForPin(scatter3->inputs[4].id) == written3.FindNode(3) &&
+              written3.FindUpstreamNodeForPin(scatter3->inputs[3].id) == written3.FindNode(4),
+          "Rock 1〜3 が繋がり、空きの Rock 4 が 1 本残る");
 }

@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 07:10
+更新日時: 2026-10-03 07:50
 
 ## 未リリース
+
+- 岩の集合体のユニットの例 `examples/rock-cluster/` を足した（4 つの岩グラフと山グラフ。大岩を重ね、周りに岩、裾に小石）。書きやすい表記で、Rock Scatter の "Rock 2" 以降や Merge の "Input 2" 以降に名前でつなげるようにした（必要な本数だけ入力を足す）。
 
 - `tools/rock_bake.py` を足した。岩グラフの Rock Asset をアプリで対話せずに焼く（山グラフの Rock ノードが読む付属フォルダを作る）。`rock_cli eval` に `rockInstanceSets`（撒いたノードと岩グラフごとの数・推定の被覆率）を足した。`examples/mountain/` を大・中・小の 3 段（Coverage の連鎖）にし、`stone.rockgraph` を足した。
 

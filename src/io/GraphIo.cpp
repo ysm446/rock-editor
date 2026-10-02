@@ -530,7 +530,8 @@ std::string Lower(std::string text) {
 
 // 書きやすい表記のリンクの端。"12"、"12:Volume"、"12:2"、{"node": 12, "pin": "Volume"}（pin は名前か番号）。
 // 名前は大文字小文字を区別しない。pin を省くと 0 番。
-graph::GraphId ResolveEnd(const graph::NodeGraph& graphData, const json& end, graph::PinKind kind, std::string& error) {
+// nodes はまだ NodeGraph に入れる前の列（Replace は余分な可変の入力を整理するので、足した "Rock N" が消えないように列の上で解く）。
+graph::GraphId ResolveEnd(const std::vector<graph::Node>& nodes, const json& end, graph::PinKind kind, std::string& error) {
     graph::GraphId nodeId = 0;
     std::string pin;
     if (end.is_number_integer()) {
@@ -551,7 +552,8 @@ graph::GraphId ResolveEnd(const graph::NodeGraph& graphData, const json& end, gr
             pin = p->is_number_integer() ? std::to_string(p->get<int>()) : p->is_string() ? p->get<std::string>() : "";
     }
     const char* side = kind == graph::PinKind::Input ? "入力" : "出力";
-    const graph::Node* owner = graphData.FindNode(nodeId);
+    const auto found = std::find_if(nodes.begin(), nodes.end(), [&](const graph::Node& n) { return n.id == nodeId; });
+    const graph::Node* owner = found == nodes.end() ? nullptr : &*found;
     if (!owner) {
         error = std::string(side) + "側のノード " + std::to_string(nodeId) + " がありません";
         return 0;
@@ -1308,15 +1310,48 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
     }
     // 名前で書いたリンク（"from" / "to"）は、ピンの ID が決まったノードの上で解決する。ID は省略できる。
     if (!namedLinks.empty()) {
-        graph::NodeGraph pinsOnly;
-        pinsOnly.Replace(nodes, {});
         for (const graph::Link& link : links) maxId = std::max(maxId, link.id);
         for (const json* item : namedLinks) maxId = std::max(maxId, ReadInt(*item, "id", 0));
+        // 入力数が可変のノード（Rock Scatter の "Rock N"、Merge の "Input N"）は、名前の番号か番号指定の分だけ
+        // 先に入力を足す（ピンは定義から 1 本しか作らないので、"Rock 2" がまだ無い）。
+        for (const json* item : namedLinks) {
+            const json to = item->value("to", json());
+            graph::GraphId nodeId = 0;
+            std::string pin;
+            if (to.is_string()) {
+                const std::string text = to.get<std::string>();
+                const size_t colon = text.find(':');
+                try { nodeId = std::stoi(text.substr(0, colon)); } catch (...) { continue; }
+                if (colon != std::string::npos) pin = text.substr(colon + 1);
+            } else if (to.is_object()) {
+                nodeId = ReadInt(to, "node", 0);
+                if (const json* p = FindMember(to, "pin"))
+                    pin = p->is_number_integer() ? std::to_string(p->get<int>()) : p->is_string() ? p->get<std::string>() : "";
+            }
+            auto owner = std::find_if(nodes.begin(), nodes.end(), [&](const graph::Node& n) { return n.id == nodeId; });
+            if (owner == nodes.end() || !graph::IsVariableInputNodeKind(owner->kind) || owner->inputs.empty() || pin.empty()) continue;
+            const std::string prefix = owner->kind == graph::NodeKind::RockScatter ? "rock " : "input ";
+            const std::string lower = Lower(pin);
+            size_t wanted = 0;  // 必要な入力の本数
+            try {
+                if (std::all_of(pin.begin(), pin.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)) != 0; }))
+                    wanted = std::stoul(pin) + 1;
+                else if (lower.rfind(prefix, 0) == 0)
+                    wanted = graph::FixedInputCount(owner->kind) + std::stoul(lower.substr(prefix.size()));
+            } catch (...) { continue; }
+            while (owner->inputs.size() < wanted && wanted <= 64) {
+                graph::Pin extra = owner->inputs.back();
+                extra.id = ++maxId;
+                extra.label = (owner->kind == graph::NodeKind::RockScatter ? "Rock " : "Input ") +
+                              std::to_string(owner->inputs.size() + 1 - graph::FixedInputCount(owner->kind));
+                owner->inputs.push_back(std::move(extra));
+            }
+        }
         for (const json* item : namedLinks) {
             std::string error;
             graph::Link link;
-            link.startPin = ResolveEnd(pinsOnly, item->value("from", json()), graph::PinKind::Output, error);
-            if (link.startPin) link.endPin = ResolveEnd(pinsOnly, item->value("to", json()), graph::PinKind::Input, error);
+            link.startPin = ResolveEnd(nodes, item->value("from", json()), graph::PinKind::Output, error);
+            if (link.startPin) link.endPin = ResolveEnd(nodes, item->value("to", json()), graph::PinKind::Input, error);
             if (!link.startPin || !link.endPin) {
                 if (issues) issues->push_back({0, ReadInt(*item, "id", 0), "リンクを捨てました: " + error});
                 continue;

@@ -1,0 +1,71 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "heightmap", "note": "地面: 60 m 四方、中央が高い 1 つの丘。岩を中央に寄せる土台",
+       "heightmap": {"width": 60, "depth": 60, "minHeight": 0, "maxHeight": 8, "resolution": 128, "textureResolution": 1024,
+                     "seed": 3, "featureSize": 50, "roughness": 0.3, "peak": 0.9}},
+      {"id": 2, "kind": "surface", "note": "地面の定数色（例を自己完結にするため）",
+       "layer": {"name": "Ground", "baseColor": [0.33, 0.30, 0.26], "roughness": 0.9, "height": {"source": "noise", "base": 0.5, "gain": 0.3},
+                 "mapping": {"method": "triplanar", "repeatMeters": 3}}},
+      {"id": 3, "kind": "meshOutput", "note": "地面"},
+      {"id": 4, "kind": "shapeMask", "note": "高さ: 丘の頂だけ白。大岩を中央に寄せる",
+       "shapeMask": {"type": "height", "resolution": 512, "low": 0.55, "high": 0.95}},
+      {"id": 5, "kind": "shapeMask", "note": "高さ: 丘の広い範囲が白。中・小を大岩の周りに寄せる（崖錐）",
+       "shapeMask": {"type": "height", "resolution": 512, "low": 0.15, "high": 0.8}},
+
+      {"id": 10, "kind": "rock", "note": "岩峰 約 14 m", "rock": {"scene": "buttress.rockgraph", "scale": 1.0, "weight": 1.0}},
+      {"id": 11, "kind": "rock", "note": "角張った岩 約 10 m", "rock": {"scene": "blocky.rockgraph", "scale": 4.0, "weight": 1.0}},
+      {"id": 12, "kind": "rock", "note": "丸い岩 約 8 m", "rock": {"scene": "boulder.rockgraph", "scale": 4.0, "weight": 1.0}},
+      {"id": 20, "kind": "rockScatter", "note": "大: 数個の大岩を頂に重ねる。大きさの間隔 0.45 で足元の円が食い込む",
+       "rockScatter": {"seed": 5, "spacing": 1, "maxCount": 5, "scaleMin": 0.9, "scaleMax": 1.2, "alignToNormal": 0.2, "embed": 0.25,
+                       "sizeSpacing": 0.45, "settle": 1, "settleMax": 0.6}},
+      {"id": 21, "kind": "meshOutput", "note": "大岩"},
+
+      {"id": 30, "kind": "maskFilter", "note": "大の足元を反転（大の無い所）", "maskFilter": {"type": "levels", "invert": true}},
+      {"id": 31, "kind": "maskCombine", "note": "丘の周り かつ 大の無い所", "maskCombine": {"operation": "minimum"}},
+      {"id": 40, "kind": "rock", "note": "角張った岩 約 4 m", "rock": {"scene": "blocky.rockgraph", "scale": 1.6, "weight": 1.0}},
+      {"id": 41, "kind": "rock", "note": "丸い岩 約 3.6 m", "rock": {"scene": "boulder.rockgraph", "scale": 1.8, "weight": 1.0}},
+      {"id": 42, "kind": "rockScatter", "note": "中: 大岩の周りに数 m の岩",
+       "rockScatter": {"seed": 6, "spacing": 3, "maxCount": 14, "scaleMin": 0.8, "scaleMax": 1.3, "alignToNormal": 0.5, "embed": 0.25,
+                       "sizeSpacing": 0.9, "settle": 1, "settleMax": 0.5}},
+      {"id": 43, "kind": "meshOutput", "note": "中岩"},
+
+      {"id": 50, "kind": "maskFilter", "note": "中の足元を反転", "maskFilter": {"type": "levels", "invert": true}},
+      {"id": 51, "kind": "maskCombine", "note": "大も中も無い所", "maskCombine": {"operation": "minimum"}},
+      {"id": 52, "kind": "maskCombine", "note": "丘の周り かつ 大も中も無い所", "maskCombine": {"operation": "minimum"}},
+      {"id": 60, "kind": "rock", "note": "崖錐の破片 約 1.2 m", "rock": {"scene": "talus.rockgraph", "scale": 1.0, "weight": 2.0}},
+      {"id": 61, "kind": "rock", "note": "小さい丸石 約 1 m", "rock": {"scene": "boulder.rockgraph", "scale": 0.5, "weight": 1.0}},
+      {"id": 62, "kind": "rockScatter", "note": "小: 大岩の周りの隙間に小石を散らす",
+       "rockScatter": {"seed": 7, "spacing": 1.4, "maxCount": 500, "scaleMin": 0.5, "scaleMax": 1.3, "alignToNormal": 0.6, "embed": 0.3,
+                       "sizeSpacing": 1.0, "settle": 1, "settleMax": 0.5}},
+      {"id": 63, "kind": "meshOutput", "note": "小石"}
+    ],
+    "links": [
+      {"from": "1", "to": "3:Geometry"}, {"from": "2", "to": "3:Material"},
+      {"from": "1", "to": "4"}, {"from": "1", "to": "5"},
+      {"from": "1", "to": "20:Terrain"}, {"from": "4", "to": "20:Mask"},
+      {"from": "10", "to": "20:Rock 1"}, {"from": "11", "to": "20:Rock 2"}, {"from": "12", "to": "20:Rock 3"},
+      {"from": "20:Instances", "to": "21:Geometry"},
+      {"from": "20:Coverage", "to": "30"},
+      {"from": "5", "to": "31:A"}, {"from": "30", "to": "31:B"},
+      {"from": "1", "to": "42:Terrain"}, {"from": "31", "to": "42:Mask"},
+      {"from": "40", "to": "42:Rock 1"}, {"from": "41", "to": "42:Rock 2"},
+      {"from": "42:Instances", "to": "43:Geometry"},
+      {"from": "42:Coverage", "to": "50"},
+      {"from": "30", "to": "51:A"}, {"from": "50", "to": "51:B"},
+      {"from": "51", "to": "52:A"}, {"from": "5", "to": "52:B"},
+      {"from": "1", "to": "62:Terrain"}, {"from": "52", "to": "62:Mask"},
+      {"from": "60", "to": "62:Rock 1"}, {"from": "61", "to": "62:Rock 2"},
+      {"from": "62:Instances", "to": "63:Geometry"}
+    ]
+  },
+  "preview": {
+    "camera": {"target": [0, 6, 0], "distance": 80, "fovY": 0.785398, "pitch": 0.3, "yaw": 0.6},
+    "exposure": {"compensation": 0.7},
+    "showSkybox": true
+  },
+  "skies": [{"asset": {"path": "Skies/preview.rocksky", "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"}}],
+  "activeSky": 0
+}

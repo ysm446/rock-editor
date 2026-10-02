@@ -1,0 +1,187 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "randomBoxes",
+        "randomBoxes": {
+          "count": 5,
+          "size": [
+            1.7,
+            1.2,
+            1.4
+          ],
+          "sizeVariation": 0.4,
+          "spread": 0.6,
+          "rotation": 35,
+          "seed": 11
+        }
+      },
+      {
+        "id": 2,
+        "kind": "toVolume",
+        "toVolume": {
+          "resolution": 96
+        }
+      },
+      {
+        "id": 4,
+        "kind": "planeCuts",
+        "note": "丸める前に大きな面をいくつか作ると、ただの楕円体にならない",
+        "planeCuts": {
+          "count": 7,
+          "depthMin": 0.05,
+          "depthMax": 0.18,
+          "seed": 3
+        }
+      },
+      {
+        "id": 5,
+        "kind": "volumeSmooth",
+        "note": "角を落として丸める。半径を上げるほど丸い",
+        "volumeSmooth": {
+          "mode": "smooth",
+          "radius": 0.05,
+          "amount": 1
+        }
+      },
+      {
+        "id": 6,
+        "kind": "volumeNoise",
+        "note": "セル状のノイズで表面に浅いくぼみを付ける",
+        "volumeNoise": {
+          "type": "cellular",
+          "amount": 0.015,
+          "scale": 7,
+          "octaves": 2
+        }
+      },
+      {
+        "id": 7,
+        "kind": "volumeClip",
+        "note": "接地: 形の底から embed の位置で切り、切り口を地面（高さ 0）に置く。原点中心の形を持ち上げなくてよい",
+        "volumeClip": {
+          "mode": "ground",
+          "embed": 0.2
+        }
+      },
+      {
+        "id": 8,
+        "kind": "volumeToMesh",
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 9,
+        "kind": "meshOutput"
+      },
+      {
+        "id": 10,
+        "kind": "decimate",
+        "note": "UV 展開の前に減らす",
+        "decimate": {
+          "targetTriangles": 12000,
+          "maxError": 0
+        }
+      },
+      {
+        "id": 11,
+        "kind": "uvUnwrap",
+        "uvUnwrap": {
+          "resolution": 1024,
+          "padding": 4
+        }
+      },
+      {
+        "id": 12,
+        "kind": "materialBake",
+        "note": "High に減らす前の形をつなぎ、法線と AO を焼く"
+      },
+      {
+        "id": 13,
+        "kind": "rockAsset",
+        "note": "python tools/rock_bake.py で焼く。山グラフ（cluster.mountaingraph）の Rock が読む",
+        "rockAsset": {
+          "lodCount": 4,
+          "maxTriangles": 12000
+        }
+      },
+      {
+        "id": 14,
+        "kind": "surface",
+        "note": "マテリアル無しの定数色（例を自己完結にするため）",
+        "layer": {
+          "name": "Rock",
+          "baseColor": [
+            0.4,
+            0.37,
+            0.33
+          ],
+          "roughness": 0.85,
+          "height": {
+            "source": "noise",
+            "base": 0.5,
+            "gain": 0.3
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "from": "1",
+        "to": "2"
+      },
+      {
+        "from": "2",
+        "to": "4"
+      },
+      {
+        "from": "4",
+        "to": "5"
+      },
+      {
+        "from": "5",
+        "to": "6"
+      },
+      {
+        "from": "6",
+        "to": "7"
+      },
+      {
+        "from": "7",
+        "to": "8"
+      },
+      {
+        "from": "8",
+        "to": "10"
+      },
+      {
+        "from": "10",
+        "to": "11"
+      },
+      {
+        "from": "11",
+        "to": "12:Mesh"
+      },
+      {
+        "from": "14",
+        "to": "12:Material"
+      },
+      {
+        "from": "8",
+        "to": "12:High"
+      },
+      {
+        "from": "12",
+        "to": "13"
+      },
+      {
+        "from": "13",
+        "to": "9:Geometry"
+      }
+    ]
+  }
+}

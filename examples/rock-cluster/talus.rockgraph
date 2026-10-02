@@ -1,0 +1,183 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "baseRock": {
+          "shape": "box",
+          "size": [
+            1.4,
+            0.9,
+            1.1
+          ]
+        }
+      },
+      {
+        "id": 2,
+        "kind": "toVolume",
+        "toVolume": {
+          "resolution": 96
+        }
+      },
+      {
+        "id": 3,
+        "kind": "planeCuts",
+        "note": "大きな平面で強く切り、割れた岩片の形にする",
+        "planeCuts": {
+          "count": 9,
+          "depthMin": 0.12,
+          "depthMax": 0.35,
+          "seed": 9
+        }
+      },
+      {
+        "id": 4,
+        "kind": "planeCuts",
+        "note": "局所の小さな欠けを多数",
+        "planeCuts": {
+          "scope": "local",
+          "count": 30,
+          "radius": 0.12,
+          "depthMin": 0.1,
+          "depthMax": 0.35,
+          "seed": 3
+        }
+      },
+      {
+        "id": 5,
+        "kind": "volumeNoise",
+        "volumeNoise": {
+          "type": "facet",
+          "amount": 0.008,
+          "scale": 16
+        }
+      },
+      {
+        "id": 6,
+        "kind": "volumeClip",
+        "volumeClip": {
+          "mode": "ground",
+          "embed": 0.05
+        }
+      },
+      {
+        "id": 7,
+        "kind": "volumeToMesh",
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 8,
+        "kind": "meshOutput"
+      },
+      {
+        "id": 9,
+        "kind": "decimate",
+        "note": "UV 展開の前に減らす",
+        "decimate": {
+          "targetTriangles": 6000,
+          "maxError": 0
+        }
+      },
+      {
+        "id": 10,
+        "kind": "uvUnwrap",
+        "uvUnwrap": {
+          "resolution": 1024,
+          "padding": 4
+        }
+      },
+      {
+        "id": 11,
+        "kind": "materialBake",
+        "note": "High に減らす前の形をつなぎ、法線と AO を焼く"
+      },
+      {
+        "id": 12,
+        "kind": "rockAsset",
+        "note": "python tools/rock_bake.py で焼く。山グラフ（cluster.mountaingraph）の Rock が読む",
+        "rockAsset": {
+          "lodCount": 4,
+          "maxTriangles": 6000
+        }
+      },
+      {
+        "id": 13,
+        "kind": "surface",
+        "note": "マテリアル無しの定数色（例を自己完結にするため）",
+        "layer": {
+          "name": "Rock",
+          "baseColor": [
+            0.38,
+            0.36,
+            0.33
+          ],
+          "roughness": 0.85,
+          "height": {
+            "source": "noise",
+            "base": 0.5,
+            "gain": 0.3
+          }
+        }
+      }
+    ],
+    "links": [
+      {
+        "from": "1",
+        "to": "2"
+      },
+      {
+        "from": "2",
+        "to": "3"
+      },
+      {
+        "from": "3",
+        "to": "4"
+      },
+      {
+        "from": "4",
+        "to": "5"
+      },
+      {
+        "from": "5",
+        "to": "6"
+      },
+      {
+        "from": "6",
+        "to": "7"
+      },
+      {
+        "from": "7",
+        "to": "9"
+      },
+      {
+        "from": "9",
+        "to": "10"
+      },
+      {
+        "from": "10",
+        "to": "11:Mesh"
+      },
+      {
+        "from": "13",
+        "to": "11:Material"
+      },
+      {
+        "from": "7",
+        "to": "11:High"
+      },
+      {
+        "from": "11",
+        "to": "12"
+      },
+      {
+        "from": "12",
+        "to": "8:Geometry"
+      }
+    ]
+  }
+}

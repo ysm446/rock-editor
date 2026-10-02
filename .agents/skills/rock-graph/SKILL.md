@@ -87,7 +87,7 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 python tools/rock_bake.py <graph.rockgraph> [--node <Rock Asset の id>]   # 付属フォルダ <graph>.rockgraph.bake/ を作る
 ```
 
-山グラフ（`.mountaingraph`。Heightmap の地形に Rock Scatter で岩を撒く）の Rock ノードは、岩グラフを**焼いた**岩アセットを読む。焼くのは GPU のアプリの仕事だが、`tools/rock_bake.py` が対話せずに焼く（Rock Asset ノードを自動で探し、上流の Material Bake も先に走る。数秒〜数十秒）。焼いた後は `rock_cli eval <山グラフ>` で段ごとの数と推定の被覆率（`rockInstanceSets`）、`rock_shot.py` で見た目を確かめる。段を分けるときは前の段の `Coverage` 出力を `Mask Filter`（`type: levels`, `invert: true`）で反転し、`Mask Combine`（`minimum`）で傾斜のマスクと合わせて次の段の `Mask` につなぐ。例は `examples/mountain/`。
+山グラフ（`.mountaingraph`。Heightmap の地形に Rock Scatter で岩を撒く）の Rock ノードは、岩グラフを**焼いた**岩アセットを読む。焼くのは GPU のアプリの仕事だが、`tools/rock_bake.py` が対話せずに焼く（Rock Asset ノードを自動で探し、上流の Material Bake も先に走る。数秒〜数十秒）。焼いた後は `rock_cli eval <山グラフ>` で段ごとの数と推定の被覆率（`rockInstanceSets`）、`rock_shot.py` で見た目を確かめる。複数の Rock は `"to": "20:Rock 1"`, `"20:Rock 2"`, … と名前でつなぐ（必要な本数だけ入力が足される）。段を分けるときは前の段の `Coverage` 出力を `Mask Filter`（`type: levels`, `invert: true`）で反転し、`Mask Combine`（`minimum`）で傾斜のマスクと合わせて次の段の `Mask` につなぐ。例は `examples/mountain/`（山）と `examples/rock-cluster/`（数十 m の岩の集合体のユニット）。
 
 ## 5. 研究ページを更新する（レシピを足した・直したとき）
 
