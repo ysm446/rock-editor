@@ -6,33 +6,22 @@
       {
         "id": 1,
         "kind": "baseRock",
-        "note": "凸岩峰の母岩。裾・肩・頂の凸包を、頂の稜線（走向に沿った線）と、節理面（走向 0・傾き 76°。Parallel Planes と同じ向き）で両側を切った傾いた板にする。大きな輪郭をここで決める。",
+        "note": "節理で割られる前の岩体。縦長の箱。侵食で外に見える面が全て割れ面になる",
         "baseRock": {
-          "shape": "convexPeak",
+          "shape": "box",
           "size": [
-            9,
+            10,
             15,
-            7
-          ],
-          "seed": 5,
-          "peakSides": 7,
-          "peakTopWidth": 0.06,
-          "peakShoulderHeight": 0.62,
-          "peakLeanX": 0.3,
-          "peakLeanZ": 0.0,
-          "peakVariation": 0.45,
-          "peakRidgeLength": 0.7,
-          "peakStrike": 0,
-          "peakSlabThickness": 0.42,
-          "peakSlabDip": 76
+            8
+          ]
         }
       },
       {
         "id": 2,
         "kind": "scatterPoints",
-        "note": "局所の欠けを作るための 90 点。密度のむらと高さの勾配で上ほど小さな片。輪郭は上流の凸岩峰が決める。",
+        "note": "ブロックの母点。密度のむらで、割れの多い帯（小さなブロック、先に崩れて沢になる）と割れの少ない芯（大きなブロック、塔として残る）を作る。高さの勾配: 地表に近い上ほど節理が密で、頂は小さなブロックに割れる",
         "pieces": {
-          "count": 90,
+          "count": 420,
           "seed": 3,
           "clustering": 0.9,
           "clusterScale": 2.0,
@@ -42,7 +31,7 @@
       {
         "id": 19,
         "kind": "parallelPlanes",
-        "note": "主な節理の系統（76°、間隔 2.4 m）。吸着でこの面が複数の片にまたがる一枚の節理面になる。母岩の広い面と平行。",
+        "note": "主な節理の系統（76°）。吸着でこの面が通り抜けた一枚の節理面になる",
         "parallelPlanes": {
           "rotation": [
             0,
@@ -57,7 +46,7 @@
       {
         "id": 5,
         "kind": "voronoiFracture",
-        "note": "点の Voronoi を主な節理の面に吸着させて割る（板 ∩ Voronoi）。",
+        "note": "点の Voronoi を主な節理の面に吸着させて割る（板 ∩ Voronoi）。節理面は複数のブロックにまたがる一枚の面、板の中は不規則な多面体",
         "pieces": {
           "rotation": [
             0,
@@ -75,36 +64,31 @@
       {
         "id": 6,
         "kind": "pieceSelect",
-        "note": "少量だけ欠く（進行 0.1）。稜の効き 1 で、稜・角・張り出した縁に接する片だけが欠け、面の中央には穴を開けない。接地で底からは欠かない。",
+        "note": "外周からの侵食（凍結破砕）。大きさの効きで小さなブロックから欠け、芯が残る。接地: 底からは欠かず、下のブロックに載っていない片は落ちる。安定: 狭い面で載った大きなブロック（頭でっかち）も転げ落ち、上ほど細く尖る。側面の後退: 周りの地面が下がるにつれ上ほど長く側面から削られる。横へ削れる深さを頂で 4 m、底で 0 までにし、上ほど細く、芯は残す（進行は 1 で、上限まで削る）",
         "pieces": {
           "mode": "peel",
-          "fraction": 0.1,
+          "fraction": 1.0,
           "peelNoise": 1.0,
-          "protectCore": true,
+          "protectCore": false,
           "grounded": true,
           "seed": 3,
-          "peelSize": 0,
-          "stability": 0,
-          "peelRetreat": 0,
-          "peelEdge": 1.0
+          "peelSize": 0.4,
+          "stability": 0.45,
+          "peelRetreat": 4
         }
       },
       {
         "id": 7,
         "kind": "pieceFilter",
-        "note": "選んだ片を消す",
+        "note": "選んだブロックを消す",
         "pieces": {
           "keep": false
         }
       },
       {
-        "id": 8,
-        "kind": "piecesToMesh"
-      },
-      {
         "id": 17,
         "kind": "pieceTransform",
-        "note": "わずかなずれ・傾き。接触面は To Volume で消えるので、節理の線はこのずれで付く。",
+        "note": "ブロックごとのずれ・傾き（ばらつき）。継ぎ目が段違いに開き、そろった石積みに見えなくなる。大きすぎると石を積んだように見えるので小さく",
         "pieces": {
           "individual": true,
           "jitterPosition": [
@@ -117,9 +101,13 @@
         }
       },
       {
+        "id": 8,
+        "kind": "piecesToMesh"
+      },
+      {
         "id": 9,
         "kind": "toVolume",
-        "note": "片の集合をボリューム化。隙間なく接触する共有面は距離の計算から外れる。",
+        "note": "ブロックを 1 つのボリュームにまとめる（ずれた隙間は継ぎ目として残る）",
         "toVolume": {
           "resolution": 128
         }
@@ -127,7 +115,7 @@
       {
         "id": 18,
         "kind": "volumeClose",
-        "note": "ずれで開いた細い継ぎ目を閉じる",
+        "note": "ブロックのずれで開いた細い継ぎ目を閉じ、一枚岩の塔にする（大きな段差は残る）",
         "volumeClose": {
           "mode": "width",
           "width": 0.005
@@ -136,7 +124,7 @@
       {
         "id": 11,
         "kind": "planeCuts",
-        "note": "局所の小さな欠け",
+        "note": "局所の欠けでブロックの角を割る",
         "planeCuts": {
           "count": 70,
           "scope": "local",
@@ -149,7 +137,7 @@
       {
         "id": 12,
         "kind": "volumeNoise",
-        "note": "小面のノイズ",
+        "note": "割れ肌の細かい凹凸",
         "volumeNoise": {
           "type": "facet",
           "amount": 0.006,
@@ -164,16 +152,15 @@
           "amount": 0.004,
           "radius": 0.006,
           "noise": 0.6
-        },
-        "note": "角の摩耗"
+        }
       },
       {
         "id": 14,
         "kind": "volumeClip",
-        "note": "裾を 8% 埋めて接地する",
+        "note": "根元を斜面に埋める",
         "volumeClip": {
           "mode": "ground",
-          "embed": 0.08
+          "embed": 0.16
         }
       },
       {
@@ -214,10 +201,6 @@
         "to": "7:Selection"
       },
       {
-        "from": "19",
-        "to": "5:Planes"
-      },
-      {
         "from": "7",
         "to": "17:Pieces"
       },
@@ -232,10 +215,6 @@
       {
         "from": "9",
         "to": "18"
-      },
-      {
-        "from": "18",
-        "to": "11"
       },
       {
         "from": "11",
@@ -256,6 +235,14 @@
       {
         "from": "15",
         "to": "16:Geometry"
+      },
+      {
+        "from": "18",
+        "to": "11"
+      },
+      {
+        "from": "19",
+        "to": "5:Planes"
       }
     ]
   }
