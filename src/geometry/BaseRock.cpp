@@ -197,7 +197,7 @@ Mesh ConvexPeak(const BaseRockSettings& s) {
     const double phase = random()*2*std::numbers::pi;
     for (int ring=0;ring<3;++ring) {
         const double height = ring==0 ? 0 : ring==1 ? s.peakShoulderHeight : 1;
-        const double radius = ring==0 ? .5 : ring==1 ? .36 : .5*s.peakTopWidth;
+        const double radius = ring==0 ? .5 : ring==1 ? .5*s.peakShoulderWidth : .5*s.peakTopWidth;
         for (int i=0;i<s.peakSides;++i) {
             const double angle = phase+2*std::numbers::pi*(i+(random()-.5)*s.peakVariation*.5)/s.peakSides;
             const double r = radius*(1+(random()-.5)*s.peakVariation);
@@ -222,15 +222,25 @@ Mesh ConvexPeak(const BaseRockSettings& s) {
         // 節理面の法線 = Ry(走向)·Rz(傾き)·(0,1,0)。Parallel Planes の rotation [0, 走向, 傾き] と一致する。
         const P n0{-std::sin(dip),std::cos(dip),0};
         const P n{std::cos(strike)*n0.x+std::sin(strike)*n0.z,n0.y,-std::sin(strike)*n0.x+std::cos(strike)*n0.z};
-        double low=std::numeric_limits<double>::max(),high=-low;
-        for (const auto& p : points) { low=std::min(low,Dot(n,p)); high=std::max(high,Dot(n,p)); }
-        const double center=(low+high)*.5, half=s.peakSlabThickness*s.size[0]*.5;
-        if (center+half<high-1e-9*s.size[0]) {
-            points=ClipHull(points,faces,n,center+half);
-            faces=Hull(points);
+        double low=std::numeric_limits<double>::max(),high=-low, bottom=low, top=high;
+        for (const auto& p : points) {
+            low=std::min(low,Dot(n,p)); high=std::max(high,Dot(n,p));
+            bottom=std::min(bottom,p.y); top=std::max(top,p.y);
         }
-        if (center-half>low+1e-9*s.size[0]) {
-            points=ClipHull(points,faces,n*-1.0,-(center-half));
+        const double center=(low+high)*.5, half=s.peakSlabThickness*s.size[0]*.5;
+        // 裾の広がり: 面の位置を高さで変える。頂で center ± half、裾で center ± half × (1 + 広がり)。
+        // side × n·p <= side × center + half × (1 + flare × (top − y) / H) を整理して、
+        // (side × n + k × ŷ)·p <= side × center + half + k × top、k = half × flare / H。凸は保たれる。
+        const double k=top>bottom ? half*s.peakSlabFlare/(top-bottom) : 0;
+        for (double side : {1.0,-1.0}) {
+            P m{side*n.x, side*n.y+k, side*n.z};
+            double offset=side*center+half+k*top;
+            const double length=std::sqrt(Dot(m,m));
+            m=m*(1/length); offset/=length;
+            double farthest=-std::numeric_limits<double>::max();
+            for (const auto& p : points) farthest=std::max(farthest,Dot(m,p));
+            if (farthest<=offset+1e-9*s.size[0]) continue;
+            points=ClipHull(points,faces,m,offset);
             faces=Hull(points);
         }
     }
@@ -309,7 +319,7 @@ Mesh MakeBaseRock(const BaseRockSettings& s, std::string& error) {
     if (s.peakSides<4 || s.peakSides>12 || !range(s.peakTopWidth,0,.6f) || !range(s.peakShoulderHeight,.2f,.85f) ||
         !range(s.peakLeanX,-.5f,.5f) || !range(s.peakLeanZ,-.5f,.5f) || !range(s.peakVariation,0,.5f) ||
         !range(s.peakRidgeLength,0,1) || !range(s.peakStrike,-90,90) || !range(s.peakSlabThickness,0,1) ||
-        !range(s.peakSlabDip,45,90))
+        !range(s.peakSlabDip,45,90) || !range(s.peakShoulderWidth,.2f,1) || !range(s.peakSlabFlare,0,1))
         return fail("凸岩峰の輪郭数・頂の幅・肩の高さ・偏り・ばらつきが範囲外です");
     if (s.shape == BaseShape::ConvexPeak) {
         auto peak=ConvexPeak(s);

@@ -399,7 +399,8 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                 {"peakShoulderHeight", rock->peakShoulderHeight}, {"peakLeanX", rock->peakLeanX},
                                 {"peakLeanZ", rock->peakLeanZ}, {"peakVariation", rock->peakVariation},
                                 {"peakRidgeLength", rock->peakRidgeLength}, {"peakStrike", rock->peakStrike},
-                                {"peakSlabThickness", rock->peakSlabThickness}, {"peakSlabDip", rock->peakSlabDip}};
+                                {"peakSlabThickness", rock->peakSlabThickness}, {"peakSlabDip", rock->peakSlabDip},
+                                {"peakShoulderWidth", rock->peakShoulderWidth}, {"peakSlabFlare", rock->peakSlabFlare}};
         } else if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
             item["layer"] = WriteLayer(settings->layer, writeMaterial);
         } else if (const auto* model = std::get_if<graph::ModelNodeSettings>(&node.settings)) {
@@ -1194,6 +1195,8 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.peakStrike = ReadFloat(*values, "peakStrike", 0);
                     settings.peakSlabThickness = ReadFloat(*values, "peakSlabThickness", 0);
                     settings.peakSlabDip = ReadFloat(*values, "peakSlabDip", 76);
+                    settings.peakShoulderWidth = ReadFloat(*values, "peakShoulderWidth", .72f);
+                    settings.peakSlabFlare = ReadFloat(*values, "peakSlabFlare", 0);
                 }
                 created.settings = settings;
             } else if (graph::IsLayerNodeKind(created.kind)) {

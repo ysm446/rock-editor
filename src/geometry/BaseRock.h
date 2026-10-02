@@ -26,6 +26,10 @@ struct BaseRockSettings {
     // 節理面で両側を切り、同じ向きの板にする。間隔は寸法 X に対する比。0 で切らない。
     // 傾きは水平からの度（Parallel Planes の回転 Z と同じ）。切ると外接箱は size より小さくなる。
     float peakSlabThickness = 0, peakSlabDip = 76;
+    // 肩の幅（裾に対する比。既定 0.72）。小さくすると肩から上が細くなり、裾が相対的に広がる。
+    float peakShoulderWidth = .72f;
+    // 節理面の裾の広がり（0〜1）。2 面を平行ではなく、裾ほど間隔が広がる向きに傾ける。頂で「間隔」、裾でその (1 + 広がり) 倍。
+    float peakSlabFlare = 0;
 };
 // Box / Noise 0 は従来の8頂点・12三角形をそのまま返す。
 // 曲面は共有頂点を持つ cube surface の投影。描画用の属性は含まない。

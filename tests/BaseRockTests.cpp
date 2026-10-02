@@ -279,6 +279,40 @@ void RunBaseRockTests() {
         slabOk &= error.empty() && slabPieces.pieces.size()==24 && std::abs(slabSum-info.volume)<info.volume*2e-5;
     }
     Check(ridgeOk, "凸岩峰: 頂の稜線で最高点が走向に沿った線になる");
+    // 肩の幅: 小さいほど体積が減る。裾の広がり: 節理面の間隔が裾で (1 + 広がり) 倍になる。
+    {
+        geometry::BaseRockSettings peak;
+        peak.shape = BaseShape::ConvexPeak; peak.size = {9,15,7}; peak.peakVariation = 0; peak.peakTopWidth = .1f;
+        geometry::MeshInfo narrow, wide;
+        peak.peakShoulderWidth = .3f;
+        const auto narrowMesh = geometry::MakeBaseRock(peak,error);
+        const bool narrowOk = error.empty() && geometry::InspectMesh(narrowMesh,narrow) && narrow.closed;
+        peak.peakShoulderWidth = .95f;
+        const auto wideMesh = geometry::MakeBaseRock(peak,error);
+        Check(narrowOk && error.empty() && geometry::InspectMesh(wideMesh,wide) && wide.closed && narrow.volume < wide.volume*.7,
+              "凸岩峰: 肩の幅が小さいと肩から上が細く体積が減る");
+        peak.peakShoulderWidth = .72f; peak.peakSlabThickness = .4f; peak.peakSlabDip = 76; peak.peakSlabFlare = .5f;
+        const auto flared = geometry::MakeBaseRock(peak,error);
+        geometry::MeshInfo info;
+        bool flareOk = error.empty() && geometry::InspectMesh(flared,info) && info.closed && info.components==1;
+        const double dip = 76*std::numbers::pi/180, nx = -std::sin(dip), ny = std::cos(dip);
+        double low = 1e9, high = -1e9;
+        for (const auto& p : flared.positions) {
+            if (p.y > info.minimum.y + 1e-3f) continue;
+            const double d = nx*p.x + ny*p.y;
+            low = std::min(low,d); high = std::max(high,d);
+        }
+        flareOk &= std::abs((high-low) - .4*9*1.5) < .1;
+        for (const auto& face : flared.triangles) {
+            const auto normal=geometry::FaceNormal(flared,face), a=flared.positions[face[0]];
+            for (const auto& p : flared.positions)
+                flareOk &= double(normal.x)*(p.x-a.x)+double(normal.y)*(p.y-a.y)+double(normal.z)*(p.z-a.z)<1e-5*15;
+        }
+        Check(flareOk, "凸岩峰: 節理面の裾の広がりで、裾の間隔が (1 + 広がり) 倍になり凸を保つ");
+        peak.peakSlabFlare = 1.5f;
+        geometry::MakeBaseRock(peak,error);
+        Check(!error.empty(), "凸岩峰: 裾の広がりの範囲外を拒否する");
+    }
     Check(slabOk, "凸岩峰: 節理面で切ると平行な 2 面の間に収まり、凸・閉包を保つ");
     auto& peakConfig=std::get<graph::BaseRockNodeSettings>(graph.FindMutableNode(base)->settings);
     peakConfig={}; peakConfig.shape=BaseShape::ConvexPeak;

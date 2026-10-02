@@ -6,13 +6,13 @@
       {
         "id": 1,
         "kind": "baseRock",
-        "note": "凸岩峰の母岩。裾・肩・頂の凸包を、頂の稜線（走向に沿った線）と、節理面（走向 0・傾き 76°。Parallel Planes と同じ向き）で両側を切った傾いた板にする。大きな輪郭をここで決める。",
+        "note": "凸岩峰の母岩。裾・肩・頂の凸包を、頂の稜線（走向に沿った線）と節理面（走向 0・傾き 76°。Parallel Planes と同じ向き）で両側を切った傾いた板にする。肩の幅 0.5 と節理面の裾の広がり 1.0 で、裾は広く厚く、上ほど薄い板に細まる（裾で間隔の 2 倍）。大きな輪郭をここで決める。",
         "baseRock": {
           "shape": "convexPeak",
           "size": [
-            9,
+            10,
             15,
-            7
+            8
           ],
           "seed": 5,
           "peakSides": 7,
@@ -23,8 +23,10 @@
           "peakVariation": 0.45,
           "peakRidgeLength": 0.7,
           "peakStrike": 0,
-          "peakSlabThickness": 0.42,
-          "peakSlabDip": 76
+          "peakSlabThickness": 0.3,
+          "peakSlabDip": 76,
+          "peakShoulderWidth": 0.5,
+          "peakSlabFlare": 1.0
         }
       },
       {

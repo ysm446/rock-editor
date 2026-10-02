@@ -4,7 +4,7 @@
 // アプリと同じ評価器（graph::EvaluateRocks）と保存形式の読み込み（io::ReadGraph）を使う。
 // 出力は標準出力への JSON 1 つ。ログは標準エラーへ出る。
 //
-//   rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--pretty]
+//   rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--obj <out.obj>] [--pretty]
 //   rock_cli check <graph.rockgraph> [--pretty]
 //   rock_cli catalog [--pretty]
 //
@@ -400,7 +400,8 @@ json IssuesJson(const std::vector<io::GraphReadIssue>& issues) {
     return out;
 }
 
-int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::VolumeMeshingMethod mesher, bool pretty) {
+int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::VolumeMeshingMethod mesher, bool pretty,
+            const fs::path& objPath = {}) {
     std::string error;
     auto loaded = LoadGraphFile(path, error);
     if (!loaded) return Fail(error, pretty);
@@ -452,6 +453,25 @@ int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::
     json meshes = json::array();
     for (const graph::GeneratedRock& rock : evaluation.rocks) meshes.push_back(MeshJson(graph, rock));
     result["meshes"] = std::move(meshes);
+    // --obj: 評価したメッシュ（複数なら全部を一つに）を Wavefront OBJ に書く。外部ツールや Python で形を調べるため。
+    if (!objPath.empty()) {
+        std::string text;
+        size_t base = 0;
+        for (const graph::GeneratedRock& rock : evaluation.rocks) {
+            for (const auto& p : rock.mesh.positions)
+                text += "v " + std::to_string(p.x) + " " + std::to_string(p.y) + " " + std::to_string(p.z) + "\n";
+            for (const auto& t : rock.mesh.triangles)
+                text += "f " + std::to_string(base + t[0] + 1) + " " + std::to_string(base + t[1] + 1) + " " + std::to_string(base + t[2] + 1) + "\n";
+            base += rock.mesh.positions.size();
+        }
+        if (FILE* file = _wfopen(objPath.c_str(), L"wb")) {
+            std::fwrite(text.data(), 1, text.size(), file);
+            std::fclose(file);
+            result["obj"] = ToUtf8Display(objPath);
+        } else {
+            result["objError"] = "OBJ を書けません: " + ToUtf8Display(objPath);
+        }
+    }
     if (evaluation.pieces) result["pieces"] = evaluation.pieces->pieces.size();
     if (evaluation.selection) result["selected"] = evaluation.selection->ids.size();
     if (evaluation.points) result["points"] = evaluation.points->positions.size();
@@ -512,7 +532,7 @@ int RunCatalog(bool pretty) {
 
 void PrintUsage() {
     std::fputs("使い方:\n"
-               "  rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--pretty]\n"
+               "  rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--obj <out.obj>] [--pretty]\n"
                "  rock_cli catalog [--pretty]\n",
                stderr);
 }
@@ -544,8 +564,11 @@ int wmain(int argc, wchar_t** argv) {
         }
         std::optional<graph::GraphId> node;
         auto mesher = geometry::VolumeMeshingMethod::DualContouring;
+        fs::path objPath;
         for (size_t i = 2; i < args.size(); ++i) {
-            if (args[i] == "--node" && i + 1 < args.size()) {
+            if (args[i] == "--obj" && i + 1 < args.size()) {
+                objPath = FromUtf8(args[++i]);
+            } else if (args[i] == "--node" && i + 1 < args.size()) {
                 try {
                     node = std::stoi(args[++i]);
                 } catch (...) {
@@ -559,7 +582,7 @@ int wmain(int argc, wchar_t** argv) {
                 return Fail("知らない引数: " + args[i], pretty);
             }
         }
-        return RunEval(FromUtf8(args[1]), node, mesher, pretty);
+        return RunEval(FromUtf8(args[1]), node, mesher, pretty, objPath);
     }
     PrintUsage();
     return Fail("知らないコマンド: " + command, pretty);

@@ -2382,6 +2382,7 @@ void Application::DrawGraphPanel() {
                 changed |= ui::PropertyInt("輪郭の点数", &edited.peakSides, 4, 12, 7);
                 changed |= ui::PropertyFloat("頂の幅", &edited.peakTopWidth, 0, .6f, .08f);
                 changed |= ui::PropertyFloat("肩の高さ", &edited.peakShoulderHeight, .2f, .85f, .55f);
+                changed |= ui::PropertyFloat("肩の幅", &edited.peakShoulderWidth, .2f, 1, .72f);
                 changed |= ui::PropertyFloat("頂の偏り X", &edited.peakLeanX, -.5f, .5f, .18f);
                 changed |= ui::PropertyFloat("頂の偏り Z", &edited.peakLeanZ, -.5f, .5f, -.08f);
                 changed |= ui::PropertyFloat("輪郭のばらつき", &edited.peakVariation, 0, .5f, .25f);
@@ -2389,6 +2390,7 @@ void Application::DrawGraphPanel() {
                 changed |= ui::PropertyFloat("走向 (°)", &edited.peakStrike, -90, 90, 0);
                 changed |= ui::PropertyFloat("節理面の間隔", &edited.peakSlabThickness, 0, 1, 0);
                 changed |= ui::PropertyFloat("節理面の傾き (°)", &edited.peakSlabDip, 45, 90, 76);
+                changed |= ui::PropertyFloat("節理面の裾の広がり", &edited.peakSlabFlare, 0, 1, 0);
             } else {
                 const char* levels[] = {"4", "8", "16", "32", "不明（選び直してください）"};
                 const int divisions[] = {4, 8, 16, 32};
