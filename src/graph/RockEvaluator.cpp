@@ -50,6 +50,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(s->roundness); add(s->noiseStrength); add(s->noiseScale);
         add(s->peakSides); add(s->peakTopWidth); add(s->peakShoulderHeight);
         add(s->peakLeanX); add(s->peakLeanZ); add(s->peakVariation);
+        add(s->peakRidgeLength); add(s->peakStrike); add(s->peakSlabThickness); add(s->peakSlabDip);
         return key;
     }
     const auto pose = [&](const geometry::PiecePose& p) { add(p.position); add(p.rotation); add(p.scale); };

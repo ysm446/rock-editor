@@ -19,6 +19,13 @@ struct BaseRockSettings {
     int peakSides = 7;
     float peakTopWidth = .08f, peakShoulderHeight = .55f;
     float peakLeanX = .18f, peakLeanZ = -.08f, peakVariation = .25f;
+    // 頂を一点ではなく稜線にする（裾の幅に対する比。0 で従来どおりの点）。向きは走向と同じ。
+    float peakRidgeLength = 0;
+    // 走向（Y 軸まわりの度。Parallel Planes の回転 Y と同じ向き）。稜線と節理面が共有する。
+    float peakStrike = 0;
+    // 節理面で両側を切り、同じ向きの板にする。間隔は寸法 X に対する比。0 で切らない。
+    // 傾きは水平からの度（Parallel Planes の回転 Z と同じ）。切ると外接箱は size より小さくなる。
+    float peakSlabThickness = 0, peakSlabDip = 76;
 };
 // Box / Noise 0 は従来の8頂点・12三角形をそのまま返す。
 // 曲面は共有頂点を持つ cube surface の投影。描画用の属性は含まない。

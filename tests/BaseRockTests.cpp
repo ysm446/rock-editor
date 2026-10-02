@@ -207,11 +207,14 @@ void RunBaseRockTests() {
         validPeaks &= std::abs(info.maximum.x-info.minimum.x-9)<1e-5 && std::abs(info.maximum.y-info.minimum.y-15)<1e-5 &&
                       std::abs(info.maximum.z-info.minimum.z-7)<1e-5;
         // 全頂点が全外向き面の内側にある。単に閉じているだけでは凹形状を排除できない。
+        double worst=0;
         for (const auto& face : hull.triangles) {
             const auto normal=geometry::FaceNormal(hull,face), a=hull.positions[face[0]];
             for (const auto& p : hull.positions)
-                convexPeaks &= double(normal.x)*(p.x-a.x)+double(normal.y)*(p.y-a.y)+double(normal.z)*(p.z-a.z)<3e-6;
+                worst=std::max(worst,double(normal.x)*(p.x-a.x)+double(normal.y)*(p.y-a.y)+double(normal.z)*(p.z-a.z));
         }
+        // 単精度の座標（15 m で ulp 約 1e-6）に落としてから面を作るので、数 ulp のずれは許す。
+        convexPeaks &= worst<1e-5;
         const auto repeated=geometry::MakeBaseRock(peak,error);
         repeatPeaks &= repeated.positions==hull.positions && repeated.triangles==hull.triangles;
         const auto sites=geometry::ScatterPoints(hull,{24,uint32_t(seed+1)},error);
@@ -226,6 +229,57 @@ void RunBaseRockTests() {
     Check(fracturePeaks, "凸岩峰: ScatterとVoronoiを直接接続し体積を保って分割できる");
     Check(repeatPeaks, "凸岩峰: Seedと設定で頂点・面を再現");
     Check(geometry::ParseBaseShape("convexPeak")==BaseShape::ConvexPeak, "凸岩峰の保存名");
+    // 頂の稜線: 最高点が 1 点ではなく走向に沿った線になる。節理面: 全頂点が平行な 2 面の間に収まり、両面に頂点が載る。
+    bool ridgeOk = true, slabOk = true;
+    for (int seed=0;seed<6;++seed) {
+        geometry::BaseRockSettings peak;
+        peak.shape = BaseShape::ConvexPeak;
+        peak.size = {9,15,7}; peak.seed=seed; peak.peakTopWidth=0; peak.peakVariation = seed%2 ? .5f : 0;
+        peak.peakRidgeLength = .6f; peak.peakStrike = seed*30.f-75.f;
+        const auto ridge=geometry::MakeBaseRock(peak,error);
+        geometry::MeshInfo info;
+        ridgeOk &= error.empty() && geometry::InspectMesh(ridge,info) && info.closed && info.components==1;
+        const double strike=peak.peakStrike*std::numbers::pi/180;
+        double lowest=1e9, highest=-1e9; int tops=0;
+        for (const auto& p : ridge.positions) {
+            if (p.y<info.maximum.y-1e-3f) continue;
+            ++tops;
+            const double t=p.x*std::sin(strike)+p.z*std::cos(strike);
+            lowest=std::min(lowest,t); highest=std::max(highest,t);
+        }
+        ridgeOk &= tops>=2 && highest-lowest>2;
+        peak.peakRidgeLength = .3f; peak.peakSlabThickness = .4f; peak.peakSlabDip = 60+seed*6.f;
+        const auto slab=geometry::MakeBaseRock(peak,error);
+        slabOk &= error.empty() && geometry::InspectMesh(slab,info) && info.closed && info.components==1 && info.volume>0;
+        slabOk &= info.maximum.x-info.minimum.x<=9+1e-4f && info.maximum.y-info.minimum.y<=15+1e-4f && info.maximum.z-info.minimum.z<=7+1e-4f;
+        const double dip=peak.peakSlabDip*std::numbers::pi/180;
+        const double nx0=-std::sin(dip), ny=std::cos(dip);
+        const double nx=std::cos(strike)*nx0, nz=-std::sin(strike)*nx0;
+        double low=1e9, high=-1e9; int onLow=0, onHigh=0;
+        for (const auto& p : slab.positions) { const double d=nx*p.x+ny*p.y+nz*p.z; low=std::min(low,d); high=std::max(high,d); }
+        for (const auto& p : slab.positions) {
+            const double d=nx*p.x+ny*p.y+nz*p.z;
+            onLow += d<low+2e-2; onHigh += d>high-2e-2;
+        }
+        double worstSlab=0;
+        for (const auto& face : slab.triangles) {
+            const auto normal=geometry::FaceNormal(slab,face), a=slab.positions[face[0]];
+            for (const auto& p : slab.positions) {
+                const double d=double(normal.x)*(p.x-a.x)+double(normal.y)*(p.y-a.y)+double(normal.z)*(p.z-a.z);
+                worstSlab=std::max(worstSlab,d);
+            }
+        }
+        // 節理面で切ると短い辺（数 cm）の細長い側面ができ、単精度の面の向きは 1e-5 rad ほど狂う。Voronoi 側の許容差（1e-5 相対）と同じ基準。
+        // 切った後にごく近い頂点（外接寸法の 0.1%）を面へ投影・統合するので、間隔はその分だけ揺れる。
+        slabOk &= std::abs(high-low-.4*9)<2e-2 && onLow>=3 && onHigh>=3 && worstSlab<1e-5*15;
+        const auto slabSites=geometry::ScatterPoints(slab,{24,uint32_t(seed+1)},error);
+        const auto slabPieces=geometry::FractureVoronoi(slab,slabSites,{},5,error);
+        double slabSum=0;
+        for (const auto& piece : slabPieces.pieces) slabSum+=piece.volume;
+        slabOk &= error.empty() && slabPieces.pieces.size()==24 && std::abs(slabSum-info.volume)<info.volume*2e-5;
+    }
+    Check(ridgeOk, "凸岩峰: 頂の稜線で最高点が走向に沿った線になる");
+    Check(slabOk, "凸岩峰: 節理面で切ると平行な 2 面の間に収まり、凸・閉包を保つ");
     auto& peakConfig=std::get<graph::BaseRockNodeSettings>(graph.FindMutableNode(base)->settings);
     peakConfig={}; peakConfig.shape=BaseShape::ConvexPeak;
     const auto volumeNode=graph.CreateNode(graph::NodeKind::ToVolume);

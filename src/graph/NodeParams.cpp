@@ -80,6 +80,10 @@ constexpr ParamDefinition kParams[] = {
     {K::BaseRock, "baseRock.peakLeanX", T::Float, -.5, .5, "基準幅の比", "頂の偏り X", "convexPeak用。裾から頂へ向けてX方向へ偏らせる。最終的な外接寸法はsizeに合わせる", C::Error},
     {K::BaseRock, "baseRock.peakLeanZ", T::Float, -.5, .5, "基準奥行きの比", "頂の偏り Z", "convexPeak用。裾から頂へ向けてZ方向へ偏らせる", C::Error},
     {K::BaseRock, "baseRock.peakVariation", T::Float, 0, .5, "比", "輪郭のばらつき", "convexPeak用。凸包を取る前の輪郭点を揺らす。通常のnoiseStrength、noiseScale、subdivisionsは使わず凸を保つ", C::Error},
+    {K::BaseRock, "baseRock.peakRidgeLength", T::Float, 0, 1, "裾の幅に対する比", "頂の稜線の長さ", "convexPeak用。頂の点を走向に沿った線分に並べ、一点ではなく稜線（のみの刃）にする。0 で点", C::Error},
+    {K::BaseRock, "baseRock.peakStrike", T::Float, -90, 90, "度", "走向", "convexPeak用。稜線と節理面の向き（Y 軸まわり）。Parallel Planes の回転 Y と同じ。0 で Z 方向", C::Error},
+    {K::BaseRock, "baseRock.peakSlabThickness", T::Float, 0, 1, "寸法 X に対する比", "節理面の間隔", "convexPeak用。平行な 2 枚の節理面で両側を切り、大きな面を節理の向きにそろえる。0 で切らない。切ると外接箱は size より小さくなる", C::Error},
+    {K::BaseRock, "baseRock.peakSlabDip", T::Float, 45, 90, "度", "節理面の傾き", "convexPeak用。水平からの傾き。Parallel Planes の回転 Z と同じ値にすると、吸着で割る面と母岩の面がそろう", C::Error},
     // --- Random Boxes ---
     {K::RandomBoxes, "randomBoxes.count", T::Int, 1, 32, "個", "個数", "重ねる直方体の数", C::Error},
     {K::RandomBoxes, "randomBoxes.size", T::Float3, 0.1, 100, "m", "基準寸法", "最初の直方体の寸法", C::Error},

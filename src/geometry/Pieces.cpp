@@ -118,8 +118,10 @@ bool Source(const Mesh &mesh, Poly &poly, std::vector<Plane> &planes, D &origin,
         auto a = poly.vertices[t[0]], n = Cross(poly.vertices[t[1]] - a, poly.vertices[t[2]] - a);
         n = n * (1 / Length(n));
         Plane plane{n, Dot(n, a)};
+        // 単精度の頂点から作る面の向きは、細長い三角形（短い辺が外接寸法の数%）だと 1e-5 ほど狂う。
+        // その程度の「はみ出し」は凹形状ではなく丸めの誤差なので通す（切る面がわずかに傾くだけで、穴や隙間にはならない）。
         for (auto p : poly.vertices)
-            if (Dot(n, p) - plane.d > 2e-7) {
+            if (Dot(n, p) - plane.d > 1e-5) {
                 error = "凹形状は未対応です。Boxまたは凸形状を使用してください";
                 return false;
             }

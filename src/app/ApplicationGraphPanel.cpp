@@ -2385,6 +2385,10 @@ void Application::DrawGraphPanel() {
                 changed |= ui::PropertyFloat("頂の偏り X", &edited.peakLeanX, -.5f, .5f, .18f);
                 changed |= ui::PropertyFloat("頂の偏り Z", &edited.peakLeanZ, -.5f, .5f, -.08f);
                 changed |= ui::PropertyFloat("輪郭のばらつき", &edited.peakVariation, 0, .5f, .25f);
+                changed |= ui::PropertyFloat("頂の稜線の長さ", &edited.peakRidgeLength, 0, 1, 0);
+                changed |= ui::PropertyFloat("走向 (°)", &edited.peakStrike, -90, 90, 0);
+                changed |= ui::PropertyFloat("節理面の間隔", &edited.peakSlabThickness, 0, 1, 0);
+                changed |= ui::PropertyFloat("節理面の傾き (°)", &edited.peakSlabDip, 45, 90, 76);
             } else {
                 const char* levels[] = {"4", "8", "16", "32", "不明（選び直してください）"};
                 const int divisions[] = {4, 8, 16, 32};
@@ -2404,6 +2408,8 @@ void Application::DrawGraphPanel() {
         if (edited.shape == geometry::BaseShape::ConvexPeak) {
             ui::HintText("裾・肩・頂から凸多面体の母岩を作ります。寸法は完成した外接箱の大きさ。Seedで輪郭が変わります。"
                          "Scatter PointsとVoronoi Fractureへ直接繋ぎ、輪郭を保ちながら局所的に欠く用途です。");
+            ui::HintText("頂の稜線の長さで頂を線（のみの刃）にし、節理面の間隔を 0 より大きくすると走向・傾きの平行な 2 面で"
+                         "両側を切って傾いた板にします（Parallel Planes の回転 [0, 走向, 傾き] と同じ向き。切ると外接箱は寸法より小さくなります）。");
         } else {
             ui::HintText(
                 "原点中心の母岩。寸法はノイズを加える前の大きさです。ノイズ強度は半径に対する変位率、細かさを上げ"
