@@ -136,6 +136,20 @@ void RunMeshVolumeTests() {
                     noPositiveInside = false;
             }
     Check(error.empty() && noPositiveInside, "sub-cell enclosed bubbles are filled, large cavities are kept");
+    // 厚みがセル未満でも広い閉じた隙間（片の間の板状の隙間）は埋める。4 m の箱の中の 3 × 0.05 × 3 m の隙間。
+    Mesh sheetGap;
+    Append(sheetGap, MakeBox({4, 4, 4}));
+    Append(sheetGap, MakeBox({3, .05f, 3}), {0, .0625f, 0}, true);
+    auto sheet = MeshToVolume(sheetGap, {32}, error);
+    bool sheetFilled = !sheet.values.empty();
+    for (uint32_t z = 2; z + 2 < sheet.dimensions[2] && sheetFilled; ++z)
+        for (uint32_t y = 2; y + 2 < sheet.dimensions[1]; ++y)
+            for (uint32_t x = 2; x + 2 < sheet.dimensions[0]; ++x) {
+                const auto p = sheet.Position(x, y, z);
+                if (std::abs(p.x) < 1.5f && std::abs(p.y) < 1.5f && std::abs(p.z) < 1.5f && sheet.values[sheet.Index(x, y, z)] >= 0)
+                    sheetFilled = false;
+            }
+    Check(error.empty() && sheetFilled, "thin enclosed sheet gaps are filled regardless of their extent");
     Mesh torus;
     constexpr uint32_t around = 32, section = 16;
     for (uint32_t u = 0; u < around; ++u)
