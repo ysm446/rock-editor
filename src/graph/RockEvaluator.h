@@ -49,6 +49,9 @@ struct RockReference {
     GraphId node = 0;
     std::string scene;  // 岩グラフのパス（UTF-8、絶対パス）
     float scale = 1.0f, weight = 1.0f;
+    // 焼いた岩アセット（LOD0）の範囲（倍率 1、m）。目録から読む。未焼成なら hasBounds が false。
+    bool hasBounds = false;
+    geometry::Vec3 minimum{}, maximum{};
 };
 // 撒いた岩。岩グラフごとにまとめる。描画する側が岩アセットを読み、段を選んで描く。
 struct RockInstanceSet {
@@ -56,6 +59,8 @@ struct RockInstanceSet {
     std::string scene;
     float scale = 1.0f;  // Rock ノードの倍率
     std::vector<geometry::RockInstance> instances;
+    // 撒いたノードの推定の被覆率（足元の面積の合計 ÷ 地形の面積。同じノードの全ての組で同じ値）。
+    float coverage = 0.0f;
 };
 struct RockEvaluation {
     // 構造面の系統（Parallel Planes を連結した順）。

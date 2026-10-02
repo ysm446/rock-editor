@@ -2584,13 +2584,26 @@ void Application::DrawGraphPanel() {
                                          "0 で真上を向け、1 で地形の面に垂直に立てます。");
             changed |= ui::PropertyFloat("沈める量", &edited.embed, 0.0f, 0.9f, defaults.embed,
                                          "岩の高さに対する比で、地形へ沈めます。接地の継ぎ目を隠します。");
+            changed |= ui::PropertyFloat("大きさの間隔", &edited.sizeSpacing, 0.0f, 3.0f, defaults.sizeSpacing,
+                                         "2 つの岩の足元の半径（底の投影を包む円、倍率込み）の和にこの倍率を掛けた距離より近づけません。"
+                                         "「間隔」との大きい方で判定します。大きさの違う岩を混ぜても重なりにくくなります。0 で無効。"
+                                         "焼いた岩アセットの大きさを使うので、未焼成の岩には効きません。", "%.2f");
+            changed |= ui::PropertyFloat("浮きの補正", &edited.settle, 0.0f, 1.0f, defaults.settle,
+                                         "底の 4 隅で地形の高さを読み、どの隅も浮かない深さまで追加で沈めます。急斜面で谷側の底が浮くのを防ぎます。0 で無効。");
+            changed |= ui::PropertyFloat("補正の上限", &edited.settleMax, 0.0f, 0.9f, defaults.settleMax,
+                                         "浮きの補正で追加で沈める量の上限（岩の高さに対する比）です。");
+            changed |= ui::PropertyFloat("目標の被覆率", &edited.coverageTarget, 0.0f, 1.0f, defaults.coverageTarget,
+                                         "置いた岩の足元の面積の合計が、地形の面積のこの割合に達したら止めます。0 で無効（上限の数まで置く）。");
             ui::EndPropertyTable();
         }
         {
             size_t placed = 0;
+            float coverage = 0.0f;
             for (const auto& set : m_rockInstanceSets)
-                if (set.source == selected->id) placed += set.instances.size();
-            drawStatusLine("置いた岩: " + std::to_string(placed) + " 個（上限 " + std::to_string(edited.maxCount) + "）");
+                if (set.source == selected->id) { placed += set.instances.size(); coverage = set.coverage; }
+            char coverageText[64];
+            std::snprintf(coverageText, sizeof(coverageText), "、推定の被覆 %.1f%%", coverage * 100.0f);
+            drawStatusLine("置いた岩: " + std::to_string(placed) + " 個（上限 " + std::to_string(edited.maxCount) + coverageText + "）");
             std::string lods = "描画: " + std::to_string(m_rockInstanceStats.drawn) + " 個（画面で小さく省いた " +
                                std::to_string(m_rockInstanceStats.culled) + " 個）";
             for (size_t lod = 0; lod < m_rockInstanceStats.perLod.size(); ++lod)
@@ -2601,6 +2614,9 @@ void Application::DrawGraphPanel() {
                      "その値を置く確率にします。複数の Rock をつなぐと、Rock の重みで選びます。");
         ui::HintText("岩は段（LOD）を持ち、カメラから見た大きさで段を選んで描きます。表示モードの「LOD（色分け）」で段の色になり、"
                      "段ごとの数は上の行で確かめられます。大・中・小の岩は Rock Scatter を分けて撒きます。");
+        ui::HintText("Coverage 出力は、置いた岩の足元を地形の UV の画像にした被覆マスクです（選んでいる間は地形に貼って見せます）。"
+                     "次の段の Rock Scatter の Mask に Mask Filter（反転）を挟んでつなぐと、前の段の隙間にだけ撒けます。"
+                     "Mask Combine で傾斜のマスクと組み合わせられます。");
         if (changed) {
             edited.spacing = std::clamp(edited.spacing, geometry::kMinScatterSpacing, 10000.0f);
             edited.maxCount = std::clamp(edited.maxCount, 1, geometry::kMaxScatterCount);
@@ -2608,6 +2624,10 @@ void Application::DrawGraphPanel() {
             edited.scaleMax = std::clamp(edited.scaleMax, edited.scaleMin, 100.0f);
             edited.alignToNormal = std::clamp(edited.alignToNormal, 0.0f, 1.0f);
             edited.embed = std::clamp(edited.embed, 0.0f, 0.9f);
+            edited.sizeSpacing = std::clamp(edited.sizeSpacing, 0.0f, 10.0f);
+            edited.settle = std::clamp(edited.settle, 0.0f, 1.0f);
+            edited.settleMax = std::clamp(edited.settleMax, 0.0f, 0.9f);
+            edited.coverageTarget = std::clamp(edited.coverageTarget, 0.0f, 1.0f);
             *scatter = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

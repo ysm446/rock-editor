@@ -464,6 +464,10 @@ constexpr ParamDefinition kParams[] = {
     {K::RockScatter, "rockScatter.scaleMax", T::Float, 0.01, 100, "倍", "最大の倍率", "", C::Clamp},
     {K::RockScatter, "rockScatter.alignToNormal", T::Float, 0, 1, "比", "法線に合わせる", "0 で真上、1 で地形の法線に沿う", C::Clamp},
     {K::RockScatter, "rockScatter.embed", T::Float, 0, 0.9, "岩の高さに対する比", "沈める量", "", C::Clamp},
+    {K::RockScatter, "rockScatter.sizeSpacing", T::Float, 0, 10, "倍", "大きさの間隔", "2 つの岩の足元の半径の和 × この倍率より近づけない。0 で無効。岩アセットが焼けていることが必要", C::Clamp},
+    {K::RockScatter, "rockScatter.settle", T::Float, 0, 1, "比", "浮きの補正", "底の 4 隅が浮かない深さまで追加で沈める強さ。0 で無効", C::Clamp},
+    {K::RockScatter, "rockScatter.settleMax", T::Float, 0, 0.9, "岩の高さに対する比", "補正の上限", "浮きの補正で追加で沈める量の上限", C::Clamp},
+    {K::RockScatter, "rockScatter.coverageTarget", T::Float, 0, 1, "比", "目標の被覆率", "足元の面積の合計が地形の面積のこの割合に達したら止める。0 で無効", C::Clamp},
     {K::RockScatter, "rockScatter.seed", T::Int, 0, N, "", "Seed", "", C::None},
 };
 
@@ -535,7 +539,7 @@ constexpr NodeSummary kSummaries[] = {
     {K::RockAsset, "岩グラフの最終段。LOD を作り、岩アセットにする", "Material Bake の後に置く"},
     {K::Heightmap, "山グラフの地形（ハイトマップの格子メッシュ）", "山グラフ専用"},
     {K::Rock, "山グラフ。岩グラフ（焼いた岩アセット）を 1 つ読む", "山グラフ専用。先に岩グラフで岩アセットを焼く"},
-    {K::RockScatter, "山グラフ。地形に Rock を間隔を空けて撒く", "山グラフ専用"},
+    {K::RockScatter, "山グラフ。地形に Rock を間隔を空けて撒く。Coverage 出力は置いた岩の足元の被覆マスク（次の段の Mask に反転してつなぐ）", "山グラフ専用"},
 };
 
 }  // namespace

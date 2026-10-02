@@ -250,4 +250,17 @@ bool ReadRockAssetHash(const fs::path& scene, std::string& hash) {
     return true;
 }
 
+bool ReadRockAssetBounds(const fs::path& scene, geometry::Vec3& minimum, geometry::Vec3& maximum) {
+    json manifest;
+    if (!ReadManifest(scene, manifest)) return false;
+    const auto vec = [&](const char* key, geometry::Vec3& v) {
+        if (!manifest.contains(key) || !manifest[key].is_array() || manifest[key].size() != 3) return false;
+        for (const auto& item : manifest[key])
+            if (!item.is_number()) return false;
+        v = {manifest[key][0].get<float>(), manifest[key][1].get<float>(), manifest[key][2].get<float>()};
+        return true;
+    };
+    return vec("minimum", minimum) && vec("maximum", maximum);
+}
+
 }  // namespace rock::io

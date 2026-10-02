@@ -52,6 +52,8 @@ bool SaveRockAsset(const std::filesystem::path& scene, const RockAssetData& data
 bool LoadRockAsset(const std::filesystem::path& scene, RockAssetData& data, std::string& error);
 // 目録のハッシュだけを読む（毎フレームの判定用。メッシュは読まない）。無ければ false。
 bool ReadRockAssetHash(const std::filesystem::path& scene, std::string& hash);
+// 目録の LOD0 の範囲（m）だけを読む（Rock Scatter の大きさの判定用。メッシュは読まない）。無ければ false。
+bool ReadRockAssetBounds(const std::filesystem::path& scene, geometry::Vec3& minimum, geometry::Vec3& maximum);
 
 // メッシュ 1 つの読み書き（.rockmesh）。
 bool SaveRockMesh(const std::filesystem::path& path, const geometry::Mesh& mesh);

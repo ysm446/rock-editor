@@ -2,6 +2,7 @@
 #include "graph/PieceEvaluator.h"
 #include "core/ImageIo.h"
 #include "core/PathUtf8.h"
+#include "io/RockAssetIo.h"
 
 #include <algorithm>
 #include <cmath>
@@ -218,7 +219,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
                     if (const auto* layer = std::get_if<LayerNodeSettings>(&surface->settings)) add(layer->layer.enabled);
             // 形状マスクの画像は下流の結果（rock.maskImages）に残る。マスクのノードの設定と、その入力メッシュで決まる。
             // Mask Combine の入力（A / B）もここを通り、入力のマスクのキーをつなぐ。
-            if (const auto* shape = graph.FindUpstreamNodeForPin(pin.id); shape && IsImageMaskNodeKind(shape->kind)) {
+            if (const auto* shape = graph.FindUpstreamNodeForPin(pin.id); shape && IsMaskSourceNodeKind(shape->kind)) {
                 // Mask Combine / Mask Filter は入力の反転を画像に焼き込むので、常に含める。
                 if (usesHeight || node->kind == NodeKind::Subdivide || node->kind == NodeKind::MaskCombine ||
                     node->kind == NodeKind::MaskFilter)
@@ -436,7 +437,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             const auto* b = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
             if (!settings || !a || !b) return finish(Failure(id, "Mask Combine", "AとBにShape Mask、Noise Mask、Deposition MaskまたはMask Combineを接続してください"));
             // Material Mask は面の中心で読む定数か画像で、UV空間の画像を持たない。
-            if (!IsImageMaskNodeKind(a->kind) || !IsImageMaskNodeKind(b->kind))
+            if (!IsMaskSourceNodeKind(a->kind) || !IsMaskSourceNodeKind(b->kind))
                 return finish(Failure(id, "Mask Combine", "Material Maskは合成できません。Shape Mask、Noise Mask、Deposition MaskまたはMask Combineを接続してください"));
             result = evaluate(a->id, depth + 1);
             if (!result.error.empty()) return finish(result);
@@ -462,7 +463,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (!settings || !source)
                 return finish(Failure(id, "Mask Filter", "MaskにShape Mask、Noise Mask、Deposition Mask、Mask CombineまたはMask Filterを接続してください"));
             // Material Mask は面の中心で読む定数か画像で、UV空間の画像を持たない。
-            if (!IsImageMaskNodeKind(source->kind))
+            if (!IsMaskSourceNodeKind(source->kind))
                 return finish(Failure(id, "Mask Filter", "Material Maskは加工できません。Shape Maskなど、UVの画像を作るマスクを接続してください"));
             result = evaluate(source->id, depth + 1);
             report(id, 0, 0);
@@ -489,7 +490,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             if (const auto* layer = std::get_if<LayerNodeSettings>(&material->settings); layer && !layer->layer.enabled)
                 return finish(result);
             std::shared_ptr<const geometry::MaskImage> shapeMask;
-            if (mask && IsImageMaskNodeKind(mask->kind)) {
+            if (mask && IsMaskSourceNodeKind(mask->kind)) {
                 const auto masked = evaluate(mask->id, depth + 1);
                 if (!masked.error.empty()) return finish(masked);
                 shapeMask = masked.rocks[0].previewMask;
@@ -557,7 +558,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                             const auto& u = rock.mesh.cornerUvs[f];
                             return geometry::Mesh::Uv{(u[0].u + u[1].u + u[2].u) / 3, (u[0].v + u[1].v + u[2].v) / 3};
                         };
-                        if (IsImageMaskNodeKind(maskNode->kind)) {
+                        if (IsMaskSourceNodeKind(maskNode->kind)) {
                             const auto masked = evaluate(maskNode->id, depth + 1);
                             report(id, 0, 0);
                             if (!masked.error.empty()) return finish(masked);
@@ -877,7 +878,12 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             const auto* settings = std::get_if<RockNodeSettings>(&node->settings);
             if (!settings) return finish(Failure(id, "Rock", "設定がありません"));
             if (settings->scene.empty()) return finish(Failure(id, "Rock", "岩グラフ（.rockgraph）を選んでください"));
-            result.rockReferences.push_back({id, settings->scene, settings->scale, settings->weight});
+            RockReference reference{id, settings->scene, settings->scale, settings->weight};
+            // 焼いた岩アセットの範囲（目録だけを読む）。未焼成なら大きさを使う処理（大きさの間隔・浮きの補正・被覆）は効かない。
+            reference.hasBounds = io::ReadRockAssetBounds(FromUtf8(settings->scene), reference.minimum, reference.maximum) &&
+                                  reference.maximum.x > reference.minimum.x && reference.maximum.y > reference.minimum.y &&
+                                  reference.maximum.z > reference.minimum.z;
+            result.rockReferences.push_back(std::move(reference));
             // 選んで見るときは、原点に 1 つ置く（Rock Scatter はこの配置は使わず、参照だけを読む）。
             RockInstanceSet single;
             single.source = id;
@@ -913,7 +919,7 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             std::shared_ptr<const geometry::MaskImage> mask;
             bool invert = false;
             if (const auto* maskNode = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr) {
-                if (!IsImageMaskNodeKind(maskNode->kind))
+                if (!IsMaskSourceNodeKind(maskNode->kind))
                     return finish(Failure(id, "Rock Scatter", "MaskにはShape Maskなど、地形のUVの画像を作るマスクを接続してください"));
                 const auto masked = evaluate(maskNode->id, depth + 1);
                 if (!masked.error.empty()) return finish(masked);
@@ -933,21 +939,42 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
                 references.insert(references.end(), rocks.rockReferences.begin(), rocks.rockReferences.end());
             }
             if (references.empty()) return finish(Failure(id, "Rock Scatter", "Rockに岩（Rockノード）を接続してください"));
-            std::vector<float> weights;
-            for (const auto& reference : references) weights.push_back(reference.weight);
+            std::vector<geometry::RockScatterSource> sources;
+            for (const auto& reference : references) {
+                geometry::RockScatterSource source;
+                source.weight = reference.weight;
+                source.scale = reference.scale;
+                source.hasBounds = reference.hasBounds;
+                source.minimum = reference.minimum;
+                source.maximum = reference.maximum;
+                sources.push_back(source);
+            }
             report(id, 0, -1);
             std::string error;
-            const auto instances = geometry::ScatterRocks(surface, mask.get(), invert, weights, *settings, error, stop);
+            const auto scattered = geometry::ScatterRocks(surface, mask.get(), invert, sources, *settings, error, stop);
             if (!error.empty()) return finish(Failure(id, "Rock Scatter", error));
-            // 地形は、この Rock Scatter を選んで見ているときだけ通す（Mesh Output で地形と一緒に出すと二重になるため）。
-            if (id != preview) result.rocks.clear();
+            // 被覆マスク（Coverage 出力）。置いた岩の足元を地形の UV の画像に描き、地形に載せて下流へ渡す。
+            // Mesh Output / Merge は Rock Scatter から来た地形を捨てる（地形は別の Mesh Output で出す）。
+            // 地形に UV が無いときはマスクを作らない（Mask 入力も使えない地形）。
+            geometry::Mesh terrainMesh = std::move(surface);
+            result.rocks.clear();
+            GeneratedRock coverageTerrain;
+            coverageTerrain.source = id;
+            if (geometry::HasValidUvs(terrainMesh)) {
+                auto coverage = geometry::RasterizeRockCoverage(terrainMesh, scattered.instances, sources, 1024, error, stop);
+                if (!error.empty()) return finish(Failure(id, "Rock Scatter", error));
+                coverageTerrain.previewMask = std::make_shared<const geometry::MaskImage>(std::move(coverage));
+            }
+            coverageTerrain.mesh = std::move(terrainMesh);
+            result.rocks.push_back(std::move(coverageTerrain));
             // 岩グラフごとにまとめる。
             for (size_t i = 0; i < references.size(); ++i) {
                 RockInstanceSet set;
                 set.source = id;
                 set.scene = references[i].scene;
                 set.scale = references[i].scale;
-                for (const auto& instance : instances)
+                set.coverage = scattered.coverage;
+                for (const auto& instance : scattered.instances)
                     if (instance.rock == i) set.instances.push_back(instance);
                 if (!set.instances.empty()) result.rockInstances.push_back(std::move(set));
             }
@@ -1225,8 +1252,11 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             for (const auto& pin : node->inputs) {
                 if (pin.valueType == ValueType::Material) continue;
                 if (const auto* upstream = graph.FindUpstreamNodeForPin(pin.id)) {
-                    const auto input = evaluate(upstream->id, depth + 1);
+                    auto input = evaluate(upstream->id, depth + 1);
                     if (!input.error.empty()) return finish(input);
+                    // Rock Scatter の Instances には地形（被覆マスクを載せたもの）が付いてくる。地形は別の Mesh Output で
+                    // 出すので、ここでは撒いた岩だけを受ける（Rock Scatter を選んで見るときだけ地形も出す）。
+                    if (upstream->kind == NodeKind::RockScatter) input.rocks.clear();
                     Append(result, input);
                 }
             }

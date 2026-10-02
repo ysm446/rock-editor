@@ -232,7 +232,9 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
         } else if (const auto* scatter = std::get_if<geometry::RockScatterSettings>(&node.settings)) {
             item["rockScatter"] = {{"seed", scatter->seed}, {"spacing", scatter->spacing}, {"maxCount", scatter->maxCount},
                                    {"scaleMin", scatter->scaleMin}, {"scaleMax", scatter->scaleMax},
-                                   {"alignToNormal", scatter->alignToNormal}, {"embed", scatter->embed}};
+                                   {"alignToNormal", scatter->alignToNormal}, {"embed", scatter->embed},
+                                   {"sizeSpacing", scatter->sizeSpacing}, {"settle", scatter->settle},
+                                   {"settleMax", scatter->settleMax}, {"coverageTarget", scatter->coverageTarget}};
         } else if (const auto* terrain = std::get_if<geometry::HeightmapSettings>(&node.settings)) {
             // 画像はシーンからの相対パスで書く（ルートごと動かしても読めるように）。
             item["heightmap"] = {{"source", geometry::HeightmapSourceName(terrain->source)},
@@ -754,6 +756,10 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.scaleMax = std::clamp(ReadFloat(*v, "scaleMax", settings.scaleMax), settings.scaleMin, 100.0f);
                     settings.alignToNormal = std::clamp(ReadFloat(*v, "alignToNormal", settings.alignToNormal), 0.0f, 1.0f);
                     settings.embed = std::clamp(ReadFloat(*v, "embed", settings.embed), 0.0f, 0.9f);
+                    settings.sizeSpacing = std::clamp(ReadFloat(*v, "sizeSpacing", settings.sizeSpacing), 0.0f, 10.0f);
+                    settings.settle = std::clamp(ReadFloat(*v, "settle", settings.settle), 0.0f, 1.0f);
+                    settings.settleMax = std::clamp(ReadFloat(*v, "settleMax", settings.settleMax), 0.0f, 0.9f);
+                    settings.coverageTarget = std::clamp(ReadFloat(*v, "coverageTarget", settings.coverageTarget), 0.0f, 1.0f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::Heightmap) {

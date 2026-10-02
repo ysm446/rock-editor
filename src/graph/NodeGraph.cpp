@@ -93,9 +93,10 @@ constexpr std::array<PinDefinition, 2> kMaskFilterPins = {{{PinKind::Input, Valu
 constexpr std::array<PinDefinition, 1> kHeightmapPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
 // 山グラフの岩。Rock は入力なし。Rock Scatter は Terrain（地形の Mesh）、Mask（任意）、Rock（可変本数）を受ける。
 constexpr std::array<PinDefinition, 1> kRockPins = {{{PinKind::Output, ValueType::Rock, "Rock"}}};
-constexpr std::array<PinDefinition, 4> kRockScatterPins = {{{PinKind::Input, ValueType::Mesh, "Terrain"},
+// 出力は Instances と、置いた岩の足元を地形の UV の画像にした Coverage（被覆マスク。次の段の Mask に反転してつなぐ）。
+constexpr std::array<PinDefinition, 5> kRockScatterPins = {{{PinKind::Input, ValueType::Mesh, "Terrain"},
     {PinKind::Input, ValueType::Mask, "Mask"}, {PinKind::Input, ValueType::Rock, "Rock 1"},
-    {PinKind::Output, ValueType::Instances, "Instances"}}};
+    {PinKind::Output, ValueType::Instances, "Instances"}, {PinKind::Output, ValueType::Mask, "Coverage"}}};
 // Structure Mask。UV付きの Mesh と、縞に使う構造面（Planes）を受ける。
 constexpr std::array<PinDefinition, 3> kStructureMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Planes, "Planes"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
@@ -206,6 +207,11 @@ bool IsImageMaskNodeKind(NodeKind kind) {
     return kind == NodeKind::ShapeMask || kind == NodeKind::NoiseMask || kind == NodeKind::DepositionMask ||
            kind == NodeKind::StructureMask || kind == NodeKind::VolumeDiffMask || kind == NodeKind::FlowMask || kind == NodeKind::MaskCombine ||
            kind == NodeKind::MaskFilter;
+}
+
+bool IsMaskSourceNodeKind(NodeKind kind) {
+    // Rock Scatter は Coverage 出力（被覆マスク）を地形の UV の画像として出す。
+    return IsImageMaskNodeKind(kind) || kind == NodeKind::RockScatter;
 }
 
 bool ImageMaskInvert(const Node& node) {

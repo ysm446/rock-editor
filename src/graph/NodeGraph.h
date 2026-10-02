@@ -429,6 +429,8 @@ bool IsMountainNodeKind(NodeKind kind);
 size_t FixedInputCount(NodeKind kind);
 // UV空間の画像としてマスクを出す種類か（Shape Mask / Mask Combine）。選ぶと入力メッシュにマスクを貼って見せる。
 bool IsImageMaskNodeKind(NodeKind kind);
+// UV の画像のマスクを出すノード（IsImageMaskNodeKind と、Coverage を出す Rock Scatter）。Mask を受ける側の判定に使う。
+bool IsMaskSourceNodeKind(NodeKind kind);
 // 画像マスクのノードの「反転」。使う側（描画・Displace・Subdivide）で 1 - mask にする分。
 // Mask Combine は反転を画像に焼き込むので false。
 bool ImageMaskInvert(const Node& node);
