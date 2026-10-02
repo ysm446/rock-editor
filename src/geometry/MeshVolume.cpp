@@ -220,6 +220,64 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
     bvh.order.resize(bvh.triangles.size());
     std::iota(bvh.order.begin(), bvh.order.end(), 0);
     bvh.Build(0, bvh.order.size());
+    // 隠れた面: 隙間なく接触する片の共有面（両側とも内部）。巻き数の相殺で内外には効かないが、最近距離には
+    // 効いてしまい、内側の値が浅くなって表面の位置が外へずれる（接触面に沿った筋）。面の表裏のすぐ近くの点が
+    // どちらも内部なら隠れた面として、距離の計算から外す。一部だけ隠れた面（隣が欠けて半分露出）は残す。
+    const auto merged = [](std::vector<Crossing> &crossings) {
+        std::sort(crossings.begin(), crossings.end(), [](auto a, auto b) { return a.x < b.x; });
+        size_t count = 0;
+        for (size_t i = 0; i < crossings.size();) {
+            auto value = crossings[i++];
+            while (i < crossings.size() && crossings[i].x - value.x < 1e-10)
+                value.direction += crossings[i++].direction;
+            crossings[count++] = value;
+        }
+        crossings.resize(count);
+    };
+    std::vector<uint8_t> hidden(bvh.triangles.size(), 0);
+    {
+        std::vector<size_t> ids(bvh.triangles.size());
+        std::iota(ids.begin(), ids.end(), size_t(0));
+        std::for_each(std::execution::par, ids.begin(), ids.end(), [&](size_t i) {
+            if (stop.stop_requested()) return;
+            const auto &t = bvh.triangles[i];
+            const double length = std::sqrt(Dot(t.normal, t.normal));
+            if (!(length > 0)) return;
+            const D n = t.normal * (1 / length);
+            const double eps = 1e-6;
+            thread_local std::vector<Crossing> crossings;
+            const auto inside = [&](D p) {
+                crossings.clear();
+                bvh.Crossings(p.y, p.z, 0, crossings);
+                merged(crossings);
+                int winding = 0;
+                for (const auto &c : crossings)
+                    if (c.x < p.x - 1e-10) winding += c.direction;
+                return winding > 0;
+            };
+            // 重心と、重心から各頂点へ 2/3 寄った 3 点。全部の表裏が内部のときだけ隠れた面にする。
+            const D samples[4] = {t.center, t.center + (t.a - t.center) * (2. / 3), t.center + (t.b - t.center) * (2. / 3),
+                                  t.center + (t.c - t.center) * (2. / 3)};
+            for (const auto &q : samples)
+                if (!inside(q + n * eps) || !inside(q - n * eps)) return;
+            hidden[i] = 1;
+        });
+    }
+    if (stop.stop_requested()) {
+        error = "評価をキャンセルしました";
+        return {};
+    }
+    // 最近距離は露出した面だけで測る。内外（Crossings）は全部の面で判定する。
+    Bvh surface;
+    for (size_t i = 0; i < bvh.triangles.size(); ++i)
+        if (!hidden[i]) surface.triangles.push_back(bvh.triangles[i]);
+    const bool anyHidden = surface.triangles.size() != bvh.triangles.size();
+    if (anyHidden) {
+        surface.order.resize(surface.triangles.size());
+        std::iota(surface.order.begin(), surface.order.end(), 0);
+        surface.Build(0, surface.order.size());
+    }
+    const Bvh &nearestBvh = anyHidden ? surface : bvh;
     grid.values.resize(size_t(grid.dimensions[0]) * grid.dimensions[1] * grid.dimensions[2]);
     // 行（Y,Z）どうしは独立なので並列に処理する。各格子点の値は行の順序に依存しない。
     // 診断は直列処理と同じく最初の行のものを返すため、失敗した行より前の行は最後まで調べる。
@@ -250,16 +308,8 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
         thread_local std::vector<Crossing> crossings;
         crossings.clear();
         bvh.Crossings(row.y, row.z, 0, crossings);
-        std::sort(crossings.begin(), crossings.end(), [](auto a, auto b) { return a.x < b.x; });
         // 接触する片の向きが逆の断面は、数値誤差以内の交差をまとめて相殺する。
-        size_t count = 0;
-        for (size_t i = 0; i < crossings.size();) {
-            auto value = crossings[i++];
-            while (i < crossings.size() && crossings[i].x - value.x < 1e-10)
-                value.direction += crossings[i++].direction;
-            crossings[count++] = value;
-        }
-        crossings.resize(count);
+        merged(crossings);
         int total = 0;
         for (auto crossing : crossings) {
             total += crossing.direction;
@@ -285,7 +335,7 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
                 const double bound = std::sqrt(previous) + (point.x - previousX);
                 nearest = bound * bound * (1 + 1e-6) + 1e-300;
             }
-            bvh.Nearest(point, 0, bvh.BoundsDistance(point, 0), nearest);
+            nearestBvh.Nearest(point, 0, nearestBvh.BoundsDistance(point, 0), nearest);
             previous = nearest;
             previousX = point.x;
             float distance = std::max(float(std::sqrt(nearest) * scale), grid.spacing * 1e-4f);

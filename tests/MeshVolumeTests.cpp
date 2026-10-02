@@ -103,8 +103,18 @@ void RunMeshVolumeTests() {
     Append(touching, box, {1, 0, 0});
     auto contact = MeshToVolume(touching, {32}, error);
     Check(error.empty() && !contact.values.empty(), "coincident opposite faces cancel");
-    if (!contact.values.empty())
+    if (!contact.values.empty()) {
         Check(At(contact, {0, 0, 0}) < 0, "contact interface does not create a zero sheet");
+        // 隠れた接触面は距離の計算から外す。中心の距離は内部の面（0）ではなく外面（1 m）までになる。
+        Check(At(contact, {0, 0, 0}) < -.9f, "hidden contact faces do not shorten interior distances");
+        // 接触で分けた箱と、一体の箱の距離場が一致する（表面の近くも含めて）。
+        const auto whole = MeshToVolume(MakeBox({4, 2, 2}), {32}, error);
+        double worst = 0;
+        if (whole.values.size() == contact.values.size())
+            for (size_t i = 0; i < whole.values.size(); ++i) worst = std::max<double>(worst, std::abs(whole.values[i] - contact.values[i]));
+        Check(error.empty() && whole.values.size() == contact.values.size() && worst < contact.spacing * .01,
+              "split box matches the intact box distance field");
+    }
     Mesh cavity;
     Append(cavity, MakeBox({4, 4, 4}));
     Append(cavity, box, {}, true);
