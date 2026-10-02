@@ -31,7 +31,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
                 {"invert", s->invert},
                 {"layer",s->layer},
                 {"rimLayers",s->rimLayers}, {"rimSide",s->rimSide}, {"rimFalloff",s->rimFalloff},
-                {"peelNoise",s->peelNoise}, {"protectCore",s->protectCore}, {"grounded",s->grounded}, {"peelSize",s->peelSize}, {"stability",s->stability}, {"peelRetreat",s->peelRetreat}, {"peelRetreatBase",s->peelRetreatBase},
+                {"peelNoise",s->peelNoise}, {"protectCore",s->protectCore}, {"grounded",s->grounded}, {"peelSize",s->peelSize}, {"stability",s->stability}, {"peelRetreat",s->peelRetreat}, {"peelRetreatBase",s->peelRetreatBase}, {"peelEdge",s->peelEdge},
                 {"producer", s->producer},
                 {"generation", std::to_string(s->generation)},
                 {"ids", s->ids}};
@@ -143,6 +143,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "stability",s->stability);
         read(value, "peelRetreat",s->peelRetreat);
         read(value, "peelRetreatBase",s->peelRetreatBase);
+        read(value, "peelEdge",s->peelEdge);
         read(value, "producer", s->producer);
         generation(s->generation);
         read(value, "ids", s->ids);

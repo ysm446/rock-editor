@@ -129,6 +129,9 @@ struct PieceSelectSettings {
     // peel 用。底の後退（0～1）。側面の後退の、底での割合。0 で底は削れず（従来）、1 で底も頂と同じ深さまで削れる。
     // 元の岩体の底の外周（箱の角）が裾に残るのを防ぐ。
     float peelRetreatBase = 0;
+    // peel 用。稜の効き（0～1）。元の外面が 2 方向以上を向く片（稜・角・張り出した縁）ほど先に欠け、一つの平面しか
+    // 向かない片（面の中央）は後回しにする。自然の岩は面の中央から穴が開くのではなく、縁から欠ける。
+    float peelEdge = 0;
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;

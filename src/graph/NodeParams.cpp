@@ -158,6 +158,8 @@ constexpr ParamDefinition kParams[] = {
      "peel 用。元の側面（横を向いた外面）から横へ削れる深さの上限。頂でこの値、底で 0（重心の高さに比例）。上ほど細くなり、芯は削り切らない。0 で上限なし", C::Error},
     {K::PieceSelect, "pieces.peelRetreatBase", T::Float, 0, 1, "比", "底の後退",
      "peel 用。側面の後退の、底での割合。0 で底は削れず（元の底の外周が残る）、1 で底も頂と同じ深さまで削れる。岩峰の裾に箱の角を残さないなら 0.3〜0.5", C::Error},
+    {K::PieceSelect, "pieces.peelEdge", T::Float, 0, 1, "比", "稜の効き",
+     "peel 用。元の外面が 2 方向以上を向く片（稜・角・張り出した縁）ほど先に欠け、一つの平面しか向かない片（面の中央、隣の削除で露出した片）は後回し。面の途中に穴を開けたくない岩峰・板状の岩で 0.5〜1", C::Error},
     {K::PieceSelect, "pieces.stability", T::Float, 0, 1, "比", "安定",
      "peel・接地用。下で支える片に載る面積が片の大きさ（体積の 2/3 乗）に足りないと転げ落ちる。頭でっかちの片が残らず、上ほど細く尖る", C::Error},
     {K::PieceSelect, "pieces.grounded", T::Bool, N, N, "", "接地",

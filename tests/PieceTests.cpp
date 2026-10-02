@@ -692,6 +692,38 @@ static void RunPlaneFractureTests() {
             retreat.peelRetreat = -1;
             SelectPieces(cells, retreat, error);
             Check(!error.empty(), "側面の後退: 範囲外を拒否する");
+            // 稜の効き: 元の外面が 2 方向以上を向く片（箱の稜・角）が先に欠け、一つの面しか向かない片（面の中央）は残る。
+            retreat.peelRetreat = 0;
+            retreat.peelEdge = 1;
+            retreat.fraction = .15f;
+            const auto edgy = SelectPieces(cells, retreat, error);
+            const auto sharpness = [&](const Piece& p) {
+                double total = 0; std::array<double, 3> sum{};
+                for (const auto& a : p.neighborhood->boundary) {
+                    total += std::sqrt(a[0]*a[0]+a[1]*a[1]+a[2]*a[2]);
+                    for (int k = 0; k < 3; ++k) sum[k] += a[k];
+                }
+                return total > 0 ? 1 - std::sqrt(sum[0]*sum[0]+sum[1]*sum[1]+sum[2]*sum[2]) / total : 0.;
+            };
+            size_t edged = 0, flatAvailable = 0;
+            for (const auto& p : cells.pieces) flatAvailable += sharpness(p) > 1e-6;
+            for (auto id : edgy.ids)
+                for (const auto& p : cells.pieces)
+                    if (p.id == id) edged += sharpness(p) > 1e-6;
+            Check(error.empty() && !edgy.ids.empty() && edgy.ids.size() <= flatAvailable && edged == edgy.ids.size(),
+                  "稜の効き 1: 欠けるのは稜・角に接する片だけで、面の中央の片は残る");
+            retreat.peelEdge = 0;
+            const auto plain = SelectPieces(cells, retreat, error);
+            size_t plainEdged = 0;
+            for (auto id : plain.ids)
+                for (const auto& p : cells.pieces)
+                    if (p.id == id) plainEdged += sharpness(p) > 1e-6;
+            Check(error.empty() && plainEdged < plain.ids.size(), "稜の効き 0: 面の中央の片も欠ける（従来どおり）");
+            retreat.peelEdge = 1.5f;
+            SelectPieces(cells, retreat, error);
+            Check(!error.empty(), "稜の効き: 範囲外を拒否する");
+            retreat.peelEdge = 0;
+            retreat.fraction = 1;
         }
         const auto pieces = FractureVoronoi(tall, lumpy, {}, 9, error);
         PieceSelectSettings sized;

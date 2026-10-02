@@ -46,6 +46,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     if (!std::isfinite(s.peelRetreatBase) || s.peelRetreatBase<0 || s.peelRetreatBase>1) {
         error="底の後退は0〜1にしてください"; return {};
     }
+    if (!std::isfinite(s.peelEdge) || s.peelEdge<0 || s.peelEdge>1) {
+        error="稜の効きは0〜1にしてください"; return {};
+    }
     // 大きさの効き: 体積を最大の片で割った値（0～1）を順位に足す。大きな片ほど後まで残る。
     double largest=0;
     for (const auto& p:c.pieces) largest=std::max(largest,p.volume);
@@ -54,7 +57,7 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
         struct Vertical { size_t other; double area; int otherSide; };
         std::vector<Vertical> vertical;
         std::array<double,2> cap{}, covered{};
-        double total=0, support=0, noise=0;
+        double total=0, support=0, noise=0, edge=0;
         bool exposed=false, removed=false, protectedCore=false, grounded=false, tooDeep=false;
     };
     const size_t n=c.pieces.size();
@@ -80,11 +83,22 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
             }
         }
         double boundary=0, ground=0;
+        std::array<double,3> sum{};
         for (const auto& area:p.neighborhood->boundary) {
             const double size=PieceFaceArea(p,area);
             // 接地: 下向き（法線が下から 45° 以内）の外面は地面に支えられている。
             if (s.grounded && PieceFaceNormalY(p,area)<-.7071*size) ground+=size;
-            else boundary+=size;
+            else {
+                boundary+=size;
+                for (int k=0;k<3;++k) sum[k]+=area[k];
+            }
+        }
+        // 稜の効き: 露出した元の外面の面積ベクトルの和の長さと面積の合計の比。一つの平面だけなら 0（面の中央）、
+        // 2 方向以上を向くほど大きい（直角の稜で約 0.29、角でさらに大）。面積ベクトルは全片で同じ変換なので、
+        // 変換前の値の比で足りる。
+        if (boundary>0) {
+            double length=PieceFaceArea(p,sum);
+            v.edge=std::clamp(1-length/boundary,0.,1.);
         }
         v.exposed=boundary>0;
         v.grounded=ground>0;
@@ -197,6 +211,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
             v.covered[0]>=v.cap[0]*(1-1e-6) && v.covered[1]>=v.cap[1]*(1-1e-6);
         return weights[i]>0 && v.exposed && !v.removed && !v.protectedCore && !v.tooDeep && v.total>0 && !sandwiched;
     };
+    // 稜の効き: 一番角張った片を 0、一つの平面しか向かない片（露出が隣の削除だけの片も）を「効き」の分だけ後回しにする。
+    double sharpest=0;
+    for (const auto& v:state) sharpest=std::max(sharpest,v.edge);
     const size_t eligible=std::count_if(weights.begin(),weights.end(),[](float w){return w>=0;});
     const size_t budget=size_t(std::floor(double(eligible)*s.fraction+1e-8));
     // 全層で1片ずつ選ぶ。進行の変更は同じ削除順の先頭からの長さだけを変える。
@@ -207,7 +224,8 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
             if (!candidateAvailable(i)) continue;
             const auto& v=state[i];
             const double candidate=v.support/v.total+v.noise+
-                (largest>0 ? s.peelSize*c.pieces[i].volume/largest : 0);
+                (largest>0 ? s.peelSize*c.pieces[i].volume/largest : 0)+
+                (sharpest>0 ? s.peelEdge*(1-v.edge/sharpest) : 0);
             if (best==n || candidate<score-1e-12 ||
                 (std::abs(candidate-score)<=1e-12 && c.pieces[i].id<c.pieces[best].id)) {
                 best=i;score=candidate;

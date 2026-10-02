@@ -113,6 +113,10 @@ void Application::DrawPieceSettings(graph::Node &node) {
                 changed |= ui::PropertyFloat("底の後退", &selection->peelRetreatBase, 0, 1, 0,
                     "側面の後退の、底での割合です。0 では底は削れず元の底の外周が残り、1 では底も頂と同じ深さまで削れます。");
                 selection->peelRetreatBase = std::clamp(selection->peelRetreatBase, 0.f, 1.f);
+                changed |= ui::PropertyFloat("稜の効き", &selection->peelEdge, 0, 1, 0,
+                    "元の外面が 2 方向以上を向く片（稜・角・張り出した縁）ほど先に欠け、一つの平面しか向かない片（面の中央）は後回しにします。"
+                    "面の途中に穴を開けずに縁から欠けさせたいときに上げます。");
+                selection->peelEdge = std::clamp(selection->peelEdge, 0.f, 1.f);
                 changed |= ui::PropertyBool("接地", &selection->grounded, false,
                     "下向きの外面を地面に支えられた面として扱い、そこからは欠きません。"
                     "地面から生えた岩（岩峰・露頭・崖）が上と横から欠け、根元が最後まで残ります。");
