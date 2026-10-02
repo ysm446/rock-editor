@@ -500,6 +500,12 @@ int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::
         size_t instances = 0;
         for (const auto& set : evaluation.rockInstances) instances += set.instances.size();
         result["rockInstances"] = instances;
+        // 内訳（撒いたノードと岩グラフごと）。山グラフの段ごとの数と推定の被覆率を見るため。
+        json sets = json::array();
+        for (const auto& set : evaluation.rockInstances)
+            sets.push_back({{"source", set.source}, {"scene", set.scene}, {"scale", set.scale},
+                            {"instances", set.instances.size()}, {"coverage", set.coverage}});
+        result["rockInstanceSets"] = std::move(sets);
     }
     WriteJson(result, pretty);
     return loaded->issues.empty() ? kExitOk : kExitEvaluationError;

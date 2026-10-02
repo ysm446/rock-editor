@@ -114,10 +114,10 @@
           420,
           300
         ],
-        "note": "boulder.rockgraph を開いて「岩アセットを焼く」を押すと、ここで読めるようになる",
+        "note": "大岩（約 16 m）。boulder.rockgraph を python tools/rock_bake.py で焼くと読める",
         "rock": {
           "scene": "boulder.rockgraph",
-          "scale": 2.0,
+          "scale": 5.0,
           "weight": 1.0
         }
       },
@@ -131,7 +131,8 @@
           424
         ],
         "outputs": [
-          426
+          426,
+          427
         ],
         "position": [
           700,
@@ -139,13 +140,18 @@
         ],
         "rockScatter": {
           "seed": 1,
-          "spacing": 7.0,
+          "spacing": 22.0,
           "maxCount": 5000,
-          "scaleMin": 0.7,
-          "scaleMax": 1.4,
-          "alignToNormal": 0.5,
-          "embed": 0.15
-        }
+          "scaleMin": 0.8,
+          "scaleMax": 1.3,
+          "alignToNormal": 0.3,
+          "embed": 0.2,
+          "sizeSpacing": 1.1,
+          "settle": 1.0,
+          "settleMax": 0.5,
+          "coverageTarget": 0.0
+        },
+        "note": "大: 急斜面に十数 m の岩。Coverage（足元）を次の段へ"
       },
       {
         "id": 430,
@@ -156,7 +162,228 @@
         ],
         "outputs": [],
         "position": [
+          1250,
+          100
+        ]
+      },
+      {
+        "id": 440,
+        "kind": "maskFilter",
+        "inputs": [
+          441
+        ],
+        "outputs": [
+          442
+        ],
+        "position": [
           950,
+          -80
+        ],
+        "note": "大の足元を反転（大の無い所）",
+        "maskFilter": {
+          "type": "levels",
+          "invert": true
+        }
+      },
+      {
+        "id": 450,
+        "kind": "maskCombine",
+        "inputs": [
+          451,
+          452
+        ],
+        "outputs": [
+          453
+        ],
+        "position": [
+          1250,
+          -80
+        ],
+        "note": "急斜面 かつ 大の無い所",
+        "maskCombine": {
+          "operation": "minimum"
+        }
+      },
+      {
+        "id": 460,
+        "kind": "rock",
+        "inputs": [],
+        "outputs": [
+          461
+        ],
+        "position": [
+          1250,
+          300
+        ],
+        "note": "中岩（約 5 m）",
+        "rock": {
+          "scene": "boulder.rockgraph",
+          "scale": 1.5,
+          "weight": 1.0
+        }
+      },
+      {
+        "id": 465,
+        "kind": "rock",
+        "inputs": [],
+        "outputs": [
+          466
+        ],
+        "position": [
+          1250,
+          420
+        ],
+        "note": "平たい石（約 6 m）",
+        "rock": {
+          "scene": "stone.rockgraph",
+          "scale": 3.0,
+          "weight": 1.0
+        }
+      },
+      {
+        "id": 470,
+        "kind": "rockScatter",
+        "inputs": [
+          471,
+          472,
+          473,
+          474,
+          475
+        ],
+        "outputs": [
+          476,
+          477
+        ],
+        "position": [
+          1550,
+          100
+        ],
+        "note": "中: 大の隙間に 5〜6 m の岩",
+        "rockScatter": {
+          "seed": 2,
+          "spacing": 6.0,
+          "maxCount": 5000,
+          "scaleMin": 0.7,
+          "scaleMax": 1.3,
+          "alignToNormal": 0.5,
+          "embed": 0.2,
+          "sizeSpacing": 1.1,
+          "settle": 1.0,
+          "settleMax": 0.5,
+          "coverageTarget": 0.0
+        }
+      },
+      {
+        "id": 480,
+        "kind": "meshOutput",
+        "inputs": [
+          481,
+          482
+        ],
+        "outputs": [],
+        "position": [
+          1850,
+          100
+        ]
+      },
+      {
+        "id": 490,
+        "kind": "maskFilter",
+        "inputs": [
+          491
+        ],
+        "outputs": [
+          492
+        ],
+        "position": [
+          1850,
+          -80
+        ],
+        "note": "中の足元を反転",
+        "maskFilter": {
+          "type": "levels",
+          "invert": true
+        }
+      },
+      {
+        "id": 500,
+        "kind": "maskCombine",
+        "inputs": [
+          501,
+          502
+        ],
+        "outputs": [
+          503
+        ],
+        "position": [
+          2100,
+          -80
+        ],
+        "note": "大も中も無い所",
+        "maskCombine": {
+          "operation": "minimum"
+        }
+      },
+      {
+        "id": 510,
+        "kind": "rock",
+        "inputs": [],
+        "outputs": [
+          511
+        ],
+        "position": [
+          2100,
+          300
+        ],
+        "note": "小石（約 2 m）",
+        "rock": {
+          "scene": "stone.rockgraph",
+          "scale": 1.0,
+          "weight": 1.0
+        }
+      },
+      {
+        "id": 520,
+        "kind": "rockScatter",
+        "inputs": [
+          521,
+          522,
+          523,
+          524
+        ],
+        "outputs": [
+          526,
+          527
+        ],
+        "position": [
+          2400,
+          100
+        ],
+        "note": "小: 隙間に 1〜2 m の石",
+        "rockScatter": {
+          "seed": 3,
+          "spacing": 2.2,
+          "maxCount": 20000,
+          "scaleMin": 0.6,
+          "scaleMax": 1.2,
+          "alignToNormal": 0.7,
+          "embed": 0.25,
+          "sizeSpacing": 1.0,
+          "settle": 1.0,
+          "settleMax": 0.5,
+          "coverageTarget": 0.0
+        }
+      },
+      {
+        "id": 530,
+        "kind": "meshOutput",
+        "inputs": [
+          531,
+          532
+        ],
+        "outputs": [],
+        "position": [
+          2700,
           100
         ]
       }
@@ -196,6 +423,81 @@
         "id": 504,
         "start": 426,
         "end": 431
+      },
+      {
+        "id": 600,
+        "start": 427,
+        "end": 441
+      },
+      {
+        "id": 601,
+        "start": 212,
+        "end": 451
+      },
+      {
+        "id": 602,
+        "start": 442,
+        "end": 452
+      },
+      {
+        "id": 603,
+        "start": 201,
+        "end": 471
+      },
+      {
+        "id": 604,
+        "start": 453,
+        "end": 472
+      },
+      {
+        "id": 605,
+        "start": 461,
+        "end": 473
+      },
+      {
+        "id": 606,
+        "start": 466,
+        "end": 474
+      },
+      {
+        "id": 607,
+        "start": 476,
+        "end": 481
+      },
+      {
+        "id": 608,
+        "start": 477,
+        "end": 491
+      },
+      {
+        "id": 609,
+        "start": 442,
+        "end": 501
+      },
+      {
+        "id": 610,
+        "start": 492,
+        "end": 502
+      },
+      {
+        "id": 611,
+        "start": 201,
+        "end": 521
+      },
+      {
+        "id": 612,
+        "start": 503,
+        "end": 522
+      },
+      {
+        "id": 613,
+        "start": 511,
+        "end": 523
+      },
+      {
+        "id": 614,
+        "start": 526,
+        "end": 531
       }
     ]
   },

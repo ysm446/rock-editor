@@ -81,6 +81,14 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 
 評価の完了を待ち、形全体が入るようにカメラを引いて撮る（1 方向 1〜数秒）。正面だけでは裏側の失敗を見落とすので、仕上げの確認は `--views 4` で撮る。撮った PNG を画像として開いて見て、依頼の岩に見えるかを判断する。`--ui` は評価エラーが画面に出る。数値が良くても見た目が依頼と違えば直す。
 
+## 4b. 岩アセットを焼く・山グラフで撒く
+
+```bash
+python tools/rock_bake.py <graph.rockgraph> [--node <Rock Asset の id>]   # 付属フォルダ <graph>.rockgraph.bake/ を作る
+```
+
+山グラフ（`.mountaingraph`。Heightmap の地形に Rock Scatter で岩を撒く）の Rock ノードは、岩グラフを**焼いた**岩アセットを読む。焼くのは GPU のアプリの仕事だが、`tools/rock_bake.py` が対話せずに焼く（Rock Asset ノードを自動で探し、上流の Material Bake も先に走る。数秒〜数十秒）。焼いた後は `rock_cli eval <山グラフ>` で段ごとの数と推定の被覆率（`rockInstanceSets`）、`rock_shot.py` で見た目を確かめる。段を分けるときは前の段の `Coverage` 出力を `Mask Filter`（`type: levels`, `invert: true`）で反転し、`Mask Combine`（`minimum`）で傾斜のマスクと合わせて次の段の `Mask` につなぐ。例は `examples/mountain/`。
+
 ## 5. 研究ページを更新する（レシピを足した・直したとき）
 
 `examples/ai-recipes/` のレシピを足したり直したりしたら、`python tools/rock_research_shots.py <名前>` で画像を撮り直し（`docs/research/<名前>/latest.jpg` を更新し、日時付きの経過の画像も残す）、`docs/research/<名前>/README.md` の「今の状態」（状態・作り方・課題）と「経過」、`docs/research/rocks.md` の一覧の表（状態・次に直したいこと）を更新する。経過には日付と、何を変えて何が効いたか（効かなかったことも）を書く。新しい種類なら `docs/research/<名前>/` を作る（既存のページを写す）。`docs/reference/rock-catalog.md` の状態も合わせる。新しい種類のレシピを足したら `examples/ai-recipes/templates.json` にも足す（アプリの「テンプレートから作成」に出る）。

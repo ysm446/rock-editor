@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 05:30
+更新日時: 2026-10-03 07:10
 
 ## 未リリース
+
+- `tools/rock_bake.py` を足した。岩グラフの Rock Asset をアプリで対話せずに焼く（山グラフの Rock ノードが読む付属フォルダを作る）。`rock_cli eval` に `rockInstanceSets`（撒いたノードと岩グラフごとの数・推定の被覆率）を足した。`examples/mountain/` を大・中・小の 3 段（Coverage の連鎖）にし、`stone.rockgraph` を足した。
 
 - 山グラフの Rock Scatter に「大きさの間隔」「浮きの補正」「補正の上限」「目標の被覆率」を追加し、Coverage 出力（被覆マスク）を足した。大きさの違う岩を 1 つの Scatter に混ぜても足元の半径の和で重なりを避け、急斜面で谷側の底が浮かない深さまで沈める。Coverage を Mask Filter（反転）を通して次の段の Rock Scatter の Mask につなぐと、前の段の隙間にだけ撒ける。大きさは焼いた岩アセットの目録から読む（未焼成の岩には効かない）。仕様は [Rock と Rock Scatter](reference/rock-scatter.md)。
 

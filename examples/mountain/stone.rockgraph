@@ -1,0 +1,304 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "projectVersion": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "randomBoxes",
+        "inputs": [],
+        "outputs": [
+          2
+        ],
+        "position": [
+          0,
+          0
+        ],
+        "randomBoxes": {
+          "count": 4,
+          "size": [
+            1.4,
+            0.7,
+            1.1
+          ],
+          "sizeVariation": 0.5,
+          "spread": 0.9,
+          "rotation": 30,
+          "seed": 7
+        }
+      },
+      {
+        "id": 3,
+        "kind": "toVolume",
+        "inputs": [
+          4
+        ],
+        "outputs": [
+          5
+        ],
+        "position": [
+          260,
+          0
+        ],
+        "toVolume": {
+          "resolution": 64
+        }
+      },
+      {
+        "id": 10,
+        "kind": "volumeToMesh",
+        "inputs": [
+          11
+        ],
+        "outputs": [
+          12
+        ],
+        "position": [
+          520,
+          0
+        ],
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 6,
+        "kind": "meshOutput",
+        "inputs": [
+          7,
+          20
+        ],
+        "outputs": [],
+        "position": [
+          1700,
+          0
+        ]
+      },
+      {
+        "id": 21,
+        "kind": "surface",
+        "inputs": [],
+        "outputs": [
+          22
+        ],
+        "position": [
+          960,
+          250
+        ],
+        "layer": {
+          "name": "Rock Surface",
+          "material": 1,
+          "height": {
+            "source": "constant",
+            "base": 0.5,
+            "gain": 0
+          },
+          "mapping": {
+            "method": "triplanar",
+            "repeatMeters": 0.8,
+            "offset": [
+              0.1,
+              0.2,
+              0.3
+            ],
+            "rotationDegrees": [
+              15,
+              25,
+              5
+            ],
+            "sharpness": 4
+          }
+        }
+      },
+      {
+        "id": 50,
+        "kind": "uvUnwrap",
+        "inputs": [
+          51
+        ],
+        "outputs": [
+          52
+        ],
+        "position": [
+          960,
+          0
+        ],
+        "uvUnwrap": {
+          "resolution": 1024,
+          "padding": 4,
+          "quality": 1
+        }
+      },
+      {
+        "id": 60,
+        "kind": "materialBake",
+        "inputs": [
+          61,
+          62,
+          64
+        ],
+        "outputs": [
+          63
+        ],
+        "position": [
+          1200,
+          0
+        ]
+      },
+      {
+        "id": 80,
+        "kind": "rockAsset",
+        "inputs": [
+          81
+        ],
+        "outputs": [
+          82
+        ],
+        "position": [
+          1450,
+          0
+        ],
+        "rockAsset": {
+          "lodCount": 4,
+          "maxTriangles": 20000,
+          "trianglePercent": [
+            100,
+            50,
+            25,
+            12.5,
+            6.25,
+            3.125
+          ],
+          "screenSize": [
+            1,
+            0.5,
+            0.25,
+            0.12,
+            0.06,
+            0.03
+          ]
+        }
+      },
+      {
+        "id": 110,
+        "kind": "volumeNoise",
+        "inputs": [
+          111
+        ],
+        "outputs": [
+          112
+        ],
+        "position": [
+          390,
+          150
+        ]
+      },
+      {
+        "id": 100,
+        "kind": "decimate",
+        "inputs": [
+          101
+        ],
+        "outputs": [
+          102
+        ],
+        "position": [
+          740,
+          0
+        ],
+        "decimate": {
+          "targetTriangles": 2000,
+          "maxError": 0,
+          "creaseWeight": 1
+        }
+      }
+    ],
+    "links": [
+      {
+        "id": 8,
+        "start": 2,
+        "end": 4
+      },
+      {
+        "id": 71,
+        "start": 52,
+        "end": 61
+      },
+      {
+        "id": 72,
+        "start": 22,
+        "end": 62
+      },
+      {
+        "id": 90,
+        "start": 63,
+        "end": 81
+      },
+      {
+        "id": 91,
+        "start": 82,
+        "end": 7
+      },
+      {
+        "id": 120,
+        "start": 5,
+        "end": 111
+      },
+      {
+        "id": 121,
+        "start": 112,
+        "end": 11
+      },
+      {
+        "id": 122,
+        "start": 12,
+        "end": 101
+      },
+      {
+        "id": 123,
+        "start": 102,
+        "end": 51
+      },
+      {
+        "id": 124,
+        "start": 12,
+        "end": 64
+      }
+    ]
+  },
+  "preview": {
+    "camera": {
+      "target": [
+        0,
+        0,
+        0
+      ],
+      "distance": 8,
+      "fovY": 0.785398,
+      "pitch": 0.4,
+      "yaw": 0.65
+    },
+    "exposure": {
+      "compensation": 0.7
+    },
+    "showSkybox": true
+  },
+  "skies": [
+    {
+      "asset": {
+        "path": "Skies/preview.rocksky",
+        "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"
+      }
+    }
+  ],
+  "activeSky": 0,
+  "materials": [
+    {
+      "id": 1,
+      "asset": {
+        "path": "Materials/checker.rockmat"
+      }
+    }
+  ]
+}
