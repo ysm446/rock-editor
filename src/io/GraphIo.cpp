@@ -287,8 +287,8 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             item["maskCombine"] = {{"operation", kOperations[index]}, {"mix", combine->mix}, {"low", combine->low},
                 {"high", combine->high}, {"gamma", combine->gamma}, {"invert", combine->invert}};
         } else if (const auto* filter = std::get_if<geometry::MaskFilterSettings>(&node.settings)) {
-            static constexpr const char* kTypes[] = {"blur", "sharpen", "levels"};
-            const auto index = std::min<uint32_t>(static_cast<uint32_t>(filter->type), 2);
+            static constexpr const char* kTypes[] = {"blur", "sharpen", "levels", "expand"};
+            const auto index = std::min<uint32_t>(static_cast<uint32_t>(filter->type), 3);
             item["maskFilter"] = {{"type", kTypes[index]}, {"radius", filter->radius}, {"amount", filter->amount},
                 {"inputLow", filter->inputLow}, {"inputHigh", filter->inputHigh}, {"gamma", filter->gamma},
                 {"outputLow", filter->outputLow}, {"outputHigh", filter->outputHigh}, {"invert", filter->invert}};
@@ -939,6 +939,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     const std::string type = ReadString(*v, "type");
                     settings.type = type == "sharpen"  ? geometry::MaskFilterType::Sharpen
                                   : type == "levels"   ? geometry::MaskFilterType::Levels
+                                  : type == "expand"   ? geometry::MaskFilterType::Expand
                                                        : geometry::MaskFilterType::Blur;
                     settings.radius = std::clamp(ReadFloat(*v, "radius", settings.radius), geometry::kMinMaskFilterRadius,
                                                  geometry::kMaxMaskFilterRadius);

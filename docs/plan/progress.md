@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 08:00
+更新日時: 2026-10-03 07:20
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -11,13 +11,28 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 
 ## 現在地
 
-### 2026-10-03 08:00 手本の画像を確認: 「大岩が重なる」の正体は節理で割れた 1 つの岩盤
+### 2026-10-03 07:20 那須朝日岳のユニット `examples/nasu-asahidake/` の初版と、崖錐のための「広げる」フィルタ
+
+- Mask Filter に「広げる」（`maskFilter.type: expand`、半径 m）を足した。白い所を表面に沿って半径だけ広げ、縁は距離で 1 → 0。半径の上限を 1 m → 100 m に（箱の一辺が半径に比例するので重くならない）。Rock Scatter の Coverage を広げて小石の段の Mask につなぐと、大きな岩の足元の周りに小石を溜められる（崖錐）。[仕様](../reference/mask-filter.md)。
+- 直した不具合: Rock Scatter に同じ岩グラフを倍率違いの Rock で 2 回つなぐと、Mesh Output が同じ組を 1 つしか受けず 2 つ目が描かれなかった。岩グラフごとに 1 組にまとめ、Rock の倍率をインスタンスの倍率に畳むようにした（組の倍率は 1）。`rock_cli eval` の `rockInstanceSets` に置いた位置の範囲と、8 個以下なら位置の列挙を足した（大岩が地形の縁に落ちているのを見つけられる）。
+- `KeepLargestComponents` の「新しく分かれた 5% 以上の塊を残す」規則は Volume Undercut と Volume Terrace では使わない（帯・段で分かれるのは意図しない結果。Undercut は切り離しを診断する。テスト 2 件が落ちたので戻した）。
+- ユニット: 40 m 四方のハイトマップ（16bit PNG を Python で生成。奥ほど高い斜面 + 中央の尾根）、尾根の頂に `nasu-blades` を 2 個、Coverage を広げた崖錐に破片 350 個、斜面にまばらな転石 170 個。画像は [研究ページ](../research/nasu-asahidake/README.md)。構成はできたが、刃の列が 1 つの塊に見える・破片が同じ形・地面が平板、など写真からはまだ遠い。
+- 次: 刃の列の改善（溝を頂だけ深く、2 群に分ける）、破片の形と埋まり方、地面の荒れ（礫の素材・根元のえぐれ）。山グラフ M3 の 3・4 はその後。
+
+### 2026-10-03 06:55 目標を那須朝日岳の風景に定め、刃の列のレシピ `nasu-blades` を作る
+
+- ユーザー判断（`docs/references/nasu-asahidake/DSC00363` の風景を目標にする）。写真の所見: 65° に傾いた板状節理で割れた岩盤の刃の列（1 枚 3〜6 m、厚さ 1〜2 m）、褐色の風化土の斜面に拳大〜1 m の破片、草の塊。ユニットは幅 15〜20 m。
+- レシピ `nasu-blades` を作った（研究ページ [nasu-blades](../research/nasu-blades/README.md)）。横長で低い凸岩峰 + Parallel Planes 吸着の Voronoi + Peel（小さな片から）+ To Volume の後の Volume Crack（Planes）で板の線。v5 で幅 13 m の傾いた板の列。
+- 途中で直した不具合: `KeepLargestComponents`（Plane Cuts / Volume Noise / Smooth / Edge Wear / Terrace の小片の除去）が、加工で新しく分かれた大きな塊（岩の半分）を黙って捨てていた。最大の塊の 5% 以上の塊は残すようにした（[Plane Cuts](../reference/plane-cuts.md)）。合わせて、Piece Transform のずれが板の厚さに対して大きいと板が離れて別の塊になることをレシピの注記に書いた。
+- 次: 山グラフ `examples/nasu-asahidake/`（土の斜面 + `nasu-blades` を深く沈める + 破片）。破片を刃の根元に集めるために、被覆マスクを距離で広げるフィルタを足す。刃の列の課題（溝を頂だけ深く、板の面の丸み、1 塊に）は研究ページ。
+
+### 2026-10-03 06:45 手本の画像を確認: 「大岩が重なる」の正体は節理で割れた 1 つの岩盤
 
 - ユーザーの手本は `docs/references/megascans/`（Git の対象外）にあった（チャットに落とした画像はファイル名しか届かない。以後はパスをもらう）。Megascans の露岩（10〜15 m）と UE5 の溶岩の岩場（30〜50 m）を見ると、別々の岩が重なっているのではなく、1 つの岩盤が節理で 1〜3 m のブロックに割れたまま露出し、地面が岩を包み、破片が窪みと裾に密に溜まっている。所見は [研究ページ](../research/rock-cluster/README.md) の「手本」に書いた。
 - 方針の修正: 集合体の核は別々の岩アセットの食い込みではなく、**露岩（outcrop）の岩グラフ 1 つ**（横長で低い母岩を 2 系統の節理で割り、弱い Peel）で作り、Rock 1 個として深く沈める。周りに崖錐（被覆を距離で広げるフィルタが要る）と幅広い大きさの小石。
 - 次: 露岩のレシピ `outcrop` → 被覆マスクを距離で広げるフィルタ → 集合体の例を組み直す。
 
-### 2026-10-03 07:50 岩の集合体のユニット `examples/rock-cluster/` の初版
+### 2026-10-03 06:40 岩の集合体のユニット `examples/rock-cluster/` の初版
 
 - ユーザー判断（M3 の続きより、数十 m の岩の集合体のユニットを先に）。`examples/ai-recipes/` の 4 レシピ（granite-buttress / rounded-boulder / blocky / talus-fragment）に Decimate → UV Unwrap → Material Bake → Rock Asset の鎖と定数色の Surface を足した岩グラフを `examples/rock-cluster/` に置き、`tools/rock_bake.py` で 4 つとも焼いた（buttress は「ハイポリに当たらない画素 6%」の警告。ケージを広げる余地）。
 - 山グラフ `cluster.mountaingraph`（書きやすい表記）: 60 m 四方の 1 つの丘、高さの Shape Mask で大岩 5 個を頂に寄せて「大きさの間隔」0.45 で重ね、Coverage の反転 × 丘の広い範囲で中 14 個、さらに中の被覆も避けて小石 213 個。2 方向の画像を [研究ページ](../research/rock-cluster/README.md) に保存した。構成（中央の塊 + 周りの岩 + 裾の小石）はできた。
@@ -25,7 +40,7 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 - 課題（研究ページに詳しく）: 大岩は足元が食い込むだけで寄りかからない。中・小を大岩からの距離で寄せる手段が無い（Mask Filter のぼかしは最大 1 m）。blocky の 4 倍はサイコロに見える。灰色一色・平らな地面。
 - 次: 被覆マスクを距離で広げるフィルタ（崖錐）→ 岩峰を複数、走向をそろえて重ねる → 十数 m 級の岩のレシピ。M3 の 3・4 はその後。
 
-### 2026-10-03 07:10 LLM 側から岩アセットを焼く道具と、3 段の山グラフの例
+### 2026-10-03 06:10 LLM 側から岩アセットを焼く道具と、3 段の山グラフの例
 
 - ユーザーの問い（LLM のほうで焼けないのか）。アプリの `--bake-asset` を使う `tools/rock_bake.py` を足した（Rock Asset を自動で探す、設定の隔離、目録の有無で成否）。`examples/mountain/stone.rockgraph`（平たい石。boulder の Random Boxes 違い）を足し、これで焼いて 1.3 秒で 4 段・テクスチャ付きの付属フォルダができた。副作用: `--save-project` が `.rockmat` の uid を振り直し `.meta` を作るので、例では戻した（道具の注記に書いた）。
 - `examples/mountain/mountain.mountaingraph` を大（boulder ×5、約 16 m、間隔 22）・中（boulder ×1.5 と stone ×3、間隔 6）・小（stone ×1、間隔 2.2）の 3 段にし、Coverage → Mask Filter（反転）→ Mask Combine（minimum、傾斜と）→ 次の段の Mask でつないだ。`rock_cli eval` に `rockInstanceSets`（撒いたノード・岩グラフごとの数と被覆率）を足した。結果: 大 33 個・被覆 18%、中 288 個・15%、小 2,983 個・17%。実アプリ（Release）で撮り、大岩の隙間に中・小が入り、浮いた岩は見当たらないことを確認した（チェッカーの材質と箱の岩なので見た目はまだ岩場らしくない）。

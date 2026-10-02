@@ -44,7 +44,7 @@ MaskImage FilterMask(const Mesh& mesh, const MaskImage& input, bool invertInput,
         error = "加工するマスクの画像がありません";
         return {};
     }
-    if (static_cast<uint32_t>(settings.type) > static_cast<uint32_t>(MaskFilterType::Levels) ||
+    if (static_cast<uint32_t>(settings.type) > static_cast<uint32_t>(MaskFilterType::Expand) ||
         !std::isfinite(settings.radius) || settings.radius < kMinMaskFilterRadius || settings.radius > kMaxMaskFilterRadius ||
         !std::isfinite(settings.amount) || settings.amount < 0 || settings.amount > 4 || !ValidLevels(settings)) {
         error = "Mask Filterの設定が不正です";
@@ -128,7 +128,9 @@ MaskImage FilterMask(const Mesh& mesh, const MaskImage& input, bool invertInput,
     // （細かくしても箱の数が画素の数を超えるだけで、ぼけ方は変わらない）。
     const double texelSize = std::sqrt(surfaceArea / double(covered.size()));
     const double radius = settings.radius, sigma = radius * .5;
-    const double cell = std::max(radius * .25, texelSize);
+    // 広げるは距離そのものを出すので、箱を細かく（半径の 1/8）して縁の段を小さくする。
+    const bool expand = settings.type == MaskFilterType::Expand;
+    const double cell = std::max(radius * (expand ? .125 : .25), texelSize);
     const P origin = Convert(info.minimum) - P{cell, cell, cell};
     const auto cellCoord = [&](P p, int axis) {
         const double v = axis == 0 ? p.x - origin.x : axis == 1 ? p.y - origin.y : p.z - origin.z;
@@ -175,6 +177,7 @@ MaskImage FilterMask(const Mesh& mesh, const MaskImage& input, bool invertInput,
         if (stop.stop_requested()) { cancelled = true; return; }
         Cell& c = cells[index];
         double sum = 0, total = 0;
+        double nearest2 = radius * radius;  // 広げる用。白い（0.5 以上の）箱までの最短距離の 2 乗
         for (int dz = -reach; dz <= reach; ++dz)
             for (int dy = -reach; dy <= reach; ++dy)
                 for (int dx = -reach; dx <= reach; ++dx) {
@@ -186,11 +189,22 @@ MaskImage FilterMask(const Mesh& mesh, const MaskImage& input, bool invertInput,
                     const P d = other.position - c.position;
                     const double d2 = Dot(d, d);
                     if (d2 > radius * radius) continue;
+                    if (expand) {
+                        // 白い箱までの距離。裏合わせの面（薄い板の裏）は FacingWeight が 0 なので越えない。
+                        if (other.value >= .5 && FacingWeight(c.normal, other.normal) > 0) nearest2 = std::min(nearest2, d2);
+                        continue;
+                    }
                     const double w = other.weight * std::exp(-d2 * inverseTwoSigma2) * FacingWeight(c.normal, other.normal);
                     sum += w * other.value;
                     total += w;
                 }
-        c.blurred = total > 0 ? sum / total : c.value;
+        if (expand) {
+            // 白い所からの距離で 1 → 0 に落とす。元の値がそれより明るければ元のまま（白は白のまま）。
+            const double falloff = 1 - std::sqrt(nearest2) / radius;
+            c.blurred = std::max(c.value, std::clamp(falloff, 0.0, 1.0));
+        } else {
+            c.blurred = total > 0 ? sum / total : c.value;
+        }
         if (progress && (++done % 4096) == 0) progress(10 + int(done * 60 / cells.size()));
     });
     if (cancelled || stop.stop_requested()) { error = "Mask Filterをキャンセルしました"; return {}; }

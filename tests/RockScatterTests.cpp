@@ -6,6 +6,7 @@
 #include "graph/RockEvaluator.h"
 #include "io/RockAssetIo.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -285,7 +286,10 @@ void RunRockScatterTests() {
     bool scaled = false;
     for (const auto& set : result.rockInstances) {
         total += set.instances.size();
-        if (set.scene == "C:/rocks/b.rockgraph") scaled = set.scale == 2.0f;
+        // Rock の倍率はインスタンスの倍率に畳まれる（組の倍率は 1）。
+        if (set.scene == "C:/rocks/b.rockgraph")
+            scaled = set.scale == 1.0f && !set.instances.empty() &&
+                     std::all_of(set.instances.begin(), set.instances.end(), [](const auto& i) { return i.scale >= 2.0f * 0.8f - 1e-4f; });
     }
     Check(result.error.empty() && result.rockInstances.size() == 2 && total > 100 && scaled && result.rocks.empty(),
           "撒いた岩を岩グラフごとにまとめる（Mesh Output へは地形を通さない。地形は別に出す）");

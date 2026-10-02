@@ -82,8 +82,8 @@ std::vector<uint32_t> LabelInterior(const std::vector<float>& values, const std:
 // 重なった切り落としやノイズが角を切り離すと、浮いた小片ができる。加工前の塊ごとに、そこから生まれた
 // 最大の塊だけを残す。**加工前から分かれていた塊（割れ目で分かれた岩など）はそれぞれ残す**（以前は全体で
 // 最大の 1 つだけを残していて、分かれた大きな塊まで黙って消えていた）。加工前の塊と重ならない塊と、
-// 最大の塊の 1% 未満の塊は捨てる。
-void KeepLargestComponents(VolumeGrid& grid, const std::vector<float>& before) {
+// 最大の塊の 1% 未満の塊は捨てる。keepLargeSplits なら、加工で新しく分かれた塊も最大の 5% 以上あれば残す。
+void KeepLargestComponents(VolumeGrid& grid, const std::vector<float>& before, bool keepLargeSplits = true) {
     std::vector<size_t> sizes, beforeSizes;
     const std::vector<uint32_t> labels = LabelInterior(grid.values, grid.dimensions, sizes);
     if (sizes.size() <= 2) return;
@@ -100,10 +100,14 @@ void KeepLargestComponents(VolumeGrid& grid, const std::vector<float>& before) {
         if (keeper[parent] == 0 || sizes[label] > sizes[keeper[parent]]) keeper[parent] = label;
     }
     // 加工前から分かれていても、ごく小さな破片は浮いた小片として捨てる（最大の塊の 1% 未満）。
+    // 加工で新しく分かれた塊も、最大の塊の 5% 以上あれば残す（2026-10-03: 節理の溝 + ノイズで岩が二つに分かれたとき、
+    // 片方の半分が黙って消えていた。大きく分かれたものは岩が割れたのであって、浮いた小片ではない）。
     const size_t largestSize = *std::max_element(sizes.begin() + 1, sizes.end());
     std::vector<uint8_t> keep(sizes.size(), 0);
     for (const uint32_t label : keeper)
         if (label != 0 && sizes[label] * 100 >= largestSize) keep[label] = 1;
+    if (keepLargeSplits) for (uint32_t label = 1; label < sizes.size(); ++label)
+        if (sizes[label] * 20 >= largestSize) keep[label] = 1;
     if (std::find(keep.begin(), keep.end(), uint8_t(1)) == keep.end())
         keep[std::max_element(sizes.begin() + 1, sizes.end()) - sizes.begin()] = 1;
     for (size_t i = 0; i < grid.values.size(); ++i)
@@ -2502,7 +2506,7 @@ VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, 
         return size_t(std::count_if(values.begin(), values.end(), [](float v) { return v < 0; }));
     };
     const size_t carved = interior(out.values);
-    KeepLargestComponents(out, g.values);
+    KeepLargestComponents(out, g.values, false);  // 帯・段で分かれた塊は意図しない（切り離しは診断する）
     if (interior(out.values) * 100 < carved * 99) {
         error = "帯で形が上下に切り離されました（大きな部分が離れて捨てられます）。深さを減らすか、帯の幅を狭めてください";
         return {};
@@ -2607,7 +2611,7 @@ VolumeGrid TerraceVolume(const VolumeGrid& g, const VolumeTerraceSettings& s, st
         error = "段を刻んだ結果に内部が残りません。深さを減らしてください";
         return {};
     }
-    KeepLargestComponents(out, g.values);
+    KeepLargestComponents(out, g.values, false);  // 帯・段で分かれた塊は意図しない（切り離しは診断する）
     FillNewVoids(out, g.values);
     return out;
 }

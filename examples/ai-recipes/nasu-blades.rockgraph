@@ -1,0 +1,286 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {
+        "id": 1,
+        "kind": "baseRock",
+        "note": "横長で低い尾根状の母岩（幅 14 × 高さ 8 × 奥行き 6 m）。頂は幅広い平らな稜線（Peel で刃に刻む）。節理面では切らず、Parallel Planes で板に割る。",
+        "baseRock": {
+          "shape": "convexPeak",
+          "size": [
+            14,
+            8,
+            6
+          ],
+          "seed": 7,
+          "peakSides": 8,
+          "peakTopWidth": 0.6,
+          "peakShoulderHeight": 0.45,
+          "peakShoulderWidth": 1.0,
+          "peakLeanX": 0.05,
+          "peakLeanZ": 0.0,
+          "peakVariation": 0.35,
+          "peakRidgeLength": 0.85,
+          "peakStrike": 0,
+          "peakSlabThickness": 0,
+          "peakSlabDip": 65,
+          "peakSlabFlare": 0
+        }
+      },
+      {
+        "id": 19,
+        "kind": "parallelPlanes",
+        "note": "主な節理: 65° に傾いた板、厚さ 1〜2 m（間隔 1.4 m、ばらつき 0.5）。写真の『刃』の 1 枚がこの板。",
+        "parallelPlanes": {
+          "rotation": [
+            0,
+            0,
+            65
+          ],
+          "spacing": 1.6,
+          "variation": 0.4,
+          "seed": 5
+        }
+      },
+      {
+        "id": 2,
+        "kind": "scatterPoints",
+        "note": "板の中を横の割れ目で 1〜2 m のブロックに分ける点。上ほど密（頂が細かく欠ける）。",
+        "pieces": {
+          "count": 200,
+          "seed": 3,
+          "clustering": 0.6,
+          "clusterScale": 2.0,
+          "heightGradient": 0.9
+        }
+      },
+      {
+        "id": 5,
+        "kind": "voronoiFracture",
+        "note": "板 ∩ Voronoi（吸着）。板の面内で傾き方向に 2.2 倍伸ばし、縦長のブロックにする。",
+        "pieces": {
+          "rotation": [
+            0,
+            0,
+            65
+          ],
+          "stretch": [
+            2.2,
+            1,
+            1.2
+          ],
+          "snap": true
+        }
+      },
+      {
+        "id": 6,
+        "kind": "pieceSelect",
+        "note": "頂の小さな片から欠く（peelSize 0.8、上ほど点が密）。刃ごとに高さが変わる。",
+        "pieces": {
+          "mode": "peel",
+          "fraction": 0.32,
+          "peelNoise": 1.0,
+          "protectCore": true,
+          "grounded": true,
+          "seed": 3,
+          "peelSize": 0.9,
+          "stability": 0,
+          "peelRetreat": 0,
+          "peelEdge": 0.5,
+          "supportAngle": 80
+        }
+      },
+      {
+        "id": 7,
+        "kind": "pieceFilter",
+        "note": "選んだ片を消す",
+        "pieces": {
+          "keep": false
+        }
+      },
+      {
+        "id": 8,
+        "kind": "piecesToMesh"
+      },
+      {
+        "id": 17,
+        "kind": "pieceTransform",
+        "note": "わずかなずれ（板の厚さに比べて十分小さく。0.02 にすると板が離れて別の塊になり、Volume Noise で最大の塊以外が消える）。節理の線は Volume Crack で彫る。",
+        "pieces": {
+          "individual": true,
+          "jitterPosition": [
+            0.008,
+            0.004,
+            0.008
+          ],
+          "jitterRotation": 0.5,
+          "jitterSeed": 4
+        }
+      },
+      {
+        "id": 9,
+        "kind": "toVolume",
+        "toVolume": {
+          "resolution": 128
+        }
+      },
+      {
+        "id": 18,
+        "kind": "volumeClose",
+        "volumeClose": {
+          "mode": "width",
+          "width": 0.005
+        }
+      },
+      {
+        "id": 20,
+        "kind": "volumeCrack",
+        "note": "主な節理の面に沿って V 字の溝を彫り、板（刃）を分ける。幅 0.02 × 14 m ≈ 0.3 m、深さ 0.06 ≈ 0.85 m（板の厚さ 1.6 m より浅く。貫通させると板が別の塊になる）。",
+        "volumeCrack": {
+          "source": "inputs",
+          "width": 0.02,
+          "depth": 0.06,
+          "variation": 0.5,
+          "noise": 0.5,
+          "noiseScale": 3,
+          "extent": 0,
+          "seed": 2
+        }
+      },
+      {
+        "id": 11,
+        "kind": "planeCuts",
+        "note": "局所の小さな欠け",
+        "planeCuts": {
+          "count": 60,
+          "scope": "local",
+          "radius": 0.05,
+          "depthMin": 0.15,
+          "depthMax": 0.35,
+          "seed": 12
+        }
+      },
+      {
+        "id": 12,
+        "kind": "volumeNoise",
+        "note": "小面のノイズ",
+        "volumeNoise": {
+          "type": "facet",
+          "amount": 0.008,
+          "scale": 14,
+          "octaves": 2
+        }
+      },
+      {
+        "id": 13,
+        "kind": "volumeEdgeWear",
+        "note": "角の摩耗",
+        "volumeEdgeWear": {
+          "amount": 0.004,
+          "radius": 0.006,
+          "noise": 0.6
+        }
+      },
+      {
+        "id": 14,
+        "kind": "volumeClip",
+        "note": "裾を 10% 埋めて接地する",
+        "volumeClip": {
+          "mode": "ground",
+          "embed": 0.1
+        }
+      },
+      {
+        "id": 15,
+        "kind": "volumeToMesh",
+        "volumeToMesh": {
+          "method": "dualContouring"
+        }
+      },
+      {
+        "id": 16,
+        "kind": "meshOutput"
+      }
+    ],
+    "links": [
+      {
+        "from": "1",
+        "to": "2"
+      },
+      {
+        "from": "1",
+        "to": "5:Geometry"
+      },
+      {
+        "from": "2",
+        "to": "5:Points"
+      },
+      {
+        "from": "19",
+        "to": "5:Planes"
+      },
+      {
+        "from": "5",
+        "to": "6"
+      },
+      {
+        "from": "5",
+        "to": "7:Pieces"
+      },
+      {
+        "from": "6",
+        "to": "7:Selection"
+      },
+      {
+        "from": "7",
+        "to": "17:Pieces"
+      },
+      {
+        "from": "17",
+        "to": "8"
+      },
+      {
+        "from": "8",
+        "to": "9"
+      },
+      {
+        "from": "9",
+        "to": "18"
+      },
+      {
+        "from": "18",
+        "to": "20:Volume"
+      },
+      {
+        "from": "11",
+        "to": "12"
+      },
+      {
+        "from": "12",
+        "to": "13"
+      },
+      {
+        "from": "13",
+        "to": "14"
+      },
+      {
+        "from": "14",
+        "to": "15"
+      },
+      {
+        "from": "15",
+        "to": "16:Geometry"
+      },
+      {
+        "from": "19",
+        "to": "20:Planes"
+      },
+      {
+        "from": "20",
+        "to": "11"
+      }
+    ]
+  }
+}

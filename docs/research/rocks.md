@@ -1,7 +1,7 @@
 # 岩の研究ページ
 
 作成日時: 2026-10-01 12:50
-更新日時: 2026-10-03 07:50
+更新日時: 2026-10-03 07:20
 
 「あらゆる種類の岩を作れること」を目標に、岩の種類ごとに今の出来・作り方・課題・改善の経過を残す。種類ごとにフォルダ（`docs/research/<レシピ名>/`）があり、そこの `README.md` に状態・作り方・課題・経過の文、`latest.jpg` に今の形、日時付きの `.jpg` に経過の画像を置く。一つずつ改善していく。足りないノードの整理（G 番号）は [岩の種類の網羅](../reference/rock-catalog.md)、組み方の手順は [skill](../../.agents/skills/rock-graph/SKILL.md)。
 
@@ -33,6 +33,7 @@
 | [丸い転石](rounded-boulder/README.md) | ○ | `rounded-boulder` | — |
 | [花崗岩のシーティング](granite-sheeting/README.md) | △ | `granite-sheeting` | 平らな面のボクセルの格子模様 |
 | [花崗岩の岩峰](granite-buttress/README.md) | △ | `granite-buttress` | 凸岩峰ルートに置き換え（[比較](granite-buttress/joint-study.md)）。裾の角の小さな穴。複数の塔が根元でつながる形 |
+| [那須朝日岳の刃の列](nasu-blades/README.md) | △ | `nasu-blades` | 刃の間の溝を頂だけ深く。板の面の丸み。最終形を 1 塊に |
 | [黒曜石・フリント](obsidian/README.md) | ○（形） | `obsidian` | ガラス質の素材 |
 | [礫岩](conglomerate/README.md) | ○ | `conglomerate` | — |
 | [角礫岩](breccia/README.md) | ○ | `breccia` | 礫が基質に浮いて見える（礫どうしが接しない） |
@@ -65,6 +66,7 @@
 - [丸い転石](rounded-boulder/README.md)（○）
 - [花崗岩のシーティング](granite-sheeting/README.md)（△）
 - [花崗岩の岩峰](granite-buttress/README.md)（△）
+- [那須朝日岳の刃の列](nasu-blades/README.md)（△）
 - [黒曜石・フリント](obsidian/README.md)（○（形））
 
 ## 堆積・火山の組織
@@ -100,3 +102,4 @@
 ## 山グラフのユニット（岩グラフではなく、焼いた岩を撒いた集合体）
 
 - [岩の集合体（数十 m の大岩が重なり、地面があり、小石が散る）](rock-cluster/README.md)（△）
+- [那須朝日岳の岩場（刃の列 + 土の斜面 + 破片）](nasu-asahidake/README.md)（△。目標の風景）

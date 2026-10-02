@@ -3040,9 +3040,9 @@ void Application::DrawGraphPanel() {
         auto edited = *filter;
         bool changed = false;
         if (ui::BeginPropertyTable("maskFilterRows")) {
-            const char* types[] = {"ぼかし", "シャープ", "レベル"};
-            int type = std::clamp(static_cast<int>(edited.type), 0, 2);
-            if (ui::PropertyCombo("種類", &type, types, 3, 0)) {
+            const char* types[] = {"ぼかし", "シャープ", "レベル", "広げる"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 3);
+            if (ui::PropertyCombo("種類", &type, types, 4, 0)) {
                 edited.type = static_cast<geometry::MaskFilterType>(type);
                 changed = true;
             }
@@ -3056,7 +3056,9 @@ void Application::DrawGraphPanel() {
                 changed |= ui::PropertyFloat("出力の白", &edited.outputHigh, 0, 1, 1, "白をこの明るさで出します。");
             } else {
                 changed |= ui::PropertyFloat("半径 (m)", &edited.radius, geometry::kMinMaskFilterRadius, geometry::kMaxMaskFilterRadius, .03f,
-                                             "岩の表面での距離。UVの継ぎ目をまたいでつながります。", "%.3f", ImGuiSliderFlags_Logarithmic);
+                                             edited.type == geometry::MaskFilterType::Expand
+                                                 ? "白い所を広げる距離（表面上の距離）。地形の被覆マスクなら数 m〜十数 m。"
+                                                 : "岩の表面での距離。UVの継ぎ目をまたいでつながります。", "%.3f", ImGuiSliderFlags_Logarithmic);
                 if (edited.type == geometry::MaskFilterType::Sharpen)
                     changed |= ui::PropertyFloat("量", &edited.amount, 0, 4, 1, "ぼかした差を足し戻す強さ。0 で元のまま。");
             }
@@ -3069,6 +3071,10 @@ void Application::DrawGraphPanel() {
             break;
         case geometry::MaskFilterType::Levels:
             ui::HintText("レベル：入力の黒〜白を 0〜1 へ伸ばし、カーブを掛けてから、出力の黒〜白へ写します。ぼかしの後につなぐと、ぼけた縁を締められます。");
+            break;
+        case geometry::MaskFilterType::Expand:
+            ui::HintText("広げる：白い所（0.5 以上）を表面に沿って半径だけ広げ、縁は距離で白から黒へなだらかに落とします。"
+                         "Rock Scatter の Coverage を広げて次の段の Mask につなぐと、大きな岩の足元の周りに小石を溜められます（崖錐）。");
             break;
         default:
             ui::HintText("ぼかし：岩の表面の上で、半径の範囲をなだらかに平均します。UVの継ぎ目をまたいでもつながります。");

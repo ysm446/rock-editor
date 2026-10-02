@@ -155,17 +155,20 @@ enum class MaskFilterType : uint32_t {
     Blur = 0,     // 岩の表面の上でぼかす。UVの継ぎ目をまたいでつながる
     Sharpen = 1,  // アンシャープマスク。元 + 量 × (元 − ぼかし)
     Levels = 2,   // 入力の黒・白、カーブ、出力の黒・白
+    Expand = 3,   // 白い所を表面に沿って半径だけ広げる。縁は距離で 1 → 0 になだらかに落ちる（崖錐: 岩の足元の周りに小石）
 };
 struct MaskFilterSettings {
     MaskFilterType type = MaskFilterType::Blur;
-    float radius = .03f;  // ぼかし・シャープの半径（m、表面の3D距離）。ガウスの 2σ
+    float radius = .03f;  // ぼかし・シャープの半径（m、表面の3D距離）。ガウスの 2σ。広げるでは広げる距離
     float amount = 1;     // シャープの強さ。0〜4
     // レベル。入力の low を 0、high を 1 へ伸ばし、^gamma を掛け、出力の low〜high へ写す。
     float inputLow = 0, inputHigh = 1, gamma = 1, outputLow = 0, outputHigh = 1;
     bool invert = false;  // Mask Combine と同じく画像に焼き込む
     bool operator==(const MaskFilterSettings&) const = default;
 };
-inline constexpr float kMinMaskFilterRadius = .001f, kMaxMaskFilterRadius = 1.f;
+// 半径の上限は 100 m（2026-10-03 に 1 m から広げた。地形の被覆マスクを十数 m 広げるため。箱の一辺は半径に比例するので、
+// 大きな半径でも計算量は箱の数で決まり、重くならない）。
+inline constexpr float kMinMaskFilterRadius = .001f, kMaxMaskFilterRadius = 100.f;
 // mesh は input を作ったUV付きのメッシュ。ぼかし・シャープは各画素の表面の3D位置で近い画素を重み付き平均する。
 // invertInput は入力のマスクの「反転」（画像には掛かっていない分）。出力は input と同じ解像度で、
 // UVの島が無い画素は最も近い島の値で埋める。失敗・取消では空の画像を返し、error に理由を入れる。

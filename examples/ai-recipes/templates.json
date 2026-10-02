@@ -196,6 +196,13 @@
       "category": "使い方の例",
       "status": "○",
       "description": "割ってずらしたブロックの隙間を Volume Close で土で埋め、Volume Diff Mask で詰めた土だけを別の色で塗る。ノードの note に手順を書いてある。"
+    },
+    {
+      "id": "nasu-blades",
+      "name": "那須朝日岳の刃の列",
+      "category": "形の骨格",
+      "status": "△",
+      "description": "横長で低い凸岩峰を、65° に傾いた板状の節理（Parallel Planes に吸着した Voronoi）で 1〜2 m 厚の板に割り、Peel で頂を刃に刻む。板の間は To Volume の後に Volume Crack（Planes）で彫る（那須朝日岳の安山岩の露岩）。"
     }
   ]
 }

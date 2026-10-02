@@ -42,7 +42,8 @@ constexpr ParamOption kShapeMaskTypes[] = {{"occlusion", 0, "遮蔽（窪み）"
                                           {"valleyCurvature", 3, "曲率（谷）"}, {"ridgeCurvature", 4, "曲率（山・稜線）"}};
 constexpr ParamOption kCombineOps[] = {{"multiply", 0, "積"}, {"maximum", 1, "大きい方"}, {"minimum", 2, "小さい方"},
                                        {"subtract", 3, "A − B"}, {"mix", 4, "mix で混ぜる"}};
-constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"}};
+constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"},
+                                        {"expand", 3, "広げる: 白い所を表面に沿って半径だけ広げ、縁を距離でなだらかに落とす（岩の足元の周りに小石を溜める崖錐など）"}};
 constexpr ParamOption kUndercutReferences[] = {{"shape", 0, "形: 帯の中心を形の高さに対する位置 height で指定する"},
                                                {"world", 1, "ワールド: 帯の中心をワールドの高さ level (m) で指定する（波食ノッチの水面）"}};
 constexpr ParamOption kErodeTypes[] = {{"exposure", 0, "さらされた面: direction から来る風・波・氷にさらされた面ほど削り、他の部分の陰（風下）は削らない"},
@@ -403,7 +404,7 @@ constexpr ParamDefinition kParams[] = {
     {K::MaskCombine, "maskCombine.gamma", T::Float, 0.1, 10, "", "カーブ（ガンマ）", "", C::Clamp},
     {K::MaskCombine, "maskCombine.invert", T::Bool, N, N, "", "反転", "", C::None},
     {K::MaskFilter, "maskFilter.type", T::Enum, N, N, "", "種類", "", C::Clamp, kFilterTypes},
-    {K::MaskFilter, "maskFilter.radius", T::Float, 0.001, 1, "m（表面上）", "半径", "", C::Clamp},
+    {K::MaskFilter, "maskFilter.radius", T::Float, 0.001, 100, "m（表面上）", "半径", "blur / sharpen のぼかし幅、expand の広げる距離", C::Clamp},
     {K::MaskFilter, "maskFilter.amount", T::Float, 0, 4, "", "量", "sharpen 用", C::Clamp},
     {K::MaskFilter, "maskFilter.inputLow", T::Float, 0, 0.999, "0〜1", "入力の黒", "", C::Clamp},
     {K::MaskFilter, "maskFilter.inputHigh", T::Float, 0.001, 1, "0〜1", "入力の白", "inputLow より大きく", C::Clamp},

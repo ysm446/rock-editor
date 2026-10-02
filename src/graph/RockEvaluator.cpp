@@ -967,17 +967,27 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             }
             coverageTerrain.mesh = std::move(terrainMesh);
             result.rocks.push_back(std::move(coverageTerrain));
-            // 岩グラフごとにまとめる。
+            // 岩グラフごとにまとめる。同じ岩グラフを倍率違いの Rock で 2 回つないでも 1 組にする（Mesh Output は
+            // 同じノードの同じ岩グラフの組を 1 つしか受けない）。Rock の倍率はインスタンスの倍率に畳み、組の倍率は 1。
+            std::map<std::string, size_t> setIndex;
             for (size_t i = 0; i < references.size(); ++i) {
-                RockInstanceSet set;
-                set.source = id;
-                set.scene = references[i].scene;
-                set.scale = references[i].scale;
-                set.coverage = scattered.coverage;
-                for (const auto& instance : scattered.instances)
-                    if (instance.rock == i) set.instances.push_back(instance);
-                if (!set.instances.empty()) result.rockInstances.push_back(std::move(set));
+                auto found = setIndex.find(references[i].scene);
+                if (found == setIndex.end()) {
+                    RockInstanceSet set;
+                    set.source = id;
+                    set.scene = references[i].scene;
+                    set.scale = 1.0f;
+                    set.coverage = scattered.coverage;
+                    found = setIndex.emplace(references[i].scene, result.rockInstances.size()).first;
+                    result.rockInstances.push_back(std::move(set));
+                }
+                for (auto instance : scattered.instances)
+                    if (instance.rock == i) {
+                        instance.scale *= references[i].scale;
+                        result.rockInstances[found->second].instances.push_back(instance);
+                    }
             }
+            std::erase_if(result.rockInstances, [&](const RockInstanceSet& set) { return set.source == id && set.instances.empty(); });
         } else if (node->kind == NodeKind::RockAsset) {
             const auto* settings = std::get_if<RockAssetSettings>(&node->settings);
             const auto* upstream =

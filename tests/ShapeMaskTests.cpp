@@ -724,8 +724,23 @@ void RunMaskFilterTests() {
         Check(std::abs(at(sharpened, 60, 64) - .3f) < .02f, "sharpen leaves areas far from the edge unchanged");
     }
 
+    // --- 広げる ---
+    geometry::MaskFilterSettings expand; expand.type = geometry::MaskFilterType::Expand; expand.radius = 1.0f;
+    const auto expanded = geometry::FilterMask(scene, wallWhite, false, expand, error);
+    Check(error.empty() && expanded.pixels.size() == 128 * 128, "expand keeps the input resolution");
+    if (expanded.pixels.size() == 128 * 128) {
+        // 床の画素 x は壁から (x + .5) / 128 * 4 m。半径 1 m なので、壁のすぐ横は白、0.5 m で半分、2 m 離れると黒。
+        Check(at(expanded, 1, 64) > .8f, "expand: floor next to the wall becomes white across the UV seam");  // 箱の中心までの距離（半径の 1/8）の分だけ 1 より下がる
+        Check(std::abs(at(expanded, 15, 64) - .5f) < .2f, "expand: half way to the radius is about half");
+        Check(at(expanded, 60, 64) < .02f, "expand: floor beyond the radius stays black");
+        Check(at(expanded, 100, 64) > .99f, "expand: white stays white");
+    }
+    auto expandSmall = expand; expandSmall.radius = .3f;
+    const auto expandedSmall = geometry::FilterMask(scene, wallWhite, false, expandSmall, error);
+    Check(expandedSmall.pixels.size() == 128 * 128 && at(expandedSmall, 15, 64) < at(expanded, 15, 64), "expand: smaller radius spreads less");
+
     // --- 診断 ---
-    for (auto bad : {[](auto s) { s.radius = 0; return s; }(blur), [](auto s) { s.radius = 2; return s; }(blur),
+    for (auto bad : {[](auto s) { s.radius = 0; return s; }(blur), [](auto s) { s.radius = 200; return s; }(blur),
                      [](auto s) { s.amount = 5; return s; }(sharpen), [](auto s) { s.gamma = 0; return s; }(levels),
                      [](auto s) { s.inputHigh = s.inputLow; return s; }(levels),
                      [](auto s) { s.type = geometry::MaskFilterType(9); return s; }(blur)})

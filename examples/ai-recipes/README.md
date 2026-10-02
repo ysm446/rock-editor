@@ -21,6 +21,7 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `vesicular-basalt.rockgraph` | 多孔質の溶岩 | Volume Scatter（楕円体・差）で気泡の穴を多数抜く | 約 0.2 秒 |
 | `granite-sheeting.rockgraph` | 花崗岩のシーティング・剥離 | Volume Crack の割り方「表面に沿う殻」で、外側の板がまだらに剥がれた段を作る。Edge Wear は殻より前に置く（後ろに置くと剥がれた跡に細かい縞） | 約 0.3 秒 |
 | `granite-buttress.rockgraph` | 花崗岩の岩峰（岩稜） | Base Shape の凸岩峰（傾いた板、稜線の頂）で大きな輪郭を先に作り、主な節理面に吸着した Voronoi で割る。Peel は進行 0.1・稜の効き 1 で稜と頂だけを欠く。Piece Transform のわずかなずれで節理の線、To Volume でまとめる | 約 0.2 秒 |
+| `nasu-blades.rockgraph` | 那須朝日岳の刃の列（傾いた板状節理の露岩） | 横長で低い凸岩峰を Parallel Planes（65°、1.6 m）に吸着した Voronoi で板に割り、Peel（小さな片から）で頂を刃に刻む。Piece Transform のずれは小さく、節理の線は Volume Crack（Planes）で彫る | 約 0.5 秒 |
 | `mushroom-rock.rockgraph` | きのこ岩（台座岩） | 接地させてから Volume Undercut で底の近くを削り、細い台座にする | 約 0.2 秒 |
 | `hoodoo.rockgraph` | フードゥー | 縦長の塊に Volume Undercut の帯を 4 段重ね、Volume Terrace で層の筋 | 約 0.1 秒 |
 | `roche-moutonnee.rockgraph` | 羊背岩（氷河の研磨） | 角張った塊の上流側（-X と上）だけを Volume Smooth と Edge Wear の「集中する向き」で丸める | 約 0.2 秒 |

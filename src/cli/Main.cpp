@@ -502,9 +502,28 @@ int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::
         result["rockInstances"] = instances;
         // 内訳（撒いたノードと岩グラフごと）。山グラフの段ごとの数と推定の被覆率を見るため。
         json sets = json::array();
-        for (const auto& set : evaluation.rockInstances)
-            sets.push_back({{"source", set.source}, {"scene", set.scene}, {"scale", set.scale},
-                            {"instances", set.instances.size()}, {"coverage", set.coverage}});
+        for (const auto& set : evaluation.rockInstances) {
+            json item{{"source", set.source}, {"scene", set.scene}, {"scale", set.scale},
+                      {"instances", set.instances.size()}, {"coverage", set.coverage}};
+            // 置いた点の範囲（地形の外や縁に置いていないかを見るため）。
+            if (!set.instances.empty()) {
+                geometry::Vec3 lo = set.instances[0].position, hi = lo;
+                for (const auto& instance : set.instances) {
+                    lo = {std::min(lo.x, instance.position.x), std::min(lo.y, instance.position.y), std::min(lo.z, instance.position.z)};
+                    hi = {std::max(hi.x, instance.position.x), std::max(hi.y, instance.position.y), std::max(hi.z, instance.position.z)};
+                }
+                item["positionMin"] = {lo.x, lo.y, lo.z};
+                item["positionMax"] = {hi.x, hi.y, hi.z};
+                // 少数なら位置も列挙する（大岩の置き場の確認用）。
+                if (set.instances.size() <= 8) {
+                    json positions = json::array();
+                    for (const auto& instance : set.instances)
+                        positions.push_back({instance.position.x, instance.position.y, instance.position.z});
+                    item["positions"] = std::move(positions);
+                }
+            }
+            sets.push_back(std::move(item));
+        }
         result["rockInstanceSets"] = std::move(sets);
     }
     WriteJson(result, pretty);
