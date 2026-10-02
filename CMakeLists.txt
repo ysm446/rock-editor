@@ -300,20 +300,30 @@ add_custom_command(TARGET rock_editor POST_BUILD
 )
 
 # --- 岩のテンプレート -------------------------------------------------------
-# examples/ai-recipes/ のレシピと一覧（templates.json）、研究ページの画像を実行ファイルの横の templates/ に置く。
-# アプリの「テンプレートから作成」が読む。コピーが無いとき（開発中）はソースのフォルダを使う。
+# examples/ai-recipes/ のレシピと一覧（templates.json）、研究ページの画像（docs/research/<id>/latest.jpg）を
+# 実行ファイルの横の templates/（templates/<id>/latest.jpg）に置く。アプリの「テンプレートから作成」が読む。
+# コピーが無いとき（開発中）はソースのフォルダを使う。
 file(GLOB rock_template_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes/*.rockgraph"
-    "${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes/templates.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/docs/research/images/*.jpg")
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes/templates.json")
+file(GLOB rock_template_images CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/docs/research/*/latest.jpg")
+set(rock_template_image_commands)
+foreach(image ${rock_template_images})
+    get_filename_component(image_folder "${image}" DIRECTORY)
+    get_filename_component(image_id "${image_folder}" NAME)
+    list(APPEND rock_template_image_commands
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:rock_editor>/templates/${image_id}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${image}" "$<TARGET_FILE_DIR:rock_editor>/templates/${image_id}/latest.jpg")
+endforeach()
 add_custom_command(TARGET rock_editor POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:rock_editor>/templates"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${rock_template_files} "$<TARGET_FILE_DIR:rock_editor>/templates"
+    ${rock_template_image_commands}
     COMMENT "岩のテンプレートを配置"
 )
 target_compile_definitions(rock_editor PRIVATE
     ROCK_TEMPLATE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes"
-    ROCK_TEMPLATE_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/docs/research/images")
+    ROCK_TEMPLATE_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/docs/research")
 
 # --- プレビュー用の同梱画像 -----------------------------------------------
 add_custom_command(TARGET rock_editor POST_BUILD
@@ -502,4 +512,4 @@ target_sources(rock_editor_tests PRIVATE src/graph/SurfacePresetGraph.cpp src/io
 # テストはソースのテンプレート（examples/ai-recipes/）が全部読めることを確かめる。
 target_compile_definitions(rock_editor_tests PRIVATE
     ROCK_TEMPLATE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples/ai-recipes"
-    ROCK_TEMPLATE_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/docs/research/images")
+    ROCK_TEMPLATE_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/docs/research")

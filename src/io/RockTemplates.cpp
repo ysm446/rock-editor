@@ -62,7 +62,7 @@ std::vector<RockTemplate> LoadRockTemplates(const RockTemplateFolders& folders, 
             error += (error.empty() ? "" : "\n") + std::string("岩グラフがありません: ") + entry.id;
             continue;
         }
-        const fs::path image = folders.images / FromUtf8(entry.id + ".jpg");
+        const fs::path image = folders.images / FromUtf8(entry.id) / L"latest.jpg";
         if (fs::exists(image, fileError)) entry.image = image;
         templates.push_back(std::move(entry));
     }

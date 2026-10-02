@@ -83,7 +83,7 @@ python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
 
 ## 5. 研究ページを更新する（レシピを足した・直したとき）
 
-`examples/ai-recipes/` のレシピを足したり直したりしたら、`python tools/rock_research_shots.py <名前>` で画像を撮り直し、`docs/research/rocks.md` のその岩の節（状態・課題・履歴）と一覧の表を更新する。履歴には日付と、何を変えて何が効いたか（効かなかったことも）を書く。`docs/reference/rock-catalog.md` の状態も合わせる。新しい種類のレシピを足したら `examples/ai-recipes/templates.json` にも足す（アプリの「テンプレートから作成」に出る）。
+`examples/ai-recipes/` のレシピを足したり直したりしたら、`python tools/rock_research_shots.py <名前>` で画像を撮り直し（`docs/research/<名前>/latest.jpg` を更新し、日時付きの経過の画像も残す）、`docs/research/<名前>/README.md` の「今の状態」（状態・作り方・課題）と「経過」、`docs/research/rocks.md` の一覧の表（状態・次に直したいこと）を更新する。経過には日付と、何を変えて何が効いたか（効かなかったことも）を書く。新しい種類なら `docs/research/<名前>/` を作る（既存のページを写す）。`docs/reference/rock-catalog.md` の状態も合わせる。新しい種類のレシピを足したら `examples/ai-recipes/templates.json` にも足す（アプリの「テンプレートから作成」に出る）。
 
 ## 6. 報告する
 

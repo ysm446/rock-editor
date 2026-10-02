@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 03:10
+更新日時: 2026-10-03 04:30
 
 ## 未リリース
+
+- 岩の研究ページを種類ごとのフォルダ（`docs/research/<レシピ名>/`）に分け、状態・作り方・課題・経過の文と、日時付きの経過の画像を置くようにした。`rocks.md` は一覧の入口。「テンプレートから作成」のサムネイルは `docs/research/<id>/latest.jpg` を使う（旧 `docs/research/images/` は廃止）。
 
 - Voronoi Fracture に「節理面への吸着」（`pieces.snap`）を足した。Points と Planes を両方繋いで有効にすると、Planes の最初の系統の構造面で形を板に分け、板の中を点の Voronoi で割る。節理面が複数の片にまたがる一枚の面になる。`granite-buttress` に組み込んだ。仕様は [Voronoi とピース操作](reference/voronoi-pieces.md)。
 - Piece Select の Peel に「底の後退」（`peelRetreatBase`）を足した。側面の後退の底での割合で、既定 0 は従来どおり。`granite-buttress` は継ぎ目を Volume Close で閉じ、ブロックのずれを小さくして一枚岩に寄せた。

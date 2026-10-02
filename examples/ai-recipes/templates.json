@@ -1,5 +1,5 @@
 {
-  "note": "岩のテンプレートの一覧。アプリの「テンプレートから作成」に出す。グラフは同じフォルダの <id>.rockgraph、画像は docs/research/images/<id>.jpg（研究ページと共有）。状態と説明は docs/research/rocks.md と合わせる。分類「使い方の例」はノードの組み方を見せる例（チュートリアル）で、ノードの note に手順を書く。",
+  "note": "岩のテンプレートの一覧。アプリの「テンプレートから作成」に出す。グラフは同じフォルダの <id>.rockgraph、画像は docs/research/<id>/latest.jpg（研究ページと共有）。状態と説明は docs/research/rocks.md の一覧と docs/research/<id>/README.md に合わせる。分類「使い方の例」はノードの組み方を見せる例（チュートリアル）で、ノードの note に手順を書く。",
   "templates": [
     {
       "id": "blocky",

@@ -10,7 +10,7 @@
 namespace rock::io {
 
 struct RockTemplate {
-    std::string id;           // ファイル名の元（<id>.rockgraph / <id>.jpg）
+    std::string id;           // ファイル名の元（<id>.rockgraph / <id>/latest.jpg）
     std::string name;         // 日本語名
     std::string category;     // 分類（形の骨格、風化・侵食の形 など）
     std::string status;       // ○ / △（研究ページの状態）
@@ -21,7 +21,7 @@ struct RockTemplate {
 
 struct RockTemplateFolders {
     std::filesystem::path graphs;  // templates.json と <id>.rockgraph のあるフォルダ
-    std::filesystem::path images;  // <id>.jpg のあるフォルダ
+    std::filesystem::path images;  // <id>/latest.jpg のあるフォルダ（docs/research か、コピーした templates/）
 };
 
 // 実行ファイルの隣の templates/（ビルドでコピーしたもの）。無ければソースのフォルダ（開発中）。
