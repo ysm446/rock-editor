@@ -247,12 +247,12 @@ void Application::DrawRockAssetLodControls() {
         if (active) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip.c_str());
     };
-    choice("LOD 自動##rockAssetLod", -1, "カメラから見た大きさで段を切り替えます（Rock Asset の「LODnの切替」）");
+    choice("LOD Auto##rockAssetLod", -1, "Switch LODs by on-screen size (Rock Asset \"LOD switch\" thresholds)");
     for (int level = 0; level < count; ++level) {
         ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
         char label[32] = {};
         std::snprintf(label, sizeof(label), "%d##rockAssetLod%d", level, level);
-        choice(label, level, "LOD" + std::to_string(level) + " に固定（" + GroupDigits(m_rockAssetView.triangles[level]) + " 三角形）");
+        choice(label, level, "Lock to LOD" + std::to_string(level) + " (" + GroupDigits(m_rockAssetView.triangles[level]) + " triangles)");
         // 色分け表示のときは、ボタンの下端に段の色を引いて凡例を兼ねる。
         if (lodView) {
             const auto& color = renderer::kLodDebugColors[std::min<size_t>(size_t(level), std::size(renderer::kLodDebugColors) - 1)];
@@ -265,10 +265,10 @@ void Application::DrawRockAssetLodControls() {
     const int shown = std::clamp(m_rockAssetView.shown, 0, count - 1);
     char text[128] = {};
     if (m_rockAssetLodMode < 0)
-        std::snprintf(text, sizeof(text), "LOD%d · %s 三角形 · 画面 %.2f", shown,
+        std::snprintf(text, sizeof(text), "LOD%d · %s tris · screen %.2f", shown,
                       GroupDigits(m_rockAssetView.triangles[shown]).c_str(), RockAssetScreenSize());
     else
-        std::snprintf(text, sizeof(text), "LOD%d · %s 三角形", shown, GroupDigits(m_rockAssetView.triangles[shown]).c_str());
+        std::snprintf(text, sizeof(text), "LOD%d · %s tris", shown, GroupDigits(m_rockAssetView.triangles[shown]).c_str());
     ImGui::SameLine();
     const ImVec2 padding(ui::Scaled(6.0f), ImGui::GetStyle().FramePadding.y);
     const ImVec2 size = ImGui::CalcTextSize(text);
@@ -303,7 +303,7 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
         ImGui::PopStyleColor();
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("ビューポートに何を表示するか");
+        ImGui::SetTooltip("What the viewport shows");
     }
 
     if (ImGui::BeginPopup("##viewportViewMenu")) {
@@ -320,43 +320,43 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
     // FPS / 統計 / グリッド。どれもビューポートに重ねて出すものなので、
     // トップメニューではなくここに置く。切り替えたその場で設定に覚える。
     ImGui::SameLine();
-    if (ImGui::Button("表示")) {
+    if (ImGui::Button("Display")) {
         ImGui::OpenPopup("##viewportDisplayMenu");
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("ビューポートに重ねる情報");
+        ImGui::SetTooltip("Overlays drawn on the viewport");
     }
     if (ImGui::BeginPopup("##viewportDisplayMenu")) {
         io::DisplaySettings& settings = m_settings.Display();
         bool changed = false;
         changed |= ImGui::MenuItem("FPS", nullptr, &settings.showFps);
-        changed |= ImGui::MenuItem("統計", nullptr, &settings.showStats);
-        changed |= ImGui::MenuItem("グリッド（50 m × 50 m / 1 m間隔）", nullptr, &settings.showReferenceGrid);
-        changed |= ImGui::MenuItem("人のシルエット（サイズ比較）", nullptr, &settings.showHumanScale);
-        if (ImGui::BeginMenu("人のシルエット設定")) {
-            ImGui::TextDisabled("岩の右端・底面に配置 / 1 unit = 1 m");
+        changed |= ImGui::MenuItem("Stats", nullptr, &settings.showStats);
+        changed |= ImGui::MenuItem("Grid (50 m x 50 m, 1 m spacing)", nullptr, &settings.showReferenceGrid);
+        changed |= ImGui::MenuItem("Human Silhouette (Scale Reference)", nullptr, &settings.showHumanScale);
+        if (ImGui::BeginMenu("Human Silhouette Settings")) {
+            ImGui::TextDisabled("Placed at the right edge and bottom of the rock / 1 unit = 1 m");
             ImGui::SetNextItemWidth(ui::Scaled(180.0f));
-            ImGui::SliderFloat("身長（m）", &settings.humanScaleHeight, 0.5f, 2.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SliderFloat("Height (m)", &settings.humanScaleHeight, 0.5f, 2.5f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             changed |= ImGui::IsItemDeactivatedAfterEdit();
             ImGui::SetNextItemWidth(ui::Scaled(240.0f));
-            ImGui::DragFloat3("位置補正 XYZ（m）", settings.humanScaleOffset, 0.05f, -1000.0f, 1000.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat3("Offset XYZ (m)", settings.humanScaleOffset, 0.05f, -1000.0f, 1000.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
             changed |= ImGui::IsItemDeactivatedAfterEdit();
-            if (ImGui::Button("身長・位置をリセット")) {
+            if (ImGui::Button("Reset Height and Offset")) {
                 settings.humanScaleHeight = 1.7f;
                 for (float& value : settings.humanScaleOffset) value = 0.0f;
                 changed = true;
             }
             ImGui::EndMenu();
         }
-        changed |= ImGui::MenuItem("UVチェッカー", nullptr, &settings.showUvChecker);
-        changed |= ImGui::MenuItem("ワイヤーフレームを重ねる", nullptr, &settings.showWireframeOverlay);
+        changed |= ImGui::MenuItem("UV Checker", nullptr, &settings.showUvChecker);
+        changed |= ImGui::MenuItem("Wireframe Overlay", nullptr, &settings.showWireframeOverlay);
         // 法線は頂点に焼くので、切り替えると SyncMeshGraph がメッシュを作り直す。
-        changed |= ImGui::MenuItem("スムーズシェーディング", nullptr, &settings.smoothShading);
+        changed |= ImGui::MenuItem("Smooth Shading", nullptr, &settings.smoothShading);
         // 折れ角。隣の面との角度がこれ以上の辺は法線を分けて折れ目を残す。スライダーを離した時点で保存する。
         ImGui::SetNextItemWidth(ui::Scaled(160.0f));
-        ImGui::SliderFloat("折れ角（度）", &settings.smoothShadingAngle, 0.0f, 180.0f, "%.0f");
+        ImGui::SliderFloat("Crease Angle (deg)", &settings.smoothShadingAngle, 0.0f, 180.0f, "%.0f");
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("隣の面との角度がこれ以上の辺は折れ目を残します。小さいほど稜線が残り、大きいほど全体が丸く見えます。");
+            ImGui::SetTooltip("Edges whose faces meet at this angle or more stay sharp. Smaller keeps more ridges; larger looks rounder.");
         settings.smoothShadingAngle = std::clamp(settings.smoothShadingAngle, 0.0f, 180.0f);
         changed |= ImGui::IsItemDeactivatedAfterEdit();
         if (changed) {
@@ -389,6 +389,8 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
     // **右上へ置く。** 左上は表示モードの切り替えとライトの数値で埋まっている。
     // ボタンではなく描き込みにする。押すものではないので、枠を持たせない。
     const io::DisplaySettings& display = m_settings.Display();
+    // GPU 時間は統計を出しているときだけ測る（次のフレームから効く）。
+    m_renderer.EnableGpuTiming(display.showStats);
     if (!display.showFps && !display.showStats) {
         return;
     }
@@ -408,24 +410,32 @@ void Application::DrawViewportOverlay(const ImVec2& viewportMin, const ImVec2& v
     if (display.showStats) {
         const renderer::RenderStats& stats = m_renderer.Stats();
         char text[96] = {};
-        std::snprintf(text, sizeof(text), "ドローコール %u", stats.drawCalls);
+        // フレーム全体（CPU と GPU 待ちを含む）と、ビューポートの描画にかかった GPU の時間。
+        const float framerate = ImGui::GetIO().Framerate;
+        std::snprintf(text, sizeof(text), "Frame %.2f ms", framerate > 0.0f ? 1000.0f / framerate : 0.0f);
         lines.emplace_back(text);
-        std::snprintf(text, sizeof(text), "頂点 %s", GroupDigits(stats.vertices).c_str());
+        if (const double gpuMs = m_renderer.GpuFrameMs(); gpuMs > 0.0) {
+            std::snprintf(text, sizeof(text), "GPU (viewport) %.2f ms", gpuMs);
+            lines.emplace_back(text);
+        }
+        std::snprintf(text, sizeof(text), "Draw calls %u", stats.drawCalls);
+        lines.emplace_back(text);
+        std::snprintf(text, sizeof(text), "Vertices %s", GroupDigits(stats.vertices).c_str());
         lines.emplace_back(text);
         // テセレーション中は、三角形はドメインシェーダが決めるので CPU では分からない。
         // **数えられないものを数えたふりをしない。** 投入したパッチ数と上限を出す。
         if (stats.tessellation) {
-            std::snprintf(text, sizeof(text), "パッチ %s (x%.0f まで)",
+            std::snprintf(text, sizeof(text), "Patches %s (up to x%.0f)",
                           GroupDigits(stats.patches).c_str(), stats.tessellationFactor);
         } else {
             // 描画した三角形は、影のカスケード（最大4回）ぶん重なって数えられる。メッシュそのものの数と分けて出す。
-            std::snprintf(text, sizeof(text), "描画三角形 %s（影を含む）", GroupDigits(stats.triangles).c_str());
+            std::snprintf(text, sizeof(text), "Drawn triangles %s (incl. shadows)", GroupDigits(stats.triangles).c_str());
         }
         lines.emplace_back(text);
         if (!m_rockTriangleCounts.empty()) {
             uint64_t meshTriangles = 0;
             for (const auto count : m_rockTriangleCounts) meshTriangles += count;
-            std::snprintf(text, sizeof(text), "メッシュ三角形 %s", GroupDigits(meshTriangles).c_str());
+            std::snprintf(text, sizeof(text), "Mesh triangles %s", GroupDigits(meshTriangles).c_str());
             lines.emplace_back(text);
         }
         // VRAM はプロセス全体の使用量とバジェット。合成の解像度を上げたときに
@@ -630,7 +640,7 @@ void Application::DrawFlySpeed(const ImVec2& viewportMin, const ImVec2& viewport
     if (ImGui::GetTime() >= m_fly.speedShownUntil) return;
     char text[64] = {};
     const float speed = FlySpeed();
-    std::snprintf(text, sizeof(text), speed < 10.0f ? "フライの速さ %.2f m/s" : "フライの速さ %.0f m/s", speed);
+    std::snprintf(text, sizeof(text), speed < 10.0f ? "Fly speed %.2f m/s" : "Fly speed %.0f m/s", speed);
     const ImVec2 size = ImGui::CalcTextSize(text);
     const float pad = ui::Scaled(6.0f);
     const ImVec2 min((viewportMin.x + viewportMax.x - size.x) * 0.5f - pad,
@@ -791,7 +801,7 @@ void Application::DrawLightGizmoAt(const renderer::LightSettings& light, const L
 
     // いまの値。掴んだまま数字を確かめられるようにする。
     char text[64] = {};
-    std::snprintf(text, sizeof(text), "方位角 %.0f 度   仰角 %.0f 度",
+    std::snprintf(text, sizeof(text), "Azimuth %.0f deg   Elevation %.0f deg",
                   RadiansToDegrees(light.azimuth), RadiansToDegrees(light.elevation));
     const ImVec2 textSize = ImGui::CalcTextSize(text);
     const ImVec2 padding(ui::Scaled(8.0f), ui::Scaled(5.0f));

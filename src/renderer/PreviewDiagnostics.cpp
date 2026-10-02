@@ -43,6 +43,7 @@ bool PreviewDiagnostics::Initialize(rhi::Device& device) {
         ROCK_LOG_ERROR("プレビューGPU計測を初期化できませんでした");
         Shutdown(device);
         m_enabled = false;
+        m_timing = false;
         return false;
     }
     return true;
@@ -50,7 +51,7 @@ bool PreviewDiagnostics::Initialize(rhi::Device& device) {
 
 void PreviewDiagnostics::Begin(rhi::Device& device, ID3D12GraphicsCommandList* commands) {
     m_recording = false;
-    if (!m_enabled || !Initialize(device)) return;
+    if ((!m_enabled && !m_timing) || !Initialize(device)) return;
     if (m_dirty) ResetScene(device);
     CollectProbe(device);
     auto& frame = m_frames[device.FrameIndex()];
@@ -66,6 +67,8 @@ void PreviewDiagnostics::Begin(rhi::Device& device, ID3D12GraphicsCommandList* c
             m_timestamps.resource->Unmap(0, &written);
             if (ticks[1] >= ticks[0]) {
                 const double ms = static_cast<double>(ticks[1] - ticks[0]) * 1000.0 / static_cast<double>(m_frequency);
+                // 統計の表示用。毎フレームの揺れで数字が読めないので、ならして持つ。
+                m_gpuMs = m_gpuMs > 0 ? m_gpuMs * 0.9 + ms * 0.1 : ms;
                 // 初回のパイプライン準備・材質切替直後の値を定常描画の集計へ入れない。
                 if (++m_warmup > 8) {
                     if (m_samples == 0) m_minMs = m_maxMs = ms;
@@ -93,7 +96,7 @@ void PreviewDiagnostics::End(rhi::Device& device, ID3D12GraphicsCommandList* com
     m_frames[slot] = {device.NextFenceValue(), ready};
     PIXEndEvent(commands);
     m_recording = false;
-    if (m_samples >= 30) {
+    if (m_enabled && m_samples >= 30) {
         const auto memory = device.QueryVideoMemory();
         ROCK_LOG_INFO("プレビューGPU: %u samples, %ux%u, tess=%u, mean=%.3f ms, min=%.3f ms, max=%.3f ms, VRAM usage=%llu allocated=%llu bytes",
                     m_samples, width, height, tessellation ? 1u : 0u, m_totalMs / m_samples, m_minMs, m_maxMs,

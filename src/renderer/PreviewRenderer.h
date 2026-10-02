@@ -364,6 +364,9 @@ public:
     }
     // 直前のフレームの描画の量。
     void EnableDiagnostics(bool enabled) { m_diagnostics.SetEnabled(enabled); }
+    // 統計に出す GPU 時間（ビューポートの描画、ms）を測るか。測っていなければ 0。
+    void EnableGpuTiming(bool enabled) { m_diagnostics.SetTiming(enabled); }
+    double GpuFrameMs() const { return m_diagnostics.GpuMs(); }
     const RenderStats& Stats() const { return m_stats; }
     // 道路の材質の合成解像度。作り直しは GPU 待機を伴うのでフレームの外で行う（`ProcessPendingWork`）。
     uint32_t MaterialResolution() const { return m_materialResolution; }

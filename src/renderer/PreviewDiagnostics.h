@@ -12,6 +12,9 @@ namespace rock::renderer {
 class PreviewDiagnostics {
 public:
     void SetEnabled(bool enabled) { m_enabled = enabled; }
+    // ビューポートの統計に出す GPU 時間だけを測る（ログは書かない）。数フレーム遅れの値をならして持つ。
+    void SetTiming(bool timing) { m_timing = timing; }
+    double GpuMs() const { return m_gpuMs; }
     void Invalidate() { m_dirty = true; }
     void ResetScene(rhi::Device& device);
     void Shutdown(rhi::Device& device);
@@ -30,6 +33,8 @@ private:
         bool valid = false;
     };
     bool m_enabled = false;
+    bool m_timing = false;
+    double m_gpuMs = 0;
     bool m_dirty = false;
     bool m_recording = false;
     rhi::ComPtr<ID3D12QueryHeap> m_queries;

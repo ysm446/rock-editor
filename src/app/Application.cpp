@@ -858,6 +858,24 @@ void Application::DrawStatusBar() {
                 }
             }
 
+            // --- 右: 直近の岩グラフの評価にかかった時間 -----------------------
+            // 評価の開始から結果をビューポートへ渡し終えるまで。評価のたびに更新し、次の評価まで残す。
+            if (m_lastEvaluationMs >= 0.0 && !m_pieceUpdating) {
+                char text[48] = {};
+                if (m_lastEvaluationMs < 10000.0)
+                    std::snprintf(text, sizeof(text), "評価 %.0f ms", m_lastEvaluationMs);
+                else
+                    std::snprintf(text, sizeof(text), "評価 %.1f 秒", m_lastEvaluationMs / 1000.0);
+                const float width = ImGui::CalcTextSize(text).x;
+                const float right = ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().ItemSpacing.x;
+                if (right - width > ImGui::GetCursorPosX()) {
+                    ImGui::SetCursorPosX(right - width);
+                    ImGui::TextDisabled("%s", text);
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("直近の岩グラフの評価にかかった時間（評価の開始から結果をビューポートへ渡し終えるまで）");
+                }
+            }
+
             ImGui::EndMenuBar();
         }
     }

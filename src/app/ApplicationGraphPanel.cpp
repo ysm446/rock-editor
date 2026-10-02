@@ -331,9 +331,11 @@ std::string Application::EvaluationProgressText() const {
     // xatlas の「島へ分割」は、メッシュ1つにつき 0% と 100% しか通知しない。0% のまま長く待つので、
     // 進み具合が分かる段階だけ百分率を出し、どの段階でも経過時間を添える。
     if (percent > 0) text += " " + std::to_string(percent) + "%";
-    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - m_pieceTaskStart).count();
-    if (seconds >= 2) text += "・" + std::to_string(seconds) + "秒";
-    return text;
+    // 経過時間は最初から出す（どれだけ待っているかを常に見えるようにする）。
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - m_pieceTaskStart).count();
+    char elapsed[32] = {};
+    std::snprintf(elapsed, sizeof(elapsed), "・%.1f秒", seconds);
+    return text + elapsed;
 }
 
 void Application::DrawBakedTextureTiles(const graph::MaterialBakeSettings& bake) {
@@ -490,6 +492,7 @@ void Application::SyncMeshGraph() {
             m_pieceStop = std::stop_source{};
             m_pieceProgress = std::make_shared<graph::RockEvaluationProgress>();
             m_pieceTaskStart = std::chrono::steady_clock::now();
+            m_evaluationStart = m_pieceTaskStart;
             PrepareMaterialHeights();
             m_pieceTask = std::async(std::launch::async, [snapshot=m_graph, previewMeshNode, selected=m_selectedGraphNode,
                 method=m_settings.Display().sdfPreviewMethod, cache=m_rockEvaluationCache, stop=m_pieceStop.get_token(),
@@ -520,6 +523,7 @@ void Application::SyncMeshGraph() {
     } else {
         m_pieceStop.request_stop();
         m_pieceUpdating = false; m_pieceInput.reset();
+        m_evaluationStart = std::chrono::steady_clock::now();
         evaluated = graph::EvaluateRocks(m_graph, previewMeshNode, &m_rockEvaluationCache, m_settings.Display().sdfPreviewMethod);
     }
     m_piecePreview = evaluated.pieces;
@@ -730,6 +734,7 @@ void Application::SyncMeshGraph() {
     });
     m_meshGraphRevision = m_graph.Revision();
     m_meshGraphPreviewNode = previewMeshNode;
+    m_lastEvaluationMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - m_evaluationStart).count();
 }
 
 // 選択中のノードを控える。

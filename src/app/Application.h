@@ -197,6 +197,10 @@ private:
     // 評価スレッドが書き、UI が読む。いま計算しているノードと段階。
     std::shared_ptr<graph::RockEvaluationProgress> m_pieceProgress;
     std::chrono::steady_clock::time_point m_pieceTaskStart{};
+    // 岩グラフの評価の開始時刻と、直近の評価にかかった時間（評価の開始から結果をビューポートへ渡し終えるまで、ms）。
+    // ステータスバーの右端に出す。まだ評価していなければ負。
+    std::chrono::steady_clock::time_point m_evaluationStart{};
+    double m_lastEvaluationMs = -1;
     // 計算中のノード（無ければ 0）と、「UV Unwrap: 島を配置中 42%・12秒」のような表示文。
     graph::GraphId EvaluatingNode() const;
     std::string EvaluationProgressText() const;
