@@ -28,6 +28,10 @@ struct ScatterSettings {
 };
 struct VoronoiSettings {
     std::array<float, 3> rotation{0, 0, 0}, stretch{1, 1, 1};
+    // 節理面への吸着。Points と Planes を両方繋いだとき、最初の系統の構造面で形を板に分け、板の中を点の Voronoi で
+    // 割る（板 ∩ Voronoi）。節理面は通り抜ける一枚の面になり、板の中は不規則な多面体（点の Voronoi の不規則さと、
+    // 複数の片にまたがる平らな節理面の両立）。点の無い板はできない（隣の板に併せる）。
+    bool snap = false;
     int version = 1;
     bool operator==(const VoronoiSettings &) const = default;
 };
@@ -119,6 +123,9 @@ struct PieceSelectSettings {
     // peel 用。側面の後退（m、0 で無効）。元の側面から横へ削れる深さを「後退 × 高さ（0 が底、1 が頂）」までにする。
     // 周りの地面が下がるにつれ上ほど早く地表に出て長く側面から削られたことを表し、上ほど細くなる。芯は削り切らない。
     float peelRetreat = 0;
+    // peel 用。底の後退（0～1）。側面の後退の、底での割合。0 で底は削れず（従来）、1 で底も頂と同じ深さまで削れる。
+    // 元の岩体の底の外周（箱の角）が裾に残るのを防ぐ。
+    float peelRetreatBase = 0;
     int producer = 0;
     uint64_t generation = 0;
     std::vector<uint32_t> ids;
@@ -156,9 +163,10 @@ uint64_t MeshFingerprint(const Mesh &mesh);
 PieceCollection MakeLayeredBoxes(const LayeredBoxesSettings&, int producer, std::string&, std::stop_token = {});
 PointSet ScatterPoints(const Mesh &, const ScatterSettings &, std::string &, std::stop_token = {});
 PointSet ScatterPiecePoints(const PieceCollection&, const ScatterSettings&, std::string&, std::stop_token = {});
-PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSettings &, int producer,
-                                std::string &, std::stop_token = {});
 struct StructurePlanes;
+// snap に Parallel Planes の系統を渡し settings.snap が真なら、最初の系統の板 ∩ 点の Voronoi で割る（無ければ従来の Voronoi）。
+PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSettings &, int producer,
+                                std::string &, std::stop_token = {}, const std::vector<StructurePlanes> *snap = nullptr);
 // 構造面（Parallel Planes を連結した系統）で凸な Mesh を割る。全系統の板の重なりが 1 ピース（節理で区切られた
 // ブロック）。隣接情報は 1 回の分割で揃うので、Piece Select の外周からの侵食（Peel）に使える。
 PieceCollection FracturePlanes(const Mesh &, const std::vector<StructurePlanes> &, int producer, std::string &,

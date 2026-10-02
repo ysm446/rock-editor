@@ -6,6 +6,7 @@
 #include <cmath>
 #include <execution>
 #include <map>
+#include <numbers>
 #include <limits>
 #include <numeric>
 #include <set>
@@ -134,10 +135,17 @@ bool Source(const Mesh &mesh, Poly &poly, std::vector<Plane> &planes, D &origin,
 }
 // 並列に切り出した片1つ分の結果。
 enum PieceError : uint8_t { PieceOk, PieceCancelled, PieceOpenCut, PieceTooSmall };
+// 吸着（板 ∩ Voronoi）の板の面。隣は複数の片なので、面の多角形を取っておいて後で交差面積から隣接を作る。
+constexpr int kSlabLower = -2, kSlabUpper = -3;
+struct SlabFace {
+    bool upper = false;
+    std::vector<D> vertices;  // 局所の正規化座標
+};
 struct Built {
     Piece piece;
     double volume = 0;
     PieceError error = PieceOk;
+    std::vector<SlabFace> slabFaces;
 };
 // 切り出した凸多面体 1 つからピースを作る（メッシュ・隣接面の面積・体積・重心）。
 // 面の neighbor は隣のピースの番号（Voronoi では点の番号、構造面では仮のセル番号）。
@@ -172,7 +180,12 @@ void BuildPiece(const Poly &poly, D origin, double scale, uint32_t pieceId, Buil
         if (Length(area) > scale*scale*1e-12) {
             const std::array<double,3> vector{area.x,area.y,area.z};
             if (face.neighbor >= 0) neighborhood->contacts.push_back({uint32_t(face.neighbor),vector});
-            else neighborhood->boundary.push_back(vector);
+            else if (face.neighbor == kSlabLower || face.neighbor == kSlabUpper) {
+                SlabFace slab;
+                slab.upper = face.neighbor == kSlabUpper;
+                for (auto id : face.ids) slab.vertices.push_back(poly.vertices[id]);
+                out.slabFaces.push_back(std::move(slab));
+            } else neighborhood->boundary.push_back(vector);
         }
         outer |= face.outer;
     }
@@ -593,7 +606,7 @@ PointSet ScatterPiecePoints(const PieceCollection& pieces, const ScatterSettings
     return out;
 }
 PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const VoronoiSettings &s,
-                                int producer, std::string &error, std::stop_token stop) {
+                                int producer, std::string &error, std::stop_token stop, const std::vector<StructurePlanes> *snap) {
     error.clear();
     if (points.grouped || points.source != MeshFingerprint(mesh) || points.positions.size() < 2 ||
         points.positions.size() > MaxScatterPoints || s.version != 1) {
@@ -622,9 +635,10 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
     double scale;
     if (!Source(mesh, initial, sourcePlanes, origin, scale, error, stop))
         return {};
-    std::vector<D> sites;
+    std::vector<D> sites, locals;
     for (auto p : points.positions) {
         D local = (V(p) - origin) * (1 / scale);
+        locals.push_back(local);
         if (!std::isfinite(local.x) || !std::isfinite(local.y) || !std::isfinite(local.z)) {
             error = "点が不正です";
             return {};
@@ -642,6 +656,52 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
                 return {};
             }
         sites.push_back(q);
+    }
+    // 吸着（板 ∩ Voronoi）: 最初の系統の構造面（局所の正規化座標）で形を板に分け、各点を板に振り分ける。
+    // ワールドの面 n·x = offset は、x = origin + scale·q で n·q = (offset − n·origin) / scale。
+    // 点の無い板ができないように、面は「その面より下（直前に残した面より上）に点がある」ものだけ残す。
+    // こうすると板ごとに点の Voronoi が板全体を覆い、隙間も重なりもできない（片の集まりは元の形の分割）。
+    const bool snapping = snap && !snap->empty() && s.snap;
+    D slabNormal{0, 1, 0};
+    std::vector<double> slabPlanes;        // 残した面の位置（昇順）
+    std::vector<int> slabOf(sites.size(), 0);
+    if (snapping) {
+        MeshInfo info;
+        InspectMesh(mesh, info);
+        const auto &set = snap->front();
+        std::string expandError;
+        const auto expanded = ExpandParallelPlanes(set, info.minimum, info.maximum, expandError);
+        if (!expandError.empty()) {
+            error = expandError;
+            return {};
+        }
+        D normal = V(set.normal);
+        const auto clean = [](double v) { return std::abs(v) < 1e-6 ? 0.0 : v; };
+        normal = {clean(normal.x), clean(normal.y), clean(normal.z)};
+        const double length = Length(normal);
+        if (!(length > 0)) {
+            error = "吸着する構造面の向きが不正です";
+            return {};
+        }
+        slabNormal = normal * (1 / length);
+        std::vector<double> candidates;
+        for (const auto &plane : expanded) candidates.push_back((double(plane.offset) - Dot(slabNormal, origin)) / scale);
+        std::sort(candidates.begin(), candidates.end());
+        std::vector<double> offsets;
+        for (const auto &q : locals) offsets.push_back(Dot(slabNormal, q));
+        std::sort(offsets.begin(), offsets.end());
+        double last = -std::numeric_limits<double>::infinity();
+        for (double d : candidates) {
+            // 直前に残した面以上、この面より下に点があれば残す（点が面の上にあれば上の板に属する）。
+            const auto lower = std::lower_bound(offsets.begin(), offsets.end(), last);
+            if (lower != offsets.end() && *lower < d) {
+                slabPlanes.push_back(d);
+                last = d;
+            }
+        }
+        while (!slabPlanes.empty() && offsets.back() < slabPlanes.back()) slabPlanes.pop_back();
+        for (size_t i = 0; i < sites.size(); ++i)
+            slabOf[i] = int(std::upper_bound(slabPlanes.begin(), slabPlanes.end(), Dot(slabNormal, locals[i])) - slabPlanes.begin());
     }
     // i の片を j 側から切る二等分面。点数の2乗の表は持たず、使う面だけその場で作る。
     // 差と符号の反転は浮動小数でも厳密なので、cut(j, i) は cut(i, j) の裏返しと一致する。
@@ -667,6 +727,11 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         hash.Float(v);
     for (auto v : s.stretch)
         hash.Float(v);
+    if (snapping) {
+        hash.Add(1);
+        hash.Float(float(slabNormal.x)); hash.Float(float(slabNormal.y)); hash.Float(float(slabNormal.z));
+        for (double d : slabPlanes) hash.Float(float(d));
+    }
     for (auto p : points.positions) {
         hash.Float(p.x);
         hash.Float(p.y);
@@ -692,6 +757,15 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         if (stop.stop_requested())
             return fail(PieceCancelled);
         auto poly = initial;
+        // 吸着: 先に自分の板の上下の面で切る（隣は複数の片なので面の多角形だけ取っておく）。
+        if (snapping) {
+            const int slab = slabOf[i];
+            if (slab > 0 && !Clip(poly, Plane{{-slabNormal.x, -slabNormal.y, -slabNormal.z}, -slabPlanes[size_t(slab) - 1]}, kSlabLower))
+                return fail(PieceOpenCut);
+            if (size_t(slab) < slabPlanes.size() && !Clip(poly, Plane{slabNormal, slabPlanes[size_t(slab)]}, kSlabUpper))
+                return fail(PieceOpenCut);
+            Compact(poly);
+        }
         // 近い点から順に切り、片の半径 R の2倍より遠い点で打ち切る。
         // 距離 L > 2R の点との二等分面は、片のどの頂点からも i のほうが近いので切らない。
         // これで片ごとの切断は全点ではなく近傍の点の数で済む。
@@ -715,6 +789,9 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         for (auto [distance, j] : nearby) {
             if (std::sqrt(distance) > reach * (1 + 1e-6) + 1e-9)
                 break;
+            // 吸着: 別の板の点とは板の面で既に分かれている。
+            if (snapping && slabOf[j] != slabOf[i])
+                continue;
             const auto vertices = poly.vertices.size();
             const auto faces = poly.faces.size();
             if (!Clip(poly, cut(i, j), int(j)))
@@ -727,6 +804,94 @@ PieceCollection FractureVoronoi(const Mesh &mesh, const PointSet &points, const 
         }
         BuildPiece(poly, origin, scale, uint32_t(i), built[i]);
     });
+    // 吸着: 板の面を挟んで隣り合う片の隣接を、面の多角形の交差面積から作る（面は複数の片と接する）。
+    if (snapping) {
+        // 面上の 2 次元座標。
+        D u = Cross(std::abs(slabNormal.y) < .9 ? D{0, 1, 0} : D{1, 0, 0}, slabNormal);
+        u = u * (1 / Length(u));
+        const D v = Cross(slabNormal, u);
+        struct Flat {
+            size_t site;
+            std::vector<std::array<double, 2>> points;
+            std::array<double, 2> low{}, high{};
+        };
+        const auto flatten = [&](size_t site, const SlabFace &face) {
+            Flat flat{site, {}, {std::numeric_limits<double>::max(), std::numeric_limits<double>::max()},
+                      {-std::numeric_limits<double>::max(), -std::numeric_limits<double>::max()}};
+            for (const auto &p : face.vertices) {
+                const std::array<double, 2> q{Dot(p, u), Dot(p, v)};
+                flat.points.push_back(q);
+                for (int k = 0; k < 2; ++k) {
+                    flat.low[k] = std::min(flat.low[k], q[k]);
+                    flat.high[k] = std::max(flat.high[k], q[k]);
+                }
+            }
+            double signedArea = 0;
+            for (size_t k = 0; k < flat.points.size(); ++k) {
+                const auto &a = flat.points[k], &b = flat.points[(k + 1) % flat.points.size()];
+                signedArea += a[0] * b[1] - a[1] * b[0];
+            }
+            if (signedArea < 0) std::reverse(flat.points.begin(), flat.points.end());
+            return flat;
+        };
+        // 凸多角形どうしの交差（Sutherland–Hodgman）の面積。
+        const auto overlap = [](const Flat &a, const Flat &b) {
+            for (int k = 0; k < 2; ++k)
+                if (a.high[k] <= b.low[k] || b.high[k] <= a.low[k]) return 0.0;
+            std::vector<std::array<double, 2>> poly = a.points, next;
+            for (size_t e = 0; e < b.points.size() && !poly.empty(); ++e) {
+                const auto &p = b.points[e], &q = b.points[(e + 1) % b.points.size()];
+                const auto side = [&](const std::array<double, 2> &x) { return (q[0] - p[0]) * (x[1] - p[1]) - (q[1] - p[1]) * (x[0] - p[0]); };
+                next.clear();
+                for (size_t k = 0; k < poly.size(); ++k) {
+                    const auto &cur = poly[k], &prev = poly[(k + poly.size() - 1) % poly.size()];
+                    const double sc = side(cur), sp = side(prev);
+                    if (sc >= 0) {
+                        if (sp < 0) {
+                            const double t = sp / (sp - sc);
+                            next.push_back({prev[0] + (cur[0] - prev[0]) * t, prev[1] + (cur[1] - prev[1]) * t});
+                        }
+                        next.push_back(cur);
+                    } else if (sp >= 0) {
+                        const double t = sp / (sp - sc);
+                        next.push_back({prev[0] + (cur[0] - prev[0]) * t, prev[1] + (cur[1] - prev[1]) * t});
+                    }
+                }
+                poly.swap(next);
+            }
+            double area = 0;
+            for (size_t k = 0; k < poly.size(); ++k) {
+                const auto &x = poly[k], &y = poly[(k + 1) % poly.size()];
+                area += x[0] * y[1] - x[1] * y[0];
+            }
+            return std::abs(area) * .5;
+        };
+        // 面ごとに、下の板の上面と上の板の下面を集める。
+        std::vector<std::vector<Flat>> lowerSide(slabPlanes.size() + 1), upperSide(slabPlanes.size() + 1);
+        for (size_t i = 0; i < built.size(); ++i) {
+            if (built[i].error != PieceOk || !built[i].piece.mesh) continue;
+            for (const auto &face : built[i].slabFaces) {
+                const int slab = slabOf[i];
+                if (face.upper && size_t(slab) < slabPlanes.size()) lowerSide[size_t(slab)].push_back(flatten(i, face));
+                if (!face.upper && slab > 0) upperSide[size_t(slab) - 1].push_back(flatten(i, face));
+            }
+        }
+        std::vector<std::vector<PieceContact>> extra(built.size());
+        for (size_t k = 0; k < slabPlanes.size(); ++k)
+            for (const auto &below : lowerSide[k])
+                for (const auto &above : upperSide[k]) {
+                    const double area = overlap(below, above) * scale * scale;
+                    if (area <= scale * scale * 1e-12) continue;
+                    extra[below.site].push_back({uint32_t(above.site), {slabNormal.x * area, slabNormal.y * area, slabNormal.z * area}});
+                    extra[above.site].push_back({uint32_t(below.site), {-slabNormal.x * area, -slabNormal.y * area, -slabNormal.z * area}});
+                }
+        for (size_t i = 0; i < built.size(); ++i) {
+            if (extra[i].empty() || !built[i].piece.neighborhood) continue;
+            auto neighborhood = std::make_shared<PieceNeighborhood>(*built[i].piece.neighborhood);
+            neighborhood->contacts.insert(neighborhood->contacts.end(), extra[i].begin(), extra[i].end());
+            built[i].piece.neighborhood = std::move(neighborhood);
+        }
+    }
     if (!CollectPieces(built, mesh, out, error))
         return {};
     out.adjacencyComplete=true;

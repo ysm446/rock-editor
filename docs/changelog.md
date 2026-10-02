@@ -1,9 +1,12 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 00:10
+更新日時: 2026-10-03 03:10
 
 ## 未リリース
+
+- Voronoi Fracture に「節理面への吸着」（`pieces.snap`）を足した。Points と Planes を両方繋いで有効にすると、Planes の最初の系統の構造面で形を板に分け、板の中を点の Voronoi で割る。節理面が複数の片にまたがる一枚の面になる。`granite-buttress` に組み込んだ。仕様は [Voronoi とピース操作](reference/voronoi-pieces.md)。
+- Piece Select の Peel に「底の後退」（`peelRetreatBase`）を足した。側面の後退の底での割合で、既定 0 は従来どおり。`granite-buttress` は継ぎ目を Volume Close で閉じ、ブロックのずれを小さくして一枚岩に寄せた。
 
 - Flow Mask ノードを足した。表面を重力で流れ下る水の筋（流れの量）を UV のマスクにする（鉄錆・汚れの流れた筋、濡れ跡）。入力は UV 付きの Mesh と、筋を追う格子の Volume（任意）。仕様は [Flow Mask](reference/flow-mask.md)。レシピ `rust-streaks` を足した。
 - レシピ `conglomerate` / `breccia` に、Volume Diff Mask（足した所）で礫だけを基質と別の色に塗る組み方を入れた（Surface の定数色）。

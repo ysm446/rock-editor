@@ -16,7 +16,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
         return {{"count", s->count}, {"seed", s->seed}, {"version", s->version}, {"planar",s->planar},
                 {"clustering", s->clustering}, {"clusterScale", s->clusterScale}, {"heightGradient", s->heightGradient}};
     if (auto *s = std::get_if<VoronoiSettings>(&node.settings))
-        return {{"rotation", s->rotation}, {"stretch", s->stretch}, {"version", s->version}};
+        return {{"rotation", s->rotation}, {"stretch", s->stretch}, {"snap", s->snap}, {"version", s->version}};
     if (auto *s = std::get_if<PieceFilterSettings>(&node.settings))
         return {{"keep", s->keep}};
     if (auto *s = std::get_if<PieceSelectSettings>(&node.settings))
@@ -31,7 +31,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
                 {"invert", s->invert},
                 {"layer",s->layer},
                 {"rimLayers",s->rimLayers}, {"rimSide",s->rimSide}, {"rimFalloff",s->rimFalloff},
-                {"peelNoise",s->peelNoise}, {"protectCore",s->protectCore}, {"grounded",s->grounded}, {"peelSize",s->peelSize}, {"stability",s->stability}, {"peelRetreat",s->peelRetreat},
+                {"peelNoise",s->peelNoise}, {"protectCore",s->protectCore}, {"grounded",s->grounded}, {"peelSize",s->peelSize}, {"stability",s->stability}, {"peelRetreat",s->peelRetreat}, {"peelRetreatBase",s->peelRetreatBase},
                 {"producer", s->producer},
                 {"generation", std::to_string(s->generation)},
                 {"ids", s->ids}};
@@ -113,6 +113,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
     if (auto *s = std::get_if<VoronoiSettings>(&node.settings)) {
         read(value, "rotation", s->rotation);
         read(value, "stretch", s->stretch);
+        read(value, "snap", s->snap);
         read(value, "version", s->version);
     }
     if (auto *s = std::get_if<PieceFilterSettings>(&node.settings))
@@ -140,6 +141,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "peelSize",s->peelSize);
         read(value, "stability",s->stability);
         read(value, "peelRetreat",s->peelRetreat);
+        read(value, "peelRetreatBase",s->peelRetreatBase);
         read(value, "producer", s->producer);
         generation(s->generation);
         read(value, "ids", s->ids);

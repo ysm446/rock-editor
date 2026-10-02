@@ -43,6 +43,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
     if (!std::isfinite(s.peelRetreat) || s.peelRetreat<0 || s.peelRetreat>1000) {
         error="側面の後退は0〜1000 mにしてください"; return {};
     }
+    if (!std::isfinite(s.peelRetreatBase) || s.peelRetreatBase<0 || s.peelRetreatBase>1) {
+        error="底の後退は0〜1にしてください"; return {};
+    }
     // 大きさの効き: 体積を最大の片で割った値（0～1）を順位に足す。大きな片ほど後まで残る。
     double largest=0;
     for (const auto& p:c.pieces) largest=std::max(largest,p.volume);
@@ -151,7 +154,9 @@ PieceSelection PeelPieces(const PieceCollection& c, const PieceSelectSettings& s
                     nearest=std::min(nearest,x*x+y*y+z*z);
                 }
                 const double height=high>low ? (centers[i][1]-low)/(high-low) : 0;
-                state[i].tooDeep=std::sqrt(nearest)>s.peelRetreat*height*(1+state[i].noise);
+                // 底の後退: 底でも後退 × 底の後退まで削れる（底の外周の角を残さない）。
+                const double reach=s.peelRetreat*(s.peelRetreatBase+(1-s.peelRetreatBase)*height);
+                state[i].tooDeep=std::sqrt(nearest)>reach*(1+state[i].noise);
             }
     }
 

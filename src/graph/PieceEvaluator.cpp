@@ -59,9 +59,33 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
         } else {
             const bool hasPoints = node.inputs.size() > 1 && graph.FindUpstreamNodeForPin(node.inputs[1].id);
             const bool hasPlanes = node.inputs.size() > 2 && graph.FindUpstreamNodeForPin(node.inputs[2].id);
-            if (hasPoints && hasPlanes)
-                return fail("Points と Planes はどちらか一方だけを接続してください");
-            if (hasPlanes) {
+            const auto &voronoiSettings = std::get<geometry::VoronoiSettings>(node.settings);
+            if (hasPoints && hasPlanes && !voronoiSettings.snap)
+                return fail("Points と Planes を両方繋ぐときは「節理面への吸着」を有効にしてください（Planes だけで割るなら Points を外す）");
+            if (hasPoints && hasPlanes) {
+                // 吸着: Points の Voronoi を、Planes の構造面に吸着させて割る。
+                planes = input(2);
+                if (!planes.error.empty())
+                    return planes;
+                if (!planes.planes || planes.planes->empty())
+                    return fail("Planes 入力には Parallel Planes を接続してください");
+                if (first.pieces)
+                    return fail("吸着で割るのは Mesh だけです（Pieces の再分割は未対応）");
+                for (const auto &set : *planes.planes) {
+                    add(set.normal.x); add(set.normal.y); add(set.normal.z);
+                    add(set.spacing); add(set.offset); add(set.variation); add(set.seed);
+                }
+                points = input(1);
+                if (!points.error.empty())
+                    return points;
+                if (!points.points)
+                    return fail("Points には Scatter Points を接続してください");
+                add(points.points->fingerprint);
+                add(voronoiSettings.rotation);
+                add(voronoiSettings.stretch);
+                add(voronoiSettings.snap);
+                add(voronoiSettings.version);
+            } else if (hasPlanes) {
                 planes = input(2);
                 if (!planes.error.empty())
                     return planes;
@@ -97,7 +121,9 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
                 : geometry::ScatterPoints(*mesh,s,error,stop));
         } else {
             const auto& s=std::get<geometry::VoronoiSettings>(node.settings);
-            out.pieces = std::make_shared<const geometry::PieceCollection>(planes.planes
+            out.pieces = std::make_shared<const geometry::PieceCollection>(planes.planes && points.points
+                ? geometry::FractureVoronoi(*mesh,*points.points,s,node.id,error,stop,planes.planes.get())
+                : planes.planes
                 ? geometry::FracturePlanes(*mesh,*planes.planes,node.id,error,stop)
                 : first.pieces
                 ? geometry::FracturePieces(*first.pieces,*points.points,s,node.id,error,stop)

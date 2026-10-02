@@ -52,10 +52,14 @@ void Application::DrawPieceSettings(graph::Node &node) {
         if (ui::BeginPropertyTable("voronoi")) {
             changed |= ui::PropertyFloat3Input("方向 (度)", voronoi->rotation.data(), zero) != 0;
             changed |= ui::PropertyFloat3Input("伸長 XYZ", voronoi->stretch.data(), one) != 0;
+            changed |= ui::PropertyBool("節理面への吸着", &voronoi->snap, false,
+                "Points と Planes を両方繋いだときに有効にします。Planes の最初の系統の構造面で形を板に分け、板の中を点の Voronoi で割ります。"
+                "節理面は複数の片にまたがる通り抜けた一枚の面になり、板の中は不規則な多面体になります。");
             ui::EndPropertyTable();
         }
-        ui::HintText("Points（Scatter Points）か Planes（Parallel Planes）のどちらか一方を接続します。"
-                     "Planes は連結した全系統の面で節理のブロックに割ります（方向と伸長は使いません）。");
+        ui::HintText("Points（Scatter Points）か Planes（Parallel Planes）、または両方を接続します。"
+                     "Planes だけなら連結した全系統の面で節理のブロックに割ります（方向と伸長は使いません）。"
+                     "両方なら最初の系統の板の中を点の Voronoi で割ります（節理面への吸着を有効に）。");
         ui::HintText("Yの伸長を4にすると縦に長い分割片になります。倍率の最大/"
                      "最小比は16以下。最初はノイズ0のBoxを使用してください。");
         ui::SectionHeader("表示");
@@ -104,6 +108,9 @@ void Application::DrawPieceSettings(graph::Node &node) {
                     "元の側面から横へ削れる深さの上限です。頂でこの深さ、底で 0 になり、上ほど細くなります。"
                     "上ほど長く側面から削られた様子です。0 では上限がありません。");
                 selection->peelRetreat = std::clamp(selection->peelRetreat, 0.f, 1000.f);
+                changed |= ui::PropertyFloat("底の後退", &selection->peelRetreatBase, 0, 1, 0,
+                    "側面の後退の、底での割合です。0 では底は削れず元の底の外周が残り、1 では底も頂と同じ深さまで削れます。");
+                selection->peelRetreatBase = std::clamp(selection->peelRetreatBase, 0.f, 1.f);
                 changed |= ui::PropertyBool("接地", &selection->grounded, false,
                     "下向きの外面を地面に支えられた面として扱い、そこからは欠きません。"
                     "地面から生えた岩（岩峰・露頭・崖）が上と横から欠け、根元が最後まで残ります。");

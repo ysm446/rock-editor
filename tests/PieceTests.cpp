@@ -675,6 +675,18 @@ static void RunPlaneFractureTests() {
                     if (p.id == id) (p.centroid.y > 0 ? upperRemoved : lowerRemoved) += 1;
             Check(error.empty() && upperRemoved > 2 * lowerRemoved && shaved.ids.size() < cells.pieces.size() / 2,
                   "側面の後退: 上ほど多く欠け、芯は削り切らない");
+            // 底の後退: 底でも削れるようになり、下の片の欠ける数が増える。
+            retreat.peelRetreatBase = 1;
+            const auto evenly = SelectPieces(cells, retreat, error);
+            int lowerEven = 0;
+            for (auto id : evenly.ids)
+                for (const auto& p : cells.pieces)
+                    if (p.id == id && p.centroid.y <= 0) ++lowerEven;
+            Check(error.empty() && lowerEven > lowerRemoved && evenly.ids.size() < cells.pieces.size(), "底の後退 1 では底の片も欠け、芯は残る");
+            retreat.peelRetreatBase = 2;
+            SelectPieces(cells, retreat, error);
+            Check(!error.empty(), "底の後退: 範囲外を拒否する");
+            retreat.peelRetreatBase = 0;
             retreat.peelRetreat = 0;
             Check(SelectPieces(cells, retreat, error).ids.size() == cells.pieces.size(), "側面の後退 0 では上限が無い");
             retreat.peelRetreat = -1;
@@ -713,7 +725,67 @@ static void RunPlaneFractureTests() {
     Check(evaluated.error.empty() && evaluated.pieces && evaluated.pieces->pieces.size() == 8, "グラフで 2 系統のブロックに割る");
     link(shape, scatter, 0);
     link(scatter, fracture, 1);
-    Check(!graph::EvaluateRocks(g, fracture).error.empty(), "Points と Planes の同時接続を診断する");
+    Check(!graph::EvaluateRocks(g, fracture).error.empty(), "Points と Planes の同時接続は、吸着が無効なら診断する");
+    std::get<VoronoiSettings>(g.FindMutableNode(fracture)->settings).snap = true;
+    const auto snapped = graph::EvaluateRocks(g, fracture);
+    Check(snapped.error.empty() && snapped.pieces && !snapped.pieces->pieces.empty(), "吸着が有効なら、Points と Planes の両方で割れる");
+
+    // 節理面への吸着（板 ∩ Voronoi）: 水平な構造面（y = ±0.5, 0）で板に分け、板の中を点の Voronoi で割る。
+    {
+        const auto points = ScatterPoints(box, {40, 3}, error);
+        VoronoiSettings plain;
+        const auto loose = FractureVoronoi(box, points, plain, 7, error);
+        VoronoiSettings snapSettings;
+        snapSettings.snap = true;
+        const std::vector<StructurePlanes> sets{layers};
+        const auto stuck = FractureVoronoi(box, points, snapSettings, 7, error, {}, &sets);
+        const auto onPlanes = [](const PieceCollection& pieces) {
+            size_t count = 0, all = 0;
+            for (const auto& piece : pieces.pieces)
+                for (const auto& p : piece.mesh->positions) {
+                    ++all;
+                    const double y = piece.transform[4] * p.x + piece.transform[5] * p.y + piece.transform[6] * p.z + piece.transform[7];
+                    for (double level : {-.5, 0., .5})
+                        if (std::abs(y - level) < 1e-5) { ++count; break; }
+                }
+            return all > 0 ? double(count) / double(all) : 0.;
+        };
+        double stuckVolume = 0;
+        bool stuckClosed = true, withinSlab = true;
+        for (const auto& piece : stuck.pieces) {
+            MeshInfo info;
+            stuckClosed &= InspectMesh(*piece.mesh, info) && info.closed && info.components == 1;
+            stuckVolume += piece.volume;
+            // 片は 1 枚の板の中に収まる（上下の面が隣り合う構造面）。
+            withinSlab &= info.maximum.y - info.minimum.y <= .5f + 1e-4f;
+        }
+        Check(error.empty() && stuck.pieces.size() == loose.pieces.size() && stuckClosed, "吸着: 片の数は同じで、どれも閉じている");
+        Check(withinSlab, "吸着: 片は 1 枚の板の中に収まる");
+        Check(onPlanes(stuck) > onPlanes(loose) + .2 && onPlanes(stuck) > .3, "吸着: 多くの頂点が構造面の上に乗る（複数の片にまたがる一枚の面）");
+        Check(std::abs(stuckVolume - 8) < 1e-4, "吸着: 片の体積の合計は元の形と一致する（隙間も重なりも無い）");
+        // 板の面を挟んだ隣接: 下の板の片が上の板の片と接触を持ち、面積は両側で対称。
+        size_t across = 0;
+        bool symmetric = true;
+        for (const auto& piece : stuck.pieces)
+            for (const auto& contact : piece.neighborhood->contacts) {
+                const auto& other = stuck.pieces[contact.neighbor];
+                if (std::abs(other.centroid.y - piece.centroid.y) > .25f) {
+                    ++across;
+                    const auto back = std::find_if(other.neighborhood->contacts.begin(), other.neighborhood->contacts.end(),
+                                                   [&](const auto& c) { return c.neighbor == piece.id; });
+                    symmetric &= back != other.neighborhood->contacts.end() &&
+                                 std::abs(back->areaVector[1] + contact.areaVector[1]) < 1e-9;
+                }
+            }
+        Check(across > 0 && symmetric, "吸着: 板の面を挟んだ片どうしが隣接を持ち、面積は両側で対称");
+        PieceSelectSettings peel;
+        peel.mode = PieceSelectMode::Peel;
+        peel.fraction = .3f;
+        const auto peeled = SelectPieces(stuck, peel, error);
+        Check(error.empty() && !peeled.ids.empty() && peeled.ids.size() < stuck.pieces.size(), "吸着: Peel で外周から欠ける");
+        Check(FractureVoronoi(box, points, snapSettings, 7, error, {}, &sets).generation == stuck.generation &&
+                  FractureVoronoi(box, points, plain, 7, error).generation != stuck.generation, "吸着で世代が変わる");
+    }
 
     // Volume Crack: 連結した系統を 1 回で彫る。1 系統だけなら従来の結果と同じ。
     const auto volume = MeshToVolume(box, {48}, error);
