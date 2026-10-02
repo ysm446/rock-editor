@@ -234,7 +234,9 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                    {"scaleMin", scatter->scaleMin}, {"scaleMax", scatter->scaleMax},
                                    {"alignToNormal", scatter->alignToNormal}, {"embed", scatter->embed},
                                    {"sizeSpacing", scatter->sizeSpacing}, {"settle", scatter->settle},
-                                   {"settleMax", scatter->settleMax}, {"coverageTarget", scatter->coverageTarget}};
+                                   {"settleMax", scatter->settleMax}, {"coverageTarget", scatter->coverageTarget},
+                                   {"yaw", scatter->yaw}, {"yawVariation", scatter->yawVariation},
+                                   {"embedVariation", scatter->embedVariation}};
         } else if (const auto* terrain = std::get_if<geometry::HeightmapSettings>(&node.settings)) {
             // 画像はシーンからの相対パスで書く（ルートごと動かしても読めるように）。
             item["heightmap"] = {{"source", geometry::HeightmapSourceName(terrain->source)},
@@ -363,7 +365,7 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             item["parallelPlanes"] = {{"rotation", planes->rotationDegrees}, {"spacing", planes->spacing},
                                        {"offset", planes->offset}, {"variation", planes->variation}, {"seed", planes->seed}};
         } else if (const auto* crack = std::get_if<geometry::VolumeCrackSettings>(&node.settings)) {
-            item["volumeCrack"] = {{"width", crack->width},       {"depth", crack->depth},
+            item["volumeCrack"] = {{"width", crack->width},       {"depth", crack->depth}, {"depthGradient", crack->depthGradient},
                                    {"variation", crack->variation}, {"noise", crack->noise},
                                    {"noiseScale", crack->noiseScale}, {"seed", crack->seed},
                                    {"source", geometry::VolumeCrackSourceName(crack->source)},
@@ -762,6 +764,9 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.settle = std::clamp(ReadFloat(*v, "settle", settings.settle), 0.0f, 1.0f);
                     settings.settleMax = std::clamp(ReadFloat(*v, "settleMax", settings.settleMax), 0.0f, 0.9f);
                     settings.coverageTarget = std::clamp(ReadFloat(*v, "coverageTarget", settings.coverageTarget), 0.0f, 1.0f);
+                    settings.yaw = std::clamp(ReadFloat(*v, "yaw", settings.yaw), -360.0f, 360.0f);
+                    settings.yawVariation = std::clamp(ReadFloat(*v, "yawVariation", settings.yawVariation), 0.0f, 180.0f);
+                    settings.embedVariation = std::clamp(ReadFloat(*v, "embedVariation", settings.embedVariation), 0.0f, 1.0f);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::Heightmap) {
@@ -1142,6 +1147,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                 if (const json* v = FindMember(item, "volumeCrack"); v && v->is_object()) {
                     settings.width = ReadFloat(*v, "width", settings.width);
                     settings.depth = ReadFloat(*v, "depth", settings.depth);
+                    settings.depthGradient = std::clamp(ReadFloat(*v, "depthGradient", settings.depthGradient), -1.0f, 1.0f);
                     settings.variation = ReadFloat(*v, "variation", settings.variation);
                     settings.noise = ReadFloat(*v, "noise", settings.noise);
                     settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);

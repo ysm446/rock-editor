@@ -103,6 +103,43 @@ void RunRockScatterTests() {
     const auto alignedRocks = geometry::ScatterRocks(surface, nullptr, false, Weights({1.0f}), aligned, error).instances;
     Check(!alignedRocks.empty() && alignedRocks[0].embed == 0.3f, "沈める量を岩ごとに持つ");
 
+    Section("Rock Scatter: 向きをそろえる");
+    {
+        auto aligned = settings;
+        aligned.yaw = 30;
+        aligned.yawVariation = 10;
+        const auto rocks = geometry::ScatterRocks(surface, nullptr, false, Weights({1.0f}), aligned, error).instances;
+        bool within = !rocks.empty();
+        for (const auto& p : rocks) {
+            const float degrees = p.yaw * 180.0f / float(std::numbers::pi);
+            within &= degrees >= 20.0f - 1e-3f && degrees <= 40.0f + 1e-3f;
+        }
+        Check(error.empty() && within, "向き ± ばらつきの範囲で回す");
+        Check(rocks.size() == placed.size() && rocks[0].position.x == placed[0].position.x, "向きをそろえても配置は変わらない");
+        auto bad = aligned;
+        bad.yawVariation = 200;
+        Check(geometry::ScatterRocks(surface, nullptr, false, Weights({1.0f}), bad, error).instances.empty() && !error.empty(),
+              "向きのばらつきの範囲外は診断する");
+    }
+
+    Section("Rock Scatter: 沈める量のばらつき");
+    {
+        auto varied = settings;
+        varied.embed = 0.3f;
+        varied.embedVariation = 0.5f;
+        const auto rocks = geometry::ScatterRocks(surface, nullptr, false, Weights({1.0f}), varied, error).instances;
+        float lo = 1, hi = 0;
+        for (const auto& p : rocks) { lo = std::min(lo, p.embed); hi = std::max(hi, p.embed); }
+        Check(error.empty() && !rocks.empty() && lo >= 0.15f - 1e-5f && hi <= 0.45f + 1e-5f && hi - lo > 0.15f,
+              "沈める量が embed × (1 ± ばらつき) の範囲で岩ごとに変わる");
+        Check(rocks.size() == placed.size() && rocks[0].position.x == placed[0].position.x && rocks[0].yaw == placed[0].yaw,
+              "ばらつきを付けても配置と向きは変わらない");
+        auto bad = varied;
+        bad.embedVariation = 2;
+        Check(geometry::ScatterRocks(surface, nullptr, false, Weights({1.0f}), bad, error).instances.empty() && !error.empty(),
+              "沈める量のばらつきの範囲外は診断する");
+    }
+
     Section("Rock Scatter: 大きさの間隔");
     {
         // 足元の半径 4 m（幅 8 × 奥行き 0 → 半径 4）の岩を、間隔 1 m・大きさの間隔 1 で撒く。中心どうしは 8 m 以上離れる。

@@ -16,9 +16,9 @@
        "shapeMask": {"type": "direction", "resolution": 512, "low": 0.5, "high": 1.0}},
 
       {"id": 10, "kind": "rock", "note": "刃の列（nasu-blades、幅 13 m）", "rock": {"scene": "blades.rockgraph", "scale": 1.0, "weight": 1.0}},
-      {"id": 20, "kind": "rockScatter", "note": "大: 刃の列を尾根に 2 つ。深く沈めて岩盤が地面から出ている形にする",
-       "rockScatter": {"seed": 4, "spacing": 8, "maxCount": 2, "scaleMin": 0.85, "scaleMax": 1.1, "alignToNormal": 0.15, "embed": 0.3,
-                       "sizeSpacing": 0.7, "settle": 1, "settleMax": 0.6}},
+      {"id": 20, "kind": "rockScatter", "note": "大: 刃の列を尾根に 2 つ。走向をそろえ（向き 20° ± 12°）、深く沈めて岩盤が地面から出ている形にする",
+       "rockScatter": {"seed": 4, "spacing": 8, "maxCount": 2, "scaleMin": 0.85, "scaleMax": 1.1, "alignToNormal": 0.15, "embed": 0.25,
+                       "sizeSpacing": 0.7, "settle": 1, "settleMax": 0.2, "yaw": 20, "yawVariation": 12}},
       {"id": 21, "kind": "meshOutput", "note": "刃の列"},
 
       {"id": 30, "kind": "maskFilter", "note": "刃の足元を反転（岩の無い所）", "maskFilter": {"type": "levels", "invert": true}},
@@ -26,16 +26,17 @@
       {"id": 32, "kind": "maskCombine", "note": "足元の周り 6 m かつ 岩の無い所", "maskCombine": {"operation": "minimum"}},
       {"id": 40, "kind": "rock", "note": "破片 約 1.2 m", "rock": {"scene": "talus.rockgraph", "scale": 1.0, "weight": 2.0}},
       {"id": 41, "kind": "rock", "note": "破片 約 0.5 m", "rock": {"scene": "talus.rockgraph", "scale": 0.45, "weight": 5.0}},
-      {"id": 42, "kind": "rockScatter", "note": "崖錐: 刃の根元に破片を密に。倍率 0.3〜1.4 で拳大〜1 m",
+      {"id": 44, "kind": "rock", "note": "角張ったブロックの破片 約 0.8 m（blocky の縮小）", "rock": {"scene": "chips.rockgraph", "scale": 0.3, "weight": 3.0}},
+      {"id": 42, "kind": "rockScatter", "note": "崖錐: 刃の根元に破片を密に。倍率 0.3〜1.4 で拳大〜1 m。沈める量のばらつき 0.7 で埋まった破片と転がった破片を混ぜる",
        "rockScatter": {"seed": 6, "spacing": 0.8, "maxCount": 2000, "scaleMin": 0.3, "scaleMax": 1.4, "alignToNormal": 0.7, "embed": 0.35,
-                       "sizeSpacing": 0.8, "settle": 1, "settleMax": 0.6}},
+                       "sizeSpacing": 0.8, "settle": 1, "settleMax": 0.6, "embedVariation": 0.7}},
       {"id": 43, "kind": "meshOutput", "note": "崖錐の破片"},
 
       {"id": 50, "kind": "maskFilter", "note": "崖錐の外: 傾斜のマスクを薄く（確率 0.15）", "maskFilter": {"type": "levels", "outputHigh": 0.15}},
       {"id": 51, "kind": "maskCombine", "note": "岩の無い所 × まばら", "maskCombine": {"operation": "minimum"}},
       {"id": 52, "kind": "rockScatter", "note": "まばらな転石: 斜面全体に少し",
        "rockScatter": {"seed": 8, "spacing": 1.5, "maxCount": 600, "scaleMin": 0.3, "scaleMax": 1.2, "alignToNormal": 0.6, "embed": 0.35,
-                       "sizeSpacing": 1.0, "settle": 1, "settleMax": 0.6}},
+                       "sizeSpacing": 1.0, "settle": 1, "settleMax": 0.6, "embedVariation": 0.7}},
       {"id": 53, "kind": "meshOutput", "note": "まばらな転石"}
     ],
     "links": [
@@ -46,12 +47,12 @@
       {"from": "20:Coverage", "to": "30"}, {"from": "20:Coverage", "to": "31"},
       {"from": "31", "to": "32:A"}, {"from": "30", "to": "32:B"},
       {"from": "1", "to": "42:Terrain"}, {"from": "32", "to": "42:Mask"},
-      {"from": "40", "to": "42:Rock 1"}, {"from": "41", "to": "42:Rock 2"},
+      {"from": "40", "to": "42:Rock 1"}, {"from": "41", "to": "42:Rock 2"}, {"from": "44", "to": "42:Rock 3"},
       {"from": "42:Instances", "to": "43:Geometry"},
       {"from": "5", "to": "50"},
       {"from": "30", "to": "51:A"}, {"from": "50", "to": "51:B"},
       {"from": "1", "to": "52:Terrain"}, {"from": "51", "to": "52:Mask"},
-      {"from": "40", "to": "52:Rock 1"}, {"from": "41", "to": "52:Rock 2"},
+      {"from": "40", "to": "52:Rock 1"}, {"from": "41", "to": "52:Rock 2"}, {"from": "44", "to": "52:Rock 3"},
       {"from": "52:Instances", "to": "53:Geometry"}
     ]
   },

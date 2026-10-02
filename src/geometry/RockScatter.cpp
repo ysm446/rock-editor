@@ -180,6 +180,15 @@ bool ValidateRockScatterSettings(const RockScatterSettings& s, std::string& erro
         error = "目標の被覆率は 0〜1 にしてください";
         return false;
     }
+    if (!std::isfinite(s.yaw) || s.yaw < -360 || s.yaw > 360 || !std::isfinite(s.yawVariation) || s.yawVariation < 0 ||
+        s.yawVariation > 180) {
+        error = "向きは -360〜360 度、向きのばらつきは 0〜180 度にしてください";
+        return false;
+    }
+    if (!std::isfinite(s.embedVariation) || s.embedVariation < 0 || s.embedVariation > 1) {
+        error = "沈める量のばらつきは 0〜1 にしてください";
+        return false;
+    }
     return true;
 }
 
@@ -290,7 +299,11 @@ RockScatterResult ScatterRocks(const Mesh& surface, const MaskImage* mask, bool 
             }
         }
         // 向き・倍率・どの岩か（近さの判定より先に決める。大きさの間隔はこの岩の大きさで判定する）。
-        const double yaw = random.Uniform() * 2.0 * std::numbers::pi;
+        // 向き。ばらつき 180 なら全周の乱数（従来どおり。乱数の消費も同じ）。
+        const double yawUnit = random.Uniform();
+        const double yaw = s.yawVariation >= 180.0f
+                               ? yawUnit * 2.0 * std::numbers::pi
+                               : (s.yaw + (yawUnit * 2.0 - 1.0) * s.yawVariation) * std::numbers::pi / 180.0;
         const double scaleRandom = random.Uniform();
         const double choose = random.Uniform() * weightSum;
         RockInstance instance;
@@ -337,6 +350,11 @@ RockScatterResult ScatterRocks(const Mesh& surface, const MaskImage* mask, bool 
         instance.up = {float(upx), float(upy), float(upz)};
         instance.yaw = float(yaw);
         instance.embed = s.embed;
+        if (s.embedVariation > 0) {
+            // 向きの乱数の下位の桁から派生させる（乱数の消費を増やさず、配置と向きを変えない）。
+            const double derived = std::fmod(yawUnit * 1024.0, 1.0);
+            instance.embed = float(std::clamp(double(s.embed) * (1.0 + (derived * 2.0 - 1.0) * s.embedVariation), 0.0, 0.9));
+        }
         // 浮きの補正。底の 4 隅で地形の高さを読み、浮いている隅が無くなる深さまで追加で沈める（上限あり）。
         if (useSettle && source.hasBounds) {
             std::array<Vec3, 4> corners;

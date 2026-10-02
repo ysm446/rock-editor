@@ -212,6 +212,8 @@ constexpr ParamDefinition kParams[] = {
      "表面での割れ目の全幅。To Volume のセル（最長辺 ÷ 解像度）より細いと消える", C::Error},
     {K::VolumeCrack, "volumeCrack.depth", T::Float, 0.01, 1, kLongest, "深さ",
      "表面から内側への深さ（V 字の断面）。1 で貫通して割る。浅くても面が外面に近いと薄片が分離する", C::Error},
+    {K::VolumeCrack, "volumeCrack.depthGradient", T::Float, -1, 1, "比", "深さの勾配",
+     "正で上ほど深く、負で下ほど深い。±1 で反対側の端は彫らず、同じ側の端は 2 倍。頂だけ節理が開いた岩に", C::Error},
     {K::VolumeCrack, "volumeCrack.variation", T::Float, 0, 1, "比", "ばらつき", "割れ目ごとの幅のばらつき", C::Error},
     {K::VolumeCrack, "volumeCrack.noise", T::Float, 0, 1, "比", "ゆらぎ", "割れ目に沿った幅のゆらぎ", C::Error},
     {K::VolumeCrack, "volumeCrack.noiseScale", T::Float, 0.5, 16, "最長辺あたりの山の数", "ゆらぎの細かさ", "", C::Error},
@@ -469,6 +471,9 @@ constexpr ParamDefinition kParams[] = {
     {K::RockScatter, "rockScatter.settle", T::Float, 0, 1, "比", "浮きの補正", "底の 4 隅が浮かない深さまで追加で沈める強さ。0 で無効", C::Clamp},
     {K::RockScatter, "rockScatter.settleMax", T::Float, 0, 0.9, "岩の高さに対する比", "補正の上限", "浮きの補正で追加で沈める量の上限", C::Clamp},
     {K::RockScatter, "rockScatter.coverageTarget", T::Float, 0, 1, "比", "目標の被覆率", "足元の面積の合計が地形の面積のこの割合に達したら止める。0 で無効", C::Clamp},
+    {K::RockScatter, "rockScatter.yaw", T::Float, -360, 360, "度", "向き", "上向きのまわりの向きの中心。yawVariation が 180 未満のとき効く", C::Clamp},
+    {K::RockScatter, "rockScatter.yawVariation", T::Float, 0, 180, "度", "向きのばらつき", "向き ± この角度の乱数。180 で全周の乱数（既定）。走向をそろえる露岩は 10〜20", C::Clamp},
+    {K::RockScatter, "rockScatter.embedVariation", T::Float, 0, 1, "比", "沈める量のばらつき", "岩ごとに沈める量を embed × (1 ± この比) で変える。崖錐の破片は 0.6〜0.8", C::Clamp},
     {K::RockScatter, "rockScatter.seed", T::Int, 0, N, "", "Seed", "", C::None},
 };
 

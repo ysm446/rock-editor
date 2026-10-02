@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 07:20
+更新日時: 2026-10-03 08:55
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,14 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-10-03 08:50 刃の列の改善: Volume Crack の深さの勾配と、Rock Scatter の向きをそろえる設定
+
+- ユーザー判断（進める）。Volume Crack に「深さの勾配」（`volumeCrack.depthGradient`、-1〜1）を足した。格子の高さで深さを変え、+1 で頂 2 倍・根元 0。風化で頂の節理だけが開いた岩のため。`nasu-blades` は深さ 0.09・勾配 +1 で、頂だけ刃に分かれ根元はつながる。[仕様](../reference/volume-crack.md)。
+- Rock Scatter に「向き」「向きのばらつき」（`rockScatter.yaw` / `yawVariation`、度）を足した。ばらつき 180（既定）で従来どおり全周の乱数（乱数の消費も同じで配置は変わらない）。露岩の走向をそろえる（M3 の 4 の「層の向き」の Yaw 部分）。`examples/nasu-asahidake/` は 20° ± 12°。
+- 斜面に置いた刃の列が浮きの補正（上限 0.6）でほぼ埋まっていたので、上限を 0.2 にした。研究ページ [nasu-asahidake](../research/nasu-asahidake/README.md)・[nasu-blades](../research/nasu-blades/README.md) に画像と経過。
+- 続き（08:55）: Rock Scatter に「沈める量のばらつき」（`rockScatter.embedVariation`。向きの乱数から派生させ、配置と向きは変えない）を足し、崖錐に `blocky` の縮小（`chips`）を 3 種類目として加えた。近くから撮ると、節理の露岩と大きさの混ざった破片の崖錐に見える。
+- 次: 地面の荒れ（礫の素材・破片の根元の土の盛り上がり・刃の根元のえぐれ）、刃の列の溝の幅と板の面の丸み。
 
 ### 2026-10-03 07:20 那須朝日岳のユニット `examples/nasu-asahidake/` の初版と、崖錐のための「広げる」フィルタ
 

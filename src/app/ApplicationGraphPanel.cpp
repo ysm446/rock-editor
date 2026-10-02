@@ -2210,6 +2210,9 @@ void Application::DrawGraphPanel() {
                                          "表面での割れ目の幅。形の最長辺に対する比です。セル間隔より細い割れ目は格子で潰れます。");
             changed |= ui::PropertyFloat("深さ", &edited.depth, .01f, 1, .15f,
                                          "割れ目が届く深さ。形の最長辺に対する比です。深くなるほど狭まり、この深さで閉じます。1 で形を貫きます。");
+            changed |= ui::PropertyFloat("深さの勾配", &edited.depthGradient, -1, 1, 0,
+                                         "正で上ほど深く、負で下ほど深くします。±1 で反対側の端は彫らず、同じ側の端は 2 倍の深さ。"
+                                         "頂だけ節理が開いて刃に分かれた岩に。");
             changed |= ui::PropertyFloat("ばらつき", &edited.variation, 0, 1, .6f,
                                          "割れ目ごとの幅の差。大きいほど細い割れ目が増え、一部は閉じます。");
             changed |= ui::PropertyFloat("ゆらぎ", &edited.noise, 0, 1, .5f,
@@ -2236,6 +2239,7 @@ void Application::DrawGraphPanel() {
         if (changed) {
             edited.width = std::clamp(edited.width, 0.0f, 0.2f);
             edited.depth = std::clamp(edited.depth, 0.01f, 1.0f);
+            edited.depthGradient = std::clamp(edited.depthGradient, -1.0f, 1.0f);
             edited.variation = std::clamp(edited.variation, 0.0f, 1.0f);
             edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
             edited.noiseScale = std::clamp(edited.noiseScale, 0.5f, 16.0f);
@@ -2584,6 +2588,8 @@ void Application::DrawGraphPanel() {
                                          "0 で真上を向け、1 で地形の面に垂直に立てます。");
             changed |= ui::PropertyFloat("沈める量", &edited.embed, 0.0f, 0.9f, defaults.embed,
                                          "岩の高さに対する比で、地形へ沈めます。接地の継ぎ目を隠します。");
+            changed |= ui::PropertyFloat("沈める量のばらつき", &edited.embedVariation, 0.0f, 1.0f, defaults.embedVariation,
+                                         "岩ごとに沈める量を「沈める量 × (1 ± この比)」で変えます。土に埋まった破片と転がった破片を混ぜる崖錐に。");
             changed |= ui::PropertyFloat("大きさの間隔", &edited.sizeSpacing, 0.0f, 3.0f, defaults.sizeSpacing,
                                          "2 つの岩の足元の半径（底の投影を包む円、倍率込み）の和にこの倍率を掛けた距離より近づけません。"
                                          "「間隔」との大きい方で判定します。大きさの違う岩を混ぜても重なりにくくなります。0 で無効。"
@@ -2594,6 +2600,10 @@ void Application::DrawGraphPanel() {
                                          "浮きの補正で追加で沈める量の上限（岩の高さに対する比）です。");
             changed |= ui::PropertyFloat("目標の被覆率", &edited.coverageTarget, 0.0f, 1.0f, defaults.coverageTarget,
                                          "置いた岩の足元の面積の合計が、地形の面積のこの割合に達したら止めます。0 で無効（上限の数まで置く）。");
+            changed |= ui::PropertyFloat("向き (度)", &edited.yaw, -180.0f, 180.0f, defaults.yaw,
+                                         "上向きのまわりの向きの中心です。「向きのばらつき」が 180 未満のとき効きます。", "%.0f");
+            changed |= ui::PropertyFloat("向きのばらつき (度)", &edited.yawVariation, 0.0f, 180.0f, defaults.yawVariation,
+                                         "向き ± この角度の乱数で回します。180 で全周の乱数。露岩の走向をそろえるなら 10〜20。", "%.0f");
             ui::EndPropertyTable();
         }
         {
@@ -2628,6 +2638,9 @@ void Application::DrawGraphPanel() {
             edited.settle = std::clamp(edited.settle, 0.0f, 1.0f);
             edited.settleMax = std::clamp(edited.settleMax, 0.0f, 0.9f);
             edited.coverageTarget = std::clamp(edited.coverageTarget, 0.0f, 1.0f);
+            edited.yaw = std::clamp(edited.yaw, -360.0f, 360.0f);
+            edited.yawVariation = std::clamp(edited.yawVariation, 0.0f, 180.0f);
+            edited.embedVariation = std::clamp(edited.embedVariation, 0.0f, 1.0f);
             *scatter = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

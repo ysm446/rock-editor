@@ -1143,6 +1143,10 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
         error = "割れ目の深さは 0.01～1 にしてください";
         return {};
     }
+    if (!range(s.depthGradient, -1, 1)) {
+        error = "割れ目の深さの勾配は -1～1 にしてください";
+        return {};
+    }
     if (!range(s.variation, 0, 1) || !range(s.noise, 0, 1)) {
         error = "ばらつきとゆらぎは 0～1 にしてください";
         return {};
@@ -1274,11 +1278,19 @@ static VolumeGrid CrackVolumeImpl(const VolumeGrid& g, const std::vector<Vec3>& 
                 if (peelMargin(p, k) > 0) level = k;
         return level;
     };
+    // 深さの勾配: 格子の高さ 0（下端）〜1（上端）で深さを 1 ∓ 勾配 … 1 ± 勾配 倍にする。
+    const float gridHeight = g.spacing * float(std::max<uint32_t>(g.dimensions[1], 2) - 1);
     const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
         const size_t index = out.Index(x, y, z);
         float value = g.values[index];
+        float depthHere = depth;
+        if (s.depthGradient != 0) {
+            const float h = gridHeight > 0 ? float(y) * g.spacing / gridHeight : .5f;
+            depthHere = depth * std::max(0.f, 1 + s.depthGradient * (2 * h - 1));
+            if (depthHere <= 0) { out.values[index] = value; return value < 0; }
+        }
         // 割れ目は深くなるほど狭まる。表面（と外側）で最も広く、指定の深さで幅が 0 になる。
-        const float profile = std::clamp(1 + value / depth, 0.f, 1.f);
+        const float profile = std::clamp(1 + value / depthHere, 0.f, 1.f);
         float reach = halfWidth * profile;
         // 最大の幅でも届かない点（形の外側の遠くと、深い内部）は境界面までの距離を求めない。
         if (reach > 0 && value < reach) {

@@ -255,6 +255,28 @@ void TestFiniteCracks() {
     bool neverGrows = true;
     for (size_t i = 0; i < box.values.size(); ++i) neverGrows &= patches.values[i] >= box.values[i];
     Check(neverGrows, "有限の割れ目は形を広げない");
+    // 深さの勾配: 上ほど深い。上端の断面は一様より多く彫れ、下端は彫らない。
+    {
+        VolumeCrackSettings uniform = infinite; uniform.depth = .2f;
+        VolumeCrackSettings topHeavy = uniform; topHeavy.depthGradient = 1;
+        VolumeCrackSettings bottomHeavy = uniform; bottomHeavy.depthGradient = -1;
+        const auto even = CrackVolumeWithPlanes(box, planes, uniform, error);
+        const auto top = CrackVolumeWithPlanes(box, planes, topHeavy, error);
+        const auto bottom = CrackVolumeWithPlanes(box, planes, bottomHeavy, error);
+        Check(error.empty() && top.values.size() == box.values.size() && bottom.values.size() == box.values.size(), "深さの勾配を付けて彫れる");
+        const auto carved = [&](const VolumeGrid& grid, uint32_t y) {
+            size_t n = 0;
+            for (uint32_t z = 0; z < grid.dimensions[2]; ++z)
+                for (uint32_t x = 0; x < grid.dimensions[0]; ++x)
+                    n += box.values[box.Index(x, y, z)] < 0 && grid.values[grid.Index(x, y, z)] >= 0;
+            return n;
+        };
+        const uint32_t low = box.dimensions[1] / 5, high = box.dimensions[1] * 4 / 5;
+        Check(carved(top, high) > carved(even, high) && carved(top, low) < carved(even, low), "勾配 +1 は上で多く、下で少なく彫る");
+        Check(carved(bottom, low) > carved(even, low) && carved(bottom, high) < carved(even, high), "勾配 -1 は下で多く、上で少なく彫る");
+        VolumeCrackSettings bad = uniform; bad.depthGradient = 1.5f;
+        Check(CrackVolumeWithPlanes(box, planes, bad, error).values.empty() && !error.empty(), "勾配の範囲外は診断する");
+    }
     VolumeCrackSettings none = finite; none.coverage = 0;
     Check(CrackVolumeWithPlanes(box, planes, none, error).values == box.values && error.empty(),
           "割合 0 では何も彫らない");

@@ -38,6 +38,14 @@ struct RockScatterSettings {
     float settleMax = 0.5f;
     // 目標の被覆率（0〜1）。置いた岩の足元の面積の合計が地形の面積のこの割合に達したら止める。0 で無効。
     float coverageTarget = 0.0f;
+    // --- M3 の 4: 向き ---
+    // 上向きのまわりの向き（度）。yaw を中心に ±yawVariation の範囲で乱数。yawVariation 180 で従来どおり全周の乱数。
+    // 層の向き（露岩の走向）を全体でそろえるときに yawVariation を小さくする。
+    float yaw = 0.0f;
+    float yawVariation = 180.0f;
+    // 沈める量のばらつき（0〜1）。岩ごとに沈める量を embed × (1 ± ばらつき) の範囲で変える（0〜0.9 に収める）。
+    // 土に埋まった破片と転がった破片が混ざる崖錐のため。乱数は向きの乱数から派生させ、配置は変えない。
+    float embedVariation = 0.0f;
     bool operator==(const RockScatterSettings&) const = default;
 };
 
