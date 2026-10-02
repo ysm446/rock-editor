@@ -175,6 +175,7 @@ json WritePreview(renderer::PreviewRenderer& renderer) {
     node["showSkybox"] = renderer.ShowSkybox();
     node["skyboxBlur"] = renderer.SkyboxBlur();
     node["screenSpaceAo"] = {{"enabled", renderer.Ssao().enabled}, {"radius", renderer.Ssao().radius}, {"strength", renderer.Ssao().strength}};
+    node["screenSpaceGi"] = {{"enabled", renderer.Ssgi().enabled}, {"radius", renderer.Ssgi().radius}, {"strength", renderer.Ssgi().strength}};
     node["shadow"] = renderer.ShadowEnabled();
     node["shadowResolution"] = renderer.ShadowResolution();
     node["shadowCascadeCount"] = renderer.ShadowCascadeCount();
@@ -281,6 +282,13 @@ void ReadPreview(const json& node, renderer::PreviewRenderer& renderer) {
         renderer.Ssao().enabled = ReadBool(ao, "enabled", defaults.enabled);
         renderer.Ssao().radius = std::clamp(ReadFloat(ao, "radius", defaults.radius), 0.001f, 10.0f);
         renderer.Ssao().strength = std::clamp(ReadFloat(ao, "strength", defaults.strength), 0.0f, 3.0f);
+    }
+    {
+        const auto& gi = section("screenSpaceGi");
+        const renderer::SsgiSettings defaults;
+        renderer.Ssgi().enabled = ReadBool(gi, "enabled", defaults.enabled);
+        renderer.Ssgi().radius = std::clamp(ReadFloat(gi, "radius", defaults.radius), 0.01f, 20.0f);
+        renderer.Ssgi().strength = std::clamp(ReadFloat(gi, "strength", defaults.strength), 0.0f, 4.0f);
     }
     {
         const json& camera = section("camera");

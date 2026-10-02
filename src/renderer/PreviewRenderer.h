@@ -133,6 +133,14 @@ struct SsaoSettings {
     float strength = 1.0f;
 };
 
+// スクリーンスペース GI。画面内の光っている面から、近くの面への照り返し（1 回の反射）を足す。表示専用。
+// 岩どうし・岩と土の間の照り返し。画面外と隠れた面からの光は入らない。
+struct SsgiSettings {
+    bool enabled = false;
+    float radius = 1.0f;    // 照り返しを集める距離（m）
+    float strength = 1.0f;
+};
+
 // 被写界深度。ビューポートの見え方だけの設定。
 struct DofSettings {
     bool enabled = false;
@@ -334,6 +342,8 @@ public:
     }
     SsaoSettings& Ssao() { return m_ssao; }
     const SsaoSettings& Ssao() const { return m_ssao; }
+    SsgiSettings& Ssgi() { return m_ssgi; }
+    const SsgiSettings& Ssgi() const { return m_ssgi; }
     DofSettings& Dof() { return m_dof; }
     const DofSettings& Dof() const { return m_dof; }
     // 実際にピント面として使う距離。注視点に合わせる設定ならカメラの距離。
@@ -452,7 +462,11 @@ private:
     bool m_shadowEnabled = kPreviewDefaults.shadowEnabled;
     DofSettings m_dof;
     SsaoSettings m_ssao;
+    SsgiSettings m_ssgi;
     rhi::GpuTexture m_sceneColorAo;
+    // スクリーンスペース GI の、照り返しを受ける素材色（不透明のメッシュが書く）と結果。
+    rhi::GpuTexture m_sceneAlbedo;
+    rhi::GpuTexture m_sceneColorGi;
     RenderStats m_stats;
     PreviewDiagnostics m_diagnostics;
     bool m_tessellationEnabled = kPreviewDefaults.tessellationEnabled;

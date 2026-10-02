@@ -1006,8 +1006,11 @@ float4 PsBake(VsOutput input) : SV_Target0
     return float4(height.xxx,1);
 }
 
-float4 PsMain(VsOutput input) : SV_Target0
+// 陰影を付けた色を返す。giAlbedo には照り返し（スクリーンスペース GI）を受ける拡散の素材色を入れる
+// （素材の AO を含む）。陰影を付けない表示・半透明では 0（照り返しを受けない）。
+float4 ShadeMesh(VsOutput input, out float4 giAlbedo)
 {
+    giAlbedo = float4(0.0f, 0.0f, 0.0f, 0.0f);
     const bool uvChecker = (g_mesh.meshDisplayFlags & 2u) != 0u;
     const float3 geometricNormal = normalize(input.worldNormal);
     const float3 viewDirection = normalize(g_mesh.cameraPosition - input.worldPosition);
@@ -1359,11 +1362,31 @@ float4 PsMain(VsOutput input) : SV_Target0
     const float3 specularIbl = prefiltered * (f0 * environmentBrdf.x + environmentBrdf.y);
 
     radiance += (diffuseIbl + specularIbl) * g_mesh.iblIntensity * ambientOcclusion;
+    if (g_mesh.opacityMode != 2u) giAlbedo = float4(kD * diffuseColor * ambientOcclusion, 1.0f);
 
     // シーンカラーは R16G16B16A16_FLOAT。half の上限（65504）を超えると Inf になり、
     // トーンマップを経て NaN → ハイライト中心の黒点になる。上限手前でクランプする。
     return float4(min(radiance, 60000.0f),
                   (g_mesh.opacityMode == 2u) ? opacity : 1.0f);
+}
+
+float4 PsMain(VsOutput input) : SV_Target0
+{
+    float4 giAlbedo;
+    return ShadeMesh(input, giAlbedo);
+}
+
+// スクリーンスペース GI を使うときの不透明の描画。2 枚目に照り返しを受ける素材色を書く。
+struct GiOutput
+{
+    float4 color : SV_Target0;
+    float4 albedo : SV_Target1;
+};
+GiOutput PsMainGi(VsOutput input)
+{
+    GiOutput output;
+    output.color = ShadeMesh(input, output.albedo);
+    return output;
 }
 
 // 描画と同じApplyDisplacementを使う検査。ハード法線の両側を独立して評価する。

@@ -203,6 +203,19 @@ void Application::DrawLightingPanel() {
             }
             ui::EndPropertyTable();
         }
+        ui::SectionHeader("スクリーンスペースGI");
+        if (ui::BeginPropertyTable("ssgiRows")) {
+            auto& gi = m_renderer.Ssgi();
+            const renderer::SsgiSettings defaults;
+            ui::PropertyBool("有効", &gi.enabled, defaults.enabled,
+                "画面内の光っている面から、近くの面への照り返し（岩どうし・岩と土）をGPUで足す。"
+                "画面外と隠れた面からの光は入らない。表示専用で、テクスチャには焼き込まない");
+            if (gi.enabled) {
+                ui::PropertyFloat("半径", &gi.radius, 0.01f, 20.0f, defaults.radius, "照り返しを集める距離", "%.2f m", ImGuiSliderFlags_Logarithmic);
+                ui::PropertyFloat("強さ", &gi.strength, 0.0f, 4.0f, defaults.strength, nullptr, "%.2f");
+            }
+            ui::EndPropertyTable();
+        }
         const bool atmospheric = m_renderer.AtmosphericMode();
         if (!atmospheric) ui::HintText("作業用IBLで確認中。シーンの太陽・大気の設定は保持されている");
         renderer::LightSettings& light = m_renderer.Light();

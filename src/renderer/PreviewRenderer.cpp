@@ -20,6 +20,8 @@ namespace {
 
 constexpr DXGI_FORMAT kSceneColorFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 constexpr DXGI_FORMAT kDepthFormat = DXGI_FORMAT_D32_FLOAT;
+// スクリーンスペース GI で照り返しを受ける素材色（リニア）。
+constexpr DXGI_FORMAT kSceneAlbedoFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 // 路面に貼る帯（白線）の深度バイアス。D32 なので定数項は深度の指数に対する相対値。負で手前。
 constexpr int kDecalDepthBias = -2000;
 constexpr float kDecalSlopeScaledDepthBias = -2.0f;
@@ -876,6 +878,7 @@ void PreviewRenderer::ResetSettings() {
     m_exposure = ExposureSettings{};
     m_dof = DofSettings{};
     m_ssao = SsaoSettings{};
+    m_ssgi = SsgiSettings{};
 
     // 表示モードはプロジェクトに保存しないが、ここでは戻す。
     // ハイトやラフネスを覗いたまま「新規」を押すと、
@@ -932,7 +935,7 @@ float PreviewRenderer::BoundingRadius() const {
 }
 
 void PreviewRenderer::ReleaseTargets(rhi::Device& device) {
-    rhi::GpuTexture* targets[] = {&m_sceneColor, &m_sceneColorDof, &m_sceneColorAo, &m_depth, &m_output};
+    rhi::GpuTexture* targets[] = {&m_sceneColor, &m_sceneColorDof, &m_sceneColorAo, &m_sceneColorGi, &m_sceneAlbedo, &m_depth, &m_output};
     for (rhi::GpuTexture* target : targets) {
         if (!target->IsValid()) {
             continue;
@@ -1000,6 +1003,12 @@ bool PreviewRenderer::Resize(rhi::Device& device, uint32_t width, uint32_t heigh
     dofDesc.initialState = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
     dofDesc.debugName = L"SceneColorAo";
     if (!device.Allocator().CreateTexture2D(dofDesc, m_sceneColorAo)) return false;
+    dofDesc.debugName = L"SceneColorGi";
+    if (!device.Allocator().CreateTexture2D(dofDesc, m_sceneColorGi)) return false;
+    rhi::TextureDesc albedoDesc = colorDesc;
+    albedoDesc.format = kSceneAlbedoFormat;
+    albedoDesc.debugName = L"SceneAlbedo";
+    if (!device.Allocator().CreateTexture2D(albedoDesc, m_sceneAlbedo)) return false;
     dofDesc.debugName = L"SceneColorDof";
     if (!device.Allocator().CreateTexture2D(dofDesc, m_sceneColorDof)) {
         return false;
@@ -1120,6 +1129,9 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     }
 
     ID3D12PipelineState* meshPipeline = pipelineCache.GetGraphics(meshPipelineDesc);
+    // スクリーンスペース GI は陰影を付ける表示だけ（ワイヤーフレームとチャンネル表示では使わない）。
+    const bool ssgiActive = m_ssgi.enabled && IsShadedView(displayView) && displayView != DebugView::Wireframe &&
+                            m_sceneAlbedo.IsValid() && m_sceneColorGi.IsValid();
     ID3D12PipelineState* tonemapPipeline =
         pipelineCache.GetCompute(L"TonemapPass.hlsl", L"CsMain");
     if (meshPipeline == nullptr || tonemapPipeline == nullptr) {
@@ -1497,7 +1509,28 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
 
     commandList->SetGraphicsRootSignature(pipelineCache.GlobalRootSignature());
     commandList->SetPipelineState(meshPipeline);
-    drawMeshes(constants, kPassOpaque, useTessellation);
+    // スクリーンスペース GI を使うときは、不透明のメッシュだけ 2 枚目に照り返しを受ける素材色も書く。
+    // 他の描画（モデル・空・ガイド線）は書かない（アルベド 0 = 照り返しを受けない）。
+    ID3D12PipelineState* giPipeline = nullptr;
+    if (ssgiActive) {
+        rhi::GraphicsPipelineDesc giDesc = meshPipelineDesc;
+        giDesc.pixelEntry = L"PsMainGi";
+        giDesc.rtvFormat1 = kSceneAlbedoFormat;
+        giPipeline = pipelineCache.GetGraphics(giDesc);
+    }
+    if (giPipeline != nullptr) {
+        TransitionIfNeeded(commandList, m_sceneAlbedo, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        const float noAlbedo[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        commandList->ClearRenderTargetView(m_sceneAlbedo.rtv.cpu, noAlbedo, 0, nullptr);
+        const D3D12_CPU_DESCRIPTOR_HANDLE giTargets[] = {rtv, m_sceneAlbedo.rtv.cpu};
+        commandList->OMSetRenderTargets(2, giTargets, FALSE, &dsv);
+        commandList->SetPipelineState(giPipeline);
+        drawMeshes(constants, kPassOpaque, useTessellation);
+        commandList->OMSetRenderTargets(1, &rtv, FALSE, &dsv);
+        commandList->SetPipelineState(meshPipeline);
+    } else {
+        drawMeshes(constants, kPassOpaque, useTessellation);
+    }
     // 配置したモデル。不透明の道路の後、路面に貼る帯と半透明の帯の前に描く。
     if (drawExtras) {
         PIXBeginEvent(commandList, PIX_COLOR(120, 200, 200), "PreviewSceneExtras");
@@ -1656,6 +1689,26 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
     // 飽和してから広がり、玉ボケの芯が白く潰れる。
     // チャンネルを覗く表示には掛けない（値そのものを見るための表示）。
     uint32_t tonemapSourceIndex = m_sceneColor.SrvIndex();
+    // スクリーンスペース GI。AO より前に足す（照り返しも凹部で遮られる）。
+    if (ssgiActive) {
+        if (auto* pipeline = pipelineCache.GetCompute(L"ScreenSpaceGi.hlsl", L"CsMain")) {
+            TransitionIfNeeded(commandList, m_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            TransitionIfNeeded(commandList, m_sceneAlbedo, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            TransitionIfNeeded(commandList, m_sceneColorGi, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            struct Constants {
+                uint32_t source, depth, albedo, output, width, height;
+                float nearZ, farZ, tanHalfFov, radius, strength;
+            } gi{tonemapSourceIndex, m_depth.SrvIndex(), m_sceneAlbedo.SrvIndex(), m_sceneColorGi.UavIndex(), m_width, m_height,
+                 m_camera.NearZ(), m_camera.FarZ(), std::tan(m_camera.FovY() * 0.5f),
+                 std::clamp(m_ssgi.radius, 0.01f, 20.0f), std::clamp(m_ssgi.strength, 0.0f, 4.0f)};
+            commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
+            commandList->SetPipelineState(pipeline);
+            commandList->SetComputeRoot32BitConstants(0, sizeof(gi)/sizeof(uint32_t), &gi, 0);
+            commandList->Dispatch(rhi::DispatchCount(m_width), rhi::DispatchCount(m_height), 1);
+            TransitionIfNeeded(commandList, m_sceneColorGi, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            tonemapSourceIndex = m_sceneColorGi.SrvIndex();
+        }
+    }
     if (m_ssao.enabled && IsShadedView(displayView)) {
         if (auto* pipeline = pipelineCache.GetCompute(L"ScreenSpaceAo.hlsl", L"CsMain")) {
             TransitionIfNeeded(commandList, m_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
@@ -1663,7 +1716,7 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
             struct Constants {
                 uint32_t source, depth, output, width, height;
                 float nearZ, farZ, tanHalfFov, radius, strength;
-            } ao{m_sceneColor.SrvIndex(), m_depth.SrvIndex(), m_sceneColorAo.UavIndex(), m_width, m_height,
+            } ao{tonemapSourceIndex, m_depth.SrvIndex(), m_sceneColorAo.UavIndex(), m_width, m_height,
                  m_camera.NearZ(), m_camera.FarZ(), std::tan(m_camera.FovY() * 0.5f),
                  std::clamp(m_ssao.radius, 0.001f, 10.0f), std::clamp(m_ssao.strength, 0.0f, 3.0f)};
             commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
