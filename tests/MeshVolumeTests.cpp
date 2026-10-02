@@ -122,6 +122,20 @@ void RunMeshVolumeTests() {
     Check(error.empty() && !hollow.values.empty(), "inward inner shell represents cavity");
     if (!hollow.values.empty())
         Check(At(hollow, {0, 0, 0}) > 0 && At(hollow, {1.5f, 0, 0}) < 0, "cavity sign is preserved");
+    // セルより細い閉じた隙間（泡）は埋める。4 m の箱の中の 0.05 m の空洞（セル 0.125 m）は格子の数点だけが外部になる。
+    Mesh bubble;
+    Append(bubble, MakeBox({4, 4, 4}));
+    Append(bubble, MakeBox({.05f, .05f, .05f}), {.0625f, .0625f, .0625f}, true);
+    auto filled = MeshToVolume(bubble, {32}, error);
+    bool noPositiveInside = !filled.values.empty();
+    for (uint32_t z = 2; z + 2 < filled.dimensions[2] && noPositiveInside; ++z)
+        for (uint32_t y = 2; y + 2 < filled.dimensions[1]; ++y)
+            for (uint32_t x = 2; x + 2 < filled.dimensions[0]; ++x) {
+                const auto p = filled.Position(x, y, z);
+                if (std::abs(p.x) < 1.5f && std::abs(p.y) < 1.5f && std::abs(p.z) < 1.5f && filled.values[filled.Index(x, y, z)] >= 0)
+                    noPositiveInside = false;
+            }
+    Check(error.empty() && noPositiveInside, "sub-cell enclosed bubbles are filled, large cavities are kept");
     Mesh torus;
     constexpr uint32_t around = 32, section = 16;
     for (uint32_t u = 0; u < around; ++u)

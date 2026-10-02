@@ -359,6 +359,55 @@ VolumeGrid MeshToVolume(const Mesh &mesh, const VolumeSettings &settings, std::s
         error = "形がセルより薄いため内部を捉えられません。解像度を上げるか寸法を調整してください";
         return {};
     }
+    // セルより細い閉じた隙間を埋める。ずらした片の集合（Piece Transform の 0.01 m のずれなど）は、片の間に
+    // セルより細い隙間ができ、格子ではその中の数点だけが外部になって、閉じた微小な空洞（泡）として残る。
+    // 外周から届かない外部のうち、小さな塊（27 点以下）は解像度で表せない隙間なので内部に戻す。
+    // 大きな閉じた空洞（内向きの殻で作った洞）はそのまま残す。
+    {
+        const size_t nx = grid.dimensions[0], ny = grid.dimensions[1], nz = grid.dimensions[2];
+        std::vector<uint8_t> reached(grid.values.size(), 0);
+        std::vector<size_t> stack;
+        const auto visit = [&](size_t next) {
+            if (grid.values[next] < 0 || reached[next]) return;
+            reached[next] = 1;
+            stack.push_back(next);
+        };
+        const auto neighbors = [&](size_t index, auto&& fn) {
+            const size_t x = index % nx, y = (index / nx) % ny, z = index / (nx * ny);
+            if (x > 0) fn(index - 1);
+            if (x + 1 < nx) fn(index + 1);
+            if (y > 0) fn(index - nx);
+            if (y + 1 < ny) fn(index + nx);
+            if (z > 0) fn(index - nx * ny);
+            if (z + 1 < nz) fn(index + nx * ny);
+        };
+        for (size_t z = 0; z < nz; ++z)
+            for (size_t y = 0; y < ny; ++y)
+                for (size_t x = 0; x < nx; ++x)
+                    if (x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz)
+                        visit((z * ny + y) * nx + x);
+        while (!stack.empty()) {
+            const size_t index = stack.back();
+            stack.pop_back();
+            neighbors(index, visit);
+        }
+        constexpr size_t kBubble = 27;
+        std::vector<size_t> component;
+        for (size_t start = 0; start < grid.values.size(); ++start) {
+            if (grid.values[start] < 0 || reached[start]) continue;
+            component.clear();
+            component.push_back(start);
+            reached[start] = 1;
+            for (size_t k = 0; k < component.size(); ++k)
+                neighbors(component[k], [&](size_t next) {
+                    if (grid.values[next] < 0 || reached[next]) return;
+                    reached[next] = 1;
+                    component.push_back(next);
+                });
+            if (component.size() > kBubble) continue;
+            for (size_t index : component) grid.values[index] = -grid.spacing * .5f;
+        }
+    }
     // 重なった立体は、内部の距離が隠れた面までになって浅く歪むので、表面から測り直す。
     if (overlapping.load())
         RedistanceInterior(grid, stop);
