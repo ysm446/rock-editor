@@ -16,7 +16,7 @@ inline nlohmann::json WritePieceSettings(const graph::Node &node) {
         return {{"count", s->count}, {"seed", s->seed}, {"version", s->version}, {"planar",s->planar},
                 {"clustering", s->clustering}, {"clusterScale", s->clusterScale}, {"heightGradient", s->heightGradient}};
     if (auto *s = std::get_if<VoronoiSettings>(&node.settings))
-        return {{"rotation", s->rotation}, {"stretch", s->stretch}, {"snap", s->snap}, {"version", s->version}};
+        return {{"rotation", s->rotation}, {"stretch", s->stretch}, {"snap", s->snap}, {"jointSpan", s->jointSpan}, {"version", s->version}};
     if (auto *s = std::get_if<PieceFilterSettings>(&node.settings))
         return {{"keep", s->keep}};
     if (auto *s = std::get_if<PieceSelectSettings>(&node.settings))
@@ -114,6 +114,7 @@ inline void ReadPieceSettings(graph::Node &node, const nlohmann::json &value) {
         read(value, "rotation", s->rotation);
         read(value, "stretch", s->stretch);
         read(value, "snap", s->snap);
+        read(value, "jointSpan", s->jointSpan);
         read(value, "version", s->version);
     }
     if (auto *s = std::get_if<PieceFilterSettings>(&node.settings))

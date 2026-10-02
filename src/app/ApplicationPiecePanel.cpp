@@ -55,6 +55,8 @@ void Application::DrawPieceSettings(graph::Node &node) {
             changed |= ui::PropertyBool("節理面への吸着", &voronoi->snap, false,
                 "Points と Planes を両方繋いだときに有効にします。Planes の最初の系統の構造面で形を板に分け、板の中を点の Voronoi で割ります。"
                 "節理面は複数の片にまたがる通り抜けた一枚の面になり、板の中は不規則な多面体になります。");
+            changed |= ui::PropertyInt("節理の連続枚数", &voronoi->jointSpan, 0, 16, 0,
+                "Planes のみ。0 は全体を貫通。1 は板ごと、2 以上は数枚の板ごとに横の節理の位置を変えます。第1系統の面と、各系統の向きは保ちます。");
             ui::EndPropertyTable();
         }
         ui::HintText("Points（Scatter Points）か Planes（Parallel Planes）、または両方を接続します。"

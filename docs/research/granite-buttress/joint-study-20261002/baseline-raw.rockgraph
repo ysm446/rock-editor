@@ -1,0 +1,33 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "比較で共通の母岩。10 × 15 × 8 m。", "baseRock": {"shape": "box", "size": [10, 15, 8]}},
+      {"id": 2, "kind": "scatterPoints", "note": "ブロックの母点。密度のむらで、割れの多い帯（小さなブロック、先に崩れて沢になる）と割れの少ない芯（大きなブロック、塔として残る）を作る。高さの勾配: 地表に近い上ほど節理が密で、頂は小さなブロックに割れる", "pieces": {"count": 420, "seed": 3, "clustering": 0.9, "clusterScale": 2.0, "heightGradient": 0.4}},
+      {"id": 19, "kind": "parallelPlanes", "note": "第1系統の共通面。76°、間隔2.4 m。", "parallelPlanes": {"rotation": [0, 0, 76], "spacing": 2.4, "variation": 0.8, "seed": 5}},
+      {"id": 5, "kind": "voronoiFracture", "note": "点の Voronoi を主な節理の面に吸着させて割る（板 ∩ Voronoi）。節理面は複数のブロックにまたがる一枚の面、板の中は不規則な多面体", "pieces": {"rotation": [0, 0, 76], "stretch": [2.5, 1, 1.6], "snap": true}},
+      {"id": 6, "kind": "pieceSelect", "note": "既存レシピと共通のPeel。接地、安定0.45、側面後退4 m。", "pieces": {"mode": "peel", "fraction": 1.0, "peelNoise": 1.0, "protectCore": false, "grounded": true, "seed": 3, "peelSize": 0.4, "stability": 0.45, "peelRetreat": 4}},
+      {"id": 7, "kind": "pieceFilter", "note": "選んだブロックを消す", "pieces": {"keep": false}},
+      {"id": 8, "kind": "piecesToMesh"},
+      {"id": 9, "kind": "toVolume", "note": "分割片の集合をボリュームへ変換。隙間のない接触面でも距離場に筋が出る問題の調査対象。", "toVolume": {"resolution": 128}},
+      {"id": 14, "kind": "volumeClip", "note": "根元を斜面に埋める", "volumeClip": {"mode": "ground", "embed": 0.16}},
+      {"id": 15, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 16, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"},
+      {"from": "1", "to": "5:Geometry"},
+      {"from": "2", "to": "5:Points"},
+      {"from": "5", "to": "6"},
+      {"from": "5", "to": "7:Pieces"},
+      {"from": "6", "to": "7:Selection"},
+      {"from": "8", "to": "9"},
+      {"from": "14", "to": "15"},
+      {"from": "15", "to": "16:Geometry"},
+      {"from": "19", "to": "5:Planes"},
+      {"from": "7", "to": "8"},
+      {"from": "9", "to": "14"}
+    ]
+  }
+}

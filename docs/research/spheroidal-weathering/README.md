@@ -1,9 +1,13 @@
 # 玉ねぎ状風化・剥離ドーム
 
 作成日時: 2026-10-01 12:50
-更新日時: 2026-10-03 04:00
+更新日時: 2026-10-02 21:40
 
 [岩の研究ページ](../rocks.md) の 1 項目。分類: 風化・侵食の形。レシピは [`spheroidal-weathering`](../../../examples/ai-recipes/spheroidal-weathering.rockgraph)（アプリの「テンプレートから作成」から複製して開ける）。
+
+## 概要
+
+岩塊の外側から風化が進み、丸い芯の周囲に玉ねぎの皮のような層や剥離が現れる姿を扱う。特徴は、丸い全体形と、外側の殻が部分的に剥がれた段差。このページでは大きな剥離ドームも造形上の比較対象にするが、球状風化と大規模なシーティングを同じ成因とはみなさない。[参考：USGSの球状風化研究](https://pubs.usgs.gov/pp/0575c/report.pdf)、[剥離ドームの解説](https://www.usgs.gov/geology-and-ecology-of-national-parks/geology-yosemite-national-park)。
 
 ## 今の状態
 

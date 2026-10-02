@@ -1,9 +1,12 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 04:30
+更新日時: 2026-10-02 21:18
 
 ## 未リリース
+
+- Base Shapeに「凸岩峰」を追加。裾・肩・頂の凸包から、Voronoiへ直接渡せる凸多面体の母岩を作る。頂の幅・肩の高さ・偏り・輪郭のばらつきで大きなシルエットを先に決める。[仕様](reference/convex-peak.md)。
+- Voronoi FractureにPlanes専用の「節理の連続枚数」を追加。0は従来の貫通、1以上で第1系統の板の束ごとに横の節理を止める。[岩峰の比較研究](research/granite-buttress/joint-study.md)に再現グラフ・画像・数値を保存した。
 
 - 岩の研究ページを種類ごとのフォルダ（`docs/research/<レシピ名>/`）に分け、状態・作り方・課題・経過の文と、日時付きの経過の画像を置くようにした。`rocks.md` は一覧の入口。「テンプレートから作成」のサムネイルは `docs/research/<id>/latest.jpg` を使う（旧 `docs/research/images/` は廃止）。
 

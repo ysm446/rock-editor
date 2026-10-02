@@ -710,6 +710,76 @@ static void RunPlaneFractureTests() {
         Check(error.empty() && mean(biased) < mean(plain), "大きさの効き: 小さな片から先に欠ける");
     }
 
+    // 束で止まる節理。面積の収支をメッシュから独立に測り、T字で隣接を落とさないことを確かめる。
+    for (const bool tiltedCase : {false, true}) for (int span : {1, 2, 3}) {
+        std::vector<StructurePlanes> systems{layers, joints};
+        if (tiltedCase) {
+            ParallelPlanesSettings a, b, c;
+            a.rotationDegrees = {11, 17, 76}; a.spacing = .6f; a.variation = .6f;
+            b.rotationDegrees = {-15, 23, 0}; b.spacing = .7f; b.variation = .8f;
+            c.rotationDegrees = {64, -18, 2}; c.spacing = .8f; c.variation = .5f;
+            systems = {MakeParallelPlanes(a,error),MakeParallelPlanes(b,error),MakeParallelPlanes(c,error)};
+        }
+        const auto grouped = FractureJointGroups(box, systems, span, 7, error);
+        Check(error.empty() && grouped.adjacencyComplete && !grouped.pieces.empty(), "節理の束: 分割成功");
+        double volumeSum = 0;
+        bool groupClosed = true, groupSymmetric = true, areaComplete = true;
+        for (const auto& piece : grouped.pieces) {
+            MeshInfo info;
+            groupClosed &= InspectMesh(*piece.mesh, info) && info.closed && info.components == 1;
+            volumeSum += piece.volume;
+            double surface = 0, contactArea = 0;
+            for (const auto& t : piece.mesh->triangles) {
+                const auto a = piece.mesh->positions[t[0]], b = piece.mesh->positions[t[1]], c = piece.mesh->positions[t[2]];
+                const double ux = b.x-a.x, uy = b.y-a.y, uz = b.z-a.z;
+                const double vx = c.x-a.x, vy = c.y-a.y, vz = c.z-a.z;
+                surface += .5 * std::sqrt(std::pow(uy*vz-uz*vy,2)+std::pow(uz*vx-ux*vz,2)+std::pow(ux*vy-uy*vx,2));
+            }
+            const auto length = [](const std::array<double,3>& v) { return std::sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]); };
+            for (const auto& face : piece.neighborhood->boundary) contactArea += length(face);
+            for (const auto& contact : piece.neighborhood->contacts) {
+                contactArea += length(contact.areaVector);
+                const auto& other = grouped.pieces[contact.neighbor];
+                const auto back = std::find_if(other.neighborhood->contacts.begin(), other.neighborhood->contacts.end(),
+                    [&](const auto& c) { return c.neighbor == piece.id; });
+                groupSymmetric &= back != other.neighborhood->contacts.end();
+                if (back != other.neighborhood->contacts.end())
+                    for (int k=0;k<3;++k) groupSymmetric &= std::abs(back->areaVector[k]+contact.areaVector[k]) < 1e-10;
+            }
+            areaComplete &= std::abs(surface-contactArea) < surface * 1e-5;
+        }
+        Check(groupClosed && std::abs(volumeSum-8) < 1e-4, "節理の束: 閉包と体積保存");
+        Check(groupSymmetric && areaComplete, "節理の束: T字でも全表面が外面または対称な接触として記録される");
+        // 直交する2系統なので、AABB内部の格子点の所属数から空隙と重複を独立に検出できる。
+        bool partition = true;
+        if (!tiltedCase) for (int x=0;x<13;++x) for (int y=0;y<13;++y) for (int z=0;z<3;++z) {
+            const double px = -1 + (x+.371)*2/13, py = -1 + (y+.273)*2/13, pz = -1 + (z+.417)*2/3;
+            int owners = 0;
+            for (const auto& piece : grouped.pieces) {
+                MeshInfo info;
+                InspectMesh(*piece.mesh, info);
+                owners += px > info.minimum.x && px < info.maximum.x && py > info.minimum.y && py < info.maximum.y &&
+                          pz > info.minimum.z && pz < info.maximum.z;
+            }
+            partition &= owners == 1;
+        }
+        Check(partition, "節理の束: 内部点に空隙も重複もない");
+        Check(FractureJointGroups(box, systems, span, 7, error).fingerprint == grouped.fingerprint,
+              "節理の束: 同じ設定で再現");
+        PieceSelectSettings groupPeel;
+        groupPeel.mode = PieceSelectMode::Peel; groupPeel.fraction = .35f;
+        const auto selected = SelectPieces(grouped, groupPeel, error);
+        Check(error.empty() && !selected.ids.empty() && selected.ids.size() < grouped.pieces.size(), "節理の束: Peelで欠ける");
+    }
+    Check(FractureJointGroups(box, {layers,joints}, 0, 7, error).fingerprint == blocks.fingerprint,
+          "連続枚数0は従来の構造面分割と同じ");
+    FractureJointGroups(box, {layers,joints}, 17, 7, error);
+    Check(!error.empty(), "節理の連続枚数の範囲外を診断");
+    std::stop_source stopped;
+    stopped.request_stop();
+    FractureJointGroups(box, {layers,joints}, 1, 7, error, stopped.get_token());
+    Check(!error.empty(), "節理の束の取消");
+
     // グラフ: Parallel Planes を連結して系統を足し、Voronoi Fracture の Planes 入力へ。
     graph::NodeGraph g;
     const auto shape = g.CreateNode(graph::NodeKind::BaseRock), first = g.CreateNode(graph::NodeKind::ParallelPlanes),
@@ -723,6 +793,18 @@ static void RunPlaneFractureTests() {
     Check(chained.error.empty() && chained.planes && chained.planes->size() == 2, "連結すると上流の系統にこの系統が足される");
     const auto evaluated = graph::EvaluateRocks(g, fracture);
     Check(evaluated.error.empty() && evaluated.pieces && evaluated.pieces->pieces.size() == 8, "グラフで 2 系統のブロックに割る");
+    graph::RockEvaluationCache jointCache;
+    graph::EvaluateRocks(g, fracture, &jointCache);
+    auto& jointSettings = std::get<VoronoiSettings>(g.FindMutableNode(fracture)->settings);
+    jointSettings.jointSpan = 2;
+    const auto finiteJoints = graph::EvaluateRocks(g, fracture, &jointCache);
+    Check(finiteJoints.error.empty() && finiteJoints.pieces && finiteJoints.pieces->generation != evaluated.pieces->generation,
+          "節理の連続枚数でキャッシュを更新");
+    const auto savedJoints = io::WritePieceSettings(*g.FindNode(fracture));
+    jointSettings.jointSpan = 0;
+    io::ReadPieceSettings(*g.FindMutableNode(fracture), savedJoints);
+    Check(jointSettings.jointSpan == 2, "節理の連続枚数の保存復元");
+    jointSettings.jointSpan = 0;
     link(shape, scatter, 0);
     link(scatter, fracture, 1);
     Check(!graph::EvaluateRocks(g, fracture).error.empty(), "Points と Planes の同時接続は、吸着が無効なら診断する");

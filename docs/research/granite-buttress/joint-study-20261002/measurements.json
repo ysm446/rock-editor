@@ -1,0 +1,289 @@
+[
+  {
+    "name": "baseline-finished",
+    "5": {
+      "ok": true,
+      "count": 420,
+      "volume": 1200.0000003692205
+    },
+    "7": {
+      "ok": true,
+      "count": 116,
+      "volume": 415.96850896754864
+    },
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 185.47769044340222,
+      "size": [
+        9.995396614074707,
+        12.473580360412598,
+        7.980777740478516
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 5,
+        "cavityVolume": 0.0008148147505914482,
+        "largestSolidShare": 0.9984593680311679,
+        "largestSolidVolumes": [
+          185.19275178955624,
+          0.14954487493495514,
+          0.11095110260012399,
+          0.02525808832289784,
+          4.987095103075356e-08
+        ],
+        "solids": 5
+      }
+    }
+  },
+  {
+    "name": "baseline-raw",
+    "5": {
+      "ok": true,
+      "count": 420,
+      "volume": 1200.0000003692205
+    },
+    "7": {
+      "ok": true,
+      "count": 116,
+      "volume": 415.96850896754864
+    },
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 224.47432266844027,
+      "size": [
+        10.000011444091797,
+        12.503360748291016,
+        7.999988555908203
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 0.9980568464677247,
+        "largestSolidVolumes": [
+          224.0381372232584,
+          0.22050990354996322,
+          0.21567811496876024,
+          5.959574120010215e-08
+        ],
+        "solids": 4
+      }
+    }
+  },
+  {
+    "name": "span-0",
+    "5": {
+      "ok": true,
+      "count": 310,
+      "volume": 1199.9999991204113
+    },
+    "7": {
+      "ok": true,
+      "count": 87,
+      "volume": 446.8177023504861
+    },
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 279.06915429030613,
+      "size": [
+        10.000118255615234,
+        10.763354301452637,
+        7.999989986419678
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          279.0691585604661
+        ],
+        "solids": 1
+      }
+    }
+  },
+  {
+    "name": "span-1",
+    "5": {
+      "ok": true,
+      "count": 316,
+      "volume": 1199.9999910451572
+    },
+    "7": {
+      "ok": true,
+      "count": 91,
+      "volume": 455.5593627556663
+    },
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 281.5048723740502,
+      "size": [
+        10.00001049041748,
+        11.074763298034668,
+        8.00140380859375
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          281.50486687634844
+        ],
+        "solids": 1
+      }
+    }
+  },
+  {
+    "name": "span-3",
+    "5": {
+      "ok": true,
+      "count": 290,
+      "volume": 1199.999998280488
+    },
+    "7": {
+      "ok": true,
+      "count": 80,
+      "volume": 465.8614672539738
+    },
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 311.47855529050713,
+      "size": [
+        10.000009536743164,
+        9.826339721679688,
+        8.000009536743164
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          311.47855113229343
+        ],
+        "solids": 1
+      }
+    }
+  },
+  {
+    "name": "intact-split",
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 999.1977572572204,
+      "size": [
+        10.000011444091797,
+        12.50157356262207,
+        7.999988555908203
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          999.1977556158301
+        ],
+        "solids": 1
+      }
+    }
+  },
+  {
+    "name": "intact-box",
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 999.8706365966309,
+      "size": [
+        10.000011444091797,
+        12.50157356262207,
+        7.999988555908203
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          999.8706382952241
+        ],
+        "solids": 1
+      }
+    }
+  },
+  {
+    "name": "oblique-1",
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 343.32385349977204,
+      "size": [
+        10.000007629394531,
+        8.617887496948242,
+        7.9999918937683105
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          343.3238506937637
+        ],
+        "solids": 1
+      }
+    }
+  },
+  {
+    "name": "oblique-3",
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 308.19108984003685,
+      "size": [
+        10.000008583068848,
+        9.117278099060059,
+        7.999991416931152
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          308.191092319469
+        ],
+        "solids": 1
+      }
+    }
+  },
+  {
+    "name": "span-1-close",
+    "15": {
+      "ok": true,
+      "count": 1,
+      "volume": 281.5048723740502,
+      "size": [
+        10.00001049041748,
+        11.074763298034668,
+        8.00140380859375
+      ],
+      "closed": true,
+      "shells": {
+        "cavities": 0,
+        "cavityVolume": 0.0,
+        "largestSolidShare": 1.0,
+        "largestSolidVolumes": [
+          281.50486687634844
+        ],
+        "solids": 1
+      }
+    }
+  }
+]

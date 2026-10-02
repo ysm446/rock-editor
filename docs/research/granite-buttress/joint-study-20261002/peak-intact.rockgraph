@@ -1,0 +1,19 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "凸多面体で岩峰の大きな輪郭を先に作る。裾・肩・頂の点群の凸包。Voronoiへ直接接続できる。", "baseRock": {"shape": "convexPeak", "size": [9, 15, 7], "seed": 12, "peakSides": 7, "peakTopWidth": 0.04, "peakShoulderHeight": 0.58, "peakLeanX": -0.2, "peakLeanZ": 0.05, "peakVariation": 0.35}},
+      {"id": 9, "kind": "toVolume", "note": "変位なしのピースをボリューム化。接触面由来の細い筋が出る既存の問題は未修正。", "toVolume": {"resolution": 128}},
+      {"id": 14, "kind": "volumeClip", "note": "裾を8%埋めて接地する。", "volumeClip": {"mode": "ground", "embed": 0.08}},
+      {"id": 15, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 16, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "9"},
+      {"from": "14", "to": "15"},
+      {"from": "15", "to": "16:Geometry"},
+      {"from": "9", "to": "14"}
+    ]
+  }
+}

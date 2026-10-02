@@ -32,6 +32,9 @@ struct VoronoiSettings {
     // 割る（板 ∩ Voronoi）。節理面は通り抜ける一枚の面になり、板の中は不規則な多面体（点の Voronoi の不規則さと、
     // 複数の片にまたがる平らな節理面の両立）。点の無い板はできない（隣の板に併せる）。
     bool snap = false;
+    // Planes のみ。0 は全系統を貫通。1 以上は第1系統の板をこの枚数ずつ束ね、
+    // 第2系統以降の位置と間隔の乱数を束ごとに変える。向きは系統内で共通。
+    int jointSpan = 0;
     int version = 1;
     bool operator==(const VoronoiSettings &) const = default;
 };
@@ -171,6 +174,8 @@ PieceCollection FractureVoronoi(const Mesh &, const PointSet &, const VoronoiSet
 // ブロック）。隣接情報は 1 回の分割で揃うので、Piece Select の外周からの侵食（Peel）に使える。
 PieceCollection FracturePlanes(const Mesh &, const std::vector<StructurePlanes> &, int producer, std::string &,
                                std::stop_token = {});
+PieceCollection FractureJointGroups(const Mesh &, const std::vector<StructurePlanes> &, int jointSpan,
+                                   int producer, std::string &, std::stop_token = {});
 PieceCollection FracturePieces(const PieceCollection&, const PointSet&, const VoronoiSettings&, int producer,
                               std::string&, std::stop_token = {});
 PieceSelection SelectPieces(const PieceCollection &, const PieceSelectSettings &, std::string &, std::stop_token = {});

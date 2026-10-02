@@ -1,0 +1,33 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "baseRock", "note": "凸多面体で岩峰の大きな輪郭を先に作る。裾・肩・頂の点群の凸包。Voronoiへ直接接続できる。", "baseRock": {"shape": "convexPeak", "size": [9, 15, 7], "seed": 3, "peakSides": 7, "peakTopWidth": 0.04, "peakShoulderHeight": 0.58, "peakLeanX": -0.2, "peakLeanZ": 0.05, "peakVariation": 0.35}},
+      {"id": 2, "kind": "scatterPoints", "note": "局所の欠けを作るための90点。輪郭を決めるのは上流の凸岩峰。", "pieces": {"count": 90, "seed": 3, "clustering": 0.9, "clusterScale": 2.0, "heightGradient": 0.4}},
+      {"id": 19, "kind": "parallelPlanes", "note": "主な節理の系統（76°）。吸着でこの面が通り抜けた一枚の節理面になる", "parallelPlanes": {"rotation": [0, 0, 76], "spacing": 2.4, "variation": 0.8, "seed": 5}},
+      {"id": 5, "kind": "voronoiFracture", "note": "点の Voronoi を主な節理の面に吸着させて割る（板 ∩ Voronoi）。節理面は複数のブロックにまたがる一枚の面、板の中は不規則な多面体", "pieces": {"rotation": [0, 0, 76], "stretch": [2.5, 1, 1.6], "snap": true}},
+      {"id": 6, "kind": "pieceSelect", "note": "少量だけ外周を欠く。側面後退と安定による強い削除は使わず、大きな輪郭を残す。", "pieces": {"mode": "peel", "fraction": 0.15, "peelNoise": 1.0, "protectCore": true, "grounded": true, "seed": 3, "peelSize": 0, "stability": 0, "peelRetreat": 0}},
+      {"id": 7, "kind": "pieceFilter", "note": "選んだブロックを消す", "pieces": {"keep": false}},
+      {"id": 8, "kind": "piecesToMesh"},
+      {"id": 9, "kind": "toVolume", "note": "変位なしのピースをボリューム化。接触面由来の細い筋が出る既存の問題は未修正。", "toVolume": {"resolution": 128}},
+      {"id": 14, "kind": "volumeClip", "note": "裾を8%埋めて接地する。", "volumeClip": {"mode": "ground", "embed": 0.08}},
+      {"id": 15, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 16, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"},
+      {"from": "1", "to": "5:Geometry"},
+      {"from": "2", "to": "5:Points"},
+      {"from": "5", "to": "6"},
+      {"from": "5", "to": "7:Pieces"},
+      {"from": "6", "to": "7:Selection"},
+      {"from": "8", "to": "9"},
+      {"from": "14", "to": "15"},
+      {"from": "15", "to": "16:Geometry"},
+      {"from": "19", "to": "5:Planes"},
+      {"from": "7", "to": "8"},
+      {"from": "9", "to": "14"}
+    ]
+  }
+}

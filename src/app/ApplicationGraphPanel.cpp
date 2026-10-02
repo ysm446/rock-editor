@@ -2363,9 +2363,9 @@ void Application::DrawGraphPanel() {
         bool changed = false;
         auto edited = *rock;
         if (ui::BeginPropertyTable("baseRockRows")) {
-            const char* shapes[] = {"Box", "RoundedBox", "Sphere", "Ellipsoid", "不明（選び直してください）"};
-            int shape = std::clamp(static_cast<int>(edited.shape), 0, 4);
-            if (ui::PropertyCombo("形状", &shape, shapes, shape == 4 ? 5 : 4, 0)) {
+            const char* shapes[] = {"Box", "RoundedBox", "Sphere", "Ellipsoid", "凸岩峰", "不明（選び直してください）"};
+            int shape = std::clamp(static_cast<int>(edited.shape), 0, 5);
+            if (ui::PropertyCombo("形状", &shape, shapes, shape == 5 ? 6 : 5, 0)) {
                 edited.shape = static_cast<geometry::BaseShape>(shape);
                 changed = true;
             }
@@ -2378,24 +2378,38 @@ void Application::DrawGraphPanel() {
             }
             if (edited.shape == geometry::BaseShape::RoundedBox)
                 changed |= ui::PropertyFloat("丸み", &edited.roundness, 0, 1, 0.25f);
-            const char* levels[] = {"4", "8", "16", "32", "不明（選び直してください）"};
-            const int divisions[] = {4, 8, 16, 32};
-            int level = 4;
-            for (int i = 0; i < 4; ++i)
-                if (edited.subdivisions == divisions[i]) level = i;
-            if (ui::PropertyCombo("面の分割数", &level, levels, level == 4 ? 5 : 4, 1) && level < 4) {
-                edited.subdivisions = divisions[level];
-                changed = true;
+            if (edited.shape == geometry::BaseShape::ConvexPeak) {
+                changed |= ui::PropertyInt("輪郭の点数", &edited.peakSides, 4, 12, 7);
+                changed |= ui::PropertyFloat("頂の幅", &edited.peakTopWidth, 0, .6f, .08f);
+                changed |= ui::PropertyFloat("肩の高さ", &edited.peakShoulderHeight, .2f, .85f, .55f);
+                changed |= ui::PropertyFloat("頂の偏り X", &edited.peakLeanX, -.5f, .5f, .18f);
+                changed |= ui::PropertyFloat("頂の偏り Z", &edited.peakLeanZ, -.5f, .5f, -.08f);
+                changed |= ui::PropertyFloat("輪郭のばらつき", &edited.peakVariation, 0, .5f, .25f);
+            } else {
+                const char* levels[] = {"4", "8", "16", "32", "不明（選び直してください）"};
+                const int divisions[] = {4, 8, 16, 32};
+                int level = 4;
+                for (int i = 0; i < 4; ++i)
+                    if (edited.subdivisions == divisions[i]) level = i;
+                if (ui::PropertyCombo("面の分割数", &level, levels, level == 4 ? 5 : 4, 1) && level < 4) {
+                    edited.subdivisions = divisions[level];
+                    changed = true;
+                }
+                changed |= ui::PropertyFloat("ノイズ強度", &edited.noiseStrength, 0, 0.15f, 0);
+                changed |= ui::PropertyFloat("ノイズ細かさ", &edited.noiseScale, 0.5f, 4, 2);
             }
-            changed |= ui::PropertyFloat("ノイズ強度", &edited.noiseStrength, 0, 0.15f, 0);
-            changed |= ui::PropertyFloat("ノイズ細かさ", &edited.noiseScale, 0.5f, 4, 2);
             changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 0);
             ui::EndPropertyTable();
         }
-        ui::HintText(
-            "原点中心の母岩。寸法はノイズを加える前の大きさです。ノイズ強度は半径に対する変位率、細かさを上げ"
-            "ると細かな凹凸になります。");
-        ui::HintText("Seed はノイズがあるときに形を変えます。");
+        if (edited.shape == geometry::BaseShape::ConvexPeak) {
+            ui::HintText("裾・肩・頂から凸多面体の母岩を作ります。寸法は完成した外接箱の大きさ。Seedで輪郭が変わります。"
+                         "Scatter PointsとVoronoi Fractureへ直接繋ぎ、輪郭を保ちながら局所的に欠く用途です。");
+        } else {
+            ui::HintText(
+                "原点中心の母岩。寸法はノイズを加える前の大きさです。ノイズ強度は半径に対する変位率、細かさを上げ"
+                "ると細かな凹凸になります。");
+            ui::HintText("Seed はノイズがあるときに形を変えます。");
+        }
         if (changed) {
             *rock = edited;
             m_graph.MarkDirty();

@@ -1,7 +1,7 @@
 # 岩の研究ページ
 
 作成日時: 2026-10-01 12:50
-更新日時: 2026-10-03 04:00
+更新日時: 2026-10-02 21:18
 
 「あらゆる種類の岩を作れること」を目標に、岩の種類ごとに今の出来・作り方・課題・改善の経過を残す。種類ごとにフォルダ（`docs/research/<レシピ名>/`）があり、そこの `README.md` に状態・作り方・課題・経過の文、`latest.jpg` に今の形、日時付きの `.jpg` に経過の画像を置く。一つずつ改善していく。足りないノードの整理（G 番号）は [岩の種類の網羅](../reference/rock-catalog.md)、組み方の手順は [skill](../../.agents/skills/rock-graph/SKILL.md)。
 
@@ -32,7 +32,7 @@
 | [河原の丸石](river-pebble/README.md) | ○ | `river-pebble` | 形が単調 |
 | [丸い転石](rounded-boulder/README.md) | ○ | `rounded-boulder` | — |
 | [花崗岩のシーティング](granite-sheeting/README.md) | △ | `granite-sheeting` | 平らな面のボクセルの格子模様 |
-| [花崗岩の岩峰](granite-buttress/README.md) | △ | `granite-buttress` | ブロックの積み重なりが目立つ（ずれの隙間・横の割れ目） |
+| [花崗岩の岩峰](granite-buttress/README.md) | △ | `granite-buttress` | [凸岩峰を先に作る試作](granite-buttress/joint-study.md)。接触面のボリューム化の筋と局所的な欠け方を改善 |
 | [黒曜石・フリント](obsidian/README.md) | ○（形） | `obsidian` | ガラス質の素材 |
 | [礫岩](conglomerate/README.md) | ○ | `conglomerate` | — |
 | [角礫岩](breccia/README.md) | ○ | `breccia` | 礫が基質に浮いて見える（礫どうしが接しない） |

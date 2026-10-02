@@ -60,6 +60,10 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
             const bool hasPoints = node.inputs.size() > 1 && graph.FindUpstreamNodeForPin(node.inputs[1].id);
             const bool hasPlanes = node.inputs.size() > 2 && graph.FindUpstreamNodeForPin(node.inputs[2].id);
             const auto &voronoiSettings = std::get<geometry::VoronoiSettings>(node.settings);
+            if (voronoiSettings.jointSpan < 0 || voronoiSettings.jointSpan > 16)
+                return fail("節理の連続枚数は 0〜16 にしてください");
+            if (voronoiSettings.jointSpan > 0 && (hasPoints || !hasPlanes))
+                return fail("節理の連続枚数は Planes だけを繋いだときに使います");
             if (hasPoints && hasPlanes && !voronoiSettings.snap)
                 return fail("Points と Planes を両方繋ぐときは「節理面への吸着」を有効にしてください（Planes だけで割るなら Points を外す）");
             if (hasPoints && hasPlanes) {
@@ -86,6 +90,7 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
                 add(voronoiSettings.snap);
                 add(voronoiSettings.version);
             } else if (hasPlanes) {
+                add(voronoiSettings.jointSpan);
                 planes = input(2);
                 if (!planes.error.empty())
                     return planes;
@@ -124,7 +129,7 @@ RockEvaluation EvaluatePieceNode(const NodeGraph &graph, const Node &node, RockE
             out.pieces = std::make_shared<const geometry::PieceCollection>(planes.planes && points.points
                 ? geometry::FractureVoronoi(*mesh,*points.points,s,node.id,error,stop,planes.planes.get())
                 : planes.planes
-                ? geometry::FracturePlanes(*mesh,*planes.planes,node.id,error,stop)
+                ? geometry::FractureJointGroups(*mesh,*planes.planes,s.jointSpan,node.id,error,stop)
                 : first.pieces
                 ? geometry::FracturePieces(*first.pieces,*points.points,s,node.id,error,stop)
                 : geometry::FractureVoronoi(*mesh,*points.points,s,node.id,error,stop));

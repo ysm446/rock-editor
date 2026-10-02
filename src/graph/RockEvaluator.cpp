@@ -48,6 +48,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
     if (const auto* s = std::get_if<geometry::BaseRockSettings>(&node->settings)) {
         add(s->size); add(s->seed); add(s->shape); add(s->subdivisions);
         add(s->roundness); add(s->noiseStrength); add(s->noiseScale);
+        add(s->peakSides); add(s->peakTopWidth); add(s->peakShoulderHeight);
+        add(s->peakLeanX); add(s->peakLeanZ); add(s->peakVariation);
         return key;
     }
     const auto pose = [&](const geometry::PiecePose& p) { add(p.position); add(p.rotation); add(p.scale); };
@@ -133,7 +135,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(scatter->count); add(scatter->seed); add(scatter->version); add(scatter->planar); add(scatter->clustering); add(scatter->clusterScale);
         add(scatter->heightGradient);
     } else if (const auto* voronoi = std::get_if<geometry::VoronoiSettings>(&node->settings)) {
-        add(voronoi->rotation); add(voronoi->stretch); add(voronoi->snap); add(voronoi->version);
+        add(voronoi->rotation); add(voronoi->stretch); add(voronoi->snap); add(voronoi->jointSpan); add(voronoi->version);
     } else if (const auto* selection = std::get_if<geometry::PieceSelectSettings>(&node->settings)) {
         add(selection->mode); add(selection->outerFaces); add(selection->seed); add(selection->minimum); add(selection->maximum);
         add(selection->minVolume); add(selection->maxVolume); add(selection->fraction); add(selection->invert); add(selection->producer); add(selection->generation); add(selection->layer);

@@ -319,8 +319,20 @@ void RunNodeParamsTests() {
         if (param.type != graph::ParamType::Float && param.type != graph::ParamType::Int) continue;
         const std::string name = std::string(graph::FindNodeDefinition(param.kind)->name) + ":" + param.path;
         const EdgeRule* rule = FindEdgeRule(name);
-        const auto host = MakeHost(param.kind, rule && rule->bareCrack);
+        auto host = MakeHost(param.kind, rule && rule->bareCrack);
+        if (name == "voronoiFracture:pieces.jointSpan") {
+            host = Host{};
+            auto& g = host->graph;
+            host->target = host->evaluate = Add(g, graph::NodeKind::VoronoiFracture);
+            Connect(g, SmallBox(g), host->target, 0);
+            const auto first = Add(g, graph::NodeKind::ParallelPlanes), second = Add(g, graph::NodeKind::ParallelPlanes);
+            std::get<geometry::ParallelPlanesSettings>(g.FindMutableNode(second)->settings).rotationDegrees[2] = 90;
+            Connect(g, first, second, 0);
+            Connect(g, second, host->target, 2);
+        }
         if (!host) continue;
+        if (param.kind == graph::NodeKind::BaseRock && std::string(param.path).starts_with("baseRock.peak"))
+            std::get<geometry::BaseRockSettings>(host->graph.FindMutableNode(host->target)->settings).shape = geometry::BaseShape::ConvexPeak;
         const auto number = [&](double v) { return param.type == graph::ParamType::Int ? json(int64_t(std::llround(v))) : json(v); };
         const json extras = rule ? rule->extras : json::object();
         for (const bool atMinimum : {true, false}) {

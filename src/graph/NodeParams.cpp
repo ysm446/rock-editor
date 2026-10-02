@@ -15,7 +15,8 @@ using C = ParamCheck;
 constexpr const char* kLongest = "最長辺に対する比";
 
 constexpr ParamOption kShapes[] = {{"box", 0, "直方体"}, {"roundedBox", 1, "角の丸い直方体"},
-                                   {"sphere", 2, "球（size[0] が直径）"}, {"ellipsoid", 3, "楕円体"}};
+                                   {"sphere", 2, "球（size[0] が直径）"}, {"ellipsoid", 3, "楕円体"},
+                                   {"convexPeak", 4, "凸岩峰（裾・肩・頂の凸多面体）"}};
 constexpr ParamOption kSubdivisions[] = {{"4", 4, "面を4分割"}, {"8", 8, "8分割"}, {"16", 16, "16分割"}, {"32", 32, "32分割"}};
 constexpr ParamOption kMeshers[] = {{"marchingTetrahedra", 0, "Marching Tetrahedra（なめらか。既定）"},
                                     {"dualContouring", 1, "Dual Contouring（角と平らな面を保つ。岩にはこちら）"}};
@@ -72,7 +73,13 @@ constexpr ParamDefinition kParams[] = {
     {K::BaseRock, "baseRock.roundness", T::Float, 0, 1, "短辺の半分に対する比", "丸み", "roundedBox の角の丸み", C::Error},
     {K::BaseRock, "baseRock.noiseStrength", T::Float, 0, 0.15, "原点からの距離に対する比", "ノイズ強度", "表面を放射方向に揺らす量。0 で揺らさない", C::Error},
     {K::BaseRock, "baseRock.noiseScale", T::Float, 0.5, 4, "", "ノイズ細かさ", "揺らすノイズの細かさ", C::Error},
-    {K::BaseRock, "baseRock.seed", T::Int, 0, N, "", "Seed", "noiseStrength > 0 のときだけ形に効く", C::None},
+    {K::BaseRock, "baseRock.seed", T::Int, 0, N, "", "Seed", "凸岩峰の輪郭、またはnoiseStrength > 0のときのノイズに効く", C::None},
+    {K::BaseRock, "baseRock.peakSides", T::Int, 4, 12, "個", "輪郭の点数", "convexPeak用。裾・肩・頂の各周の候補点数。凸包を取るため面数とは異なる", C::Error},
+    {K::BaseRock, "baseRock.peakTopWidth", T::Float, 0, .6, "裾に対する比", "頂の幅", "convexPeak用。0で尖った頂、増やすと頂が広がる", C::Error},
+    {K::BaseRock, "baseRock.peakShoulderHeight", T::Float, .2, .85, "高さの比", "肩の高さ", "convexPeak用。裾0、頂1に対する肩の位置。肩の幅は裾の約72%", C::Error},
+    {K::BaseRock, "baseRock.peakLeanX", T::Float, -.5, .5, "基準幅の比", "頂の偏り X", "convexPeak用。裾から頂へ向けてX方向へ偏らせる。最終的な外接寸法はsizeに合わせる", C::Error},
+    {K::BaseRock, "baseRock.peakLeanZ", T::Float, -.5, .5, "基準奥行きの比", "頂の偏り Z", "convexPeak用。裾から頂へ向けてZ方向へ偏らせる", C::Error},
+    {K::BaseRock, "baseRock.peakVariation", T::Float, 0, .5, "比", "輪郭のばらつき", "convexPeak用。凸包を取る前の輪郭点を揺らす。通常のnoiseStrength、noiseScale、subdivisionsは使わず凸を保つ", C::Error},
     // --- Random Boxes ---
     {K::RandomBoxes, "randomBoxes.count", T::Int, 1, 32, "個", "個数", "重ねる直方体の数", C::Error},
     {K::RandomBoxes, "randomBoxes.size", T::Float3, 0.1, 100, "m", "基準寸法", "最初の直方体の寸法", C::Error},
@@ -122,6 +129,8 @@ constexpr ParamDefinition kParams[] = {
      "分割の座標系の伸長比。正の値で、最大/最小の比は 16 以下。大きい軸の方向に細長い片になる", C::Error},
     {K::VoronoiFracture, "pieces.snap", T::Bool, N, N, "", "節理面への吸着",
      "Points と Planes を両方繋いだとき true にする。Planes の最初の系統の構造面で形を板に分け、板の中を点の Voronoi で割る（板 ∩ Voronoi）。節理面は複数の片にまたがる通り抜けた一枚の面になり、板の中は不規則な多面体。点の無い板はできない", C::None},
+    {K::VoronoiFracture, "pieces.jointSpan", T::Int, 0, 16, "板の枚数", "節理の連続枚数",
+     "Planes のみ。0 は従来の全系統貫通。1 以上は第1系統の板を指定枚数ずつ束ね、第2系統以降の面を束の境界で止める。束ごとに位置と間隔の乱数を変え、向きは共通。有限亀裂の物理計算ではない", C::Error},
     {K::VoronoiFracture, "pieces.version", T::Int, 1, 1, "", "", "アルゴリズムの版。1 のまま", C::Error, {}, true},
     {K::PieceSelect, "pieces.mode", T::IntEnum, 0, 6, "", "選別方法", "どの片を選ぶか。使う項目はモードで変わる", C::Error, kSelectModes},
     {K::PieceSelect, "pieces.outerFaces", T::Int, 0, 63, "ビット", "接する外面",

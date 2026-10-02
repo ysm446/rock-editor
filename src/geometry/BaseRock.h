@@ -4,7 +4,7 @@
 #include "geometry/Mesh.h"
 
 namespace rock::geometry {
-enum class BaseShape { Box, RoundedBox, Sphere, Ellipsoid, Invalid };
+enum class BaseShape { Box, RoundedBox, Sphere, Ellipsoid, ConvexPeak, Invalid };
 const char* BaseShapeName(BaseShape shape);
 BaseShape ParseBaseShape(std::string_view name);
 struct BaseRockSettings {
@@ -15,6 +15,10 @@ struct BaseRockSettings {
     float roundness = 0.25f;  // 最短辺の半分に対する丸み半径。
     float noiseStrength = 0;  // 原点からの距離に対する最大変位率。
     float noiseScale = 2;     // 正規化した方向上のノイズ周波数。
+    // 凸岩峰。裾・肩・頂の点群の凸包を取り、外接箱をsizeに合わせる。
+    int peakSides = 7;
+    float peakTopWidth = .08f, peakShoulderHeight = .55f;
+    float peakLeanX = .18f, peakLeanZ = -.08f, peakVariation = .25f;
 };
 // Box / Noise 0 は従来の8頂点・12三角形をそのまま返す。
 // 曲面は共有頂点を持つ cube surface の投影。描画用の属性は含まない。

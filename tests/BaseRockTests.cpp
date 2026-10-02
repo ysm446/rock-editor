@@ -4,6 +4,7 @@
 #include "TestSupport.h"
 #include "app/UndoHistory.h"
 #include "geometry/BaseRock.h"
+#include "geometry/Pieces.h"
 #include "graph/RockEvaluator.h"
 #include "renderer/RockMesh.h"
 
@@ -188,4 +189,53 @@ void RunBaseRockTests() {
     graph.Replace(redone.graphNodes, redone.graphLinks);
     Check(graph::EvaluateRocks(graph, base).rocks[0].mesh.positions == evaluated.rocks[0].mesh.positions,
           "Redo で形状・ノイズ・seed を再現");
+
+    tests::Section("凸岩峰 — 凸性と分割への接続");
+    bool validPeaks = true, convexPeaks = true, fracturePeaks = true, repeatPeaks = true;
+    for (int seed=0;seed<8;++seed) for (int sides : {4,7,12}) {
+        geometry::BaseRockSettings peak;
+        peak.shape = BaseShape::ConvexPeak;
+        peak.size = {9,15,7}; peak.seed=seed; peak.peakSides=sides;
+        peak.peakTopWidth = seed%2 ? 0 : .6f;
+        peak.peakShoulderHeight = seed%2 ? .2f : .85f;
+        peak.peakVariation = seed%3 ? .5f : 0;
+        peak.peakLeanX = seed%2 ? -.5f : .5f;
+        peak.peakLeanZ = seed%3 ? -.5f : .5f;
+        const auto hull=geometry::MakeBaseRock(peak,error);
+        geometry::MeshInfo info;
+        validPeaks &= error.empty() && geometry::InspectMesh(hull,info) && info.closed && info.components==1 && info.volume>0;
+        validPeaks &= std::abs(info.maximum.x-info.minimum.x-9)<1e-5 && std::abs(info.maximum.y-info.minimum.y-15)<1e-5 &&
+                      std::abs(info.maximum.z-info.minimum.z-7)<1e-5;
+        // 全頂点が全外向き面の内側にある。単に閉じているだけでは凹形状を排除できない。
+        for (const auto& face : hull.triangles) {
+            const auto normal=geometry::FaceNormal(hull,face), a=hull.positions[face[0]];
+            for (const auto& p : hull.positions)
+                convexPeaks &= double(normal.x)*(p.x-a.x)+double(normal.y)*(p.y-a.y)+double(normal.z)*(p.z-a.z)<3e-6;
+        }
+        const auto repeated=geometry::MakeBaseRock(peak,error);
+        repeatPeaks &= repeated.positions==hull.positions && repeated.triangles==hull.triangles;
+        const auto sites=geometry::ScatterPoints(hull,{24,uint32_t(seed+1)},error);
+        fracturePeaks &= error.empty();
+        const auto pieces=geometry::FractureVoronoi(hull,sites,{},5,error);
+        double sum=0;
+        for (const auto& p : pieces.pieces) sum+=p.volume;
+        fracturePeaks &= error.empty() && pieces.pieces.size()==24 && std::abs(sum-info.volume)<info.volume*2e-5;
+    }
+    Check(validPeaks, "凸岩峰: 端の設定・複数Seedで閉包・体積・指定寸法を維持");
+    Check(convexPeaks, "凸岩峰: 全頂点が全ての面の内側にある");
+    Check(fracturePeaks, "凸岩峰: ScatterとVoronoiを直接接続し体積を保って分割できる");
+    Check(repeatPeaks, "凸岩峰: Seedと設定で頂点・面を再現");
+    Check(geometry::ParseBaseShape("convexPeak")==BaseShape::ConvexPeak, "凸岩峰の保存名");
+    auto& peakConfig=std::get<graph::BaseRockNodeSettings>(graph.FindMutableNode(base)->settings);
+    peakConfig={}; peakConfig.shape=BaseShape::ConvexPeak;
+    const auto volumeNode=graph.CreateNode(graph::NodeKind::ToVolume);
+    std::get<geometry::VolumeSettings>(graph.FindMutableNode(volumeNode)->settings).resolution=24;
+    graph.CreateLink(graph.FindNode(base)->outputs[0].id,graph.FindNode(volumeNode)->inputs[0].id);
+    graph::RockEvaluationCache peakCache;
+    const auto oldVolume=graph::EvaluateRocks(graph,volumeNode,&peakCache);
+    // CreateNodeで設定への参照が無効になる可能性があるので取り直す。
+    std::get<graph::BaseRockNodeSettings>(graph.FindMutableNode(base)->settings).peakLeanX=-.3f;
+    const auto newVolume=graph::EvaluateRocks(graph,volumeNode,&peakCache);
+    Check(oldVolume.error.empty() && newVolume.error.empty() &&
+          oldVolume.rocks[0].volume!=newVolume.rocks[0].volume, "凸岩峰: 輪郭の編集で下流のキャッシュを更新");
 }

@@ -394,7 +394,10 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                 {"subdivisions", rock->subdivisions},
                                 {"roundness", rock->roundness},
                                 {"noiseStrength", rock->noiseStrength},
-                                {"noiseScale", rock->noiseScale}};
+                                {"noiseScale", rock->noiseScale},
+                                {"peakSides", rock->peakSides}, {"peakTopWidth", rock->peakTopWidth},
+                                {"peakShoulderHeight", rock->peakShoulderHeight}, {"peakLeanX", rock->peakLeanX},
+                                {"peakLeanZ", rock->peakLeanZ}, {"peakVariation", rock->peakVariation}};
         } else if (const auto* settings = std::get_if<graph::LayerNodeSettings>(&node.settings)) {
             item["layer"] = WriteLayer(settings->layer, writeMaterial);
         } else if (const auto* model = std::get_if<graph::ModelNodeSettings>(&node.settings)) {
@@ -1179,6 +1182,12 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.roundness = ReadFloat(*values, "roundness", 0.25f);
                     settings.noiseStrength = ReadFloat(*values, "noiseStrength", 0);
                     settings.noiseScale = ReadFloat(*values, "noiseScale", 2);
+                    settings.peakSides = ReadInt(*values, "peakSides", 7);
+                    settings.peakTopWidth = ReadFloat(*values, "peakTopWidth", .08f);
+                    settings.peakShoulderHeight = ReadFloat(*values, "peakShoulderHeight", .55f);
+                    settings.peakLeanX = ReadFloat(*values, "peakLeanX", .18f);
+                    settings.peakLeanZ = ReadFloat(*values, "peakLeanZ", -.08f);
+                    settings.peakVariation = ReadFloat(*values, "peakVariation", .25f);
                 }
                 created.settings = settings;
             } else if (graph::IsLayerNodeKind(created.kind)) {
