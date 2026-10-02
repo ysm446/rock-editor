@@ -382,11 +382,15 @@ int Application::Run() {
         if (m_options.frameAll && !m_pieceUpdating && m_renderer.HasMeshScene())
             m_renderer.GetCamera().Frame(m_renderer.FrameCenter(), m_renderer.FrameRadius());
         // 開発用: 起動引数のカメラの向き（読み込んだシーンの視点より優先する）。
-        if (!std::isnan(m_options.cameraYawDegrees) || !std::isnan(m_options.cameraPitchDegrees)) {
+        if (!std::isnan(m_options.cameraYawDegrees) || !std::isnan(m_options.cameraPitchDegrees) ||
+            !std::isnan(m_options.cameraDistance) || !std::isnan(m_options.cameraTarget[0])) {
             renderer::CameraState state = m_renderer.GetCamera().State();
             constexpr float kRadians = 3.14159265358979f / 180.0f;
             if (!std::isnan(m_options.cameraYawDegrees)) state.yaw = m_options.cameraYawDegrees * kRadians;
             if (!std::isnan(m_options.cameraPitchDegrees)) state.pitch = m_options.cameraPitchDegrees * kRadians;
+            if (!std::isnan(m_options.cameraDistance)) state.distance = m_options.cameraDistance;
+            if (!std::isnan(m_options.cameraTarget[0]))
+                state.target = {m_options.cameraTarget[0], m_options.cameraTarget[1], m_options.cameraTarget[2]};
             m_renderer.GetCamera().SetState(state);
         }
         if (!std::isnan(m_options.lightAzimuthDegrees))

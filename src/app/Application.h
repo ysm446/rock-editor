@@ -91,6 +91,10 @@ struct StartupOptions {
     // yaw は注視点のまわりの水平の角度、pitch は見下ろす角度（正で上から）。
     float cameraYawDegrees = std::numeric_limits<float>::quiet_NaN();
     float cameraPitchDegrees = std::numeric_limits<float>::quiet_NaN();
+    // 開発用。注視点からの距離（m）と注視点（m）。NaN なら変えない。岩の内側にカメラを置いて内部の面を確かめるのに使う。
+    float cameraDistance = std::numeric_limits<float>::quiet_NaN();
+    float cameraTarget[3] = {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN(),
+                             std::numeric_limits<float>::quiet_NaN()};
     // 開発用。作業用ライトの方位（度）。NaN なら変えない。視点を回して撮るときに光も回し、裏側が影で潰れないようにする。
     float lightAzimuthDegrees = std::numeric_limits<float>::quiet_NaN();
     // 開発用。FBX をモデルとして読み込み、FBX のマテリアルからマテリアルを作ってプレビューを開く。

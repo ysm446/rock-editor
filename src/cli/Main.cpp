@@ -4,7 +4,7 @@
 // アプリと同じ評価器（graph::EvaluateRocks）と保存形式の読み込み（io::ReadGraph）を使う。
 // 出力は標準出力への JSON 1 つ。ログは標準エラーへ出る。
 //
-//   rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--obj <out.obj>] [--pretty]
+//   rock_cli eval <graph.rockgraph> [--node <id>] [--mesher dc|mt] [--obj <out.obj>] [--volume <out.bin>] [--cache] [--pretty]
 //   rock_cli check <graph.rockgraph> [--pretty]
 //   rock_cli catalog [--pretty]
 //
@@ -401,7 +401,7 @@ json IssuesJson(const std::vector<io::GraphReadIssue>& issues) {
 }
 
 int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::VolumeMeshingMethod mesher, bool pretty,
-            const fs::path& objPath = {}) {
+            const fs::path& objPath = {}, const fs::path& volumePath = {}, bool useCache = false) {
     std::string error;
     auto loaded = LoadGraphFile(path, error);
     if (!loaded) return Fail(error, pretty);
@@ -427,7 +427,9 @@ int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::
     const auto started = std::chrono::steady_clock::now();
     // Mesh Output はプレビュー無し（0）で評価する。アプリの表示と同じ。
     const graph::GraphId preview = graph.FindNode(target)->kind == graph::NodeKind::MeshOutput ? 0 : target;
-    const graph::RockEvaluation evaluation = graph::EvaluateRocks(graph, preview, nullptr, mesher);
+    // --cache: アプリと同じく永続キャッシュ付きで評価する（アプリとの結果の違いを切り分けるため）。
+    graph::RockEvaluationCache cache;
+    const graph::RockEvaluation evaluation = graph::EvaluateRocks(graph, preview, useCache ? &cache : nullptr, mesher);
     result["elapsedMs"] = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
 
     if (!evaluation.error.empty()) {
@@ -453,6 +455,25 @@ int RunEval(const fs::path& path, std::optional<graph::GraphId> node, geometry::
     json meshes = json::array();
     for (const graph::GeneratedRock& rock : evaluation.rocks) meshes.push_back(MeshJson(graph, rock));
     result["meshes"] = std::move(meshes);
+    // --volume: 評価したノードの距離場（Volume を持つ結果の最初のもの）を生の float で書く。
+    // 先頭に寸法 3 つ（uint32）、原点 3 つ（float）、間隔（float）、続けて値（X が最速、負が内部）。
+    if (!volumePath.empty()) {
+        const geometry::VolumeGrid* grid = nullptr;
+        for (const graph::GeneratedRock& rock : evaluation.rocks)
+            if (rock.volume && !rock.volume->values.empty()) { grid = rock.volume.get(); break; }
+        if (!grid) {
+            result["volumeError"] = "このノードの結果に Volume がありません";
+        } else if (FILE* file = _wfopen(volumePath.c_str(), L"wb")) {
+            std::fwrite(grid->dimensions.data(), sizeof(uint32_t), 3, file);
+            const float header[4] = {grid->origin.x, grid->origin.y, grid->origin.z, grid->spacing};
+            std::fwrite(header, sizeof(float), 4, file);
+            std::fwrite(grid->values.data(), sizeof(float), grid->values.size(), file);
+            std::fclose(file);
+            result["volume"] = ToUtf8Display(volumePath);
+        } else {
+            result["volumeError"] = "Volume を書けません: " + ToUtf8Display(volumePath);
+        }
+    }
     // --obj: 評価したメッシュ（複数なら全部を一つに）を Wavefront OBJ に書く。外部ツールや Python で形を調べるため。
     if (!objPath.empty()) {
         std::string text;
@@ -564,10 +585,15 @@ int wmain(int argc, wchar_t** argv) {
         }
         std::optional<graph::GraphId> node;
         auto mesher = geometry::VolumeMeshingMethod::DualContouring;
-        fs::path objPath;
+        fs::path objPath, volumePath;
+        bool useCache = false;
         for (size_t i = 2; i < args.size(); ++i) {
             if (args[i] == "--obj" && i + 1 < args.size()) {
                 objPath = FromUtf8(args[++i]);
+            } else if (args[i] == "--volume" && i + 1 < args.size()) {
+                volumePath = FromUtf8(args[++i]);
+            } else if (args[i] == "--cache") {
+                useCache = true;
             } else if (args[i] == "--node" && i + 1 < args.size()) {
                 try {
                     node = std::stoi(args[++i]);
@@ -582,7 +608,7 @@ int wmain(int argc, wchar_t** argv) {
                 return Fail("知らない引数: " + args[i], pretty);
             }
         }
-        return RunEval(FromUtf8(args[1]), node, mesher, pretty, objPath);
+        return RunEval(FromUtf8(args[1]), node, mesher, pretty, objPath, volumePath, useCache);
     }
     PrintUsage();
     return Fail("知らないコマンド: " + command, pretty);

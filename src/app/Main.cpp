@@ -131,6 +131,10 @@ rock::StartupOptions ParseCommandLine() {
             options.cameraYawDegrees = static_cast<float>(::_wtof(argv[++i]));
         } else if (argument == L"--camera-pitch" && (i + 1) < argc) {
             options.cameraPitchDegrees = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--camera-distance" && (i + 1) < argc) {
+            options.cameraDistance = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--camera-target" && (i + 3) < argc) {
+            for (float& v : options.cameraTarget) v = static_cast<float>(::_wtof(argv[++i]));
         } else if (argument == L"--light-azimuth" && (i + 1) < argc) {
             options.lightAzimuthDegrees = static_cast<float>(::_wtof(argv[++i]));
         } else if (argument == L"--screenshot-frame" && (i + 1) < argc) {
