@@ -8,8 +8,8 @@
       {"id": 3, "kind": "planeCuts", "note": "節理で割れた面", "planeCuts": {"count": 16, "depthMin": 0.05, "depthMax": 0.2, "seed": 3}},
       {"id": 4, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.03, "amount": 1}},
       {"id": 5, "kind": "volumeClip", "note": "先に接地してから、ワールドの高さで帯を置く", "volumeClip": {"mode": "ground", "embed": 0.1}},
-      {"id": 6, "kind": "volumeUndercut", "note": "波食ノッチ: 水面（ワールドの高さ 0.9 m）の帯を内側へ削る。帯の基準を world にすると、形の大きさに関係なく水面の高さで決まる", "volumeUndercut": {"reference": "world", "level": 0.9, "width": 0.1, "depth": 0.12, "count": 1, "noise": 0.35, "noiseScale": 2.5, "seed": 2}},
-      {"id": 7, "kind": "volumeNoise", "note": "水面の近くの小さなくぼみ（タフォニ風）", "volumeNoise": {"type": "pits", "amount": 0.006, "scale": 12, "octaves": 2, "seed": 5}},
+      {"id": 6, "kind": "volumeUndercut", "note": "波食ノッチ: 水面（ワールドの高さ 0.9 m）の帯を内側へ削る。帯の基準を world にすると、形の大きさに関係なく水面の高さで決まる。向きに集中で波の当たる側（-X、沖）を深く", "volumeUndercut": {"reference": "world", "level": 0.9, "width": 0.1, "depth": 0.14, "count": 1, "noise": 0.3, "noiseScale": 2.5, "seed": 2, "upwardFocus": 0.7, "focusDirection": [-1, 0, 0]}},
+      {"id": 7, "kind": "volumeNoise", "note": "波の当たる側の小さなくぼみ（タフォニ風）", "volumeNoise": {"type": "pits", "amount": 0.008, "scale": 12, "octaves": 2, "seed": 5, "upwardFocus": 0.8, "focusDirection": [-1, 0.2, 0]}},
       {"id": 8, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.02, "radius": 0.015}},
       {"id": 9, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
       {"id": 10, "kind": "meshOutput"}

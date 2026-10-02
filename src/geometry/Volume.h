@@ -166,6 +166,10 @@ struct VolumeNoiseSettings {
     // 歪み。サンプル位置をずらす量の最大（最長辺に対する比。0～0.2）と、その細かさ（0.5～16）。
     float warp = 0;
     float warpScale = 2;
+    // 向きへの集中。0 で全ての面、1 で focusDirection を向いた面だけ。0～1。保存名は upwardFocus（Smooth / Edge Wear と同じ）。
+    // 陰の面のタフォニ、波の当たる側のくぼみ、風下の穴。
+    float upwardFocus = 0;
+    std::array<float, 3> focusDirection{0, 1, 0};  // 既定は上（+Y）。長さ 0 なら上
     int seed = 1;
 };
 // Volume Smooth。ガウスぼかしで表面をなまらせる（なめらか）か、ぼかしとの差を足して角を立てる（シャープ）。
@@ -267,6 +271,9 @@ struct VolumeUndercutSettings {
     float spacing = .25f;   // 帯の間隔。形の高さに対する比。0.05～1
     float noise = .3f;      // 削る深さを水平方向にばらつかせる量。0～1
     float noiseScale = 3;   // ばらつきの細かさ。最長辺あたりの山の数。0.5～16
+    // 向きへの集中。0 で全周、1 で focusDirection を向いた面だけ削る（波の当たる側のノッチ）。0～1
+    float upwardFocus = 0;
+    std::array<float, 3> focusDirection{0, 1, 0};
     int seed = 1;
 };
 
@@ -389,6 +396,9 @@ VolumeGrid UndercutVolume(const VolumeGrid& grid, const VolumeUndercutSettings& 
 // 格子（範囲・セル間隔）は入力のまま。削る方向にだけ効き、形は広がらない。
 // 加工でできた浮いた小片と閉じた空洞は除く。
 VolumeGrid ErodeVolume(const VolumeGrid& grid, const VolumeErodeSettings& settings, std::string& error);
+// 流下の流れの量。表面に近い格子点を出発点に、重力で斜面を流れ下る筋を追い、通った格子点に量を積む（Volume Erode の流下、Flow Mask）。
+// reachLength は筋を追う長さ (m)、sigmaCells は量をぼかす幅（セル）。格子は入力と同じ並び。
+std::vector<float> FlowAccumulation(const VolumeGrid& grid, float reachLength, float sigmaCells);
 // 表面の近くに小さな形を散らし、和（埋まった礫）か差（穴・気泡）で合成する。和では突き出す分だけ格子を広げる。
 // 形の外に浮いた形（入力の塊と重ならない塊）と、加工でできた閉じた空洞は除く。
 VolumeGrid ScatterVolume(const VolumeGrid& grid, const VolumeScatterSettings& settings, std::string& error);

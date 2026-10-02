@@ -599,6 +599,88 @@ const char* VolumeDiffModeName(VolumeDiffMode mode) { return mode == VolumeDiffM
 VolumeDiffMode ParseVolumeDiffMode(std::string_view name) {
     return name == "removed" ? VolumeDiffMode::Removed : VolumeDiffMode::Added;
 }
+MaskImage FlowMask(const Mesh& mesh, const FlowMaskSettings& s, const VolumeGrid* volume, std::string& error, std::stop_token stop,
+                   const std::function<void(int)>& progress) {
+    error.clear();
+    const auto within = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (s.resolution < kMinShapeMaskResolution || s.resolution > kMaxShapeMaskResolution || (s.resolution & (s.resolution - 1)) ||
+        s.volumeResolution < 16 || s.volumeResolution > 128 || !within(s.length, .05f, 1) || !within(s.width, .005f, .1f) ||
+        !within(s.sharpness, 1, 8)) {
+        error = "Flow Maskの設定が不正です";
+        return {};
+    }
+    MeshInfo info;
+    if (!HasValidUvs(mesh) || !InspectMesh(mesh, info)) {
+        error = "UV付きのMeshが必要です。先にUV Unwrapを通してください";
+        return {};
+    }
+    // 流れを追う格子: Volume 入力があればそれ、無ければメッシュを格子にする。
+    VolumeGrid converted;
+    if (!volume) {
+        if (!info.closed) {
+            error = "閉じたメッシュが必要です（流れを追う格子を作れません）。Volume に Volume to Mesh の前の Volume を繋いでください";
+            return {};
+        }
+        VolumeSettings volumeSettings;
+        volumeSettings.resolution = s.volumeResolution;
+        converted = MeshToVolume(mesh, volumeSettings, error, stop);
+        if (!error.empty()) {
+            error += "。Volume に Volume to Mesh の前の Volume を繋いでください";
+            return {};
+        }
+    }
+    const VolumeGrid& grid = volume ? *volume : converted;
+    if (grid.values.empty() || grid.dimensions[0] < 2 || grid.dimensions[1] < 2 || grid.dimensions[2] < 2) {
+        error = "流れを追う格子を作れませんでした";
+        return {};
+    }
+    const V extent = Convert(info.maximum) - Convert(info.minimum);
+    const float longest = float(std::max({extent.x, extent.y, extent.z}));
+    if (!(longest > 0)) {
+        error = "メッシュに大きさがありません";
+        return {};
+    }
+    if (progress) progress(5);
+    const std::vector<float> flow = FlowAccumulation(grid, s.length * longest, s.width * longest / grid.spacing);
+    if (stop.stop_requested()) {
+        error = "Flow Maskをキャンセルしました";
+        return {};
+    }
+    // 表面の格子点の流れの量の上位 5% を 1 とする（最も流れが集まる筋で白）。
+    std::vector<float> positive;
+    for (size_t i = 0; i < flow.size(); ++i)
+        if (flow[i] > 0 && std::abs(grid.values[i]) <= grid.spacing) positive.push_back(flow[i]);
+    float scale = 1;
+    if (!positive.empty()) {
+        const size_t rank = std::min(positive.size() * 95 / 100, positive.size() - 1);
+        std::nth_element(positive.begin(), positive.begin() + ptrdiff_t(rank), positive.end());
+        scale = std::max(positive[rank], 1e-6f);
+    }
+    const auto sample = [&](const V& p) {
+        const auto coord = [&](double v, float origin, uint32_t n) {
+            return std::clamp((v - origin) / grid.spacing, 0., double(n - 1));
+        };
+        const double fx = coord(p.x, grid.origin.x, grid.dimensions[0]), fy = coord(p.y, grid.origin.y, grid.dimensions[1]),
+                     fz = coord(p.z, grid.origin.z, grid.dimensions[2]);
+        const uint32_t x0 = uint32_t(fx), y0 = uint32_t(fy), z0 = uint32_t(fz);
+        const uint32_t x1 = std::min(x0 + 1, grid.dimensions[0] - 1), y1 = std::min(y0 + 1, grid.dimensions[1] - 1),
+                       z1 = std::min(z0 + 1, grid.dimensions[2] - 1);
+        const double tx = fx - x0, ty = fy - y0, tz = fz - z0;
+        const auto at = [&](uint32_t x, uint32_t y, uint32_t z) { return double(flow[grid.Index(x, y, z)]); };
+        const auto mix = [](double a, double b, double t) { return a + (b - a) * t; };
+        return mix(mix(mix(at(x0, y0, z0), at(x1, y0, z0), tx), mix(at(x0, y1, z0), at(x1, y1, z0), tx), ty),
+                   mix(mix(at(x0, y0, z1), at(x1, y0, z1), tx), mix(at(x0, y1, z1), at(x1, y1, z1), tx), ty), tz);
+    };
+    const std::function<double(V)> pattern = [&](V p) {
+        const double f = std::clamp(sample(p) / scale, 0., 1.);
+        return std::pow(f, double(s.sharpness));
+    };
+    ShapeMaskSettings raster;
+    raster.resolution = s.resolution;
+    raster.low = 0;
+    raster.high = 1;
+    return SurfaceMask(mesh, raster, error, stop, progress, nullptr, nullptr, &pattern);
+}
 MaskImage VolumeDiffMask(const Mesh& mesh, const VolumeGrid& before, const VolumeDiffMaskSettings& s, std::string& error,
                          std::stop_token stop, const std::function<void(int)>& progress) {
     error.clear();

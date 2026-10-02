@@ -1,0 +1,32 @@
+{
+  "format": "rock-editor.scene",
+  "version": 1,
+  "graph": {
+    "nodes": [
+      {"id": 1, "kind": "randomBoxes", "randomBoxes": {"count": 6, "size": [2.2, 2.4, 1.8], "sizeVariation": 0.35, "spread": 0.45, "rotation": 15, "seed": 23}},
+      {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 112}},
+      {"id": 3, "kind": "planeCuts", "note": "急な面を作る（筋が流れ下る面）", "planeCuts": {"count": 10, "depthMin": 0.05, "depthMax": 0.2, "seed": 5}},
+      {"id": 4, "kind": "volumeNoise", "volumeNoise": {"type": "facet", "amount": 0.015, "scale": 6, "octaves": 2, "seed": 3}},
+      {"id": 5, "kind": "volumeEdgeWear", "volumeEdgeWear": {"amount": 0.02, "radius": 0.02}},
+      {"id": 6, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.15}},
+      {"id": 7, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 8, "kind": "decimate", "decimate": {"targetTriangles": 30000}},
+      {"id": 9, "kind": "uvUnwrap", "uvUnwrap": {"resolution": 1024}},
+      {"id": 10, "kind": "surface", "note": "灰色の岩の下地", "layer": {"material": null, "baseColor": [0.42, 0.41, 0.39], "roughness": 0.7, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 11, "kind": "applyMaterial"},
+      {"id": 12, "kind": "surface", "note": "鉄錆の色", "layer": {"material": null, "baseColor": [0.38, 0.17, 0.06], "roughness": 0.8, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 13, "kind": "flowMask", "note": "鉄錆の流れた筋: 表面を雨水が流れ下る筋を追い、流れが集まる所ほど白い。上端は黒く、下へ行くほど濃い。Volume には接地した後の Volume を繋ぐ（メッシュと同じ位置）", "flowMask": {"length": 0.6, "width": 0.012, "sharpness": 1.5}},
+      {"id": 14, "kind": "noiseMask", "note": "錆のまだら（筋を途切れさせる）", "noiseMask": {"size": 0.25, "contrast": 0.3, "seed": 7}},
+      {"id": 15, "kind": "maskCombine", "maskCombine": {"operation": "multiply", "low": 0.05, "high": 0.6}},
+      {"id": 16, "kind": "applyMaterial"},
+      {"id": 17, "kind": "meshOutput"}
+    ],
+    "links": [
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "4"}, {"from": "4", "to": "5"},
+      {"from": "5", "to": "6"}, {"from": "6", "to": "7"}, {"from": "7", "to": "8"}, {"from": "8", "to": "9"},
+      {"from": "9", "to": "11:Mesh"}, {"from": "10", "to": "11:Material"}, {"from": "9", "to": "13:Mesh"}, {"from": "6", "to": "13:Volume"}, {"from": "9", "to": "14"},
+      {"from": "13", "to": "15:A"}, {"from": "14", "to": "15:B"}, {"from": "11", "to": "16:Mesh"}, {"from": "12", "to": "16:Material"},
+      {"from": "15", "to": "16:Mask"}, {"from": "16", "to": "17:Geometry"}
+    ]
+  }
+}

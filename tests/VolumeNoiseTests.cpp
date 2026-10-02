@@ -51,6 +51,31 @@ void RunVolumeNoiseTests() {
         Check(smooth, "なめらかなノイズは帯の境でも隣の格子点と 1.5 セル以上跳ばない");
     }
 
+    // 向きに集中: -X を向いた面だけを削り、+X の面は変わらない。
+    {
+        geometry::VolumeNoiseSettings s;
+        s.type = geometry::VolumeNoiseType::Pits;
+        s.amount = .05f;
+        s.scale = 6;
+        s.upwardFocus = 1;
+        s.focusDirection = {-1, 0, 0};
+        const auto focused = geometry::NoiseVolume(box, s, error);
+        float minusX = 0, plusX = 0;
+        for (uint32_t z = 0; z < box.dimensions[2]; ++z)
+            for (uint32_t y = 0; y < box.dimensions[1]; ++y)
+                for (uint32_t x = 0; x < box.dimensions[0]; ++x) {
+                    const auto p = box.Position(x, y, z);
+                    if (std::abs(p.y) > .4f || std::abs(p.z) > .4f) continue;
+                    const float d = focused.values[box.Index(x, y, z)] - box.values[box.Index(x, y, z)];
+                    if (std::abs(p.x + .95f) < .05f) minusX = std::max(minusX, d);
+                    if (std::abs(p.x - .95f) < .05f) plusX = std::max(plusX, d);
+                }
+        Check(error.empty() && minusX > .02f && plusX < 1e-4f, "向きに集中: 集中する向きを向いた面だけ削れ、反対の面は変わらない");
+        s.upwardFocus = 2;
+        geometry::NoiseVolume(box, s, error);
+        Check(!error.empty(), "向きに集中が範囲外なら診断する");
+    }
+
     for (const auto type : {geometry::VolumeNoiseType::Smooth, geometry::VolumeNoiseType::Cellular,
                             geometry::VolumeNoiseType::Facet, geometry::VolumeNoiseType::Pits}) {
         geometry::VolumeNoiseSettings s;

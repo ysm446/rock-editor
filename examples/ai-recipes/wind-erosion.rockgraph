@@ -9,7 +9,7 @@
       {"id": 4, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.12}},
       {"id": 11, "kind": "volumeErode", "note": "風上（-X）から来る風にさらされた面を後退させる。風下の陰は削らない。回数を重ねるほど鼻先が丸く流線形になる。Volume Smooth の向き集中は面の中央を皿状にくぼませるので使わない", "volumeErode": {"type": "exposure", "amount": 0.14, "direction": [-1, 0.15, 0], "sharpness": 1.5, "shadow": 0.6, "iterations": 6, "noise": 0.15, "noiseScale": 6, "seed": 4}},
       {"id": 6, "kind": "volumeUndercut", "note": "砂が最も当たる地面の近く（高さ 0.3 m）を帯で削る。風食のくびれ・きのこ岩の成因", "volumeUndercut": {"reference": "world", "level": 0.3, "width": 0.12, "depth": 0.075, "count": 1, "noise": 0.4, "noiseScale": 2, "seed": 3}},
-      {"id": 7, "kind": "volumeNoise", "note": "風上に残る細かなくぼみ", "volumeNoise": {"type": "pits", "amount": 0.004, "scale": 14, "octaves": 2, "seed": 5}},
+      {"id": 7, "kind": "volumeNoise", "note": "風下（+X）に残る細かなくぼみ（風上は砂で磨かれて平滑）", "volumeNoise": {"type": "pits", "amount": 0.008, "scale": 14, "octaves": 2, "seed": 5, "upwardFocus": 0.9, "focusDirection": [1, 0, 0]}},
       {"id": 8, "kind": "volumeEdgeWear", "note": "風上の角を摩耗", "volumeEdgeWear": {"amount": 0.05, "radius": 0.04, "upwardFocus": 0.8, "focusDirection": [-1, 0.25, 0]}},
       {"id": 9, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
       {"id": 10, "kind": "meshOutput"}

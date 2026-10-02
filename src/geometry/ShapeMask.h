@@ -99,7 +99,22 @@ struct VolumeDiffMaskSettings {
     bool invert = false;    // 使う側で 1 - mask にする。画像には掛けない。
     bool operator==(const VolumeDiffMaskSettings&) const = default;
 };
+// Flow Mask。表面を重力で流れ下る水の筋（流れの量）のマスク。鉄錆・汚れの流れた筋、濡れ跡、流れ下る土。
+// メッシュをいったん Volume にし、Volume Erode の流下と同じ筋の追跡で流れの量を積み、最後のメッシュの表面で読む。
+struct FlowMaskSettings {
+    int resolution = 1024;
+    int volumeResolution = 96;  // 筋を追う格子の解像度（最長辺のセル数）。16～128
+    float length = .5f;         // 1 つの出発点から筋を追う長さ。最長辺に対する比。0.05～1
+    float width = .015f;        // 筋の幅（流れの量をぼかす σ）。最長辺に対する比。0.005～0.1
+    float sharpness = 2;        // 最も流れが集まる筋を 1 として流れの量の集中乗。1～8
+    bool invert = false;        // 使う側で 1 - mask にする。画像には掛けない。
+    bool operator==(const FlowMaskSettings&) const = default;
+};
 struct VolumeGrid;
+// volume を渡せばその格子で筋を追う（Volume to Mesh の前の Volume。UV 展開や Decimate を経たメッシュは格子に変換できないことがある）。
+// 無ければメッシュを格子に変換する。
+MaskImage FlowMask(const Mesh&, const FlowMaskSettings&, const VolumeGrid* volume, std::string&, std::stop_token = {},
+                   const std::function<void(int)>& progress = {});
 MaskImage VolumeDiffMask(const Mesh&, const VolumeGrid& before, const VolumeDiffMaskSettings&, std::string&,
                          std::stop_token = {}, const std::function<void(int)>& progress = {});
 

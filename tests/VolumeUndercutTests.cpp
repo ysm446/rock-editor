@@ -79,6 +79,25 @@ void RunVolumeUndercutTests() {
               geometry::VolumeUndercutReference::World && geometry::ParseVolumeUndercutReference("?") == geometry::VolumeUndercutReference::Shape,
           "帯の基準の保存名を往復できる");
 
+    // 向きに集中: -X を向いた面の帯だけを削り、+X の面の帯は変わらない。
+    {
+        geometry::VolumeUndercutSettings oneSided = band;
+        oneSided.upwardFocus = 1;
+        oneSided.focusDirection = {-1, 0, 0};
+        const auto sided = geometry::UndercutVolume(box, oneSided, error);
+        float minusX = 0, plusX = 0;
+        for (uint32_t z = 0; z < box.dimensions[2]; ++z)
+            for (uint32_t y = 0; y < box.dimensions[1]; ++y)
+                for (uint32_t x = 0; x < box.dimensions[0]; ++x) {
+                    const auto p = box.Position(x, y, z);
+                    if (std::abs(p.y) > .05f || std::abs(p.z) > .4f) continue;
+                    const float d = sided.values[box.Index(x, y, z)] - box.values[box.Index(x, y, z)];
+                    if (std::abs(p.x + .95f) < .05f) minusX = std::max(minusX, d);
+                    if (std::abs(p.x - .95f) < .05f) plusX = std::max(plusX, d);
+                }
+        Check(error.empty() && minusX > .15f && plusX < 1e-4f, "向きに集中: 集中する向きを向いた側の帯だけ削れ、反対側は変わらない");
+    }
+
     geometry::VolumeUndercutSettings stacked = band;
     stacked.height = .2f;
     stacked.width = .08f;

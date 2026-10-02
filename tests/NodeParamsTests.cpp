@@ -127,7 +127,7 @@ std::optional<Host> MakeHost(graph::NodeKind kind, bool bareCrack = false) {
         Connect(g, SmallVolume(g), host.target, 1);
         return host;
     }
-    case K::ShapeMask: case K::NoiseMask: case K::DepositionMask: case K::StructureMask: {
+    case K::ShapeMask: case K::NoiseMask: case K::DepositionMask: case K::StructureMask: case K::FlowMask: {
         const auto uv = Add(g, K::UvUnwrap);
         Connect(g, SmallBox(g), uv, 0);
         host.target = host.evaluate = Add(g, kind);
@@ -205,6 +205,8 @@ const std::vector<EdgeRule>& EdgeRules() {
         {"subdivide:subdivide.levels", json::object(), false, true, "重い"},
         {"depositionMask:depositionMask.resolution", json::object(), false, true, "重い"},
         {"structureMask:structureMask.resolution", json::object(), false, true, "重い"},
+        {"flowMask:flowMask.resolution", json::object(), false, true, "重い"},
+        {"flowMask:flowMask.volumeResolution", json::object(), false, true, "重い"},
         {"depositionMask:depositionMask.samples", json::object(), false, true, "重い"},
     };
     return rules;

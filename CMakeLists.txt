@@ -351,6 +351,7 @@ add_executable(rock_editor_tests
     tests/VolumeScatterTests.cpp
     tests/VolumeUndercutTests.cpp
     tests/VolumeErodeTests.cpp
+    tests/FlowMaskTests.cpp
     tests/ShadowCascadeTests.cpp
     src/renderer/ShadowCascades.cpp
     src/renderer/Camera.cpp

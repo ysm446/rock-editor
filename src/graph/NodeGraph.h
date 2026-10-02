@@ -117,6 +117,8 @@ enum class NodeKind : uint32_t {
     VolumeDiffMask = 79,
     // 向きで削る量を変える侵食（さらされた面: 風・波・氷の向き / 流下: 斜面を流れる筋）。
     VolumeErode = 80,
+    // 表面を重力で流れ下る水の筋（流れの量）のマスク。UV付きの Mesh を受ける（鉄錆・汚れの流れた筋）。
+    FlowMask = 81,
     // 岩グラフの最終段。入力のメッシュから段階的な LOD を作り、この岩グラフの岩アセットにする。
     // 出力は LOD0（Mesh Output へ繋いで表示できる）。選ぶとビューポートで LOD を切り替えて見られる。
     RockAsset = 72,
@@ -291,7 +293,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeEdgeWearSettings, geometry::VolumeClipSettings, geometry::VolumeScatterSettings, geometry::VolumeUndercutSettings, geometry::VolumeErodeSettings,
                                   geometry::DecimateSettings, geometry::RemeshSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
-                                  geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::StructureMaskSettings, geometry::VolumeDiffMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
+                                  geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::StructureMaskSettings, geometry::VolumeDiffMaskSettings, geometry::FlowMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
                                   geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, RockNodeSettings,

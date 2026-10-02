@@ -1440,6 +1440,11 @@ float CellNoise(float x, float y, float z, uint64_t seed, VolumeNoiseType type) 
     return .5f + .5f * std::clamp(along * 1.5f, -1.f, 1.f);
 }
 }  // namespace
+namespace {
+Vec3 FocusDirection(const std::array<float, 3>& d);
+float Upwardness(const VolumeGrid& g, uint32_t x, uint32_t y, uint32_t z, const Vec3& direction);
+std::vector<float> BlurGrid(const VolumeGrid& g, float sigmaCells);
+}  // namespace
 VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {
@@ -1464,12 +1469,23 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
         error = "重ねる数は 1～5 にしてください";
         return {};
     }
+    if (!range(s.upwardFocus, 0, 1)) {
+        error = "向きに集中は 0～1 にしてください";
+        return {};
+    }
     const float longest = InteriorLongestSide(g);
     if (longest <= 0) {
         error = "入力のボリュームに内部がありません";
         return {};
     }
     const float amount = s.amount * longest, warp = s.warp * longest;
+    // 向きの重みはぼかした場の法線で決める（Smooth / Edge Wear と同じ。元の場の法線は稜線で急に変わり、境に段が出る）。
+    const Vec3 focus = FocusDirection(s.focusDirection);
+    VolumeGrid blurredGrid;
+    if (s.upwardFocus > 0) {
+        blurredGrid = g;
+        blurredGrid.values = BlurGrid(g, 2);
+    }
     // 歪みは表面を外へも動かす。外周を空に保てるよう、動く量だけ格子を広げる。
     const uint32_t pad = warp > 0 ? uint32_t(std::ceil(warp * 1.75f / g.spacing)) + 1 : 0;
     VolumeGrid out;
@@ -1521,7 +1537,14 @@ VolumeGrid NoiseVolume(const VolumeGrid& g, const VolumeNoiseSettings& s, std::s
                     weight += gain;
                 }
                 // 削る方向にだけ効かせる。形は広がらない。
-                value += amount * noise / weight;
+                float facing = 1;
+                if (s.upwardFocus > 0) {
+                    const uint32_t gx = uint32_t(std::clamp(int(x) - int(pad), 0, int(g.dimensions[0]) - 1)),
+                                   gy = uint32_t(std::clamp(int(y) - int(pad), 0, int(g.dimensions[1]) - 1)),
+                                   gz = uint32_t(std::clamp(int(z) - int(pad), 0, int(g.dimensions[2]) - 1));
+                    facing = 1 - s.upwardFocus * (1 - Upwardness(blurredGrid, gx, gy, gz, focus));
+                }
+                value += amount * noise / weight * facing;
             }
             value = original + (value - original) * strength;
         }
@@ -2160,6 +2183,7 @@ std::vector<float> BlurValues(const VolumeGrid& g, const std::vector<float>& val
     }
     return a;
 }
+}  // namespace
 // 流下: 表面の点から重力で斜面を流れ下る筋を追い、通った格子点に流れの量を積む。
 std::vector<float> FlowAccumulation(const VolumeGrid& g, float reachLength, float sigmaCells) {
     std::vector<std::atomic<uint32_t>> counts(g.values.size());
@@ -2214,7 +2238,6 @@ std::vector<float> FlowAccumulation(const VolumeGrid& g, float reachLength, floa
     if (sigmaCells <= .3f) return accumulation;
     return BlurValues(g, accumulation, sigmaCells);
 }
-}  // namespace
 VolumeGrid ErodeVolume(const VolumeGrid& g, const VolumeErodeSettings& s, std::string& error) {
     error.clear();
     if (!ValidGrid(g)) {
@@ -2416,10 +2439,21 @@ VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, 
         error = "ばらつきは 0～1、ばらつきの細かさは 0.5～16 にしてください";
         return {};
     }
+    if (!range(s.upwardFocus, 0, 1)) {
+        error = "向きに集中は 0～1 にしてください";
+        return {};
+    }
     const float longest = InteriorLongestSide(g);
     if (longest <= 0) {
         error = "入力のボリュームに内部がありません";
         return {};
+    }
+    // 向きの重みはぼかした場の法線で決める（波の当たる側だけ深く削る）。
+    const Vec3 focus = FocusDirection(s.focusDirection);
+    VolumeGrid blurredGrid;
+    if (s.upwardFocus > 0) {
+        blurredGrid = g;
+        blurredGrid.values = BlurGrid(g, 2);
     }
     uint32_t lowest = g.dimensions[1], highest = 0;
     for (uint32_t z = 0; z < g.dimensions[2]; ++z)
@@ -2449,6 +2483,7 @@ VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, 
         }
         if (inset > 0 && depth > 0) {
             float amount = depth * inset;
+            if (s.upwardFocus > 0) amount *= 1 - s.upwardFocus * (1 - Upwardness(blurredGrid, x, y, z, focus));
             if (s.noise > 0) {
                 const float n = ValueNoise(p.x * frequency, p.y * frequency * .5f, p.z * frequency, seed);
                 amount *= std::clamp(1 - s.noise * (1 - 2 * n), 0.f, 2.f);

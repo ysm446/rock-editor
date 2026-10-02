@@ -1463,6 +1463,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::NoiseMask, "Noise Mask — 3Dノイズでムラのマスクを作る");
         addNodeMenuItem(graph::NodeKind::StructureMask, "Structure Mask — 構造面に沿う縞・網目の脈のマスクを作る");
         addNodeMenuItem(graph::NodeKind::VolumeDiffMask, "Volume Diff Mask — 後から足した所（隙間の土・礫）・削った所のマスク");
+        addNodeMenuItem(graph::NodeKind::FlowMask, "Flow Mask — 表面を流れ下る水の筋のマスク（鉄錆・汚れの筋）");
         addNodeMenuItem(graph::NodeKind::ShapeMask, "Shape Mask — 形状からマスクを作る（遮蔽 / 上向き度 / 高さ / 曲率）");
         addNodeMenuItem(graph::NodeKind::MaskCombine, "Mask Combine — 2つのマスクを合成（乗算 / 最大 / 最小 / 差 / 混合）");
         addNodeMenuItem(graph::NodeKind::MaskFilter, "Mask Filter — マスクを加工（ぼかし / シャープ / レベル）");
@@ -1695,6 +1696,12 @@ void Application::DrawGraphPanel() {
             changed |= ui::PropertyFloat("歪み", &edited.warp, 0, .2f, 0,
                                          "サンプル位置をずらす量の最大。平面や直線的な割れ目を波打たせます。");
             changed |= ui::PropertyFloat("歪みの細かさ", &edited.warpScale, .5f, 16, 2);
+            changed |= ui::PropertyFloat("向きに集中", &edited.upwardFocus, 0, 1, 0,
+                                         "0 で全ての面。1 で「集中する向き」を向いた面だけを削ります（陰の面のタフォニ、波の当たる側のくぼみ、風下の穴）。");
+            {
+                const float up[3] = {0, 1, 0};
+                changed |= ui::PropertyFloat3Input("集中する向き", edited.focusDirection.data(), up, "既定は上 (0, 1, 0)。") != 0;
+            }
             changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
             ui::EndPropertyTable();
         }
@@ -1707,6 +1714,7 @@ void Application::DrawGraphPanel() {
             edited.octaves = std::clamp(edited.octaves, 1, 5);
             edited.warp = std::clamp(edited.warp, 0.0f, 0.2f);
             edited.warpScale = std::clamp(edited.warpScale, 0.5f, 16.0f);
+            edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *noise = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
@@ -1775,6 +1783,41 @@ void Application::DrawGraphPanel() {
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *wear = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* flow = std::get_if<geometry::FlowMaskSettings>(&selected->settings)) {
+        auto edited = *flow;
+        bool changed = false;
+        if (ui::BeginPropertyTable("flowMaskRows")) {
+            changed |= ui::PropertyFloat("筋の長さ", &edited.length, .05f, 1, .5f, "1 つの出発点から流れを追う長さ。形の最長辺に対する比です。長いほど下まで筋が伸びます。");
+            changed |= ui::PropertyFloat("筋の幅", &edited.width, .005f, .1f, .015f, "流れの量をぼかす幅。形の最長辺に対する比です。");
+            changed |= ui::PropertyFloat("集中", &edited.sharpness, 1, 8, 2, "最も流れが集まる筋を 1 として流れの量の集中乗。大きいほど太い筋だけが白くなります。");
+            const char* volumeResolutions[] = {"32", "48", "64", "96", "128"};
+            const int volumeOptions[] = {32, 48, 64, 96, 128};
+            int volumeIndex = 3;
+            for (int i = 0; i < 5; ++i)
+                if (edited.volumeResolution == volumeOptions[i]) volumeIndex = i;
+            if (ui::PropertyCombo("格子の解像度", &volumeIndex, volumeResolutions, 5, 3, "Volume 入力が無いときにメッシュを格子にする解像度です。Volume を繋いだときは使いません。")) {
+                edited.volumeResolution = volumeOptions[volumeIndex];
+                changed = true;
+            }
+            const char* resolutions[] = {"128", "256", "512", "1024", "2048", "4096"};
+            int resolution = std::clamp(static_cast<int>(std::log2(std::max(edited.resolution, 128))) - 7, 0, 5);
+            if (ui::PropertyCombo("マスク解像度", &resolution, resolutions, 6, 3)) {
+                edited.resolution = 128 << resolution;
+                changed = true;
+            }
+            changed |= ui::PropertyBool("反転", &edited.invert, false);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("表面を重力で流れ下る水の筋（流れの量）のマスクを作ります。Mesh に UV Unwrap の出力、Volume に Volume to Mesh の前の Volume を繋ぎます（Volume は任意ですが、UV 展開後のメッシュは格子に変換できないことがあります）。"
+                     "流れが集まる下の方ほど白く、上端は黒くなります。鉄錆・汚れの流れた筋や濡れ跡の Apply Material の Mask に。上は +Y です。");
+        if (changed) {
+            edited.length = std::clamp(edited.length, .05f, 1.0f);
+            edited.width = std::clamp(edited.width, .005f, .1f);
+            edited.sharpness = std::clamp(edited.sharpness, 1.0f, 8.0f);
+            *flow = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }
@@ -1927,6 +1970,12 @@ void Application::DrawGraphPanel() {
             changed |= ui::PropertyFloat("間隔", &edited.spacing, .05f, 1, .25f, "帯の間隔。形の高さに対する比です。");
             changed |= ui::PropertyFloat("ばらつき", &edited.noise, 0, 1, .3f, "削る深さを水平方向にばらつかせます。");
             changed |= ui::PropertyFloat("ばらつきの細かさ", &edited.noiseScale, .5f, 16, 3);
+            changed |= ui::PropertyFloat("向きに集中", &edited.upwardFocus, 0, 1, 0,
+                                         "0 で全周。1 で「集中する向き」を向いた面だけを深く削ります（波食ノッチなら波の当たる側）。");
+            {
+                const float up[3] = {0, 1, 0};
+                changed |= ui::PropertyFloat3Input("集中する向き", edited.focusDirection.data(), up, "既定は上 (0, 1, 0)。") != 0;
+            }
             changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
             ui::EndPropertyTable();
         }
@@ -1941,6 +1990,7 @@ void Application::DrawGraphPanel() {
             edited.spacing = std::clamp(edited.spacing, .05f, 1.0f);
             edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
+            edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *undercut = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();

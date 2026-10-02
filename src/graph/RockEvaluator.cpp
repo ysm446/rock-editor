@@ -63,6 +63,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         const auto* s = std::get_if<geometry::VolumeNoiseSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->type); add(s->amount); add(s->scale); add(s->octaves); add(s->warp); add(s->warpScale);
+        add(s->upwardFocus); add(s->focusDirection[0]); add(s->focusDirection[1]); add(s->focusDirection[2]);
         add(s->seed);
     } else if (node->kind == NodeKind::VolumeSmooth) {
         const auto* s = std::get_if<geometry::VolumeSmoothSettings>(&node->settings);
@@ -81,6 +82,7 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         const auto* s = std::get_if<geometry::VolumeUndercutSettings>(&node->settings);
         if (!s) return std::nullopt;
         add(s->height); add(s->width); add(s->depth); add(s->count); add(s->spacing); add(s->noise); add(s->noiseScale); add(s->seed);
+        add(int(s->reference)); add(s->level); add(s->upwardFocus); add(s->focusDirection[0]); add(s->focusDirection[1]); add(s->focusDirection[2]);
     } else if (node->kind == NodeKind::VolumeErode) {
         const auto* s = std::get_if<geometry::VolumeErodeSettings>(&node->settings);
         if (!s) return std::nullopt;
@@ -180,6 +182,8 @@ std::optional<std::string> VolumeKey(const NodeGraph& graph, GraphId id, const s
         add(structure->width); add(structure->warp); add(structure->warpScale); add(structure->seed);
     } else if (const auto* diff = std::get_if<geometry::VolumeDiffMaskSettings>(&node->settings)) {
         add(diff->mode); add(diff->distance); add(diff->softness); add(diff->resolution);
+    } else if (const auto* flow = std::get_if<geometry::FlowMaskSettings>(&node->settings)) {
+        add(flow->resolution); add(flow->volumeResolution); add(flow->length); add(flow->width); add(flow->sharpness);
     } else if (const auto* noise = std::get_if<geometry::NoiseMaskSettings>(&node->settings)) {
         add(noise->size); add(noise->contrast); add(noise->seed); add(noise->detail); add(noise->warp); add(noise->resolution);
     } else if (const auto* occlusion = std::get_if<geometry::ShapeMaskSettings>(&node->settings)) {
@@ -354,6 +358,29 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             auto image = geometry::VolumeDiffMask(result.rocks[0].mesh, *before.rocks[0].volume, *settings, error, stop,
                                                   [&](int p) { report(id, 0, p); });
             if (!error.empty()) return finish(Failure(id, "Volume Diff Mask", error));
+            result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
+            result.rocks[0].previewMaskInvert = ImageMaskInvert(*node);
+        } else if (node->kind == NodeKind::FlowMask) {
+            const auto* settings = std::get_if<geometry::FlowMaskSettings>(&node->settings);
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            const auto* volumeNode = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
+            if (!settings || !upstream) return finish(Failure(id, "Flow Mask", "UV付きのMeshを接続してください"));
+            std::shared_ptr<const geometry::VolumeGrid> volume;
+            if (volumeNode) {
+                const auto volumeResult = evaluate(volumeNode->id, depth + 1);
+                if (!volumeResult.error.empty()) return finish(volumeResult);
+                if (volumeResult.hasModels || volumeResult.rocks.size() != 1 || !volumeResult.rocks[0].volume)
+                    return finish(Failure(id, "Flow Mask", "Volume には Volume を 1 つ接続してください（Volume to Mesh の前）"));
+                volume = volumeResult.rocks[0].volume;
+            }
+            result = evaluate(upstream->id, depth + 1);
+            report(id, 0, 0);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.size() != 1 || result.rocks[0].volume)
+                return finish(Failure(id, "Flow Mask", "UV付きの生成メッシュを1つ接続してください（UV Unwrapの出力）"));
+            std::string error;
+            auto image = geometry::FlowMask(result.rocks[0].mesh, *settings, volume.get(), error, stop, [&](int p) { report(id, 0, p); });
+            if (!error.empty()) return finish(Failure(id, "Flow Mask", error));
             result.rocks[0].previewMask = std::make_shared<const geometry::MaskImage>(std::move(image));
             result.rocks[0].previewMaskInvert = ImageMaskInvert(*node);
         } else if (node->kind == NodeKind::StructureMask) {

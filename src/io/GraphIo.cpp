@@ -263,6 +263,9 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                      {"fill", structure->fill}, {"softness", structure->softness}, {"scale", structure->scale},
                                      {"width", structure->width}, {"warp", structure->warp}, {"warpScale", structure->warpScale},
                                      {"seed", structure->seed}, {"invert", structure->invert}};
+        } else if (const auto* flow = std::get_if<geometry::FlowMaskSettings>(&node.settings)) {
+            item["flowMask"] = {{"resolution", flow->resolution}, {"volumeResolution", flow->volumeResolution}, {"length", flow->length},
+                                {"width", flow->width}, {"sharpness", flow->sharpness}, {"invert", flow->invert}};
         } else if (const auto* diff = std::get_if<geometry::VolumeDiffMaskSettings>(&node.settings)) {
             item["volumeDiffMask"] = {{"mode", geometry::VolumeDiffModeName(diff->mode)}, {"distance", diff->distance},
                                       {"softness", diff->softness}, {"resolution", diff->resolution}, {"invert", diff->invert}};
@@ -329,7 +332,8 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             item["volumeUndercut"] = {{"reference", geometry::VolumeUndercutReferenceName(undercut->reference)},
                                       {"level", undercut->level}, {"height", undercut->height}, {"width", undercut->width}, {"depth", undercut->depth},
                                       {"count", undercut->count}, {"spacing", undercut->spacing}, {"noise", undercut->noise},
-                                      {"noiseScale", undercut->noiseScale}, {"seed", undercut->seed}};
+                                      {"noiseScale", undercut->noiseScale}, {"upwardFocus", undercut->upwardFocus},
+                                      {"focusDirection", undercut->focusDirection}, {"seed", undercut->seed}};
         } else if (const auto* close = std::get_if<geometry::VolumeCloseSettings>(&node.settings)) {
             item["volumeClose"] = {{"mode", geometry::VolumeCloseModeName(close->mode)}, {"width", close->width},
                                    {"distance", close->distance}, {"threshold", close->threshold},
@@ -351,6 +355,7 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                    {"octaves", noise->octaves},
                                    {"warp", noise->warp},
                                    {"warpScale", noise->warpScale},
+                                   {"upwardFocus", noise->upwardFocus}, {"focusDirection", noise->focusDirection},
                                    {"seed", noise->seed}};
         } else if (const auto* planes = std::get_if<geometry::ParallelPlanesSettings>(&node.settings)) {
             item["parallelPlanes"] = {{"rotation", planes->rotationDegrees}, {"spacing", planes->spacing},
@@ -830,6 +835,17 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.invert = ReadBool(*v, "invert", settings.invert);
                 }
                 created.settings = settings;
+            } else if (created.kind == graph::NodeKind::FlowMask) {
+                geometry::FlowMaskSettings settings;
+                if (const json* v = FindMember(item, "flowMask"); v && v->is_object()) {
+                    settings.resolution = ReadInt(*v, "resolution", settings.resolution);
+                    settings.volumeResolution = ReadInt(*v, "volumeResolution", settings.volumeResolution);
+                    settings.length = ReadFloat(*v, "length", settings.length);
+                    settings.width = ReadFloat(*v, "width", settings.width);
+                    settings.sharpness = ReadFloat(*v, "sharpness", settings.sharpness);
+                    settings.invert = ReadBool(*v, "invert", settings.invert);
+                }
+                created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeDiffMask) {
                 geometry::VolumeDiffMaskSettings settings;
                 if (const json* v = FindMember(item, "volumeDiffMask"); v && v->is_object()) {
@@ -1048,6 +1064,9 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.spacing = ReadFloat(*v, "spacing", settings.spacing);
                     settings.noise = ReadFloat(*v, "noise", settings.noise);
                     settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
+                    settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
+                    const auto focus = ReadFloat3(*v, "focusDirection", {0, 1, 0});
+                    settings.focusDirection = {focus.x, focus.y, focus.z};
                     settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
@@ -1086,6 +1105,9 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.octaves = ReadInt(*v, "octaves", settings.octaves);
                     settings.warp = ReadFloat(*v, "warp", settings.warp);
                     settings.warpScale = ReadFloat(*v, "warpScale", settings.warpScale);
+                    settings.upwardFocus = ReadFloat(*v, "upwardFocus", settings.upwardFocus);
+                    const auto focus = ReadFloat3(*v, "focusDirection", {0, 1, 0});
+                    settings.focusDirection = {focus.x, focus.y, focus.z};
                     settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;

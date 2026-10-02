@@ -90,14 +90,14 @@
       "name": "礫岩",
       "category": "堆積・火山の組織",
       "status": "○",
-      "description": "丸い礫が半分ほど埋まって突き出る。"
+      "description": "丸い礫が半分ほど埋まって突き出る。礫は Volume Diff Mask で基質と別の色（Surface の定数色）。"
     },
     {
       "id": "breccia",
       "name": "角礫岩",
       "category": "堆積・火山の組織",
-      "status": "△",
-      "description": "角張った礫が浅く埋まる。"
+      "status": "○",
+      "description": "角張った礫が浅く埋まる。礫は Volume Diff Mask で基質と別の色（Surface の定数色）。"
     },
     {
       "id": "vesicular-basalt",
@@ -152,8 +152,8 @@
       "id": "wave-cut-notch",
       "name": "波食ノッチ",
       "category": "風化・侵食の形",
-      "status": "△",
-      "description": "水面の高さ（ワールドの高さ）に 1 本のくびれが入った海岸の岩。"
+      "status": "○",
+      "description": "水面の高さ（ワールドの高さ）に、波の当たる側ほど深いくびれが入った海岸の岩。"
     },
     {
       "id": "wind-erosion",
@@ -168,6 +168,13 @@
       "category": "風化・侵食の形",
       "status": "△",
       "description": "雨水が斜面を流れ下る筋に沿って溝が彫られた岩。"
+    },
+    {
+      "id": "rust-streaks",
+      "name": "鉄錆・汚れの流れた筋",
+      "category": "表面・色",
+      "status": "△",
+      "description": "雨水が流れ下る筋に沿って錆色が付いた岩（Surface の定数色、Flow Mask）。"
     },
     {
       "id": "gneiss",

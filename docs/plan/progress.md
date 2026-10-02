@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-02 22:10
+更新日時: 2026-10-03 00:10
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,15 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-10-02 Flow Mask と、Noise / Undercut の「向きに集中」
+
+- ユーザー依頼（Flow Mask を続ける。一つ改良すると多くのレシピが解決する改良を探る）。
+- Flow Mask ノードを足した。表面を重力で流れ下る水の筋（流れの量）を UV のマスクに出す。Volume Erode の流下の筋の追跡（`FlowAccumulation`、公開した）を共用。入力は UV 付き Mesh と、筋を追う格子の Volume（任意。UV 展開・Decimate 後のメッシュは格子に変換できないことがあるので繋ぐ）。仕様は [Flow Mask](../reference/flow-mask.md)。レシピ `rust-streaks`（鉄錆の流れた筋。× → △）。
+- 一つで多くに効く改良として、Volume Noise と Volume Undercut に Smooth / Edge Wear と同じ「向きに集中」（`upwardFocus` / `focusDirection`）を足した。`honeycomb` はタフォニが陰の面に集まり上面は平滑に、`wave-cut-notch` はノッチが波の当たる側だけ深く（△ → ○）、`wind-erosion` はくぼみが風下に。ぼかした場の法線で重みを決めるのは既存と同じ。
+- テストを足し、全テスト成功。
+- 礫と基質の色分けを、新しいノードを足さずに Volume Diff Mask（足した所）で付けた。接地を礫の前に移し、Before とメッシュの位置をそろえる。`conglomerate` は ○ のまま課題が消え、`breccia` は △ → ○（礫 360 個）。
+- 次: 鉄錆の筋の起点（鉄分の源）の指定。角礫岩の礫を密に接しさせる手段。
 
 ### 2026-10-02 向きで削る量を変える侵食 Volume Erode
 

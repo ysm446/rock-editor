@@ -16,8 +16,8 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `talus-fragment.rockgraph` | 崖錐の角張った岩片 | 箱を大きな平面で強く切り、局所の欠けを多数 | 約 0.1 秒 |
 | `honeycomb.rockgraph` | 蜂の巣状の風化（タフォニ）・多孔質 | 丸めた塊に Volume Noise の「くぼみ」を粗・細の 2 段で掛ける | 約 0.2 秒 |
 | `spheroidal-weathering.rockgraph` | 玉ねぎ状風化 | 表面を揺らした楕円体（内部に面の無い Base Shape）に「表面に沿う殻」を薄く 3 枚。外側ほど剥がれる | 約 0.5 秒 |
-| `conglomerate.rockgraph` | 礫岩 | 丸めた塊に Volume Scatter（楕円体・和）で大小の礫を半分ほど埋める | 約 0.6 秒 |
-| `breccia.rockgraph` | 角礫岩 | Volume Scatter（箱・和）で角張った礫を浅く埋める。礫と基質の色の違いが無いと弱い | 約 0.3 秒 |
+| `conglomerate.rockgraph` | 礫岩 | 接地した塊に Volume Scatter（楕円体・和）で礫を埋め、Volume Diff Mask（足した所）で礫だけ別の色に | 約 5 秒（UV 展開を含む） |
+| `breccia.rockgraph` | 角礫岩 | Volume Scatter（箱・和）で角礫を浅く埋め、Volume Diff Mask で礫だけ別の色に | 約 5 秒（UV 展開を含む） |
 | `vesicular-basalt.rockgraph` | 多孔質の溶岩 | Volume Scatter（楕円体・差）で気泡の穴を多数抜く | 約 0.2 秒 |
 | `granite-sheeting.rockgraph` | 花崗岩のシーティング・剥離 | Volume Crack の割り方「表面に沿う殻」で、外側の板がまだらに剥がれた段を作る。Edge Wear は殻より前に置く（後ろに置くと剥がれた跡に細かい縞） | 約 0.3 秒 |
 | `granite-buttress.rockgraph` | 花崗岩の岩峰（岩稜） | 縦長の箱を、密度のむらのある点で、節理の向き（76°）に回して伸長した Voronoi の多面体に割る。Piece Select の Peel（接地・大きさの効き）で外周の小さなブロックから抜き取り、割れの少ない芯を塔として残す。Piece Transform のばらつきでずらし、To Volume でまとめる | 約 0.3 秒 |
@@ -32,6 +32,7 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `wave-cut-notch.rockgraph` | 波食ノッチ | 接地してから Volume Undercut（帯の基準 world）で水面の高さに帯を 1 本 | 約 0.3 秒 |
 | `wind-erosion.rockgraph` | 風食 | Volume Erode（さらされた面）で風上の面を後退させ、足元を world の Undercut で削る | 約 0.6 秒 |
 | `limestone-rills.rockgraph` | 石灰岩の溶食（縦溝） | Volume Erode（流下）で雨水の筋に沿って溝を彫る | 約 1 秒 |
+| `rust-streaks.rockgraph` | 鉄錆・汚れの流れた筋 | Flow Mask（流れの量）× Noise Mask で錆色を塗る（Surface の定数色） | 約 5 秒（UV 展開を含む） |
 
 使い方の例（チュートリアル）。ノードの組み方を見せる例で、ノードの note に手順を書いてある。テンプレートの一覧では「使い方の例」の分類に出る。
 

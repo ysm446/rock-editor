@@ -1,9 +1,13 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-02 22:10
+更新日時: 2026-10-03 00:10
 
 ## 未リリース
+
+- Flow Mask ノードを足した。表面を重力で流れ下る水の筋（流れの量）を UV のマスクにする（鉄錆・汚れの流れた筋、濡れ跡）。入力は UV 付きの Mesh と、筋を追う格子の Volume（任意）。仕様は [Flow Mask](reference/flow-mask.md)。レシピ `rust-streaks` を足した。
+- レシピ `conglomerate` / `breccia` に、Volume Diff Mask（足した所）で礫だけを基質と別の色に塗る組み方を入れた（Surface の定数色）。
+- Volume Noise と Volume Undercut に「向きに集中」「集中する向き」を足した（Volume Smooth / Edge Wear と同じ）。既定 0 で従来と同じ。タフォニを陰の面に集める、波食ノッチを波の当たる側だけ深くする、くぼみを風下に付ける、に使える。レシピ `honeycomb` / `wave-cut-notch` / `wind-erosion` に適用した。
 
 - Volume Erode ノードを足した。向きで削る量を変える侵食で、「さらされた面」（風・波・氷が来る向きを向く面ほど削り、他の部分の陰は削らない。風上の面が後退する）と「流下」（表面を重力で流れ下る筋を追い、流れが集まる所ほど削って溝にする）を選べる。仕様は [Volume Erode](reference/volume-erode.md)。レシピ `wind-erosion` に組み込み、石灰岩の溶食の縦溝 `limestone-rills` を足した。再距離化（`RedistanceInterior`）に、深すぎる値も直す両方向モードを足した（既存の呼び出しは従来どおり）。さらされた面の重みは横向きの面にも弱く効き、陰は風上側 50° の円錐の開放度で決める。
 

@@ -7,14 +7,23 @@
       {"id": 2, "kind": "toVolume", "toVolume": {"resolution": 128}},
       {"id": 3, "kind": "planeCuts", "planeCuts": {"count": 10, "depthMin": 0.04, "depthMax": 0.18, "seed": 6}},
       {"id": 8, "kind": "volumeSmooth", "volumeSmooth": {"radius": 0.025, "amount": 1}},
-      {"id": 4, "kind": "volumeScatter", "note": "角張った礫（箱）を埋める", "volumeScatter": {"shape": "box", "operation": "union", "count": 160, "radiusMin": 0.02, "radiusMax": 0.05, "depthMin": 0.3, "depthMax": 0.9, "elongation": 1.6, "blend": 0.1, "seed": 8}},
-      {"id": 5, "kind": "volumeClip", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 5, "kind": "volumeClip", "note": "礫を足す前に接地する。ここが Volume Diff Mask の Before（メッシュと同じ位置）", "volumeClip": {"mode": "ground", "embed": 0.2}},
+      {"id": 4, "kind": "volumeScatter", "note": "角張った礫（箱）を埋める", "volumeScatter": {"shape": "box", "operation": "union", "count": 360, "radiusMin": 0.02, "radiusMax": 0.06, "depthMin": 0.2, "depthMax": 0.9, "elongation": 1.6, "blend": 0.1, "seed": 8}},
       {"id": 6, "kind": "volumeToMesh", "volumeToMesh": {"method": "dualContouring"}},
+      {"id": 10, "kind": "decimate", "decimate": {"targetTriangles": 40000}},
+      {"id": 11, "kind": "uvUnwrap", "uvUnwrap": {"resolution": 1024}},
+      {"id": 12, "kind": "surface", "note": "基質の色", "layer": {"material": null, "baseColor": [0.40, 0.33, 0.27], "roughness": 0.85, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 13, "kind": "applyMaterial"},
+      {"id": 14, "kind": "surface", "note": "角礫の色", "layer": {"material": null, "baseColor": [0.25, 0.24, 0.26], "roughness": 0.6, "mapping": {"method": "triplanar", "repeatMeters": 1}}},
+      {"id": 15, "kind": "volumeDiffMask", "note": "礫を足す前の形（Before）の外にある表面 = 突き出た角礫", "volumeDiffMask": {"mode": "added", "distance": 0.006, "softness": 0.012, "resolution": 2048}},
+      {"id": 16, "kind": "applyMaterial"},
       {"id": 7, "kind": "meshOutput"}
     ],
     "links": [
-      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "8"}, {"from": "8", "to": "4"},
-      {"from": "4", "to": "5"}, {"from": "5", "to": "6"}, {"from": "6", "to": "7:Geometry"}
+      {"from": "1", "to": "2"}, {"from": "2", "to": "3"}, {"from": "3", "to": "8"}, {"from": "8", "to": "5"},
+      {"from": "5", "to": "4"}, {"from": "4", "to": "6"}, {"from": "6", "to": "10"}, {"from": "10", "to": "11"},
+      {"from": "11", "to": "13:Mesh"}, {"from": "12", "to": "13:Material"}, {"from": "11", "to": "15:Mesh"}, {"from": "5", "to": "15:Before"},
+      {"from": "13", "to": "16:Mesh"}, {"from": "14", "to": "16:Material"}, {"from": "15", "to": "16:Mask"}, {"from": "16", "to": "7:Geometry"}
     ]
   }
 }
