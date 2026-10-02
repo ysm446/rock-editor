@@ -101,7 +101,7 @@ std::optional<Host> MakeHost(graph::NodeKind kind, bool bareCrack = false) {
         Connect(g, SmallBox(g), host.target, 0);
         return host;
     case K::VolumeTransform: case K::PlaneCuts: case K::VolumeNoise: case K::VolumeSmooth: case K::VolumeTerrace:
-    case K::VolumeClose: case K::VolumeEdgeWear: case K::VolumeClip: case K::VolumeToMesh: case K::VolumeScatter: case K::VolumeUndercut:
+    case K::VolumeClose: case K::VolumeEdgeWear: case K::VolumeClip: case K::VolumeToMesh: case K::VolumeScatter: case K::VolumeUndercut: case K::VolumeErode:
         host.target = host.evaluate = Add(g, kind);
         Connect(g, SmallVolume(g), host.target, 0);
         return host;

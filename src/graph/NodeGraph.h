@@ -115,6 +115,8 @@ enum class NodeKind : uint32_t {
     StructureMask = 78,
     // 後から足した所（削った所）のマスク。UV付きの Mesh と、比べる元（足す・削る前）の Volume を受ける。
     VolumeDiffMask = 79,
+    // 向きで削る量を変える侵食（さらされた面: 風・波・氷の向き / 流下: 斜面を流れる筋）。
+    VolumeErode = 80,
     // 岩グラフの最終段。入力のメッシュから段階的な LOD を作り、この岩グラフの岩アセットにする。
     // 出力は LOD0（Mesh Output へ繋いで表示できる）。選ぶとビューポートで LOD を切り替えて見られる。
     RockAsset = 72,
@@ -286,7 +288,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::VolumeBooleanSettings, geometry::PlaneCutsSettings,
                                   geometry::LayeredBoxesSettings, geometry::ParallelPlanesSettings, geometry::VolumeCrackSettings, geometry::VolumeNoiseSettings,
                                   geometry::VolumeSmoothSettings, geometry::VolumeTerraceSettings, geometry::VolumeCloseSettings,
-                                  geometry::VolumeEdgeWearSettings, geometry::VolumeClipSettings, geometry::VolumeScatterSettings, geometry::VolumeUndercutSettings,
+                                  geometry::VolumeEdgeWearSettings, geometry::VolumeClipSettings, geometry::VolumeScatterSettings, geometry::VolumeUndercutSettings, geometry::VolumeErodeSettings,
                                   geometry::DecimateSettings, geometry::RemeshSettings,
                                   geometry::SubdivideSettings, geometry::DisplaceSettings, geometry::UvUnwrapSettings, MaterialBakeSettings, MaterialMaskSettings,
                                   geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::StructureMaskSettings, geometry::VolumeDiffMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,

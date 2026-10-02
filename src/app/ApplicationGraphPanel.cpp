@@ -1436,6 +1436,7 @@ void Application::DrawGraphEditor() {
         addNodeMenuItem(graph::NodeKind::PlaneCuts, "Plane Cuts — 平面の群で切り落とし、角張った面を作る");
         addNodeMenuItem(graph::NodeKind::VolumeClip, "Volume Clip — 水平な平面で切り、下（または上）を捨てる");
         addNodeMenuItem(graph::NodeKind::VolumeUndercut, "Volume Undercut — 高さの帯を内側へ削り、くびれを作る（きのこ岩・フードゥー）");
+        addNodeMenuItem(graph::NodeKind::VolumeErode, "Volume Erode — 向きで削る量を変える侵食（風・波・氷にさらされた面 / 流れ下る筋の溝）");
         addNodeMenuItem(graph::NodeKind::VolumeScatter, "Volume Scatter — 表面の近くに小さな形を散らし、礫を足す / 穴を抜く");
         addNodeMenuItem(graph::NodeKind::ParallelPlanes, "Parallel Planes — 向きと間隔から平行な構造面を定義");
         addNodeMenuItem(graph::NodeKind::VolumeCrack, "Volume Crack — 構造面や点群の境界に沿って割れ目を彫る");
@@ -1857,6 +1858,51 @@ void Application::DrawGraphPanel() {
             edited.warp = std::clamp(edited.warp, 0.0f, 1.0f);
             edited.warpScale = std::clamp(edited.warpScale, .01f, 100.0f);
             *structure = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* erode = std::get_if<geometry::VolumeErodeSettings>(&selected->settings)) {
+        auto edited = *erode;
+        bool changed = false;
+        if (ui::BeginPropertyTable("volumeErodeRows")) {
+            const char* types[] = {"さらされた面（風・波・氷）", "流下（斜面を流れる筋）"};
+            int type = std::clamp(static_cast<int>(edited.type), 0, 1);
+            if (ui::PropertyCombo("種類", &type, types, 2, 0,
+                                  "さらされた面は「来る向き」を向いた面ほど削り、他の部分の陰（風下）は削りません。"
+                                  "流下は表面を重力で流れ下る筋を追い、流れが集まる所ほど削って溝にします。")) {
+                edited.type = static_cast<geometry::VolumeErodeType>(type);
+                changed = true;
+            }
+            changed |= ui::PropertyFloat("量", &edited.amount, 0, .3f, .05f, "削る深さの合計の最大。形の最長辺に対する比です。");
+            if (edited.type == geometry::VolumeErodeType::Exposure) {
+                const float windward[3] = {-1, 0, 0};
+                changed |= ui::PropertyFloat3Input("来る向き", edited.direction.data(), windward,
+                                                   "風・波・氷が来る向き（風上）。既定は -X (-1, 0, 0)。") != 0;
+                changed |= ui::PropertyFloat("陰の距離", &edited.shadow, 0, 1, .5f,
+                                             "風上へこの距離の中に形があれば陰（風下）として削りません。形の最長辺に対する比。0 で陰を見ません。");
+            } else {
+                changed |= ui::PropertyFloat("筋の長さ", &edited.length, .05f, 1, .5f, "1 つの出発点から流れを追う長さ。形の最長辺に対する比です。");
+                changed |= ui::PropertyFloat("溝の幅", &edited.width, .005f, .1f, .02f, "流れをぼかす幅。形の最長辺に対する比です。セルより細いと溝になりません。");
+            }
+            changed |= ui::PropertyFloat("集中", &edited.sharpness, 1, 8, 2, "1 で向き（流れ）に広く効き、8 で正面（最も流れが集まる筋）だけに効きます。");
+            changed |= ui::PropertyInt("回数", &edited.iterations, 1, 8, 3, "削ってから向き（流れ）を取り直す回数。多いほど風上の面が後退して丸まり、流れが溝に集まります。");
+            changed |= ui::PropertyFloat("ばらつき", &edited.noise, 0, 1, .3f, "削る深さを場所でばらつかせます。");
+            changed |= ui::PropertyFloat("ばらつきの細かさ", &edited.noiseScale, .5f, 16, 4);
+            changed |= ui::PropertyInt("Seed", &edited.seed, 0, 1000000000, 1);
+            ui::EndPropertyTable();
+        }
+        ui::HintText("向きで削る量を変える侵食です。風食・ヤルダンは「さらされた面」を風上へ、石灰岩の溶食の縦溝は「流下」。"
+                     "削る方向にだけ効き、削り落とされた小片は捨てます。");
+        if (changed) {
+            edited.amount = std::clamp(edited.amount, 0.0f, .3f);
+            edited.sharpness = std::clamp(edited.sharpness, 1.0f, 8.0f);
+            edited.shadow = std::clamp(edited.shadow, 0.0f, 1.0f);
+            edited.length = std::clamp(edited.length, .05f, 1.0f);
+            edited.width = std::clamp(edited.width, .005f, .1f);
+            edited.iterations = std::clamp(edited.iterations, 1, 8);
+            edited.noise = std::clamp(edited.noise, 0.0f, 1.0f);
+            edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
+            *erode = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

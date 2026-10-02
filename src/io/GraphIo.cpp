@@ -320,6 +320,11 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
                                      {"depthMin", spread->depthMin}, {"depthMax", spread->depthMax},
                                      {"elongation", spread->elongation}, {"blend", spread->blend}, {"lie", spread->lie},
                                      {"seed", spread->seed}};
+        } else if (const auto* erode = std::get_if<geometry::VolumeErodeSettings>(&node.settings)) {
+            item["volumeErode"] = {{"type", geometry::VolumeErodeTypeName(erode->type)}, {"amount", erode->amount},
+                                   {"direction", erode->direction}, {"sharpness", erode->sharpness}, {"shadow", erode->shadow},
+                                   {"length", erode->length}, {"width", erode->width}, {"iterations", erode->iterations},
+                                   {"noise", erode->noise}, {"noiseScale", erode->noiseScale}, {"seed", erode->seed}};
         } else if (const auto* undercut = std::get_if<geometry::VolumeUndercutSettings>(&node.settings)) {
             item["volumeUndercut"] = {{"reference", geometry::VolumeUndercutReferenceName(undercut->reference)},
                                       {"level", undercut->level}, {"height", undercut->height}, {"width", undercut->width}, {"depth", undercut->depth},
@@ -1012,6 +1017,23 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.blend = ReadFloat(*v, "blend", settings.blend);
                     settings.lie = ReadFloat(*v, "lie", settings.lie);
                     settings.seed = ReadUInt(*v, "seed", settings.seed);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::VolumeErode) {
+                geometry::VolumeErodeSettings settings;
+                if (const json* v = FindMember(item, "volumeErode"); v && v->is_object()) {
+                    settings.type = geometry::ParseVolumeErodeType(ReadString(*v, "type", "exposure"));
+                    settings.amount = ReadFloat(*v, "amount", settings.amount);
+                    const auto direction = ReadFloat3(*v, "direction", {-1, 0, 0});
+                    settings.direction = {direction.x, direction.y, direction.z};
+                    settings.sharpness = ReadFloat(*v, "sharpness", settings.sharpness);
+                    settings.shadow = ReadFloat(*v, "shadow", settings.shadow);
+                    settings.length = ReadFloat(*v, "length", settings.length);
+                    settings.width = ReadFloat(*v, "width", settings.width);
+                    settings.iterations = ReadInt(*v, "iterations", settings.iterations);
+                    settings.noise = ReadFloat(*v, "noise", settings.noise);
+                    settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
+                    settings.seed = ReadInt(*v, "seed", settings.seed);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::VolumeUndercut) {

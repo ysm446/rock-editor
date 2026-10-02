@@ -102,7 +102,7 @@ constexpr std::array<PinDefinition, 3> kStructureMaskPins = {{{PinKind::Input, V
 // Volume Diff Mask。UV付きの Mesh と、比べる元（足す・削る前）の Volume を受ける。
 constexpr std::array<PinDefinition, 3> kVolumeDiffMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Volume, "Before"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 48> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 49> kNodeDefinitions = {{
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -144,6 +144,7 @@ constexpr std::array<NodeDefinition, 48> kNodeDefinitions = {{
     {NodeKind::VolumeClip, "volumeClip", "Volume Clip", kVolumeTransformPins},
     {NodeKind::VolumeScatter, "volumeScatter", "Volume Scatter", kVolumeTransformPins},
     {NodeKind::VolumeUndercut, "volumeUndercut", "Volume Undercut", kVolumeTransformPins},
+    {NodeKind::VolumeErode, "volumeErode", "Volume Erode", kVolumeTransformPins},
     {NodeKind::VolumeToMesh, "volumeToMesh", "Volume to Mesh", kVolumeToMeshPins},
     {NodeKind::BaseRock, "baseRock", "Base Shape", kBaseRockPins},
     {NodeKind::Merge, "merge", "Merge", kMergePins},
@@ -187,7 +188,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::PlaneCuts || kind == NodeKind::VolumeCrack ||
            kind == NodeKind::VolumeNoise || kind == NodeKind::VolumeSmooth || kind == NodeKind::VolumeTerrace ||
            kind == NodeKind::VolumeClose || kind == NodeKind::VolumeEdgeWear || kind == NodeKind::VolumeClip ||
-           kind == NodeKind::VolumeScatter || kind == NodeKind::VolumeUndercut ||
+           kind == NodeKind::VolumeScatter || kind == NodeKind::VolumeUndercut || kind == NodeKind::VolumeErode ||
            kind == NodeKind::VolumeToMesh ||
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
@@ -562,6 +563,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::VolumeScatterSettings{};
     } else if (kind == NodeKind::VolumeUndercut) {
         node.settings = geometry::VolumeUndercutSettings{};
+    } else if (kind == NodeKind::VolumeErode) {
+        node.settings = geometry::VolumeErodeSettings{};
     } else if (kind == NodeKind::LayeredBoxes) {
         node.settings = geometry::LayeredBoxesSettings{};
     } else if (kind == NodeKind::ScatterPoints) {

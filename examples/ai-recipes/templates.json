@@ -160,7 +160,14 @@
       "name": "風食",
       "category": "風化・侵食の形",
       "status": "△",
-      "description": "風上の面が丸く研磨され、地面の近くが砂で削られた岩。"
+      "description": "風上の面が削られて後退し、地面の近くが砂で削られた岩。"
+    },
+    {
+      "id": "limestone-rills",
+      "name": "石灰岩の溶食（縦溝）",
+      "category": "風化・侵食の形",
+      "status": "△",
+      "description": "雨水が斜面を流れ下る筋に沿って溝が彫られた岩。"
     },
     {
       "id": "gneiss",

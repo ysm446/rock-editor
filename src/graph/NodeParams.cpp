@@ -44,6 +44,8 @@ constexpr ParamOption kCombineOps[] = {{"multiply", 0, "積"}, {"maximum", 1, "�
 constexpr ParamOption kFilterTypes[] = {{"blur", 0, "ぼかし"}, {"sharpen", 1, "シャープ"}, {"levels", 2, "レベル補正"}};
 constexpr ParamOption kUndercutReferences[] = {{"shape", 0, "形: 帯の中心を形の高さに対する位置 height で指定する"},
                                                {"world", 1, "ワールド: 帯の中心をワールドの高さ level (m) で指定する（波食ノッチの水面）"}};
+constexpr ParamOption kErodeTypes[] = {{"exposure", 0, "さらされた面: direction から来る風・波・氷にさらされた面ほど削り、他の部分の陰（風下）は削らない"},
+                                       {"flow", 1, "流下: 表面を重力で流れ下る筋を追い、流れが集まる所ほど削る（溝）。向きは常に下"}};
 constexpr ParamOption kClipModes[] = {{"world", 0, "指定した高さで切る"},
                                      {"ground", 1, "形の底から embed の位置で切り、切り口を height（地面）に置く"}};
 constexpr ParamOption kVolumeDiffModes[] = {{"added", 0, "足した所: 比べる元の形の外にある表面（隙間を埋めた土・足した礫）"},
@@ -264,6 +266,20 @@ constexpr ParamDefinition kParams[] = {
     {K::VolumeUndercut, "volumeUndercut.noise", T::Float, 0, 1, "比", "ばらつき", "削る深さを水平方向にばらつかせる", C::Error},
     {K::VolumeUndercut, "volumeUndercut.noiseScale", T::Float, 0.5, 16, "最長辺あたりの山の数", "ばらつきの細かさ", "", C::Error},
     {K::VolumeUndercut, "volumeUndercut.seed", T::Int, 0, N, "", "Seed", "", C::None},
+    {K::VolumeErode, "volumeErode.type", T::Enum, N, N, "", "種類", "", C::Clamp, kErodeTypes},
+    {K::VolumeErode, "volumeErode.amount", T::Float, 0, 0.3, kLongest, "量", "削る深さの合計の最大（全ての回を足して）。流線形にするなら 0.1 以上", C::Error},
+    {K::VolumeErode, "volumeErode.direction", T::Float3, N, N, "向き（正規化しなくてよい）", "来る向き",
+     "exposure 用。風・波・氷が来る向き（風上）。既定 [-1, 0, 0]（-X から吹く）。長さ 0 なら -X", C::None},
+    {K::VolumeErode, "volumeErode.sharpness", T::Float, 1, 8, "", "集中", "1 で向き（流れ）に広く効き、8 で正面（最も流れが集まる筋）だけ", C::Error},
+    {K::VolumeErode, "volumeErode.shadow", T::Float, 0, 1, kLongest, "陰の距離",
+     "exposure 用。風上へこの距離の中に形があれば陰（風下）として削らない。0 で陰を見ない", C::Error},
+    {K::VolumeErode, "volumeErode.length", T::Float, 0.05, 1, kLongest, "筋の長さ", "flow 用。1 つの出発点から流れを追う長さ", C::Error},
+    {K::VolumeErode, "volumeErode.width", T::Float, 0.005, 0.1, kLongest, "溝の幅", "flow 用。流れをぼかす幅（σ）。セルより細いと溝にならない", C::Error},
+    {K::VolumeErode, "volumeErode.iterations", T::Int, 1, 8, "回", "回数",
+     "削ってから向き（流れ）を取り直す回数。多いほど風上の面が後退して丸まり、流れが溝に集まる", C::Error},
+    {K::VolumeErode, "volumeErode.noise", T::Float, 0, 1, "比", "ばらつき", "削る深さを場所でばらつかせる", C::Error},
+    {K::VolumeErode, "volumeErode.noiseScale", T::Float, 0.5, 16, "最長辺あたりの山の数", "ばらつきの細かさ", "", C::Error},
+    {K::VolumeErode, "volumeErode.seed", T::Int, 0, N, "", "Seed", "", C::None},
     {K::VolumeScatter, "volumeScatter.shape", T::Enum, N, N, "", "形", "散らす形", C::Clamp, kScatterShapes},
     {K::VolumeScatter, "volumeScatter.operation", T::Enum, N, N, "", "合成", "", C::Clamp, kScatterOperations},
     {K::VolumeScatter, "volumeScatter.count", T::Int, 1, 2000, "個", "数", "置けた分だけ置く（表面の近くに置ける場所が足りないと減る）", C::Error},
@@ -470,6 +486,8 @@ constexpr NodeSummary kSummaries[] = {
     {K::MaskFilter, "マスクをぼかす・シャープにする・レベル補正する", ""},
     {K::VolumeUndercut, "形の高さの帯を内側へ削り、くびれを作る（きのこ岩・フードゥー・波食ノッチ）",
      "高さは形に対する位置（接地の前後で意味が変わらない）。削り落とされた小片は捨てる"},
+    {K::VolumeErode, "向きで削る量を変える侵食。さらされた面（風・波・氷の向きを向く面を削り、陰は残す）か、流下（斜面を流れる筋に沿って溝を彫る）",
+     "風食・ヤルダンは exposure を風上へ、波食ノッチの片側は Volume Undercut の後に exposure、石灰岩の溶食の縦溝は flow。削る方向にだけ効く。削り落とされた小片は捨てる"},
     {K::VolumeScatter, "表面の近くに小さな形を散らし、和（埋まった礫）か差（穴・気泡）で合成する",
      "礫岩・角礫岩・多孔質の溶岩に使う。和で突き出す分だけ格子を広げる（各軸 256 点まで）。浮いた形は除く"},
     {K::VolumeClip, "水平面でボリュームを切り、片側を捨てる（接地面を作る）",

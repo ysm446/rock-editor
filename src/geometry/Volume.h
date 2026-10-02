@@ -270,6 +270,29 @@ struct VolumeUndercutSettings {
     int seed = 1;
 };
 
+// Volume Erode。向きで削る量を変える侵食。
+// さらされた面（exposure）: 向き direction から来る風・波・氷にさらされた面（法線がその向きを向く面）ほど削り、
+// 他の部分の陰（風下）になる所は削らない。風上の面が後退し、流線形になる（風食・ヤルダン、波の当たる側、氷河の上流側）。
+// 流下（flow）: 表面の点から重力で斜面を流れ下る筋を追い、流れが集まる所ほど削る。溝が流れに沿って彫られる
+// （石灰岩の溶食の縦溝、雨水の流れた筋）。向きは常に下（-Y）。
+enum class VolumeErodeType { Exposure, Flow };
+const char* VolumeErodeTypeName(VolumeErodeType type);
+// 知らない名前は Exposure。
+VolumeErodeType ParseVolumeErodeType(std::string_view name);
+struct VolumeErodeSettings {
+    VolumeErodeType type = VolumeErodeType::Exposure;
+    float amount = .05f;                          // 削る深さの合計（全ての回を足した最大）。最長辺に対する比。0～0.3
+    std::array<float, 3> direction{-1, 0, 0};     // exposure 用。風・波・氷が来る向き（風上）。長さ 0 なら -X
+    float sharpness = 2;                          // 向き（流れ）への集中。1 で広く、8 で正面（最も流れが集まる筋）だけ。1～8
+    float shadow = .5f;                           // exposure 用。風下の陰を調べる距離。最長辺に対する比。0 で陰を見ない。0～1
+    float length = .5f;                           // flow 用。筋を追う長さ。最長辺に対する比。0.05～1
+    float width = .02f;                           // flow 用。溝の幅（流れをぼかす σ）。最長辺に対する比。0.005～0.1
+    int iterations = 3;                           // 削って向き（流れ）を取り直す回数。1～8
+    float noise = .3f;                            // 削る深さの場所によるばらつき。0～1
+    float noiseScale = 4;                         // ばらつきの細かさ。最長辺あたりの山の数。0.5～16
+    int seed = 1;
+};
+
 enum class VolumeCloseMode { Width, Occlusion };
 const char* VolumeCloseModeName(VolumeCloseMode mode);
 // 不明な名前は Occlusion として読む。
@@ -303,7 +326,9 @@ struct VolumeClipSettings {
 // 内部の値が隠れた面や一つの箱の中での深さになり、表面からの深さより浅く歪む。殻・割れ目の深さ・Undercut など
 // 内部の値を使う処理が崩れるので、内外の境目（格子の辺の交点）から最も近い表面までの距離で置き換える。
 // 外側の値と内外の符号は変えない。内側で 1 セル以上深くなる所だけを置き換える。
-void RedistanceInterior(VolumeGrid& grid, std::stop_token stop = {});
+// bothWays が真なら、表面から 3 セルより深い内部の値を標本点までの距離で置き換える（深すぎる値も直す）。
+// 表面を内側へ動かした後（Volume Erode の回の間）のように、内部の値が新しい表面より深いまま残る場合に使う。
+void RedistanceInterior(VolumeGrid& grid, std::stop_token stop = {}, bool bothWays = false);
 // 位置 p の距離（負が内部）を線形補間で読む。格子の外は外周の値に外へ出た距離を足す（符号は正のまま）。
 float SampleVolumeDistance(const VolumeGrid& grid, Vec3 p);
 VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSettings& settings,
@@ -361,6 +386,9 @@ VolumeGrid CloseVolume(const VolumeGrid& grid, const VolumeCloseSettings& settin
 VolumeGrid ClipVolume(const VolumeGrid& grid, const VolumeClipSettings& settings, std::string& error);
 // 格子（範囲・セル間隔）は入力のまま。帯の中の距離場を内側へずらして削る。削り落とされた小片と閉じた空洞は除く。
 VolumeGrid UndercutVolume(const VolumeGrid& grid, const VolumeUndercutSettings& settings, std::string& error);
+// 格子（範囲・セル間隔）は入力のまま。削る方向にだけ効き、形は広がらない。
+// 加工でできた浮いた小片と閉じた空洞は除く。
+VolumeGrid ErodeVolume(const VolumeGrid& grid, const VolumeErodeSettings& settings, std::string& error);
 // 表面の近くに小さな形を散らし、和（埋まった礫）か差（穴・気泡）で合成する。和では突き出す分だけ格子を広げる。
 // 形の外に浮いた形（入力の塊と重ならない塊）と、加工でできた閉じた空洞は除く。
 VolumeGrid ScatterVolume(const VolumeGrid& grid, const VolumeScatterSettings& settings, std::string& error);

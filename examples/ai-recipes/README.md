@@ -28,6 +28,10 @@ LLM に岩を作らせるときの出発点。どれも手で書きやすい表�
 | `gneiss.rockgraph` | 片麻岩（縞） | 同じ Parallel Planes で浅い割れ目と Structure Mask の縞を作り、暗い下地に明るい層を塗る（Surface の定数色） | 約 9 秒（UV 展開を含む） |
 | `marble.rockgraph` | 大理石（脈） | 丸めた塊の白い下地に、Structure Mask の脈で暗い線を塗る。網目の感じが少し残る | 約 4 秒（UV 展開を含む） |
 | `river-pebble.rockgraph` | 河原の丸石 | 平たい楕円体を弱いノイズで歪ませ、Marching Tetrahedra でなめらかに | 約 0.1 秒 |
+| `pillow-lava.rockgraph` | 枕状溶岩 | 低い台に Volume Scatter の楕円体を「寝かせる割合」で扁平にして積む | 約 0.3 秒 |
+| `wave-cut-notch.rockgraph` | 波食ノッチ | 接地してから Volume Undercut（帯の基準 world）で水面の高さに帯を 1 本 | 約 0.3 秒 |
+| `wind-erosion.rockgraph` | 風食 | Volume Erode（さらされた面）で風上の面を後退させ、足元を world の Undercut で削る | 約 0.6 秒 |
+| `limestone-rills.rockgraph` | 石灰岩の溶食（縦溝） | Volume Erode（流下）で雨水の筋に沿って溝を彫る | 約 1 秒 |
 
 使い方の例（チュートリアル）。ノードの組み方を見せる例で、ノードの note に手順を書いてある。テンプレートの一覧では「使い方の例」の分類に出る。
 

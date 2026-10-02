@@ -1,6 +1,7 @@
 #include "geometry/Volume.h"
 #include "geometry/DualContouring.h"
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <cmath>
 #include <execution>
@@ -273,7 +274,7 @@ VolumeGrid BoxesToVolume(const std::vector<OrientedBox>& boxes, const VolumeSett
     if (boxes.size() > 1) RedistanceInterior(grid);
     return grid;
 }
-void RedistanceInterior(VolumeGrid& grid, std::stop_token stop) {
+void RedistanceInterior(VolumeGrid& grid, std::stop_token stop, bool bothWays) {
     if (!ValidGrid(grid)) return;
     const size_t nx = grid.dimensions[0], ny = grid.dimensions[1], nz = grid.dimensions[2];
     const size_t stride[3] = {1, nx, nx * ny};
@@ -387,7 +388,12 @@ void RedistanceInterior(VolumeGrid& grid, std::stop_token stop) {
         const float surface = point;
         const float depth = -value;
         const float weight = std::clamp((depth - grid.spacing) / (2 * grid.spacing), 0.f, 1.f);
-        value = -(depth + weight * std::max(0.f, surface - depth));
+        if (bothWays) {
+            // 深すぎる値も直す: 表面の近く（1〜3 セル）は元の値を残し、それより深い所は標本点までの距離にする。
+            value = -(depth + weight * (surface - depth));
+        } else {
+            value = -(depth + weight * std::max(0.f, surface - depth));
+        }
     }
 }
 VolumeGrid TransformVolume(const VolumeGrid& g, const VolumeTransformSettings& s, std::string& error) {
@@ -2090,6 +2096,290 @@ const char* VolumeUndercutReferenceName(VolumeUndercutReference reference) {
 }
 VolumeUndercutReference ParseVolumeUndercutReference(std::string_view name) {
     return name == "world" ? VolumeUndercutReference::World : VolumeUndercutReference::Shape;
+}
+const char* VolumeErodeTypeName(VolumeErodeType type) {
+    return type == VolumeErodeType::Flow ? "flow" : "exposure";
+}
+VolumeErodeType ParseVolumeErodeType(std::string_view name) {
+    return name == "flow" ? VolumeErodeType::Flow : VolumeErodeType::Exposure;
+}
+namespace {
+// 格子点の勾配（中心差分）から外向きの法線を求める。勾配が無ければ長さ 0。
+Vec3 GridNormal(const VolumeGrid& g, const std::vector<float>& values, int x, int y, int z) {
+    const auto at = [&](int ix, int iy, int iz) {
+        return values[g.Index(uint32_t(std::clamp(ix, 0, int(g.dimensions[0]) - 1)),
+                              uint32_t(std::clamp(iy, 0, int(g.dimensions[1]) - 1)),
+                              uint32_t(std::clamp(iz, 0, int(g.dimensions[2]) - 1)))];
+    };
+    Vec3 n{at(x + 1, y, z) - at(x - 1, y, z), at(x, y + 1, z) - at(x, y - 1, z), at(x, y, z + 1) - at(x, y, z - 1)};
+    const float length = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+    if (length <= 0) return {0, 0, 0};
+    return {n.x / length, n.y / length, n.z / length};
+}
+// 位置 p の法線（三線形補間した場の差分）。
+Vec3 SampledNormal(const VolumeGrid& g, const Vec3& p) {
+    const float h = g.spacing * .5f;
+    Vec3 n{SampleVolume(g, {p.x + h, p.y, p.z}) - SampleVolume(g, {p.x - h, p.y, p.z}),
+           SampleVolume(g, {p.x, p.y + h, p.z}) - SampleVolume(g, {p.x, p.y - h, p.z}),
+           SampleVolume(g, {p.x, p.y, p.z + h}) - SampleVolume(g, {p.x, p.y, p.z - h})};
+    const float length = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+    if (length <= 0) return {0, 0, 0};
+    return {n.x / length, n.y / length, n.z / length};
+}
+// 値の場のガウスぼかし（格子の外は端の値をそのまま使う。BlurGrid は距離場向けに外を距離で外挿するので、重みや量には使わない）。
+std::vector<float> BlurValues(const VolumeGrid& g, const std::vector<float>& values, float sigmaCells) {
+    const int half = std::max(1, int(std::ceil(sigmaCells * 3)));
+    std::vector<float> kernel(size_t(half) * 2 + 1);
+    double total = 0;
+    for (int k = -half; k <= half; ++k) {
+        const double w = std::exp(-double(k) * k / (2.0 * double(sigmaCells) * sigmaCells));
+        kernel[size_t(k + half)] = float(w);
+        total += w;
+    }
+    for (auto& w : kernel) w = float(w / total);
+    const int n[3] = {int(g.dimensions[0]), int(g.dimensions[1]), int(g.dimensions[2])};
+    const size_t stride[3] = {1, size_t(n[0]), size_t(n[0]) * size_t(n[1])};
+    std::vector<float> a = values, b(values.size());
+    for (int axis = 0; axis < 3; ++axis) {
+        std::vector<uint32_t> slices(g.dimensions[2]);
+        std::iota(slices.begin(), slices.end(), 0u);
+        std::for_each(std::execution::par, slices.begin(), slices.end(), [&](uint32_t z) {
+            for (int y = 0; y < n[1]; ++y)
+                for (int x = 0; x < n[0]; ++x) {
+                    const int c[3] = {x, y, int(z)};
+                    const size_t base = (size_t(z) * size_t(n[1]) + size_t(y)) * size_t(n[0]) + size_t(x);
+                    double sum = 0;
+                    for (int k = -half; k <= half; ++k) {
+                        const int i = std::clamp(c[axis] + k, 0, n[axis] - 1);
+                        sum += kernel[size_t(k + half)] * a[base + size_t(ptrdiff_t(i - c[axis]) * ptrdiff_t(stride[axis]))];
+                    }
+                    b[base] = float(sum);
+                }
+        });
+        std::swap(a, b);
+    }
+    return a;
+}
+// 流下: 表面の点から重力で斜面を流れ下る筋を追い、通った格子点に流れの量を積む。
+std::vector<float> FlowAccumulation(const VolumeGrid& g, float reachLength, float sigmaCells) {
+    std::vector<std::atomic<uint32_t>> counts(g.values.size());
+    for (auto& c : counts) c.store(0, std::memory_order_relaxed);
+    // 形の底（内部の最も低い格子点）。水はそこで岩を離れるので、底まで来た筋は終える（底の縁に流れが溜まらない）。
+    uint32_t lowest = g.dimensions[1];
+    for (uint32_t z = 0; z < g.dimensions[2]; ++z)
+        for (uint32_t y = 0; y < std::min(lowest, g.dimensions[1]); ++y)
+            for (uint32_t x = 0; x < g.dimensions[0]; ++x)
+                if (g.values[g.Index(x, y, z)] < 0) { lowest = std::min(lowest, y); break; }
+    const float floor = g.origin.y + float(lowest) * g.spacing + g.spacing * 1.5f;
+    const float step = g.spacing * .75f;
+    const int maxSteps = std::max(1, int(reachLength / step));
+    const auto deposit = [&](const Vec3& p) {
+        const int ix = int(std::lround((p.x - g.origin.x) / g.spacing)), iy = int(std::lround((p.y - g.origin.y) / g.spacing)),
+                  iz = int(std::lround((p.z - g.origin.z) / g.spacing));
+        if (ix < 0 || iy < 0 || iz < 0 || ix >= int(g.dimensions[0]) || iy >= int(g.dimensions[1]) || iz >= int(g.dimensions[2])) return;
+        counts[g.Index(uint32_t(ix), uint32_t(iy), uint32_t(iz))].fetch_add(1, std::memory_order_relaxed);
+    };
+    // 表面に近い格子点を出発点にし、Z スライスごとに並列で筋を追う。
+    std::vector<uint32_t> slices(g.dimensions[2]);
+    std::iota(slices.begin(), slices.end(), 0u);
+    std::for_each(std::execution::par, slices.begin(), slices.end(), [&](uint32_t z) {
+        for (uint32_t y = 0; y < g.dimensions[1]; ++y)
+            for (uint32_t x = 0; x < g.dimensions[0]; ++x) {
+                const float value = g.values[g.Index(x, y, z)];
+                if (std::abs(value) > g.spacing * .75f) continue;
+                Vec3 n = GridNormal(g, g.values, int(x), int(y), int(z));
+                if (n.y < -.2f) continue;  // 張り出しの下面は水が離れて落ちる
+                const Vec3 origin = g.Position(x, y, z);
+                Vec3 p{origin.x - value * n.x, origin.y - value * n.y, origin.z - value * n.z};
+                for (int i = 0; i < maxSteps; ++i) {
+                    n = SampledNormal(g, p);
+                    // 重力の、面に沿う成分（流れ下る向き）。ほぼ水平な面では流れが止まる（溜まる）。
+                    Vec3 t{-n.x * (-n.y), -1 - n.y * (-n.y), -n.z * (-n.y)};
+                    const float tl = std::sqrt(t.x * t.x + t.y * t.y + t.z * t.z);
+                    if (tl < .2f) break;
+                    p = {p.x + t.x / tl * step, p.y + t.y / tl * step, p.z + t.z / tl * step};
+                    if (p.y < floor) break;
+                    // 表面へ戻す（2 回のニュートン法）。
+                    for (int k = 0; k < 2; ++k) {
+                        const float d = SampleVolume(g, p);
+                        const Vec3 m = SampledNormal(g, p);
+                        p = {p.x - d * m.x, p.y - d * m.y, p.z - d * m.z};
+                    }
+                    deposit(p);
+                }
+            }
+    });
+    std::vector<float> accumulation(counts.size());
+    for (size_t i = 0; i < counts.size(); ++i) accumulation[i] = float(counts[i].load(std::memory_order_relaxed));
+    if (sigmaCells <= .3f) return accumulation;
+    return BlurValues(g, accumulation, sigmaCells);
+}
+}  // namespace
+VolumeGrid ErodeVolume(const VolumeGrid& g, const VolumeErodeSettings& s, std::string& error) {
+    error.clear();
+    if (!ValidGrid(g)) {
+        error = "ボリュームの格子が不正です";
+        return {};
+    }
+    if (s.type != VolumeErodeType::Exposure && s.type != VolumeErodeType::Flow) {
+        error = "種類が不正です";
+        return {};
+    }
+    const auto range = [](float v, float lo, float hi) { return std::isfinite(v) && v >= lo && v <= hi; };
+    if (!range(s.amount, 0, .3f)) {
+        error = "量は 0～0.3 にしてください";
+        return {};
+    }
+    if (!range(s.sharpness, 1, 8) || !range(s.shadow, 0, 1)) {
+        error = "集中は 1～8、陰の距離は 0～1 にしてください";
+        return {};
+    }
+    if (!range(s.length, .05f, 1) || !range(s.width, .005f, .1f)) {
+        error = "筋の長さは 0.05～1、溝の幅は 0.005～0.1 にしてください";
+        return {};
+    }
+    if (s.iterations < 1 || s.iterations > 8) {
+        error = "回数は 1～8 にしてください";
+        return {};
+    }
+    if (!range(s.noise, 0, 1) || !range(s.noiseScale, .5f, 16)) {
+        error = "ばらつきは 0～1、ばらつきの細かさは 0.5～16 にしてください";
+        return {};
+    }
+    for (float d : s.direction)
+        if (!std::isfinite(d)) {
+            error = "向きが非有限です";
+            return {};
+        }
+    const float longest = InteriorLongestSide(g);
+    if (longest <= 0) {
+        error = "入力のボリュームに内部がありません";
+        return {};
+    }
+    VolumeGrid out = g;
+    if (s.amount <= 0) return out;
+    // 削った後の表面は、入力の内部の「深さ = 削る量」の等値面になる。重なった立体（Random Boxes）の内部の距離は隠れた面で
+    // 歪んでいるので、先に表面から測り直す（測り直さないと、削った面に隠れた箱の面が迷路のような段として出る）。
+    RedistanceInterior(out);
+    const float directionLength = std::sqrt(s.direction[0] * s.direction[0] + s.direction[1] * s.direction[1] + s.direction[2] * s.direction[2]);
+    const Vec3 from = directionLength > 1e-6f
+                          ? Vec3{s.direction[0] / directionLength, s.direction[1] / directionLength, s.direction[2] / directionLength}
+                          : Vec3{-1, 0, 0};
+    const float stepDepth = s.amount * longest / float(s.iterations);
+    const float reach = stepDepth + 2 * g.spacing;
+    const float shadowReach = s.shadow * longest;
+    const float frequency = s.noiseScale / longest;
+    const uint64_t seed = uint64_t(uint32_t(s.seed)) * 0x9E3779B97F4A7C15ull;
+    const float threshold = g.spacing * 1e-4f;
+    const float minimumStep = g.spacing * .5f;
+    for (int iteration = 0; iteration < s.iterations; ++iteration) {
+        const VolumeGrid current = out;
+        // 向きの判定はぼかした場の法線で行う（細かな凹凸ではなく、形の大きな面の向きで決める）。
+        const std::vector<float> blurred = BlurGrid(current, std::max(1.5f, .02f * longest / g.spacing));
+        std::vector<float> flow;
+        float flowScale = 1;
+        if (s.type == VolumeErodeType::Flow) {
+            flow = FlowAccumulation(current, s.length * longest, s.width * longest / g.spacing);
+            // 流れの量の上位 5% を 1 とする（最も流れが集まる筋で量いっぱい削る）。
+            std::vector<float> positive;
+            positive.reserve(flow.size() / 16);
+            for (size_t i = 0; i < flow.size(); ++i)
+                if (flow[i] > 0 && std::abs(current.values[i]) <= g.spacing) positive.push_back(flow[i]);
+            if (positive.empty()) break;
+            const size_t rank = positive.size() * 95 / 100;
+            std::nth_element(positive.begin(), positive.begin() + ptrdiff_t(std::min(rank, positive.size() - 1)), positive.end());
+            flowScale = std::max(positive[std::min(rank, positive.size() - 1)], 1e-6f);
+        }
+        // 重みは一度格子に書き、1.5 セルでぼかしてから削る（陰の判定やノイズが格子点ごとに飛ぶと、削った面が段々になる）。
+        // ぼかしが外から 0 を引き込まないよう、削る帯より 4 セル広く重みを求める。
+        const float weightReach = reach + 4 * g.spacing;
+        std::vector<float> weights(current.values.size(), 0.f);
+        {
+            std::vector<float> raw(current.values.size(), 0.f);
+            FillSlices(current, [&](uint32_t x, uint32_t y, uint32_t z) {
+                const size_t index = current.Index(x, y, z);
+                const float value = current.values[index];
+                if (x == 0 || y == 0 || z == 0 || x + 1 == g.dimensions[0] || y + 1 == g.dimensions[1] || z + 1 == g.dimensions[2] ||
+                    std::abs(value) > weightReach)
+                    return false;
+                const Vec3 n = GridNormal(current, current.values, int(x), int(y), int(z));
+                if (n.x == 0 && n.y == 0 && n.z == 0) return false;
+                const Vec3 p = current.Position(x, y, z);
+                const Vec3 surface{p.x - value * n.x, p.y - value * n.y, p.z - value * n.z};
+                float weight = 0;
+                if (s.type == VolumeErodeType::Exposure) {
+                    // 向きは、その格子点ではなく最も近い表面の点で、ぼかした場の法線を読む。
+                    // 格子点で読むと、深い格子点ほど表面と違う向き（内部の中心面の向き）になり、削った面が段々になる。
+                    const float h = g.spacing;
+                    Vec3 b{SampleGridValues(current, blurred, {surface.x + h, surface.y, surface.z}) - SampleGridValues(current, blurred, {surface.x - h, surface.y, surface.z}),
+                           SampleGridValues(current, blurred, {surface.x, surface.y + h, surface.z}) - SampleGridValues(current, blurred, {surface.x, surface.y - h, surface.z}),
+                           SampleGridValues(current, blurred, {surface.x, surface.y, surface.z + h}) - SampleGridValues(current, blurred, {surface.x, surface.y, surface.z - h})};
+                    const float bl = std::sqrt(b.x * b.x + b.y * b.y + b.z * b.z);
+                    if (bl > 0) b = {b.x / bl, b.y / bl, b.z / bl};
+                    const float facing = std::clamp(b.x * from.x + b.y * from.y + b.z * from.z, 0.f, 1.f);
+                    weight = std::pow(facing, s.sharpness);
+                    if (weight > 0 && shadowReach > 0) {
+                        // 風上へ向かって形に当たれば、他の部分の陰（風下）にある。少し広げた 5 本のレイ（中心と 4 方向）の
+                        // スフィアトレーシングで、当たった割合だけ弱める。表面のすぐ近く（3 セル）の当たりは自分の面なので数えない。
+                        const Vec3 start{surface.x + n.x * g.spacing, surface.y + n.y * g.spacing, surface.z + n.z * g.spacing};
+                        const Vec3 side = std::abs(from.y) < .9f ? Vec3{-from.z, 0, from.x} : Vec3{1, 0, 0};
+                        const float sl = std::sqrt(side.x * side.x + side.y * side.y + side.z * side.z);
+                        const Vec3 u{side.x / sl, side.y / sl, side.z / sl};
+                        const Vec3 v{from.y * u.z - from.z * u.y, from.z * u.x - from.x * u.z, from.x * u.y - from.y * u.x};
+                        const float spread = .35f;
+                        const Vec3 rays[5] = {from,
+                                              {from.x + u.x * spread, from.y + u.y * spread, from.z + u.z * spread},
+                                              {from.x - u.x * spread, from.y - u.y * spread, from.z - u.z * spread},
+                                              {from.x + v.x * spread, from.y + v.y * spread, from.z + v.z * spread},
+                                              {from.x - v.x * spread, from.y - v.y * spread, from.z - v.z * spread}};
+                        int hits = 0;
+                        for (const Vec3& ray : rays) {
+                            const float rl = std::sqrt(ray.x * ray.x + ray.y * ray.y + ray.z * ray.z);
+                            float t = g.spacing * 3;
+                            while (t < shadowReach) {
+                                const float d = SampleVolume(current, {start.x + ray.x / rl * t, start.y + ray.y / rl * t, start.z + ray.z / rl * t});
+                                if (d < 0) { ++hits; break; }
+                                t += std::max(d, minimumStep);
+                            }
+                        }
+                        weight *= 1 - float(hits) / 5;
+                    }
+                } else {
+                    const float f = std::clamp(SampleGridValues(current, flow, surface) / flowScale, 0.f, 1.f);
+                    weight = std::pow(f, s.sharpness);
+                }
+                if (weight > 0 && s.noise > 0) {
+                    const float nz = ValueNoise(surface.x * frequency, surface.y * frequency, surface.z * frequency, seed);
+                    weight *= std::clamp(1 - s.noise * (1 - nz) * 2, 0.f, 1.f);
+                }
+                raw[index] = weight;
+                return false;
+            });
+            weights = BlurValues(current, raw, 1.5f);
+        }
+        const bool inside = FillSlices(out, [&](uint32_t x, uint32_t y, uint32_t z) {
+            const size_t index = current.Index(x, y, z);
+            const float value = current.values[index];
+            if (std::abs(value) > reach) {
+                out.values[index] = value;
+                return value < 0;
+            }
+            float result = value + std::clamp(weights[index], 0.f, 1.f) * stepDepth;
+            if (std::abs(result) < threshold) result = threshold;
+            out.values[index] = result;
+            return result < 0;
+        });
+        if (!inside) {
+            error = "削った結果に内部が残りません。量を減らしてください";
+            return {};
+        }
+        // 削った帯より内側の値は古い（新しい表面より深い）ままなので、距離を測り直す。
+        // 測り直さないと次の回の法線と表面の点が帯の境で壊れ、削った面が段々になる。
+        if (iteration + 1 < s.iterations) RedistanceInterior(out, {}, true);
+    }
+    KeepLargestComponents(out, g.values);
+    FillNewVoids(out, g.values);
+    return out;
 }
 VolumeGrid UndercutVolume(const VolumeGrid& g, const VolumeUndercutSettings& s, std::string& error) {
     error.clear();
