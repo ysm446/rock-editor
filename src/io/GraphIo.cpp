@@ -232,7 +232,8 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
         } else if (const auto* erode = std::get_if<geometry::TerrainErodeSettings>(&node.settings)) {
             item["terrainErode"] = {{"talusAngle", erode->talusAngle}, {"thermalIterations", erode->thermalIterations},
                                     {"thermalRate", erode->thermalRate}, {"rillDepth", erode->rillDepth},
-                                    {"rillSharpness", erode->rillSharpness}, {"rillWidth", erode->rillWidth}};
+                                    {"rillSharpness", erode->rillSharpness}, {"rillWidth", erode->rillWidth},
+                                    {"rillIterations", erode->rillIterations}};
         } else if (const auto* deform = std::get_if<geometry::TerrainDeformSettings>(&node.settings)) {
             item["terrainDeform"] = {{"amount", deform->amount}, {"blur", deform->blur}};
         } else if (const auto* scatter = std::get_if<geometry::RockScatterSettings>(&node.settings)) {
@@ -765,6 +766,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     settings.rillDepth = ReadFloat(*v, "rillDepth", settings.rillDepth);
                     settings.rillSharpness = ReadFloat(*v, "rillSharpness", settings.rillSharpness);
                     settings.rillWidth = ReadFloat(*v, "rillWidth", settings.rillWidth);
+                    settings.rillIterations = ReadInt(*v, "rillIterations", settings.rillIterations);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::TerrainDeform) {

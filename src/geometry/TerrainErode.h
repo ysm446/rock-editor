@@ -22,6 +22,9 @@ struct TerrainErodeSettings {
     float rillDepth = 0.4f;      // 最も流れの集まる筋を彫る深さ（m、0〜50）。0 で彫らない
     float rillSharpness = 0.6f;  // 流れの量（0〜1）^ この値（0.1〜4）。小さいほど細い筋も彫れる
     float rillWidth = 1.0f;      // 筋をぼかす幅（m、0〜50）。0 でぼかさない
+    // 流路の反復（1〜50）。彫る → 流れを求め直す、を繰り返す。溝が深くなるほど流れが集まり、見える溝になる。
+    // 深さは反復で分けて彫る（合計はおよそ rillDepth）。1 で従来どおり 1 回。
+    int rillIterations = 1;
     bool operator==(const TerrainErodeSettings&) const = default;
 };
 

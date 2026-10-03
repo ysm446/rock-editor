@@ -467,6 +467,7 @@ constexpr ParamDefinition kParams[] = {
     {K::TerrainErode, "terrainErode.rillDepth", T::Float, 0, 50, "m", "流路の深さ", "最も流れの集まる筋を彫る深さ。0 で彫らない", C::Error},
     {K::TerrainErode, "terrainErode.rillSharpness", T::Float, 0.1, 4, "", "流路の集中", "流れの量（対数で 0〜1）^ この値。小さいほど細い筋も彫れる", C::Error},
     {K::TerrainErode, "terrainErode.rillWidth", T::Float, 0, 50, "m", "流路の幅", "筋をぼかす幅。0 でぼかさない", C::Error},
+    {K::TerrainErode, "terrainErode.rillIterations", T::Int, 1, 50, "回", "流路の反復", "彫る → 流れを求め直す、の回数。溝が深くなるほど流れが集まる。1 で 1 回だけ", C::Error},
     {K::TerrainDeform, "terrainDeform.amount", T::Float, -20, 20, "m", "量", "マスクの白い所を動かす量。正で盛る、負でえぐる", C::Error},
     {K::TerrainDeform, "terrainDeform.blur", T::Float, 0, 50, "m", "ぼかし", "マスクの縁をぼかす幅", C::Error},
     {K::RockScatter, "rockScatter.spacing", T::Float, 0.05, 10000, "m", "間隔", "岩の中心どうしの最小距離", C::Clamp},

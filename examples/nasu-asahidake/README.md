@@ -1,13 +1,13 @@
 # 那須朝日岳の岩場（nasu-asahidake）— 刃の列 + 土の斜面 + 破片の 1 ユニット
 
 作成日時: 2026-10-03 07:15
-更新日時: 2026-10-03 11:05
+更新日時: 2026-10-03 11:14
 
 目標の風景（`docs/references/nasu-asahidake/DSC00363`。Git の対象外）を 1 ユニット（40 m 四方）として組む山グラフ。
 このフォルダをルートとして開き、`nasu.mountaingraph` を読み込む。
 
 ```text
-Heightmap（Heightmaps/slope.png、40 m、尾根が最も高い斜面）→ Terrain Erode（崩れ 34°、流路 0.5 m）─┬→ Terrain Deform（Mask = 刃の Coverage を 4 m 広げたもの、-0.4 m）→ Apply Material（土）→ Apply Material（暗い土、Mask = Noise Mask）→ Apply Material（岩屑、Mask = 刃の Coverage を 4 m 広げたもの）→ Subdivide → Displace → Mesh Output
+Heightmap（Heightmaps/slope.png、40 m、尾根が最も高い斜面）→ Terrain Erode（崩れ 34°、流路 1.5 m を 12 回の反復で）─┬→ Terrain Deform（Mask = 刃の Coverage を 4 m 広げたもの、-0.4 m）→ Apply Material（土）→ Apply Material（暗い土、Mask = Noise Mask）→ Apply Material（岩屑、Mask = 刃の Coverage を 4 m 広げたもの）→ Subdivide → Displace → Mesh Output
                        ├→ Shape Mask（高さ: 尾根の頂）───────┐ Mask
                        ├→ Shape Mask（上向き度）──┐           │
                        ├────────────────────────│───────────┤ Terrain

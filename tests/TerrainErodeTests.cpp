@@ -85,6 +85,16 @@ void RunTerrainErodeTests() {
     bool neverRaises = true;
     for (size_t i = 0; i < valley.values.size(); ++i) neverRaises &= carved.values[i] <= valley.values[i] + 1e-6f;
     Check(neverRaises, "流路は彫るだけで盛らない");
+    // 反復: 同じ合計の深さでも、流れが集まる谷底はより深く、尾根はより浅く彫れる。
+    auto repeated = rills;
+    repeated.rillIterations = 8;
+    const auto gullied = geometry::ErodeTerrain(valley, terrain, repeated, error);
+    const auto dropRepeated = [&](uint32_t x, uint32_t y) { return (valley.values[size_t(y) * 65 + x] - gullied.values[size_t(y) * 65 + x]) * 20; };
+    Check(error.empty() && dropRepeated(32, 60) > drop(32, 60) * 0.9 && dropRepeated(10, 60) < drop(10, 60) + 0.05,
+          "反復すると谷底に彫りが集まる");
+    auto tooMany = rills;
+    tooMany.rillIterations = 0;
+    Check(geometry::ErodeTerrain(valley, terrain, tooMany, error).values.empty() && !error.empty(), "流路の反復の範囲外は診断する");
     auto wide = rills;
     wide.rillWidth = 6;
     const auto smooth = geometry::ErodeTerrain(valley, terrain, wide, error);

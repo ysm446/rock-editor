@@ -132,6 +132,7 @@ bool ValidateTerrainErodeSettings(const TerrainErodeSettings& s, std::string& er
     if (!Finite(s.thermalRate, 0, 1)) { error = "崩れの割合は 0〜1 にしてください"; return false; }
     if (!Finite(s.rillDepth, 0, 50) || !Finite(s.rillWidth, 0, 50)) { error = "流路の深さと幅は 0〜50 m にしてください"; return false; }
     if (!Finite(s.rillSharpness, 0.1f, 4)) { error = "流路の集中は 0.1〜4 にしてください"; return false; }
+    if (s.rillIterations < 1 || s.rillIterations > 50) { error = "流路の反復は 1〜50 にしてください"; return false; }
     return true;
 }
 
@@ -157,19 +158,24 @@ HeightGrid ErodeTerrain(const HeightGrid& grid, const HeightmapSettings& terrain
         ThermalStep(f, tanTalus, s.thermalRate);
         if (progress && (i % 8) == 0) progress(int(i * 70 / std::max(s.thermalIterations, 1)));
     }
-    if (s.rillDepth > 0) {
+    // 水侵食。反復ごとに流れの量を求め直して、深さの 1/反復 を彫る。溝が深くなるほど流れが集まり、筋が太く深くなる。
+    for (int pass = 0; s.rillDepth > 0 && pass < s.rillIterations; ++pass) {
         if (stop.stop_requested()) { error = "Terrain Erode をキャンセルしました"; return {}; }
         std::vector<double> acc = FlowAccumulation(f);
         const double maximum = *std::max_element(acc.begin(), acc.end());
         // 流れの量を 0〜1 にし（対数で、細い筋も見えるように）、集中乗で彫る深さにする。
         std::vector<double> carve(acc.size());
         const double logMax = std::log(std::max(maximum, 2.0));
+        const double depthPerPass = double(s.rillDepth) / s.rillIterations;
         for (size_t i = 0; i < acc.size(); ++i) {
             const double unit = std::clamp(std::log(acc[i]) / logMax, 0.0, 1.0);
-            carve[i] = std::pow(unit, double(s.rillSharpness)) * s.rillDepth;
+            carve[i] = std::pow(unit, double(s.rillSharpness)) * depthPerPass;
         }
         if (s.rillWidth > 0) BlurField(carve, f.width, f.height, s.rillWidth / f.dx * 0.5, s.rillWidth / f.dz * 0.5);
         for (size_t i = 0; i < f.h.size(); ++i) f.h[i] -= carve[i];
+        // 溝の壁が安息角を超えたら少し崩す（反復のときだけ。溝が V 字に広がる）。
+        if (s.rillIterations > 1 && s.thermalIterations > 0) ThermalStep(f, tanTalus, s.thermalRate * 0.5);
+        if (progress) progress(70 + int((pass + 1) * 30 / s.rillIterations));
     }
     if (progress) progress(100);
     return ToGrid(f, terrain);

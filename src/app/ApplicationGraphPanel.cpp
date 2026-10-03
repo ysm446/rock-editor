@@ -1804,6 +1804,8 @@ void Application::DrawGraphPanel() {
                                          "流れの量（対数で 0〜1）をこの値で累乗します。小さいほど細い筋も彫れます。", "%.2f");
             changed |= ui::PropertyFloat("流路の幅 (m)", &edited.rillWidth, 0.0f, 10.0f, defaults.rillWidth,
                                          "筋をぼかす幅です。0 でぼかしません。", "%.2f");
+            changed |= ui::PropertyInt("流路の反復", &edited.rillIterations, 1, 50, defaults.rillIterations,
+                                       "彫ってから流れを求め直す回数です。溝が深くなるほど流れが集まり、見える溝になります。深さは反復で分けて彫ります。");
             ui::EndPropertyTable();
         }
         ui::HintText("Terrain に Heightmap（か別の Terrain Erode / Deform）をつなぎます。熱侵食は安息角より急な斜面の土を崩して裾に溜め（崖錐の斜面）、"
@@ -1815,6 +1817,7 @@ void Application::DrawGraphPanel() {
             edited.rillDepth = std::clamp(edited.rillDepth, 0.0f, 50.0f);
             edited.rillSharpness = std::clamp(edited.rillSharpness, 0.1f, 4.0f);
             edited.rillWidth = std::clamp(edited.rillWidth, 0.0f, 50.0f);
+            edited.rillIterations = std::clamp(edited.rillIterations, 1, 50);
             *erode = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
