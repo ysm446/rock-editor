@@ -1,11 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 08:55
+更新日時: 2026-10-03 10:05
 
 ## 未リリース
 
-- Volume Crack に「深さの勾配」（上ほど深く / 下ほど深く）を足した。Rock Scatter に「向き」「向きのばらつき」（上向きのまわりの向きをそろえる）と「沈める量のばらつき」を足した。`nasu-blades` と `examples/nasu-asahidake/` に適用。
+- Volume Crack に「深さの勾配」（上ほど深く / 下ほど深く）を足した。Rock Scatter に「向き」「向きのばらつき」（上向きのまわりの向きをそろえる）と「沈める量のばらつき」を足した。`nasu-blades` と `examples/nasu-asahidake/` に適用。那須の例の地面を Apply Material + Noise Mask + Displace で荒らした。
 
 - Mask Filter に「広げる」を足した（白い所を表面に沿って半径だけ広げ、縁を距離でなだらかに落とす。崖錐）。半径の上限を 100 m に広げた。Rock Scatter に同じ岩グラフを倍率違いで 2 回つないだときに 2 つ目が描かれない不具合を直した。`rock_cli eval` の `rockInstanceSets` に置いた位置を足した。那須朝日岳のユニットの例 `examples/nasu-asahidake/` を足した。
 

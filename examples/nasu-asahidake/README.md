@@ -1,13 +1,13 @@
 # 那須朝日岳の岩場（nasu-asahidake）— 刃の列 + 土の斜面 + 破片の 1 ユニット
 
 作成日時: 2026-10-03 07:15
-更新日時: 2026-10-03 08:55
+更新日時: 2026-10-03 10:05
 
 目標の風景（`docs/references/nasu-asahidake/DSC00363`。Git の対象外）を 1 ユニット（40 m 四方）として組む山グラフ。
 このフォルダをルートとして開き、`nasu.mountaingraph` を読み込む。
 
 ```text
-Heightmap（Heightmaps/slope.png、40 m、尾根が最も高い斜面）─┬→ Mesh Output ← Surface（褐色の土、定数色）
+Heightmap（Heightmaps/slope.png、40 m、尾根が最も高い斜面）─┬→ Apply Material（土）→ Apply Material（暗い土、Mask = Noise Mask）→ Apply Material（岩屑、Mask = 刃の Coverage を 4 m 広げたもの）→ Subdivide → Displace → Mesh Output
                        ├→ Shape Mask（高さ: 尾根の頂）───────┐ Mask
                        ├→ Shape Mask（上向き度）──┐           │
                        ├────────────────────────│───────────┤ Terrain
@@ -28,7 +28,8 @@ Rock（talus ×1）・Rock（talus ×0.45）・Rock（chips ×0.3）→ 崖錐 R
    焼くとアプリが岩グラフを同じパスに書き戻す（長い書式になる）。書きやすい表記のまま残したいときは、焼く前に写しを取って戻す。
 2. `nasu.mountaingraph` を開く。尾根に刃の列が 2 つ（互いに食い込み、向き 20° ± 12° で走向をそろえる）、その根元 6 m に破片が密に（`Mask Filter` の「広げる」）、斜面全体にまばらな転石。
 3. 破片の密度は崖錐の Rock Scatter の間隔、広がりは「広げる」の半径、刃の沈み方は大の Rock Scatter の沈める量と浮きの補正で変える。
-4. `rock_cli eval examples/nasu-asahidake/nasu.mountaingraph` の `rockInstanceSets` に段ごとの数と置いた位置（8 個以下なら列挙）が出る。
+4. `rock_cli eval examples/nasu-asahidake/nasu.mountaingraph --node 20`（Rock Scatter を指す）の `rockInstanceSets` に段ごとの数と置いた位置（8 個以下なら列挙）が出る。地面の Displace は GPU が要るので、Mesh Output を指すと評価できない。
+6. 地面は Apply Material 3 段（土、Noise Mask でまだらの暗い土、刃の根元の岩屑）と Subdivide → Displace（0.3 m）で荒らしてある。岩屑はハイトが低いので根元が少しえぐれる。
 5. ハイトマップ `Heightmaps/slope.png`（16bit PNG、256²）は、奥（-Z）ほど高い斜面に中央の尾根の盛り上がりを足したもの。
 
 今の形と課題は [研究ページ](../../docs/research/nasu-asahidake/README.md)。刃の列の作り方は [nasu-blades](../../docs/research/nasu-blades/README.md)。
