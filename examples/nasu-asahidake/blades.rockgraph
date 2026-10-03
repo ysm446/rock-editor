@@ -137,10 +137,10 @@
       {
         "id": 20,
         "kind": "volumeCrack",
-        "note": "主な節理の面に沿って V 字の溝を彫り、板（刃）を分ける。幅 0.02 × 14 m ≈ 0.3 m。深さの勾配 1 で頂は 2 倍（0.18 ≈ 2.5 m）、根元は 0: 頂だけ刃に分かれ、根元はつながる。",
+        "note": "主な節理の面に沿って V 字の溝を彫り、板（刃）を分ける。幅 0.03 × 14 m ≈ 0.4 m。深さの勾配 1 で頂は 2 倍（0.18 ≈ 2.5 m）、根元は 0: 頂だけ刃に分かれ、根元はつながる。",
         "volumeCrack": {
           "source": "inputs",
-          "width": 0.02,
+          "width": 0.03,
           "depth": 0.09,
           "variation": 0.5,
           "noise": 0.5,
@@ -161,6 +161,16 @@
           "depthMin": 0.15,
           "depthMax": 0.35,
           "seed": 12
+        }
+      },
+      {
+        "id": 21,
+        "kind": "volumeSmooth",
+        "note": "板の面の角を少しなまらせる（風化の丸み）。半径 0.007 × 14 m ≈ 0.1 m、量 0.5。強くすると指のような丸い板になる",
+        "volumeSmooth": {
+          "mode": "smooth",
+          "radius": 0.007,
+          "amount": 0.5
         }
       },
       {
@@ -205,7 +215,7 @@
         "kind": "meshOutput"
       },
       {
-        "id": 21,
+        "id": 22,
         "kind": "decimate",
         "note": "UV 展開の前に減らす",
         "decimate": {
@@ -214,7 +224,7 @@
         }
       },
       {
-        "id": 22,
+        "id": 23,
         "kind": "uvUnwrap",
         "uvUnwrap": {
           "resolution": 1024,
@@ -222,12 +232,12 @@
         }
       },
       {
-        "id": 23,
+        "id": 24,
         "kind": "materialBake",
         "note": "High に減らす前の形をつなぎ、法線と AO を焼く"
       },
       {
-        "id": 24,
+        "id": 25,
         "kind": "rockAsset",
         "note": "python tools/rock_bake.py で焼く。山グラフ nasu.mountaingraph の Rock が読む",
         "rockAsset": {
@@ -236,7 +246,7 @@
         }
       },
       {
-        "id": 25,
+        "id": 26,
         "kind": "surface",
         "note": "マテリアル無しの定数色（例を自己完結にするため）",
         "layer": {
@@ -306,7 +316,7 @@
       },
       {
         "from": "11",
-        "to": "12"
+        "to": "21"
       },
       {
         "from": "12",
@@ -329,31 +339,35 @@
         "to": "11"
       },
       {
-        "from": "15",
-        "to": "21"
+        "from": "21",
+        "to": "12"
       },
       {
-        "from": "21",
+        "from": "15",
         "to": "22"
       },
       {
         "from": "22",
-        "to": "23:Mesh"
-      },
-      {
-        "from": "25",
-        "to": "23:Material"
-      },
-      {
-        "from": "15",
-        "to": "23:High"
+        "to": "23"
       },
       {
         "from": "23",
-        "to": "24"
+        "to": "24:Mesh"
+      },
+      {
+        "from": "26",
+        "to": "24:Material"
+      },
+      {
+        "from": "15",
+        "to": "24:High"
       },
       {
         "from": "24",
+        "to": "25"
+      },
+      {
+        "from": "25",
         "to": "16:Geometry"
       }
     ]
