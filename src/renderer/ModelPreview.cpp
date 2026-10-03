@@ -402,9 +402,16 @@ void ModelPreview::RenderInstancedInScene(rhi::Device& device, rhi::PipelineCach
     desc.layout = rhi::VertexLayout::MeshStandard;
     desc.rtvFormat = context.rtvFormat;
     desc.dsvFormat = context.dsvFormat;
-    if (context.shadowPass) desc.cullMode = D3D12_CULL_MODE_NONE;
-    else desc.pixelEntry = L"PsMain";
-    // 岩は不透明として描く（切り抜き・半透明の材質は想定しない）。
+    // 切り抜き（masked）の材質（植生の葉）があれば、影パスでも抜く PS を付ける。岩だけなら深度のみ。
+    bool anyMasked = false;
+    for (const auto id : model.materials)
+        if (const auto* m = materials.Find(id); m && m->blendMode == compositor::BlendMode::Masked) anyMasked = true;
+    if (context.shadowPass) {
+        desc.cullMode = D3D12_CULL_MODE_NONE;
+        if (anyMasked) desc.pixelEntry = L"PsShadow";
+    } else {
+        desc.pixelEntry = L"PsMain";
+    }
     ID3D12PipelineState* pipeline = pipelineCache.GetGraphics(desc);
     if (pipeline == nullptr) return;
     commandList->SetGraphicsRootSignature(pipelineCache.GlobalRootSignature());

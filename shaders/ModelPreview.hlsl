@@ -170,6 +170,48 @@ PixelInput VsMain(VertexInput input, uint instance : SV_InstanceID)
     return output;
 }
 
+// アルファ抜きの判定。ミップはアルファも平均するので、遠くほど閾値を超える画素が減って葉が痩せる。
+// ミップが 1 段進むごとにアルファを持ち上げ、見かけの被覆を保つ（terrain-graph と同じ式。インポスターの焼き込みも同じ補正）。
+static const float kAlphaMipScale = 0.25f;
+void ClipAlpha(float alpha, float lod)
+{
+    clip(alpha * (1.0f + max(lod, 0.0f) * kAlphaMipScale) - g_model.maskThreshold);
+}
+// 切り抜き（masked）。不透明度のマップがあればそれで、無ければベースカラーのアルファで抜く（植生の葉のカード）。
+void ClipMasked(MapUv uvSets[2])
+{
+    if (g_model.opacityIndex != kInvalidTextureIndex)
+    {
+        const MapUv m = uvSets[(g_model.mapUvSets >> ROCK_MAP_OPACITY) & 1u];
+        const float lod = MapLod(g_model.opacityIndex, m.deltaX, m.deltaY);
+        ClipAlpha(SelectChannel(SampleMap(g_model.opacityIndex, m.uv, lod), UnpackChannel(g_model.mapChannels, ROCK_CHANNEL_SLOT_OPACITY)), lod);
+    }
+    else if (g_model.baseColorIndex != kInvalidTextureIndex)
+    {
+        const MapUv m = uvSets[(g_model.mapUvSets >> ROCK_MAP_BASE_COLOR) & 1u];
+        const float lod = MapLod(g_model.baseColorIndex, m.deltaX, m.deltaY);
+        ClipAlpha(SampleMap(g_model.baseColorIndex, m.uv, lod).a, lod);
+    }
+    else
+    {
+        clip(g_model.opacityValue - g_model.maskThreshold);
+    }
+}
+
+// 影パス（切り抜きのある材質だけ）。深度だけを書くので色は返さない。
+void PsShadow(PixelInput input)
+{
+    if (g_model.blendMode != kBlendMasked) return;
+    MapUv uvSets[2];
+    uvSets[0].uv = input.uv;
+    uvSets[0].deltaX = ddx(input.uv);
+    uvSets[0].deltaY = ddy(input.uv);
+    uvSets[1].uv = input.uv2;
+    uvSets[1].deltaX = ddx(input.uv2);
+    uvSets[1].deltaY = ddy(input.uv2);
+    ClipMasked(uvSets);
+}
+
 float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
 {
     MapUv uvSets[2];
@@ -185,16 +227,18 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
     float opacity = 1.0f;
     if (g_model.blendMode != 0u)
     {
-        opacity = g_model.opacityValue;
-        if (g_model.opacityIndex != kInvalidTextureIndex)
-        {
-            const MapUv m = MAP_UV(ROCK_MAP_OPACITY);
-            opacity = SampleScalarMap(g_model.opacityIndex, ROCK_CHANNEL_SLOT_OPACITY, m.uv, m.deltaX, m.deltaY);
-        }
         if (g_model.blendMode == kBlendMasked)
         {
-            clip(opacity - g_model.maskThreshold);
-            opacity = 1.0f;
+            ClipMasked(uvSets);
+        }
+        else
+        {
+            opacity = g_model.opacityValue;
+            if (g_model.opacityIndex != kInvalidTextureIndex)
+            {
+                const MapUv m = MAP_UV(ROCK_MAP_OPACITY);
+                opacity = SampleScalarMap(g_model.opacityIndex, ROCK_CHANNEL_SLOT_OPACITY, m.uv, m.deltaX, m.deltaY);
+            }
         }
     }
 
