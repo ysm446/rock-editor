@@ -68,7 +68,7 @@ void Application::RequestSaveProject(bool saveAs) {
     m_pendingProjectSave = path;
 }
 
-// 保存したシーンのプレビュー画像。ビューポートを縦横比を保って最大 256px へ縮小する。
+// 岩は固定条件の正方形、山はビューポートの構図で保存する。
 // 失敗してもシーン本体の保存は成功扱い。
 void Application::SaveSceneThumbnail(const std::filesystem::path& path) {
     if (!io::IsSceneFile(path) || !m_renderer.HasOutput()) return;
@@ -79,7 +79,11 @@ void Application::SaveSceneThumbnail(const std::filesystem::path& path) {
     }
     std::error_code error;
     std::filesystem::create_directories(thumbnail.parent_path(), error);
-    if (error || !m_renderer.SaveOutputToPng(m_device, thumbnail, 256)) {
+    const bool rock = _wcsicmp(path.extension().c_str(), L".rockgraph") == 0;
+    const bool saved = !error && (rock
+        ? m_renderer.SaveAssetThumbnail(m_device, m_pipelineCache, m_textureLibrary, m_materialLibrary, thumbnail)
+        : m_renderer.SaveOutputToPng(m_device, thumbnail, 256));
+    if (!saved) {
         ROCK_LOG_WARN("シーンは保存しましたが、サムネイルを保存できませんでした");
     }
     m_assetThumbnails.Invalidate();
@@ -488,7 +492,8 @@ void Application::ProcessPendingFileWork() {
         io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                              m_renderer, m_graph, &m_models};
         if (io::SaveProject(path, refs, &m_workspace)) {
-            SaveSceneThumbnail(path);
+            // SyncMeshGraph と材質合成が済んだフレームの後で撮る。
+            m_pendingSceneThumbnail = path;
             m_assetRefresh = true;
             m_recentProjects.Add(m_workspace.Root(), path);
             m_projectPath = path;

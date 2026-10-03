@@ -419,7 +419,7 @@ int Application::Run() {
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。
         if (!m_options.saveProjectPath.empty() && !m_bakeJob && !m_pendingBake && !m_pendingAssetBake && !m_options.bakeAssetNode &&
-            m_frameCounter >= m_options.screenshotFrame) {
+            !m_pieceUpdating && !m_renderer.IsEvaluating() && m_frameCounter >= m_options.screenshotFrame) {
             const io::ProjectRefs refs{m_textureLibrary, m_materialLibrary, m_skyLibrary,
                                        m_renderer, m_graph, &m_models};
             const bool scene = io::IsSceneFile(m_options.saveProjectPath);
@@ -583,6 +583,15 @@ int Application::Run() {
         }
 
         m_device.EndFrame(m_settings.Display().vsync);
+
+        if (!m_pendingSceneThumbnail.empty()) {
+            // 保存直後に別の文書へ移った場合は、その文書の絵で上書きしない。
+            if (m_pendingSceneThumbnail != m_projectPath) m_pendingSceneThumbnail.clear();
+            else if (evaluationIdle) {
+                const auto path = std::exchange(m_pendingSceneThumbnail, {});
+                SaveSceneThumbnail(path);
+            }
+        }
 
         // 最初のフレームをバックバッファへ出してから窓を見せる。
         // 初期化中（シェーダのコンパイルなど）の白い窓を出さないため。

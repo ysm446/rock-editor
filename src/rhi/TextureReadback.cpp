@@ -80,10 +80,16 @@ bool SaveTextureToPng(Device& device, GpuTexture& texture, const std::filesystem
             const uint32_t y0 = uint32_t(uint64_t(y) * texture.height / height);
             const uint32_t y1 = std::max(y0 + 1, uint32_t(uint64_t(y + 1) * texture.height / height));
             uint64_t sum[4]{};
-            for (uint32_t sy = y0; sy < y1; ++sy) for (uint32_t sx = x0; sx < x1; ++sx)
-                for (size_t c = 0; c < 4; ++c) sum[c] += source[size_t(sy) * footprint.Footprint.RowPitch + sx * 4 + c];
+            // 透明な背景の黒が輪郭に混ざらないよう、RGB はアルファで重み付けする。
+            for (uint32_t sy = y0; sy < y1; ++sy) for (uint32_t sx = x0; sx < x1; ++sx) {
+                const auto* pixel = source + size_t(sy) * footprint.Footprint.RowPitch + sx * 4;
+                for (size_t c = 0; c < 3; ++c) sum[c] += uint64_t(pixel[c]) * pixel[3];
+                sum[3] += pixel[3];
+            }
             const uint64_t count = uint64_t(x1 - x0) * (y1 - y0);
-            for (size_t c = 0; c < 4; ++c) pixels[(size_t(y) * width + x) * 4 + c] = uint8_t(sum[c] / count);
+            auto* pixel = pixels.data() + (size_t(y) * width + x) * 4;
+            for (size_t c = 0; c < 3; ++c) pixel[c] = sum[3] ? uint8_t(sum[c] / sum[3]) : 0;
+            pixel[3] = uint8_t(sum[3] / count);
         }
         saved = SaveRgba8Png(path, width, height, width * 4, pixels.data());
     }

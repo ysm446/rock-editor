@@ -999,6 +999,7 @@ private:
     // UI（DrawUi）はフレームの記録より前に走るので、その結果をここへ残して使う。
     bool m_materialSphereVisible = false;
     std::filesystem::path m_pendingProjectSave;
+    std::filesystem::path m_pendingSceneThumbnail;
     std::filesystem::path m_pendingProjectOpen;
     std::filesystem::path m_pendingMaterialExport;
     std::filesystem::path m_pendingMaterialImport;

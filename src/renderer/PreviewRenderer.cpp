@@ -336,6 +336,7 @@ struct TonemapConstants {
     uint32_t tonemapMode;
     // 0 以外なら、メッシュ側が書いた値をそのまま出す（チャンネルを覗く表示）。
     uint32_t passthrough;
+    uint32_t backgroundDepthIndex;
 };
 
 // 陰影を付けて描く表示か。**クレイもこちら側**（テクスチャを貼らないだけで
@@ -966,6 +967,69 @@ bool PreviewRenderer::SaveOutputToPng(rhi::Device& device, const std::filesystem
         return false;
     }
     return rhi::SaveTextureToPng(device, m_output, path, maxSize);
+}
+
+bool PreviewRenderer::SaveAssetThumbnail(rhi::Device& device, rhi::PipelineCache& pipelineCache,
+                                         const compositor::TextureLibrary& textures,
+                                         const compositor::MaterialLibrary& materials,
+                                         const std::filesystem::path& path) {
+    if (!m_meshSceneEnabled || IsEvaluating()) return false;
+    PreviewRenderer studio;
+    // 途中の失敗でも GPU 資源と借りたシーンを必ず戻す。
+    bool borrowed = false;
+    const auto cleanup = [&](PreviewRenderer* renderer) {
+        if (borrowed) {
+            std::swap(m_meshScene, renderer->m_meshScene);
+            m_sceneMeshes.swap(renderer->m_sceneMeshes);
+            m_sceneLodMeshes.swap(renderer->m_sceneLodMeshes);
+            m_sceneMaterials.swap(renderer->m_sceneMaterials);
+        }
+        renderer->Shutdown(device);
+    };
+    const std::unique_ptr<PreviewRenderer, decltype(cleanup)> guard(&studio, cleanup);
+    if (!studio.Initialize(device, pipelineCache) || !studio.Resize(device, 512, 512)) return false;
+    SkySettings sky;
+    sky.zenithColor = {0.65f, 0.65f, 0.65f};
+    // 陰側も材質と形を読めるよう、環境光と下半球の照り返しを確保する。
+    sky.horizonColor = {0.55f, 0.55f, 0.55f};
+    sky.groundColor = {0.30f, 0.30f, 0.30f};
+    sky.intensity = 30000.0f;
+    if (!studio.m_environment.BuildFromSky(device, pipelineCache, sky)) return false;
+    studio.m_showSkybox = false;
+    studio.m_transparentBackground = true;
+    studio.m_showReferenceGrid = false;
+    studio.m_light = {DirectX::XMConvertToRadians(-20.0f), DirectX::XMConvertToRadians(50.0f),
+                      100000.0f, {1.0f, 1.0f, 1.0f}};
+    studio.m_exposure.useManualEv = true;
+    studio.m_exposure.manualEv100 = 15.0f;
+    studio.m_tonemap = TonemapMode::Aces;
+    studio.m_meshSceneEnabled = true;
+    studio.m_meshSceneRadius = m_meshSceneRadius;
+    studio.m_frameCenter = m_frameCenter;
+    studio.m_frameRadius = m_frameRadius;
+    // 実際の変位は保持する。選択色・線・グリッド・デバッグ表示・表示 LOD は持ち込まない。
+    studio.m_tessellationEnabled = m_tessellationEnabled;
+    studio.m_tessellationFactor = m_tessellationFactor;
+    studio.m_tessellationTargetPixels = m_tessellationTargetPixels;
+    studio.m_camera.SetSceneRadius(m_meshSceneRadius);
+    CameraState camera;
+    camera.yaw = DirectX::XMConvertToRadians(35.0f);
+    camera.pitch = DirectX::XMConvertToRadians(20.0f);
+    camera.fovY = FovYFromFocalLength(50.0f);
+    studio.m_camera.SetState(camera);
+    studio.m_camera.Frame(m_frameCenter, m_frameRadius);
+
+    std::swap(m_meshScene, studio.m_meshScene);
+    m_sceneMeshes.swap(studio.m_sceneMeshes);
+    m_sceneLodMeshes.swap(studio.m_sceneLodMeshes);
+    m_sceneMaterials.swap(studio.m_sceneMaterials);
+    borrowed = true;
+    const bool rendered = device.ExecuteImmediate([&](ID3D12GraphicsCommandList* list) {
+        studio.Render(device, pipelineCache, list, textures, materials);
+    });
+    // 保存直前に材質変更が入った場合は、未合成の画像で以前のサムネイルを置き換えない。
+    return rendered && studio.m_stats.drawCalls > 0 && !studio.IsEvaluating() &&
+           studio.SaveOutputToPng(device, path, 256);
 }
 
 bool PreviewRenderer::Resize(rhi::Device& device, uint32_t width, uint32_t height) {
@@ -1773,11 +1837,14 @@ void PreviewRenderer::Render(rhi::Device& device, rhi::PipelineCache& pipelineCa
 
     TransitionIfNeeded(commandList, m_output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
+    if (m_transparentBackground)
+        TransitionIfNeeded(commandList, m_depth, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     const TonemapConstants tonemapConstants{
         tonemapSourceIndex,    m_output.UavIndex(),
         m_width,               m_height,
         m_exposure.Exposure(), static_cast<uint32_t>(m_tonemap),
-        IsShadedView(displayView) ? 0u : 1u};
+        IsShadedView(displayView) ? 0u : 1u,
+        m_transparentBackground ? m_depth.SrvIndex() : UINT32_MAX};
 
     commandList->SetComputeRootSignature(pipelineCache.GlobalRootSignature());
     commandList->SetPipelineState(tonemapPipeline);

@@ -376,6 +376,13 @@ public:
     // maxSize を指定すると縦横比を保ってその大きさ以下へ縮小する（シーンのサムネイル用）。
     bool SaveOutputToPng(rhi::Device& device, const std::filesystem::path& path, uint32_t maxSize = 0);
 
+    // 評価済みの岩を固定のスタジオ条件で撮る。フレーム外で呼ぶ。
+    // 表示用カメラ・照明・出力には触れず、形状と合成済み材質だけを撮影用レンダラへ貸す。
+    bool SaveAssetThumbnail(rhi::Device& device, rhi::PipelineCache& pipelineCache,
+                            const compositor::TextureLibrary& textures,
+                            const compositor::MaterialLibrary& materials,
+                            const std::filesystem::path& path);
+
     bool HasOutput() const { return m_output.IsValid(); }
     // 同寸法・同形式のキャッシュへコピー。呼出側はフレーム外で宛先を確保する。
     bool CopyOutputTo(ID3D12GraphicsCommandList* commandList, rhi::GpuTexture& destination);
@@ -461,6 +468,8 @@ private:
     uint32_t m_materialResolution = kPreviewDefaults.materialResolution;
     uint32_t m_requestedMaterialResolution = kPreviewDefaults.materialResolution;
     bool m_showSkybox = kPreviewDefaults.showSkybox;
+    // アセット撮影だけ、深度が無い背景を透明にする。
+    bool m_transparentBackground = false;
     bool m_skyboxBlur = kPreviewDefaults.skyboxBlur;
     bool m_shadowEnabled = kPreviewDefaults.shadowEnabled;
     DofSettings m_dof;

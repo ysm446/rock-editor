@@ -12,6 +12,8 @@ struct TonemapConstants
     uint tonemapMode;
     // 0 以外なら、メッシュ側が書いた値をそのまま出す（チャンネルを覗く表示）。
     uint passthrough;
+    // サムネイル撮影時だけ深度で背景を抜く。それ以外は未指定。
+    uint backgroundDepthIndex;
 };
 
 ConstantBuffer<TonemapConstants> g_constants : register(b0);
@@ -26,6 +28,16 @@ void CsMain(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     Texture2D<float4> source = ResourceDescriptorHeap[g_constants.sourceIndex];
     RWTexture2D<float4> output = ResourceDescriptorHeap[g_constants.outputIndex];
+
+    if (g_constants.backgroundDepthIndex != 0xffffffffu)
+    {
+        Texture2D<float> depth = ResourceDescriptorHeap[g_constants.backgroundDepthIndex];
+        if (depth[dispatchThreadId.xy] >= 1.0f)
+        {
+            output[dispatchThreadId.xy] = 0.0f;
+            return;
+        }
+    }
 
     float3 color = source[dispatchThreadId.xy].rgb;
 
