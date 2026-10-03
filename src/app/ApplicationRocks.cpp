@@ -200,6 +200,38 @@ Application::LoadedRockAsset* Application::LoadPlantAsset(const std::string& sce
         asset.screenSizes.push_back(size);
         asset.triangles.push_back(geometry->lods[lod].triangles);
     }
+    // インポスター（terrain-graph が焼いた色・法線のアトラス）。読めたら最終段として足す。
+    asset.impostor = {};
+    if (info.impostor.baked) {
+        LdrImage color, normal;
+        const uint32_t size = info.impostor.frames * info.impostor.frameSize;
+        if (LoadLdrImage(info.impostor.color, color) && LoadLdrImage(info.impostor.normal, normal) && color.width == size &&
+            color.height == size && normal.width == size && normal.height == size) {
+            const auto colorId = m_textureLibrary.AddTransient(m_device, m_pipelineCache, "Impostor " + info.name + " C（一時）", color);
+            const auto normalId = m_textureLibrary.AddTransient(m_device, m_pipelineCache, "Impostor " + info.name + " N（一時）", normal);
+            if (colorId && normalId) {
+                asset.textures.push_back(colorId);
+                asset.textures.push_back(normalId);
+                asset.impostor.colorSrv = m_textureLibrary.SrvIndex(colorId, false);
+                asset.impostor.normalSrv = m_textureLibrary.SrvIndex(normalId, false);
+                asset.impostor.center = {info.impostor.center.x, info.impostor.center.y, info.impostor.center.z};
+                asset.impostor.radius = info.impostor.radius;
+                asset.impostor.frames = info.impostor.frames;
+                asset.impostor.fullSphere = info.impostor.fullSphere;
+                asset.impostor.lod = int(asset.screenSizes.size());
+                // 切り替えの大きさは最後のメッシュの段の次（.tgmodel の lodScreenSizes にあればそれ）。
+                const size_t level = asset.screenSizes.size();
+                static constexpr float kDefaults[] = {1.0f, 0.5f, 0.25f, 0.12f, 0.06f, 0.03f};
+                asset.screenSizes.push_back(level - 1 < info.lodScreenSizes.size() ? info.lodScreenSizes[level - 1]
+                                                                                   : kDefaults[std::min<size_t>(level, std::size(kDefaults) - 1)]);
+                asset.triangles.push_back(2);
+            }
+        } else {
+            asset.error = "インポスターの画像を読めません（メッシュだけで描きます）";
+        }
+    }
+    ROCK_LOG_INFO("植生のモデル資産を読みました: %s（%zu 段、インポスター %s%s）", info.name.c_str(), asset.screenSizes.size(),
+                  asset.impostor.lod >= 0 ? "あり" : "なし", info.impostor.baked ? "" : "（目録に無いか画像が無い）");
     asset.gpu = std::make_unique<renderer::ModelPreview>(16);
     if (!asset.gpu->PrepareAllLods(m_device, asset.model)) {
         asset.error = "モデルを GPU へ転送できません";
@@ -331,8 +363,10 @@ void Application::DrawRockInstances(ID3D12GraphicsCommandList* commandList, cons
     for (const auto& draw : m_rockDraws) {
         const auto found = m_rockAssets.find(draw.scene);
         if (found == m_rockAssets.end() || !found->second.gpu) continue;
-        found->second.gpu->RenderInstancedInScene(m_device, m_pipelineCache, commandList, found->second.model, m_materialLibrary,
-                                                  m_textureLibrary, context, m_rockInstanceBufferSrv, draw.batches);
+        const auto& asset = found->second;
+        asset.gpu->RenderInstancedInScene(m_device, m_pipelineCache, commandList, asset.model, m_materialLibrary, m_textureLibrary,
+                                          context, m_rockInstanceBufferSrv, asset.impostor.lod >= 0 ? &asset.impostor : nullptr,
+                                          draw.batches);
     }
 }
 

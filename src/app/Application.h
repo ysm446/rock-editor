@@ -441,6 +441,8 @@ private:
         std::vector<size_t> triangles;                // 段ごとの三角形数
         std::vector<compositor::TextureId> textures;  // 一時のテクスチャ（読み直すときに捨てる）
         float radius = 0.0f, height = 0.0f;           // LOD0 を包む球の半径と高さ（倍率 1）
+        // 植生のインポスター（terrain-graph が焼いた画像を読んだもの）。lod はメッシュの段の次の番号。
+        renderer::ModelImpostorDraw impostor;
         std::string error;
     };
     std::map<std::string, LoadedRockAsset> m_rockAssets;

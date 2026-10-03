@@ -1,7 +1,7 @@
 # 那須朝日岳の岩場（nasu-asahidake）— 刃の列 + 土の斜面 + 破片の 1 ユニット
 
 作成日時: 2026-10-03 07:15
-更新日時: 2026-10-03 11:55
+更新日時: 2026-10-03 17:20
 
 目標の風景（`docs/references/nasu-asahidake/DSC00363`。Git の対象外）を 1 ユニット（40 m 四方）として組む山グラフ。
 このフォルダをルートとして開き、`nasu.mountaingraph` を読み込む。
@@ -32,7 +32,7 @@ Rock（talus ×1）・Rock（talus ×0.45）・Rock（chips ×0.3）→ 崖錐 R
 4. `rock_cli eval examples/nasu-asahidake/nasu.mountaingraph --node 20`（Rock Scatter を指す）の `rockInstanceSets` に段ごとの数と置いた位置（8 個以下なら列挙）が出る。地面の Displace は GPU が要るので、Mesh Output を指すと評価できない。
 6. 地形は Terrain Erode（熱侵食で崖錐の斜面、流路の溝）で侵食し、岩の配置も地面もその出力から。地面側だけ Terrain Deform を 2 段（刃の根元を 0.4 m えぐる、崖錐の破片の根元を 0.15 m 盛る）。岩の配置は変形前の地形で決まる。
 7. 表示はシーンの空（大気散乱。太陽 54°・120000 lux）と手動 EV 14 にしてある。撮るときは `python tools/rock_shot.py examples/nasu-asahidake/nasu.mountaingraph out.png --lighting atmospheric --light-elevation 55 --yaw 330 --pitch 18`。
-8. 植生（ススキ・ハイマツ）は terrain-graph の植生アセット（`Models/Susuki/`、`Models/Haimatsu/`。Git の対象外）。Blender で作る:
+8. 植生（ススキ・ハイマツ）は terrain-graph の植生アセット（`Models/Susuki/`、`Models/Haimatsu/`。Git の対象外）。terrain-graph の `data/Models/` に焼き済み（インポスター付き）があれば、フォルダごと写すのが早い。無ければ Blender で作り、インポスターは terrain-graph で焼く:
 
    ```bash
    "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --python-exit-code 1 --python d:/GitHub/terrain-graph/tools/blender/make_susuki.py -- --out examples/nasu-asahidake/Models/Susuki --root examples/nasu-asahidake

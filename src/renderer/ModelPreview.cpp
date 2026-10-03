@@ -54,6 +54,12 @@ struct ModelConstants {
     // インスタンスの行列のバッファの中の、このまとまりの先頭。
     uint32_t instanceBase = 0;
     uint32_t instancePad[3] = {};
+    // インポスター（植生の最終段）。ModelPreview.hlsl と同じ並び。
+    uint32_t impostorColor = 0xffffffffu, impostorNormal = 0xffffffffu, impostorFrames = 12, impostorFullSphere = 0;
+    float impostorCenter[3] = {};
+    float impostorRadius = 0.0f;
+    uint32_t impostorShadow = 0;
+    uint32_t impostorPad[3] = {};
 };
 static_assert(sizeof(ModelConstants) % 16 == 0);
 
@@ -394,7 +400,8 @@ void ModelPreview::RenderInstancedInScene(rhi::Device& device, rhi::PipelineCach
                                           ID3D12GraphicsCommandList* commandList, const ModelAsset& model,
                                           const compositor::MaterialLibrary& materials,
                                           const compositor::TextureLibrary& textures, const SceneDrawContext& context,
-                                          uint32_t instanceBuffer, const std::vector<ModelInstanceBatch>& batches) {
+                                          uint32_t instanceBuffer, const ModelImpostorDraw* impostor,
+                                          const std::vector<ModelInstanceBatch>& batches) {
     if (!m_allLodsGeometry || m_allLodsGeometry != model.geometry || batches.empty()) return;
     rhi::GraphicsPipelineDesc desc;
     desc.shaderPath = L"ModelPreview.hlsl";
@@ -417,8 +424,56 @@ void ModelPreview::RenderInstancedInScene(rhi::Device& device, rhi::PipelineCach
     commandList->SetGraphicsRootSignature(pipelineCache.GlobalRootSignature());
     commandList->SetPipelineState(pipeline);
     const compositor::MaterialAsset fallback;
+    // インポスター段（植生の最終段）。カメラ（影パスでは光源）を向く四角形 1 枚を、SV_VertexID から作って描く。
+    const auto drawImpostor = [&](const ModelInstanceBatch& batch) {
+        rhi::GraphicsPipelineDesc quad;
+        quad.shaderPath = L"ModelPreview.hlsl";
+        quad.vertexEntry = L"VsImpostor";
+        quad.pixelEntry = context.shadowPass ? L"PsImpostorShadow" : L"PsImpostor";
+        quad.layout = rhi::VertexLayout::None;
+        quad.rtvFormat = context.rtvFormat;
+        quad.dsvFormat = context.dsvFormat;
+        quad.cullMode = D3D12_CULL_MODE_NONE;
+        ID3D12PipelineState* quadPipeline = pipelineCache.GetGraphics(quad);
+        if (quadPipeline == nullptr) return;
+        ModelConstants constants = SceneConstants(fallback, textures, context, DirectX::XMMatrixIdentity());
+        constants.instanceBuffer = instanceBuffer;
+        constants.instanceBase = batch.base;
+        constants.impostorColor = impostor->colorSrv;
+        constants.impostorNormal = impostor->normalSrv;
+        constants.impostorFrames = impostor->frames;
+        constants.impostorFullSphere = impostor->fullSphere ? 1u : 0u;
+        constants.impostorCenter[0] = impostor->center.x;
+        constants.impostorCenter[1] = impostor->center.y;
+        constants.impostorCenter[2] = impostor->center.z;
+        constants.impostorRadius = impostor->radius;
+        constants.impostorShadow = context.shadowPass ? 1u : 0u;
+        constants.baseColorTint[0] = constants.baseColorTint[1] = constants.baseColorTint[2] = 1.0f;
+        if (context.lodView) {
+            const auto& color = kLodDebugColors[std::min<size_t>(size_t(batch.lod), std::size(kLodDebugColors) - 1)];
+            constants.baseColorIndex = compositor::kInvalidTextureIndex;
+            constants.baseColorTint[0] = color.x;
+            constants.baseColorTint[1] = color.y;
+            constants.baseColorTint[2] = color.z;
+        } else {
+            constants.baseColorIndex = 0;  // 色分けではない印（シェーダは tint の和で判定する）
+        }
+        const auto cb = device.Upload().Allocate(sizeof(constants), 256);
+        if (!cb.IsValid()) return;
+        std::memcpy(cb.cpu, &constants, sizeof(constants));
+        commandList->SetPipelineState(quadPipeline);
+        commandList->SetGraphicsRootConstantBufferView(1, cb.gpuAddress);
+        commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        commandList->DrawInstanced(6, batch.count, 0, 0);
+        commandList->SetPipelineState(pipeline);
+    };
     for (const ModelInstanceBatch& batch : batches) {
-        if (batch.count == 0 || batch.lod < 0 || size_t(batch.lod) >= m_lodMeshes.size()) continue;
+        if (batch.count == 0 || batch.lod < 0) continue;
+        if (impostor && impostor->lod == batch.lod && impostor->colorSrv != 0xffffffffu) {
+            drawImpostor(batch);
+            continue;
+        }
+        if (size_t(batch.lod) >= m_lodMeshes.size()) continue;
         const auto& parts = m_allLodsGeometry->lods[size_t(batch.lod)].parts;
         for (size_t part = 0; part < parts.size() && part < m_lodMeshes[size_t(batch.lod)].size(); ++part) {
             const auto& mesh = m_lodMeshes[size_t(batch.lod)][part];

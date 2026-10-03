@@ -21,6 +21,16 @@ struct ModelInstanceBatch {
     int lod = 0;
     uint32_t base = 0, count = 0;
 };
+// インスタンス描画のインポスター段（植生）。terrain-graph が焼いた色・法線のアトラス（GPU のテクスチャの SRV）と、
+// 撮った球の中心と半径（モデル空間）、方向数。lod はこの段の番号（メッシュの段の次）。
+struct ModelImpostorDraw {
+    uint32_t colorSrv = 0xffffffffu, normalSrv = 0xffffffffu;
+    DirectX::XMFLOAT3 center{};
+    float radius = 0.0f;
+    uint32_t frames = 12;
+    bool fullSphere = false;
+    int lod = -1;
+};
 
 // シーンへ置いたモデル 1 つぶん。ワールド行列と、ノードに足す回転（Model ノードの設定。無ければ読んだままの姿勢）。
 struct ModelInstanceDraw {
@@ -65,6 +75,7 @@ public:
                                 ID3D12GraphicsCommandList* commandList, const ModelAsset& model,
                                 const compositor::MaterialLibrary& materials, const compositor::TextureLibrary& textures,
                                 const SceneDrawContext& context, uint32_t instanceBuffer,
+                                const ModelImpostorDraw* impostor,
                                 const std::vector<ModelInstanceBatch>& batches);
 
     Camera& GetCamera() { return m_camera; }

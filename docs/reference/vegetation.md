@@ -1,7 +1,7 @@
 # 植生（Plant）— terrain-graph と共有する植生アセットを山グラフで撒く
 
 作成日時: 2026-10-03 11:55
-更新日時: 2026-10-03 11:55
+更新日時: 2026-10-03 17:20
 
 ## 位置付け
 
@@ -17,8 +17,8 @@ Rock Scatter（Terrain、Mask）← Plant（Models/Susuki/Susuki_Var1.tgmodel）
 | 段階 | 内容 | 状態 |
 | --- | --- | --- |
 | 1 | `.tgmodel` / `.tgmat` の読み込み、FBX の `_LOD<n>` 名、Plant ノード、Rock Scatter で撒く、葉のアルファ抜きで描く | 2026-10-03 に実装 |
-| 2 | インポスター（最終段。八面体の 12 × 12 方向、`_Impostor_C/N/V.png`。terrain-graph の `Impostor.cpp` の移植） | 未 |
-| 3 | 色むら（`colorVariation`）、ミップ段に応じたアルファの持ち上げ、風の揺れ | 未 |
+| 2 | インポスター（最終段）。**焼くのは terrain-graph**（`terrain_graph.exe --bake-impostors` か Model のプロパティの「作成」）で、rock-editor は `.tgmodel` の `impostor.baked` と `_Impostor_C/N.png` を読んで描く | 2026-10-03 に実装（描く側） |
+| 3 | 色むら（`colorVariation`）、風の揺れ | 未。ミップ段に応じたアルファの持ち上げと影パスの切り抜きは 2026-10-03 に実装 |
 
 ## 1. アセットの共有
 
@@ -56,14 +56,20 @@ terrain-graph のスクリプトをそのまま使う（rock-editor にはスク
 - 描画は岩アセットと同じ `LoadedRockAsset` の経路（`Application::LoadPlantAsset`）。FBX を `renderer::LoadModel` で読み、スロットのマテリアルは `.tgmat` を共有アセットとしてライブラリへ読む（ルートの外なら無地）。段の切り替えは `lodScreenSizes`。GPU インスタンス描画で、段はカメラから見た大きさで選ぶ（岩と同じ）。
 - Rock Scatter の設定はそのまま使える。草を岩の根元に寄せるには、岩の Coverage を Mask Filter の「広げる」で広げ、反転した Coverage と Noise Mask を合わせて Mask につなぐ（`examples/nasu-asahidake/`）。
 
-## 制限（段階 1）
+## 3. インポスター（段階 2）
 
-- インポスターが無い。最後のメッシュの段より遠くは、その段のメッシュのまま描く（数百株の規模では問題ない）。
-- ミップ段に応じたアルファの持ち上げが無いので、遠くで葉が痩せる。
+- 焼き込みは terrain-graph の仕事にする（アセットを共有する以上、焼く仕組みを 2 つ持つと結果が食い違う）。terrain-graph で `Models/<名前>/<名前>_VarN_Impostor_C.png`（色、a = 覆い）/ `_N.png`（rg = 8 面体の法線、b = 深度、a = ラフネス）/ `_V.png`（色むらの重み）を焼き、`.tgmodel` の `impostor.baked`（`frames`、`frameSize`、`fullSphere`、`center`、`radius`、画像の参照）に記録する。方向とマスの対応は `shaders/ImpostorCommon.hlsli`（terrain-graph のものをそのまま写した）。
+- rock-editor は `io::ReadModelAssetInfo` で `impostor.baked` を読み、画像が揃っていれば `Application::LoadPlantAsset` で色と法線のアトラスを一時のテクスチャ（ミップ付き）にして、メッシュの段の次を**インポスター段**にする（`LoadedRockAsset::impostor`、`renderer::ModelImpostorDraw`）。切り替えの大きさは `.tgmodel` の `lodScreenSizes` の次の値（無ければ 0.12 …）。
+- 描画（`ModelPreview.hlsl` の `VsImpostor` / `PsImpostor` / `PsImpostorShadow`）: カメラ（影パスでは光源）を向く四角形 1 枚を `SV_VertexID` から作り、ピクセルごとに視線に近い 3 方向のマスの平面へ視線を当て、覆いで重みを付けて色・法線・深度を混ぜる。インスタンスの行列から軸と原点を取り出してモデル空間へ戻す（倍率は均一）。陰影はメッシュと同じ `ShadeModel`。影は焼いた深度から戻した表面の深度を書く。色むらの重み（`_V.png`）は読まない（段階 3）。
+- LOD の色分け表示では、インポスター段も段の色（4 段目なら青）で塗る。
+
+## 制限
+
 - `colorVariation`（株ごとの色むら）と風の揺れは無い。
-- 影はメッシュで落とすが、影パスでアルファ抜きをしないので、葉のカードは四角い影になる（確認して直す）。
+- インポスターの切り替え距離はメッシュの段と同じ画面の大きさで決める。ディザで混ぜる区画（terrain-graph の `fadeBand`）は無いので、切り替わりは見える。
 - `rock_cli eval` は FBX の範囲を読むために `ufbx` を使う（植生 1 種類あたり数十 ms）。
+- アプリのログ（`ROCK_LOG_*`）は `OutputDebugString` にしか出ない。撮影で確かめるときは `--select-node <Plant の id> --screenshot-ui` で状態の行（「モデル: 4 段・LOD0 … 三角形」と画面下の「インポスター あり」）を見る。
 
 ## 検証
 
-`tests/RockScatterTests.cpp` の「Plant」: 出力の型、Rock Scatter への接続、未選択・無いファイルの診断、`IsModelAssetPath`。実アプリでは `examples/nasu-asahidake/` にススキ 3 変種（刃の根元の 2.5 m の帯 × まだら）とハイマツ 2 変種（斜面にまばら）を撒き、葉のアルファ抜きで描けることを画像で確認した（[研究ページ](../research/nasu-asahidake/README.md)）。
+`tests/RockScatterTests.cpp` の「Plant」: 出力の型、Rock Scatter への接続、未選択・無いファイルの診断、`IsModelAssetPath`。実アプリでは `examples/nasu-asahidake/` にススキ 3 変種（刃の根元の 2.5 m の帯 × まだら）とハイマツ 2 変種（斜面にまばら）を撒き、葉のアルファ抜きで描けること、terrain-graph で焼いたインポスター（`data/Models/` から写した）が 4 段目として描けること（切り替えを一時的に近くにして LOD の色分けで確認）を画像で確認した（[研究ページ](../research/nasu-asahidake/README.md)）。

@@ -8,6 +8,7 @@
 
 #include "Brdf.hlsli"
 #include "CompositeCommon.hlsli"
+#include "ImpostorCommon.hlsli"
 #include "LayerMaterial.hlsli"
 #include "EnvCommon.hlsli"
 #include "Tonemap.hlsli"
@@ -39,6 +40,10 @@ struct ModelConstants
     LayerMaterialData layerMaterial;
     // インスタンスの行列のバッファの中の、このまとまりの先頭（SV_InstanceID は描画ごとに 0 から数える）。
     uint instanceBase; uint3 instancePad;
+    // インポスター（植生の最終段）。アトラスの SRV、撮った球の中心と半径（モデル空間）、方向数、半球か、影パスか。
+    uint impostorColor, impostorNormal, impostorFrames, impostorFullSphere;
+    float3 impostorCenter; float impostorRadius;
+    uint impostorShadow; uint3 impostorPad;
 };
 
 ConstantBuffer<ModelConstants> g_model : register(b1);
@@ -198,6 +203,9 @@ void ClipMasked(MapUv uvSets[2])
     }
 }
 
+float3 ShadeModel(float3 position, float3 normal, float3 viewDirection, float3 baseColor, float roughness, float metallic,
+                  float ambientOcclusion);
+
 // 影パス（切り抜きのある材質だけ）。深度だけを書くので色は返さない。
 void PsShadow(PixelInput input)
 {
@@ -300,6 +308,18 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
     }
 
     const float3 viewDirection = normalize(g_model.cameraPosition - input.position);
+    const float3 radiance = ShadeModel(input.position, normal, viewDirection, baseColor, roughness, metallic, ambientOcclusion);
+    const float alpha = g_model.blendMode == kBlendTranslucent ? saturate(opacity) : 1.0f;
+    // シーンでは線形 HDR のまま返す（露出とトーンマップはレンダラの後段が掛ける）。
+    if (g_model.sceneMode != 0u) return float4(radiance, alpha);
+    const float3 color = LinearToSrgb(ApplyTonemap(radiance * g_model.exposure, g_model.tonemapMode));
+    return float4(color, alpha);
+}
+
+// 陰影（ビューポートと同じ式）。メッシュとインポスターで共用する。
+float3 ShadeModel(float3 position, float3 normal, float3 viewDirection, float3 baseColor, float roughness, float metallic,
+                  float ambientOcclusion)
+{
     float3 diffuseColor;
     float3 f0;
     SplitBaseColor(baseColor, metallic, diffuseColor, f0);
@@ -307,7 +327,7 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
 
     const float3 lightDirection = normalize(g_model.lightDirection);
     // 影は直接光にだけ掛ける（MeshPbr と同じ）。プレビューでは受けない。
-    const float shadow = SampleCascadedShadow(input.position, dot(normal, lightDirection));
+    const float shadow = SampleCascadedShadow(position, dot(normal, lightDirection));
     float3 radiance = ShadeDirectionalLight(normal, viewDirection, lightDirection,
                                             g_model.lightColor, g_model.lightIlluminance,
                                             diffuseColor, f0, clampedRoughness) * shadow;
@@ -332,10 +352,158 @@ float4 PsMain(PixelInput input, bool frontFace : SV_IsFrontFace) : SV_TARGET
 
         radiance += (diffuseIbl + specularIbl) * g_model.iblIntensity * ambientOcclusion;
     }
+    return radiance;
+}
 
-    const float alpha = g_model.blendMode == kBlendTranslucent ? saturate(opacity) : 1.0f;
-    // シーンでは線形 HDR のまま返す（露出とトーンマップはレンダラの後段が掛ける）。
-    if (g_model.sceneMode != 0u) return float4(radiance, alpha);
-    const float3 color = LinearToSrgb(ApplyTonemap(radiance * g_model.exposure, g_model.tonemapMode));
-    return float4(color, alpha);
+// --- インポスター（植生の最終段。terrain-graph と同じ焼き方の画像を描く）-------------------------
+// カメラを向く四角形 1 枚。ピクセルごとに、視線に近い 3 方向の画像それぞれの平面（中心を通り、その方向に垂直）へ
+// 視線を当て、当たった位置の画素を重みで混ぜる。株の置き方（インスタンスの行列）は補間せずに渡し、
+// ピクセルでは視線をモデル空間へ戻して画像を選ぶ。
+struct ImpostorInput
+{
+    float4 clip : SV_POSITION;
+    float3 position : POSITION;
+    nointerpolation float3 origin : ORIGIN;
+    nointerpolation float3 axisX : AXISX;
+    nointerpolation float3 axisY : AXISY;
+    nointerpolation float3 axisZ : AXISZ;
+    nointerpolation float scale : SCALE;
+};
+
+ImpostorInput VsImpostor(uint vertex : SV_VertexID, uint instance : SV_InstanceID)
+{
+    static const float2 kCorners[6] = {float2(-1, -1), float2(1, -1), float2(1, 1), float2(-1, -1), float2(1, 1), float2(-1, 1)};
+    float4x4 worldMatrix = g_model.world;
+    if (g_model.instanceBuffer != 0xFFFFFFFFu)
+    {
+        StructuredBuffer<float4x4> instances = ResourceDescriptorHeap[g_model.instanceBuffer];
+        worldMatrix = instances[g_model.instanceBase + instance];
+    }
+    ImpostorInput output;
+    // 行列から軸（倍率込み）と原点を取り出す（倍率は均一）。
+    output.axisX = mul(float4(1, 0, 0, 0), worldMatrix).xyz;
+    output.axisY = mul(float4(0, 1, 0, 0), worldMatrix).xyz;
+    output.axisZ = mul(float4(0, 0, 1, 0), worldMatrix).xyz;
+    output.origin = mul(float4(0, 0, 0, 1), worldMatrix).xyz;
+    output.scale = max(length(output.axisX), 1e-6f);
+    const float3 center = mul(float4(g_model.impostorCenter, 1), worldMatrix).xyz;
+    const float radius = g_model.impostorRadius * output.scale;
+    const float3 toCamera = g_model.cameraPosition - center;
+    const float cameraDistance = length(toCamera);
+    float3 right, up;
+    // 影パスは平行光の正射影。板を光源へ向け、半径ぶんだけ覆う。
+    const bool shadow = g_model.impostorShadow != 0;
+    ImpostorFrameBasis(shadow ? normalize(g_model.lightDirection) : toCamera / max(cameraDistance, 1e-4f), right, up);
+    // 透視では球の輪郭が中心の平面上で半径より少し大きく見えるので、その分だけ広げる。
+    const float extent = shadow ? radius
+        : cameraDistance > radius * 1.01f ? radius * cameraDistance / sqrt(cameraDistance * cameraDistance - radius * radius)
+                                          : radius * 8;
+    output.position = center + (right * kCorners[vertex % 6].x + up * kCorners[vertex % 6].y) * extent;
+    output.clip = mul(float4(output.position, 1), g_model.viewProjection);
+    return output;
+}
+
+// 焼いた画像を 1 本の視線で引いた結果（モデル空間）。
+struct ImpostorHit
+{
+    float coverage, roughness;
+    float3 color;    // リニア
+    float3 normal;   // モデル空間
+    float3 surface;  // 焼いた深度から戻した表面の位置（モデル空間）
+};
+// eye を通り ray へ進む視線で引く。toViewer はマスを選ぶ向き（透視なら株の中心からカメラ、平行光なら光源の向き）。
+ImpostorHit SampleImpostor(float3 eye, float3 ray, float3 toViewer)
+{
+    const float3 center = g_model.impostorCenter;
+    const float radius = g_model.impostorRadius;
+    const uint frames = g_model.impostorFrames;
+    const bool fullSphere = g_model.impostorFullSphere != 0;
+    const ImpostorFrames selected = SelectImpostorFrames(toViewer, frames, fullSphere);
+    Texture2D<float4> colorMap = ResourceDescriptorHeap[g_model.impostorColor];
+    Texture2D<float4> normalMap = ResourceDescriptorHeap[g_model.impostorNormal];
+    float2 atlasUv[3];
+    float3 hit[3], direction[3];
+    bool inside[3];
+    [unroll] for (uint k = 0; k < 3; ++k)
+    {
+        direction[k] = ImpostorFrameDirection(selected.frame[k], frames, fullSphere);
+        float3 right, up;
+        ImpostorFrameBasis(direction[k], right, up);
+        const float denominator = dot(ray, direction[k]);
+        const float t = dot(center - eye, direction[k]) / (abs(denominator) > 1e-4f ? denominator : 1e-4f);
+        hit[k] = eye + ray * t;
+        const float3 local = hit[k] - center;
+        const float2 tile = float2(0.5f + dot(local, right) / (2 * radius), 0.5f - dot(local, up) / (2 * radius));
+        inside[k] = all(tile >= 0) && all(tile <= 1);
+        atlasUv[k] = (float2(selected.frame[k]) + saturate(tile)) / float(frames);
+    }
+    // ミップは最も重いマスの座標の変化で決める（分岐の前に微分を取る）。
+    const float lod = MapLod(g_model.impostorColor, ddx(atlasUv[0]), ddy(atlasUv[0]));
+    ImpostorHit result;
+    result.coverage = 0; result.roughness = 0; result.color = 0; result.normal = 0; result.surface = 0;
+    float2 normalSum = 0;
+    [unroll] for (uint k = 0; k < 3; ++k)
+    {
+        if (!inside[k]) continue;
+        const float4 c = colorMap.SampleLevel(g_samplerLinearClamp, atlasUv[k], lod);
+        const float4 n = normalMap.SampleLevel(g_samplerLinearClamp, atlasUv[k], lod);
+        const float weight = selected.weight[k] * c.a;
+        result.color += SrgbToLinear(c.rgb) * weight;
+        normalSum += n.xy * weight;
+        result.roughness += n.w * weight;
+        // 深度は「中心を通る平面から、撮った向きへどれだけ手前か」（terrain-graph の ImpostorBake.hlsl）。
+        result.surface += (hit[k] + direction[k] * (n.z - 0.5f) * 2 * radius) * weight;
+        result.coverage += weight;
+    }
+    const float inverse = 1 / max(result.coverage, 1e-4f);
+    result.color *= inverse;
+    result.roughness *= inverse;
+    result.surface *= inverse;
+    result.normal = DecodeImpostorNormal(normalSum * inverse * 2 - 1);
+    // メッシュのアルファ抜きと同じく、遠くで痩せないようミップ段に応じて持ち上げる。
+    result.coverage *= 1 + max(lod, 0) * kAlphaMipScale;
+    return result;
+}
+// 株の置き方（ImpostorInput）でワールドとモデル空間を行き来する。軸は倍率込み。
+float3 ImpostorToModel(ImpostorInput input, float3 world)
+{
+    const float3 relative = world - input.origin;
+    const float inverseScale2 = 1 / (input.scale * input.scale);
+    return float3(dot(relative, input.axisX), dot(relative, input.axisY), dot(relative, input.axisZ)) * inverseScale2;
+}
+float3 ImpostorDirectionToModel(ImpostorInput input, float3 direction)
+{
+    return normalize(float3(dot(direction, input.axisX), dot(direction, input.axisY), dot(direction, input.axisZ)));
+}
+float3 ImpostorToWorld(ImpostorInput input, float3 model)
+{
+    return input.origin + input.axisX * model.x + input.axisY * model.y + input.axisZ * model.z;
+}
+
+float4 PsImpostor(ImpostorInput input) : SV_TARGET
+{
+    const float3 camera = ImpostorToModel(input, g_model.cameraPosition);
+    const float3 target = ImpostorToModel(input, input.position);
+    const ImpostorHit hit = SampleImpostor(camera, normalize(target - camera), normalize(camera - g_model.impostorCenter));
+    clip(hit.coverage - 0.5f);
+    const float3 normal = normalize(input.axisX * hit.normal.x + input.axisY * hit.normal.y + input.axisZ * hit.normal.z);
+    // 影と環境光の高さは、板の上の点ではなく焼いた深度から戻した表面で引く（影を落とす側と揃える）。
+    const float3 surface = ImpostorToWorld(input, hit.surface);
+    // LOD の色分け（baseColorIndex を無効にして tint を入れる）ではその色で塗る。
+    const float3 baseColor = g_model.baseColorIndex == kInvalidTextureIndex && g_model.baseColorTint.r + g_model.baseColorTint.g + g_model.baseColorTint.b < 2.99f
+                                 ? g_model.baseColorTint : hit.color;
+    const float3 radiance = ShadeModel(surface, normal, normalize(g_model.cameraPosition - input.position), baseColor, hit.roughness, 0, 1);
+    if (g_model.sceneMode != 0u) return float4(radiance, 1);
+    return float4(LinearToSrgb(ApplyTonemap(radiance * g_model.exposure, g_model.tonemapMode)), 1);
+}
+
+// 影パス。光の向きの平行な視線で引き、焼いた深度から戻した表面の深度を書く。
+float PsImpostorShadow(ImpostorInput input) : SV_Depth
+{
+    const float3 toLight = ImpostorDirectionToModel(input, normalize(g_model.lightDirection));
+    const float3 target = ImpostorToModel(input, input.position);
+    const ImpostorHit hit = SampleImpostor(target + toLight * (4 * g_model.impostorRadius), -toLight, toLight);
+    clip(hit.coverage - 0.5f);
+    const float4 projected = mul(float4(ImpostorToWorld(input, hit.surface), 1), g_model.viewProjection);
+    return saturate(projected.z / projected.w);
 }

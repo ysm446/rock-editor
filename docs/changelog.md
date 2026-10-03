@@ -1,11 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 11:55
+更新日時: 2026-10-03 17:20
 
 ## 未リリース
 
-- 山グラフに Plant ノードを足した。terrain-graph の植生アセット（`.tgmodel` / `.tgmat`、FBX の `_LOD<n>` 名の段）をそのまま読み、Rock Scatter で撒いて葉のアルファ抜きで描く。仕様は [植生](reference/vegetation.md)。那須の例にススキとハイマツを入れた。
+- 山グラフに Plant ノードを足した。terrain-graph の植生アセット（`.tgmodel` / `.tgmat`、FBX の `_LOD<n>` 名の段、terrain-graph で焼いたインポスター）をそのまま読み、Rock Scatter で撒いて葉のアルファ抜き（影パスでも）で描く。最終段はインポスター（カメラを向く板に 3 方向の画像を混ぜる）。仕様は [植生](reference/vegetation.md)。那須の例にススキとハイマツを入れた。
 
 - 山グラフに Terrain Erode（熱侵食の崩れと流路の溝。流路は反復で溝に流れを集められる）と Terrain Deform（マスクで地形を盛る・えぐる）を足した。Heightmap の格子を加工してメッシュを作り直す。仕様は [Terrain Erode / Deform](reference/terrain-erode.md)。那須の例に組み込んだ。撮影用の起動引数 `--lighting ibl|atmospheric`、`--light-elevation`、`--light-illuminance`、`--exposure`、`--skylight` を足した（`tools/rock_shot.py` からも渡せる）。
 

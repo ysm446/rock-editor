@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 11:55
+更新日時: 2026-10-03 17:20
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -18,7 +18,8 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 - Plant ノード（出力は Rock と同じ型）。評価は FBX から範囲を読み、描画は岩アセットと同じ `LoadedRockAsset` の経路（`Application::LoadPlantAsset`。`.tgmat` の葉はアルファ抜き、両面）。
 - Blender（5.2）で terrain-graph のスクリプトを `--root` を rock-editor 側にして実行し、ススキとハイマツを作った。`make_haimatsu.py` は `CORE` の import 漏れで止まるので terrain-graph 側で 1 行直した（未コミット。ユーザーに伝える）。
 - 那須の例に Plant を 5 つ（ススキ 3・ハイマツ 2）と Scatter 2 段を足し、葉のアルファ抜きで描けることを確認した。
-- 残り（段階 2・3）: インポスター（terrain-graph の `Impostor.cpp` の移植）、ミップでのアルファの持ち上げ、色むら、影パスのアルファ抜き。
+- 続き（2026-10-03 17:20）: 影パスの切り抜きとミップ段のアルファの持ち上げ（terrain-graph と同じ式）、インポスター段を入れた。焼くのは terrain-graph（アセットの共有先）に任せ、rock-editor は `.tgmodel` の `impostor.baked` と画像を読んで描く（`VsImpostor` / `PsImpostor` / `PsImpostorShadow`、`ImpostorCommon.hlsli` を写した）。例には terrain-graph の焼き済みアセットを写した。LOD の色分けで 4 段目が板になることを確認。
+- 残り（段階 3）: 色むら（`colorVariation` と `_V.png`）、切り替えのディザ、風。
 
 ### 2026-10-03 10:28 地形の侵食 Terrain Erode と変形 Terrain Deform
 

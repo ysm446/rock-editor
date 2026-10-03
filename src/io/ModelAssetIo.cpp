@@ -79,6 +79,26 @@ bool ReadModelAssetInfo(const fs::path& assetPath, ModelAssetInfo& info, std::st
     if (document.contains("lodScreenSizes") && document["lodScreenSizes"].is_array())
         for (const json& v : document["lodScreenSizes"])
             if (v.is_number()) info.lodScreenSizes.push_back(v.get<float>());
+    // インポスター（terrain-graph が焼いたもの）。画像の参照が切れていれば焼いていない扱い。
+    if (document.contains("impostor") && document["impostor"].is_object()) {
+        const json& value = document["impostor"];
+        if (value.contains("baked") && value["baked"].is_object()) {
+            const json& baked = value["baked"];
+            ModelImpostorInfo& imp = info.impostor;
+            imp.frames = static_cast<uint32_t>(std::clamp(baked.value("frames", 12), 2, 32));
+            imp.frameSize = static_cast<uint32_t>(std::clamp(baked.value("frameSize", 256), 32, 2048));
+            imp.fullSphere = baked.value("fullSphere", false);
+            imp.radius = baked.value("radius", 0.0f);
+            if (baked.contains("center") && baked["center"].is_array() && baked["center"].size() == 3)
+                imp.center = {baked["center"][0].get<float>(), baked["center"][1].get<float>(), baked["center"][2].get<float>()};
+            imp.color = Resolve(refPath(baked.value("color", json())), root, assetDir);
+            imp.normal = Resolve(refPath(baked.value("normal", json())), root, assetDir);
+            imp.variation = Resolve(refPath(baked.value("variation", json())), root, assetDir);
+            std::error_code fsError;
+            imp.baked = imp.radius > 0 && !imp.color.empty() && !imp.normal.empty() && fs::exists(imp.color, fsError) &&
+                        fs::exists(imp.normal, fsError);
+        }
+    }
     return true;
 }
 

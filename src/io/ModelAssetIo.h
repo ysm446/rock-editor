@@ -13,11 +13,22 @@
 // 仕様は docs/reference/vegetation.md。
 namespace rock::io {
 
+// terrain-graph が焼いたインポスター（.tgmodel の impostor.baked）。
+struct ModelImpostorInfo {
+    bool baked = false;
+    uint32_t frames = 12, frameSize = 256;
+    bool fullSphere = false;
+    geometry::Vec3 center{};
+    float radius = 0.0f;
+    std::filesystem::path color, normal, variation;  // _Impostor_C / _N / _V.png（variation は無いことがある）
+};
+
 struct ModelAssetInfo {
     std::string name;
     std::filesystem::path fbx;                      // 解決した FBX のパス
     std::vector<std::filesystem::path> materials;   // スロット順のマテリアル（.tgmat / .rockmat）。解決できなければ空
     std::vector<float> lodScreenSizes;              // [i] が LOD i+1 に替わる画面の大きさ（無ければ空）
+    ModelImpostorInfo impostor;
 };
 
 // .tgmodel（か .model）の目録を読む。失敗なら false と理由。
