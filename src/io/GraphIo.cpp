@@ -229,6 +229,12 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             // 岩グラフはシーンからの相対パスで書く。
             item["rock"] = {{"scene", rockNode->scene.empty() ? std::string() : RelativePathString(FromUtf8(rockNode->scene), baseDir)},
                             {"scale", rockNode->scale}, {"weight", rockNode->weight}};
+        } else if (const auto* erode = std::get_if<geometry::TerrainErodeSettings>(&node.settings)) {
+            item["terrainErode"] = {{"talusAngle", erode->talusAngle}, {"thermalIterations", erode->thermalIterations},
+                                    {"thermalRate", erode->thermalRate}, {"rillDepth", erode->rillDepth},
+                                    {"rillSharpness", erode->rillSharpness}, {"rillWidth", erode->rillWidth}};
+        } else if (const auto* deform = std::get_if<geometry::TerrainDeformSettings>(&node.settings)) {
+            item["terrainDeform"] = {{"amount", deform->amount}, {"blur", deform->blur}};
         } else if (const auto* scatter = std::get_if<geometry::RockScatterSettings>(&node.settings)) {
             item["rockScatter"] = {{"seed", scatter->seed}, {"spacing", scatter->spacing}, {"maxCount", scatter->maxCount},
                                    {"scaleMin", scatter->scaleMin}, {"scaleMax", scatter->scaleMax},
@@ -748,6 +754,24 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                     if (!scene.empty()) settings.scene = ToUtf8Portable(ResolvePath(scene, baseDir));
                     settings.scale = std::clamp(ReadFloat(*v, "scale", settings.scale), 0.001f, 1000.0f);
                     settings.weight = std::clamp(ReadFloat(*v, "weight", settings.weight), 0.0f, 1000.0f);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::TerrainErode) {
+                geometry::TerrainErodeSettings settings;
+                if (const json* v = FindMember(item, "terrainErode"); v && v->is_object()) {
+                    settings.talusAngle = ReadFloat(*v, "talusAngle", settings.talusAngle);
+                    settings.thermalIterations = ReadInt(*v, "thermalIterations", settings.thermalIterations);
+                    settings.thermalRate = ReadFloat(*v, "thermalRate", settings.thermalRate);
+                    settings.rillDepth = ReadFloat(*v, "rillDepth", settings.rillDepth);
+                    settings.rillSharpness = ReadFloat(*v, "rillSharpness", settings.rillSharpness);
+                    settings.rillWidth = ReadFloat(*v, "rillWidth", settings.rillWidth);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::TerrainDeform) {
+                geometry::TerrainDeformSettings settings;
+                if (const json* v = FindMember(item, "terrainDeform"); v && v->is_object()) {
+                    settings.amount = ReadFloat(*v, "amount", settings.amount);
+                    settings.blur = ReadFloat(*v, "blur", settings.blur);
                 }
                 created.settings = settings;
             } else if (created.kind == graph::NodeKind::RockScatter) {

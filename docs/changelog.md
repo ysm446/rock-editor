@@ -1,9 +1,11 @@
 # Changelog
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 10:14
+更新日時: 2026-10-03 10:28
 
 ## 未リリース
+
+- 山グラフに Terrain Erode（熱侵食の崩れと流路の溝）と Terrain Deform（マスクで地形を盛る・えぐる）を足した。Heightmap の格子を加工してメッシュを作り直す。仕様は [Terrain Erode / Deform](reference/terrain-erode.md)。那須の例に組み込んだ。
 
 - Volume Crack に「深さの勾配」（上ほど深く / 下ほど深く）を足した。Rock Scatter に「向き」「向きのばらつき」（上向きのまわりの向きをそろえる）と「沈める量のばらつき」を足した。`nasu-blades` と `examples/nasu-asahidake/` に適用。那須の例の地面を Apply Material + Noise Mask + Displace で荒らし、素材を Megascans にした（テクスチャは Git の対象外。`data/textures/` から写す）。
 

@@ -1403,6 +1403,8 @@ void Application::DrawGraphEditor() {
         if (mountain) {
             ImGui::TextDisabled("地形");
             addNodeMenuItem(graph::NodeKind::Heightmap, "Heightmap — ハイトマップ（画像 / ノイズ）から地形を作る");
+            addNodeMenuItem(graph::NodeKind::TerrainErode, "Terrain Erode — 地形を侵食する（崩れの崖錐 / 流路の溝）");
+            addNodeMenuItem(graph::NodeKind::TerrainDeform, "Terrain Deform — マスクで地形を盛る・えぐる（岩の根元の土）");
             ImGui::Separator();
             ImGui::TextDisabled("岩の配置");
             addNodeMenuItem(graph::NodeKind::Rock, "Rock — 岩グラフ（焼いた岩アセット）を 1 つ選ぶ");
@@ -1783,6 +1785,56 @@ void Application::DrawGraphPanel() {
             edited.noiseScale = std::clamp(edited.noiseScale, .5f, 16.0f);
             edited.upwardFocus = std::clamp(edited.upwardFocus, 0.0f, 1.0f);
             *wear = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* erode = std::get_if<geometry::TerrainErodeSettings>(&selected->settings)) {
+        auto edited = *erode;
+        bool changed = false;
+        const geometry::TerrainErodeSettings defaults;
+        if (ui::BeginPropertyTable("terrainErodeRows")) {
+            changed |= ui::PropertyFloat("安息角 (度)", &edited.talusAngle, 10.0f, 80.0f, defaults.talusAngle,
+                                         "これより急な斜面の土が低い隣へ崩れます。崖錐は 30〜38 度。", "%.0f");
+            changed |= ui::PropertyInt("崩れの回数", &edited.thermalIterations, 0, 500, defaults.thermalIterations,
+                                       "多いほど裾まで崩れて安息角の斜面になります。0 で崩しません。");
+            changed |= ui::PropertyFloat("崩れの割合", &edited.thermalRate, 0.0f, 1.0f, defaults.thermalRate, "1 回に崩す割合です。");
+            changed |= ui::PropertyFloat("流路の深さ (m)", &edited.rillDepth, 0.0f, 10.0f, defaults.rillDepth,
+                                         "最も流れの集まる筋を彫る深さです。0 で彫りません。Ctrl + クリックで 50 まで入力できます。", "%.2f");
+            changed |= ui::PropertyFloat("流路の集中", &edited.rillSharpness, 0.1f, 4.0f, defaults.rillSharpness,
+                                         "流れの量（対数で 0〜1）をこの値で累乗します。小さいほど細い筋も彫れます。", "%.2f");
+            changed |= ui::PropertyFloat("流路の幅 (m)", &edited.rillWidth, 0.0f, 10.0f, defaults.rillWidth,
+                                         "筋をぼかす幅です。0 でぼかしません。", "%.2f");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("Terrain に Heightmap（か別の Terrain Erode / Deform）をつなぎます。熱侵食は安息角より急な斜面の土を崩して裾に溜め（崖錐の斜面）、"
+                     "水侵食は流れの集まる筋を溝に彫ります（雨の流路）。格子の上で計算するので GPU は要りません。出力の Mesh を Rock Scatter の Terrain と地面の Mesh Output へつなぎます。");
+        if (changed) {
+            edited.talusAngle = std::clamp(edited.talusAngle, 10.0f, 80.0f);
+            edited.thermalIterations = std::clamp(edited.thermalIterations, 0, 500);
+            edited.thermalRate = std::clamp(edited.thermalRate, 0.0f, 1.0f);
+            edited.rillDepth = std::clamp(edited.rillDepth, 0.0f, 50.0f);
+            edited.rillSharpness = std::clamp(edited.rillSharpness, 0.1f, 4.0f);
+            edited.rillWidth = std::clamp(edited.rillWidth, 0.0f, 50.0f);
+            *erode = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* deform = std::get_if<geometry::TerrainDeformSettings>(&selected->settings)) {
+        auto edited = *deform;
+        bool changed = false;
+        const geometry::TerrainDeformSettings defaults;
+        if (ui::BeginPropertyTable("terrainDeformRows")) {
+            changed |= ui::PropertyFloat("量 (m)", &edited.amount, -5.0f, 5.0f, defaults.amount,
+                                         "マスクの白い所を動かす量です。正で盛り、負でえぐります。Ctrl + クリックで ±20 まで入力できます。", "%.2f");
+            changed |= ui::PropertyFloat("ぼかし (m)", &edited.blur, 0.0f, 10.0f, defaults.blur, "マスクの縁をぼかす幅です。", "%.2f");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("Terrain に Heightmap（か Terrain Erode）、Mask に地形の UV の画像（Rock Scatter の Coverage を Mask Filter の「広げる」で広げたものなど）をつなぎます。"
+                     "岩の根元の土をえぐる・盛るのに使います。岩の配置は変形前の地形で決め、この出力は地面の Mesh Output だけにつなぎます。");
+        if (changed) {
+            edited.amount = std::clamp(edited.amount, -20.0f, 20.0f);
+            edited.blur = std::clamp(edited.blur, 0.0f, 50.0f);
+            *deform = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

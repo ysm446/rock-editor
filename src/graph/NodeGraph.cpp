@@ -91,6 +91,11 @@ constexpr std::array<PinDefinition, 2> kMaskFilterPins = {{{PinKind::Input, Valu
     {PinKind::Output, ValueType::Mask, "Mask"}}};
 // 山グラフの地形。入力は無く、UV 付きの Mesh を出す。
 constexpr std::array<PinDefinition, 1> kHeightmapPins = {{{PinKind::Output, ValueType::Mesh, "Mesh"}}};
+// 山グラフの地形の加工。Heightmap（か他の地形の加工）の Mesh を受け、格子を作り直した Mesh を出す。
+constexpr std::array<PinDefinition, 2> kTerrainErodePins = {{{PinKind::Input, ValueType::Mesh, "Terrain"},
+    {PinKind::Output, ValueType::Mesh, "Mesh"}}};
+constexpr std::array<PinDefinition, 3> kTerrainDeformPins = {{{PinKind::Input, ValueType::Mesh, "Terrain"},
+    {PinKind::Input, ValueType::Mask, "Mask"}, {PinKind::Output, ValueType::Mesh, "Mesh"}}};
 // 山グラフの岩。Rock は入力なし。Rock Scatter は Terrain（地形の Mesh）、Mask（任意）、Rock（可変本数）を受ける。
 constexpr std::array<PinDefinition, 1> kRockPins = {{{PinKind::Output, ValueType::Rock, "Rock"}}};
 // 出力は Instances と、置いた岩の足元を地形の UV の画像にした Coverage（被覆マスク。次の段の Mask に反転してつなぐ）。
@@ -106,7 +111,9 @@ constexpr std::array<PinDefinition, 3> kVolumeDiffMaskPins = {{{PinKind::Input, 
 // Flow Mask。UV付きの Mesh と、筋を追う格子（任意。Volume to Mesh の前の Volume）を受ける。
 constexpr std::array<PinDefinition, 3> kFlowMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 50> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 52> kNodeDefinitions = {{
+    {NodeKind::TerrainErode, "terrainErode", "Terrain Erode", kTerrainErodePins},
+    {NodeKind::TerrainDeform, "terrainDeform", "Terrain Deform", kTerrainDeformPins},
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
     {NodeKind::ParallelPlanes, "parallelPlanes", "Parallel Planes", kParallelPlanesPins},
     {NodeKind::ApplyMaterial, "applyMaterial", "Apply Material", kApplyPins},
@@ -198,7 +205,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
            kind == NodeKind::RockAsset || kind == NodeKind::Heightmap || kind == NodeKind::Rock ||
-           kind == NodeKind::RockScatter ||
+           kind == NodeKind::RockScatter || kind == NodeKind::TerrainErode || kind == NodeKind::TerrainDeform ||
            // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
            IsImageMaskNodeKind(kind);
 }
@@ -239,7 +246,8 @@ bool IsVariableInputNodeKind(NodeKind kind) {
 }
 
 bool IsMountainNodeKind(NodeKind kind) {
-    return kind == NodeKind::Heightmap || kind == NodeKind::Rock || kind == NodeKind::RockScatter;
+    return kind == NodeKind::Heightmap || kind == NodeKind::Rock || kind == NodeKind::RockScatter ||
+           kind == NodeKind::TerrainErode || kind == NodeKind::TerrainDeform;
 }
 
 size_t FixedInputCount(NodeKind kind) {
@@ -618,6 +626,10 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = geometry::StructureMaskSettings{};
     } else if (kind == NodeKind::FlowMask) {
         node.settings = geometry::FlowMaskSettings{};
+    } else if (kind == NodeKind::TerrainErode) {
+        node.settings = geometry::TerrainErodeSettings{};
+    } else if (kind == NodeKind::TerrainDeform) {
+        node.settings = geometry::TerrainDeformSettings{};
     } else if (kind == NodeKind::VolumeDiffMask) {
         node.settings = geometry::VolumeDiffMaskSettings{};
     } else if (kind == NodeKind::ShapeMask) {

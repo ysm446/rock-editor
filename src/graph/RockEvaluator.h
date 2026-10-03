@@ -43,6 +43,10 @@ struct GeneratedRock {
     std::shared_ptr<const geometry::Mesh> bakeMesh;
     // Material Bake の High（ハイポリ）の内容のハッシュ。0 は未接続。変わったら焼き直しが要る。
     uint64_t bakeDetail = 0;
+    // 山グラフの地形（Heightmap / Terrain Erode / Terrain Deform の出力）だけが持つハイトの格子と寸法。
+    // 地形の加工は mesh ではなくこの格子の上で行い、格子からメッシュを作り直す。
+    std::shared_ptr<const geometry::HeightGrid> terrain;
+    geometry::HeightmapSettings terrainSettings;
 };
 // 山グラフの Rock ノードが出す、岩グラフ（焼いた岩アセット）への参照。
 struct RockReference {

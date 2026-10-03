@@ -2,6 +2,7 @@
 #include "graph/PieceEvaluator.h"
 #include "core/ImageIo.h"
 #include "core/PathUtf8.h"
+#include "geometry/TerrainErode.h"
 #include "io/RockAssetIo.h"
 
 #include <algorithm>
@@ -874,7 +875,54 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             GeneratedRock rock;
             rock.source = id;
             rock.mesh = std::move(mesh);
+            rock.terrain = std::make_shared<const geometry::HeightGrid>(std::move(grid));
+            rock.terrainSettings = *settings;
             result.rocks.push_back(std::move(rock));
+        } else if (node->kind == NodeKind::TerrainErode || node->kind == NodeKind::TerrainDeform) {
+            const bool erode = node->kind == NodeKind::TerrainErode;
+            const char* name = erode ? "Terrain Erode" : "Terrain Deform";
+            const auto* upstream = node->inputs.empty() ? nullptr : graph.FindUpstreamNodeForPin(node->inputs[0].id);
+            if (!upstream) return finish(Failure(id, name, "Terrain に Heightmap（か Terrain Erode / Deform）の出力を接続してください"));
+            // マスク（Deform）。地形の UV の画像を作るノード（Shape Mask、Rock Scatter の Coverage など）。
+            std::shared_ptr<const geometry::MaskImage> mask;
+            bool invert = false;
+            if (!erode) {
+                const auto* maskNode = node->inputs.size() > 1 ? graph.FindUpstreamNodeForPin(node->inputs[1].id) : nullptr;
+                if (!maskNode) return finish(Failure(id, name, "Mask に地形の UV の画像を作るマスク（Rock Scatter の Coverage を Mask Filter で広げたものなど）を接続してください"));
+                if (!IsMaskSourceNodeKind(maskNode->kind))
+                    return finish(Failure(id, name, "Mask には Shape Mask など、地形の UV の画像を作るマスクを接続してください"));
+                const auto masked = evaluate(maskNode->id, depth + 1);
+                if (!masked.error.empty()) return finish(masked);
+                if (masked.rocks.size() != 1 || !masked.rocks[0].previewMask)
+                    return finish(Failure(id, name, "入力のマスクがありません"));
+                mask = masked.rocks[0].previewMask;
+                invert = ImageMaskInvert(*maskNode);
+            }
+            result = evaluate(upstream->id, depth + 1);
+            report(id, 0, 0);
+            if (!result.error.empty()) return finish(result);
+            if (result.hasModels || result.rocks.size() != 1 || !result.rocks[0].terrain)
+                return finish(Failure(id, name, "Terrain には Heightmap（か Terrain Erode / Deform）の出力を 1 つ接続してください（格子を持つ地形）"));
+            GeneratedRock& rock = result.rocks[0];
+            std::string error;
+            geometry::HeightGrid grid;
+            if (erode) {
+                const auto* settings = std::get_if<geometry::TerrainErodeSettings>(&node->settings);
+                if (!settings) return finish(Failure(id, name, "設定がありません"));
+                grid = geometry::ErodeTerrain(*rock.terrain, rock.terrainSettings, *settings, error, stop, [&](int p) { report(id, 0, p); });
+            } else {
+                const auto* settings = std::get_if<geometry::TerrainDeformSettings>(&node->settings);
+                if (!settings) return finish(Failure(id, name, "設定がありません"));
+                grid = geometry::DeformTerrain(*rock.terrain, rock.terrainSettings, *mask, invert, *settings, error);
+            }
+            if (!error.empty()) return finish(Failure(id, name, error));
+            auto mesh = geometry::MakeTerrainMesh(grid, rock.terrainSettings, error);
+            if (!error.empty()) return finish(Failure(id, name, error));
+            rock.mesh = std::move(mesh);
+            rock.terrain = std::make_shared<const geometry::HeightGrid>(std::move(grid));
+            rock.meshHistory.push_back(rock.source);
+            rock.source = id;
+            rock.previewMask.reset();
         } else if (node->kind == NodeKind::Rock) {
             const auto* settings = std::get_if<RockNodeSettings>(&node->settings);
             if (!settings) return finish(Failure(id, "Rock", "設定がありません"));

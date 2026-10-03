@@ -32,6 +32,7 @@ void RunRemeshTests();
 void RunRockAssetTests();
 void RunDetailTransferTests();
 void RunTerrainTests();
+void RunTerrainErodeTests();
 void RunRockAssetIoTests();
 void RunRockScatterTests();
 void RunUvTests();
@@ -100,6 +101,7 @@ const Group kGroups[] = {
     {"RockAsset", &RunRockAssetTests},
     {"DetailTransfer", &RunDetailTransferTests},
     {"Terrain", &RunTerrainTests},
+    {"TerrainErode", &RunTerrainErodeTests},
     {"RockAssetIo", &RunRockAssetIoTests},
     {"RockScatter", &RunRockScatterTests},
     {"Uv", &RunUvTests},

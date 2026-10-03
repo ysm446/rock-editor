@@ -5,6 +5,7 @@
 #include "geometry/DetailTransfer.h"
 #include "geometry/Terrain.h"
 #include "geometry/RockScatter.h"
+#include "geometry/TerrainErode.h"
 #include "geometry/Remesh.h"
 #include "geometry/UvUnwrap.h"
 #include "geometry/Pieces.h"
@@ -124,6 +125,10 @@ enum class NodeKind : uint32_t {
     RockAsset = 72,
     // 山グラフの地形。ハイトマップ（画像かノイズ）から UV 付きの格子のメッシュを作る。
     Heightmap = 73,
+    // 山グラフの地形の侵食（熱侵食の崩れと、流路の溝）。Heightmap の格子を受け、格子のメッシュを出す。
+    TerrainErode = 82,
+    // 山グラフの地形の変形。UV のマスク（Rock Scatter の Coverage など）で盛る・えぐる。
+    TerrainDeform = 83,
     // 山グラフ。岩グラフ（.rockgraph）を 1 つ選び、焼いた岩アセットを読む。出力は Rock。
     Rock = 74,
     // 山グラフ。地形（Mesh）とマスクを受け、つないだ Rock を間隔を空けて撒く。出力は Instances。
@@ -297,7 +302,8 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
                                   geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, RockNodeSettings,
-                                  geometry::RockScatterSettings, std::monostate>;
+                                  geometry::RockScatterSettings, geometry::TerrainErodeSettings, geometry::TerrainDeformSettings,
+                                  std::monostate>;
 
 struct Node {
     GraphId id = 0;

@@ -443,6 +443,7 @@ add_executable(rock_cli
     src/geometry/MeshVolume.cpp
     src/geometry/RockScatter.cpp
     src/geometry/Terrain.cpp
+    src/geometry/TerrainErode.cpp
     src/geometry/DetailTransfer.cpp
     src/geometry/BakeOcclusion.cpp
     src/geometry/MaskCombine.cpp
@@ -491,8 +492,8 @@ target_sources(rock_editor PRIVATE src/app/ApplicationPiecePanel.cpp)
 target_sources(rock_editor PRIVATE src/geometry/MeshVolume.cpp)
 target_sources(rock_editor_tests PRIVATE src/geometry/MeshVolume.cpp tests/MeshVolumeTests.cpp)
 
-target_sources(rock_editor PRIVATE src/geometry/RockScatter.cpp src/io/RockAssetIo.cpp src/geometry/Terrain.cpp src/geometry/DetailTransfer.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp)
-target_sources(rock_editor_tests PRIVATE src/geometry/RockScatter.cpp tests/RockScatterTests.cpp src/io/RockAssetIo.cpp tests/RockAssetIoTests.cpp src/geometry/Terrain.cpp tests/TerrainTests.cpp src/geometry/DetailTransfer.cpp tests/DetailTransferTests.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp tests/DecimateTests.cpp tests/RemeshTests.cpp tests/RockAssetTests.cpp)
+target_sources(rock_editor PRIVATE src/geometry/RockScatter.cpp src/io/RockAssetIo.cpp src/geometry/Terrain.cpp src/geometry/TerrainErode.cpp src/geometry/DetailTransfer.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp)
+target_sources(rock_editor_tests PRIVATE src/geometry/RockScatter.cpp tests/RockScatterTests.cpp src/io/RockAssetIo.cpp tests/RockAssetIoTests.cpp src/geometry/Terrain.cpp tests/TerrainTests.cpp src/geometry/TerrainErode.cpp tests/TerrainErodeTests.cpp src/geometry/DetailTransfer.cpp tests/DetailTransferTests.cpp src/geometry/BakeOcclusion.cpp src/geometry/MaskCombine.cpp src/geometry/MaskFilter.cpp src/geometry/Decimate.cpp src/geometry/Remesh.cpp tests/DecimateTests.cpp tests/RemeshTests.cpp tests/RockAssetTests.cpp)
 
 target_sources(rock_editor_tests PRIVATE tests/ApplyMaterialTests.cpp)
 
