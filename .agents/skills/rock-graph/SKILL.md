@@ -77,6 +77,7 @@ build/bin/Release/rock_cli.exe eval <graph> --node <id>       # 途中のノー�
 ```bash
 python tools/rock_shot.py <graph> <out.png> --views 4 [--node <id>]   # 4 方向を 2×2 の 1 枚に
 python tools/rock_shot.py <graph> <out.png> [--yaw <度>] [--pitch <度>] [--ui]
+python tools/rock_shot.py <graph> <out.png> --lighting atmospheric --light-elevation 55 [--exposure <EV>]   # 写真と比べる昼の直射日光
 ```
 
 評価の完了を待ち、形全体が入るようにカメラを引いて撮る（1 方向 1〜数秒）。正面だけでは裏側の失敗を見落とすので、仕上げの確認は `--views 4` で撮る。撮った PNG を画像として開いて見て、依頼の岩に見えるかを判断する。`--ui` は評価エラーが画面に出る。数値が良くても見た目が依頼と違えば直す。

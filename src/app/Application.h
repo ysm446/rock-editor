@@ -97,6 +97,13 @@ struct StartupOptions {
                              std::numeric_limits<float>::quiet_NaN()};
     // 開発用。作業用ライトの方位（度）。NaN なら変えない。視点を回して撮るときに光も回し、裏側が影で潰れないようにする。
     float lightAzimuthDegrees = std::numeric_limits<float>::quiet_NaN();
+    // 撮影用: 光の仰角（度）・照度（lux）・露出補正（EV。正で暗く、負で明るく）。NaN なら変えない。
+    float lightElevationDegrees = std::numeric_limits<float>::quiet_NaN();
+    float lightIlluminance = std::numeric_limits<float>::quiet_NaN();
+    float exposureCompensation = std::numeric_limits<float>::quiet_NaN();
+    float skylightIntensity = std::numeric_limits<float>::quiet_NaN();  // シーンの空の環境光（IBL）の倍率
+    int lightingMode = -1;  // -1 変えない、0 作業用 IBL、1 シーンの空（大気）
+    bool exposureApplied = false;  // 露出補正は一度だけ適用する（手動 EV に足すため）
     // 開発用。FBX をモデルとして読み込み、FBX のマテリアルからマテリアルを作ってプレビューを開く。
     std::filesystem::path importModel;
     // 開発用。ルート内のアセットをアセットの帯のダブルクリックと同じ経路で開く。

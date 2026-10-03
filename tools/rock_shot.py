@@ -1,6 +1,7 @@
 """岩グラフをアプリで開いて、ビューポートを PNG に撮る（LLM が見た目を確かめるための道具）。
 
     python tools/rock_shot.py <graph.rockgraph> <out.png> [--node <id>] [--views 4] [--yaw <deg>] [--pitch <deg>] [--ui]
+                              [--light-azimuth <deg>] [--light-elevation <deg>] [--light-illuminance <lux>] [--exposure <EV>] [--skylight <x>] [--lighting ibl|atmospheric]
 
 - グラフの評価が終わるのを待ってから撮る。カメラは形全体が入るように引く（--frame-all）。
 - プロジェクトのルートはグラフのファイルから上へ project.reproj を探して決める。無ければグラフのフォルダ。
@@ -38,6 +39,12 @@ def main() -> int:
     parser.add_argument('--views', type=int, default=1, help='回して撮る方向の数（4 で 2×2 の 1 枚）')
     parser.add_argument('--yaw', type=float, help='水平の向き（度）')
     parser.add_argument('--pitch', type=float, help='見下ろす角度（度）')
+    parser.add_argument('--light-azimuth', type=float, help='光の方位（度）。省くとカメラの少し横')
+    parser.add_argument('--light-elevation', type=float, help='光の仰角（度）。昼の直射日光は 50〜65')
+    parser.add_argument('--light-illuminance', type=float, help='光の照度（lux）。晴天の直射日光は 100000')
+    parser.add_argument('--exposure', type=float, help='露出補正（EV）。正で暗く、負で明るく')
+    parser.add_argument('--skylight', type=float, help='環境光（空の IBL）の倍率。既定 1')
+    parser.add_argument('--lighting', choices=['ibl', 'atmospheric'], help='表示環境。atmospheric はシーンの空（大気散乱の太陽と空）')
     args = parser.parse_args()
 
     exe = REPO / 'build' / 'bin' / args.config / 'rock_editor.exe'
@@ -80,9 +87,23 @@ def shoot(exe: Path, graph: Path, out: Path, args, yaw, pitch) -> int:
         command += ['--preview-node', str(args.node)]
     if yaw is not None:
         # 光はカメラの少し横から当てる（既定の視点と光の角度の差に合わせる）。裏側を撮っても影で潰れない。
-        command += ['--camera-yaw', str(yaw), '--light-azimuth', str(yaw + 18.0)]
+        command += ['--camera-yaw', str(yaw)]
+        if args.light_azimuth is None:
+            command += ['--light-azimuth', str(yaw + 18.0)]
     if pitch is not None:
         command += ['--camera-pitch', str(pitch)]
+    if args.light_azimuth is not None:
+        command += ['--light-azimuth', str(args.light_azimuth)]
+    if args.light_elevation is not None:
+        command += ['--light-elevation', str(args.light_elevation)]
+    if args.light_illuminance is not None:
+        command += ['--light-illuminance', str(args.light_illuminance)]
+    if args.exposure is not None:
+        command += ['--exposure', str(args.exposure)]
+    if args.skylight is not None:
+        command += ['--skylight', str(args.skylight)]
+    if args.lighting:
+        command += ['--lighting', args.lighting]
     env = dict(os.environ)
     env['LOCALAPPDATA'] = str(Path(tempfile.gettempdir()) / 'rock_shot_settings')
     if out.exists():

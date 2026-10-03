@@ -79,8 +79,10 @@
   },
   "preview": {
     "camera": {"target": [0, 10, 0], "distance": 55, "fovY": 0.785398, "pitch": 0.25, "yaw": 2.6},
-    "exposure": {"compensation": 1.8},
-    "showSkybox": true
+    "exposure": {"useManualEv": true, "manualEv100": 14.0},
+    "showSkybox": true,
+    "lightingMode": "atmospheric",
+    "atmosphere": {"azimuth": 2.3, "elevation": 0.95, "illuminance": 120000}
   },
   "skies": [{"asset": {"path": "Skies/preview.rocksky", "uid": "{93FDAFDB-210A-40AB-B468-DD10B7328658}"}}],
   "activeSky": 0

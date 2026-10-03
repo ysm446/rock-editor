@@ -393,8 +393,28 @@ int Application::Run() {
                 state.target = {m_options.cameraTarget[0], m_options.cameraTarget[1], m_options.cameraTarget[2]};
             m_renderer.GetCamera().SetState(state);
         }
+        // 撮影用: 表示環境（作業用 IBL / シーンの空）。先に切り替えてから、その方式の光を変える。
+        if (m_options.lightingMode >= 0) m_renderer.AtmosphericMode() = m_options.lightingMode == 1;
+        // 撮影用: 光の方位・仰角・照度、露出補正、環境光の強さ（写真の直射日光の条件に合わせる）。
+        // 光は今の方式のもの（シーンの空なら太陽、作業用 IBL なら作業ライト）を変える。
         if (!std::isnan(m_options.lightAzimuthDegrees))
-            m_renderer.WorkLight().azimuth = m_options.lightAzimuthDegrees * 3.14159265358979f / 180.0f;
+            m_renderer.Light().azimuth = m_options.lightAzimuthDegrees * 3.14159265358979f / 180.0f;
+        if (!std::isnan(m_options.lightElevationDegrees))
+            m_renderer.Light().elevation = m_options.lightElevationDegrees * 3.14159265358979f / 180.0f;
+        if (!std::isnan(m_options.lightIlluminance)) m_renderer.Light().illuminance = m_options.lightIlluminance;
+        // 露出補正: 自動露出なら補正値に、そうでなければ物理カメラ（か手動 EV）の EV100 に足して手動 EV にする。
+        // 正で暗く、負で明るく。手動 EV に足すので一度だけ適用する。
+        if (!std::isnan(m_options.exposureCompensation) && !m_options.exposureApplied && m_frameCounter >= 2) {
+            renderer::ExposureSettings& exposure = m_renderer.Exposure();
+            if (exposure.automatic) {
+                exposure.compensation = m_options.exposureCompensation;
+            } else {
+                exposure.manualEv100 = exposure.Ev100() + m_options.exposureCompensation;
+                exposure.useManualEv = true;
+            }
+            m_options.exposureApplied = true;
+        }
+        if (!std::isnan(m_options.skylightIntensity)) m_renderer.SkylightIntensity() = m_options.skylightIntensity;
 
         // 開発用: 数フレーム描いてからプロジェクトを保存して終了する。
         // 対話せずに保存と読み込みを確かめるために使う。

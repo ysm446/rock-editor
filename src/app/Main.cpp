@@ -22,7 +22,7 @@ namespace {
 //   rock_editor.exe [--root <dir>] [--project <path>] [--save-project <path>]
 //                       [--hdri <path>] [--texture <path>]...
 //                       [--screenshot <path>] [--screenshot-ui <path>]
-//                       [--screenshot-frame <n>] [--frame-all] [--camera-yaw <deg>] [--camera-pitch <deg>] [--light-azimuth <deg>] [--import-model <fbx>] [--open-asset <path>] [--place-model <path>] [--gizmo-rotate] [--gizmo-scale]
+//                       [--screenshot-frame <n>] [--frame-all] [--camera-yaw <deg>] [--camera-pitch <deg>] [--light-azimuth <deg>] [--light-elevation <deg>] [--light-illuminance <lux>] [--exposure <EV>] [--skylight <x>] [--lighting ibl|atmospheric] [--import-model <fbx>] [--open-asset <path>] [--place-model <path>] [--gizmo-rotate] [--gizmo-scale]
 //                       [--model-node-rotation <node> <x> <y> <z>] [--model-node-gizmo <node>] [--focus-panel <name>]
 rock::StartupOptions ParseCommandLine() {
     rock::StartupOptions options;
@@ -137,6 +137,17 @@ rock::StartupOptions ParseCommandLine() {
             for (float& v : options.cameraTarget) v = static_cast<float>(::_wtof(argv[++i]));
         } else if (argument == L"--light-azimuth" && (i + 1) < argc) {
             options.lightAzimuthDegrees = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--light-elevation" && (i + 1) < argc) {
+            options.lightElevationDegrees = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--light-illuminance" && (i + 1) < argc) {
+            options.lightIlluminance = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--exposure" && (i + 1) < argc) {
+            options.exposureCompensation = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--skylight" && (i + 1) < argc) {
+            options.skylightIntensity = static_cast<float>(::_wtof(argv[++i]));
+        } else if (argument == L"--lighting" && (i + 1) < argc) {
+            const std::wstring mode = argv[++i];
+            options.lightingMode = mode == L"atmospheric" ? 1 : mode == L"ibl" ? 0 : -1;
         } else if (argument == L"--screenshot-frame" && (i + 1) < argc) {
             options.screenshotFrame = static_cast<uint32_t>(::_wtoi(argv[i + 1]));
             ++i;
