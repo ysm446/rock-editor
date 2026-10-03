@@ -108,19 +108,14 @@
       {
         "id": 13,
         "kind": "surface",
-        "note": "マテリアル無しの定数色（例を自己完結にするため）",
+        "note": "Megascans の素材 Materials/gouged-rock-cliff.rockmat（テクスチャは Git の対象外。data/textures/ から写す）",
         "layer": {
           "name": "Rock",
-          "baseColor": [
-            0.47,
-            0.38,
-            0.28
-          ],
-          "roughness": 0.85,
-          "height": {
-            "source": "noise",
-            "base": 0.5,
-            "gain": 0.3
+          "material": "Materials/gouged-rock-cliff.rockmat",
+          "mapping": {
+            "method": "triplanar",
+            "repeatMeters": 1.2,
+            "sharpness": 4
           }
         }
       }

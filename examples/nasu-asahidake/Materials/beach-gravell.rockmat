@@ -1,0 +1,69 @@
+{
+  "ambientOcclusion": 1.0,
+  "baseColorTint": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "blendMode": "opaque",
+  "brightness": 1.2,
+  "flipNormalGreen": true,
+  "format": "rock-editor.material-asset",
+  "hueShift": 0.0,
+  "mapUvSets": {
+    "ambientOcclusion": 1,
+    "baseColor": 1,
+    "height": 1,
+    "metallic": 1,
+    "normal": 1,
+    "opacity": 1,
+    "roughness": 1
+  },
+  "maps": {
+    "ambientOcclusion": {
+      "channel": "r",
+      "texture": {
+        "path": "textures/beach_gravel_udlladln_2k/Beach_Gravel_udlladln_2K_AO.jpg",
+        "uid": "{4B564020-D465-4F3B-B57D-D1D3173EA64E}"
+      }
+    },
+    "baseColor": {
+      "path": "textures/beach_gravel_udlladln_2k/Beach_Gravel_udlladln_2K_BaseColor.jpg",
+      "uid": "{D97AEBBB-322D-486B-9098-BFEA030124F2}"
+    },
+    "height": {
+      "channel": "r",
+      "texture": {
+        "path": "textures/beach_gravel_udlladln_2k/Beach_Gravel_udlladln_2K_Displacement.jpg",
+        "uid": "{707D4342-AA1B-4FA8-8B35-A92B61054466}"
+      }
+    },
+    "metallic": {
+      "channel": "r",
+      "texture": null
+    },
+    "normal": {
+      "path": "textures/beach_gravel_udlladln_2k/Beach_Gravel_udlladln_2K_Normal.jpg",
+      "uid": "{8285A19A-8C73-4989-B09A-D2571361B9CE}"
+    },
+    "opacity": {
+      "channel": "r",
+      "texture": null
+    },
+    "roughness": {
+      "channel": "r",
+      "texture": {
+        "path": "textures/beach_gravel_udlladln_2k/Beach_Gravel_udlladln_2K_Roughness.jpg",
+        "uid": "{A57043C3-5AE4-4A3E-9FDC-32AC6A5DB6E3}"
+      }
+    }
+  },
+  "maskThreshold": 0.5,
+  "metallic": 0.0,
+  "name": "beach-gravell",
+  "opacity": 1.0,
+  "roughness": 0.5,
+  "saturation": 1.0,
+  "uid": "{6EAC4FDD-BB05-4E16-9454-999830838C72}",
+  "version": 1
+}

@@ -1,0 +1,69 @@
+{
+  "ambientOcclusion": 1.0,
+  "baseColorTint": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "blendMode": "opaque",
+  "brightness": 1.25,
+  "flipNormalGreen": true,
+  "format": "rock-editor.material-asset",
+  "hueShift": 0.0,
+  "mapUvSets": {
+    "ambientOcclusion": 1,
+    "baseColor": 1,
+    "height": 1,
+    "metallic": 1,
+    "normal": 1,
+    "opacity": 1,
+    "roughness": 1
+  },
+  "maps": {
+    "ambientOcclusion": {
+      "channel": "r",
+      "texture": {
+        "path": "Textures/gouged_rock_cliff_vlcpcbc_2k/Gouged_Rock_Cliff_vlcpcbc_2K_AO.jpg",
+        "uid": "{51D690EF-7DF9-4B3C-BF9A-31AE60248C98}"
+      }
+    },
+    "baseColor": {
+      "path": "Textures/gouged_rock_cliff_vlcpcbc_2k/Gouged_Rock_Cliff_vlcpcbc_2K_BaseColor.jpg",
+      "uid": "{72ED07AF-AF5E-428F-A75D-C524799AB13F}"
+    },
+    "height": {
+      "channel": "r",
+      "texture": {
+        "path": "Textures/gouged_rock_cliff_vlcpcbc_2k/Gouged_Rock_Cliff_vlcpcbc_2K_Displacement.jpg",
+        "uid": "{D3BF7DDA-954E-4CC0-87BE-C2F847845FE2}"
+      }
+    },
+    "metallic": {
+      "channel": "r",
+      "texture": null
+    },
+    "normal": {
+      "path": "Textures/gouged_rock_cliff_vlcpcbc_2k/Gouged_Rock_Cliff_vlcpcbc_2K_Normal.jpg",
+      "uid": "{60DCD851-F888-4B29-AD97-F9DE1F0E7E7F}"
+    },
+    "opacity": {
+      "channel": "r",
+      "texture": null
+    },
+    "roughness": {
+      "channel": "r",
+      "texture": {
+        "path": "Textures/gouged_rock_cliff_vlcpcbc_2k/Gouged_Rock_Cliff_vlcpcbc_2K_Roughness.jpg",
+        "uid": "{5049B35B-767A-42DB-B20B-50C8BEFE5E2C}"
+      }
+    }
+  },
+  "maskThreshold": 0.5,
+  "metallic": 0.0,
+  "name": "gouged-rock-cliff",
+  "opacity": 1.0,
+  "roughness": 0.5,
+  "saturation": 1.0,
+  "uid": "{6FCC7FB2-AC7C-4B50-8425-11539287935B}",
+  "version": 1
+}

@@ -1,7 +1,7 @@
 # 那須朝日岳の岩場（nasu-asahidake）— 刃の列 + 土の斜面 + 破片の 1 ユニット
 
 作成日時: 2026-10-03 07:15
-更新日時: 2026-10-03 10:05
+更新日時: 2026-10-03 10:14
 
 目標の風景（`docs/references/nasu-asahidake/DSC00363`。Git の対象外）を 1 ユニット（40 m 四方）として組む山グラフ。
 このフォルダをルートとして開き、`nasu.mountaingraph` を読み込む。
@@ -19,6 +19,7 @@ Rock（talus ×1）・Rock（talus ×0.45）・Rock（chips ×0.3）→ 崖錐 R
                                                 └→ Mask Filter（レベル、白を 0.15 に）→ Mask Combine（min、反転した足元と）→ まばらな転石 Rock Scatter → Mesh Output
 ```
 
+0. 素材は Megascans（`Materials/rocky-soil.rockmat` ほか 4 つ）。テクスチャは再配布できないので Git の対象外（`examples/**/textures/`）。手元の `data/textures/` から次の 4 フォルダを `examples/nasu-asahidake/textures/` へ写す: `MI_Rocky_Soil_Ground_uhomdjolw_2K`、`beach_gravel_udlladln_2k`、`gouged_rock_cliff_vlcpcbc_2k`、`mine_rock_wall_ueijag3ew_2k`（約 140 MB）。無いと素材が読めず、定数色にならずに未解決の素材として表示される。
 1. 岩グラフ 3 つ（`blades`（レシピ `nasu-blades` + Rock Asset の鎖）、`talus`（`talus-fragment` + 同）、`chips`（`blocky` + 同。角張った破片））を焼く。焼いた結果はサンプルに含めていない。
 
    ```bash

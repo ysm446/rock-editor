@@ -27,3 +27,6 @@ examples/**/.rock-editor/
 __pycache__/
 # 焼いた岩アセット（岩グラフの付属フォルダ）はサンプルに含めない。サンプルを開いて焼く。
 examples/**/*.rockgraph.bake/
+
+# Megascans などの再配布できないテクスチャ（例のフォルダに写して使う。data/textures/ から）
+examples/**/textures/

@@ -1,0 +1,69 @@
+{
+  "ambientOcclusion": 1.0,
+  "baseColorTint": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "blendMode": "opaque",
+  "brightness": 1.350000023841858,
+  "flipNormalGreen": true,
+  "format": "rock-editor.material-asset",
+  "hueShift": 0.0,
+  "mapUvSets": {
+    "ambientOcclusion": 1,
+    "baseColor": 1,
+    "height": 1,
+    "metallic": 1,
+    "normal": 1,
+    "opacity": 1,
+    "roughness": 1
+  },
+  "maps": {
+    "ambientOcclusion": {
+      "channel": "r",
+      "texture": {
+        "path": "Textures/mine_rock_wall_ueijag3ew_2k/Mine_Rock_Wall_ueijag3ew_2K_AO.jpg",
+        "uid": "{D865B231-E548-45FE-9A6C-044CB03CB30C}"
+      }
+    },
+    "baseColor": {
+      "path": "Textures/mine_rock_wall_ueijag3ew_2k/Mine_Rock_Wall_ueijag3ew_2K_BaseColor.jpg",
+      "uid": "{7201BFBA-B9F9-4F22-AB60-FC4DF1126DC9}"
+    },
+    "height": {
+      "channel": "r",
+      "texture": {
+        "path": "Textures/mine_rock_wall_ueijag3ew_2k/Mine_Rock_Wall_ueijag3ew_2K_Displacement.jpg",
+        "uid": "{8A7A4BE2-668A-4664-9BD7-02E76984EA15}"
+      }
+    },
+    "metallic": {
+      "channel": "r",
+      "texture": null
+    },
+    "normal": {
+      "path": "Textures/mine_rock_wall_ueijag3ew_2k/Mine_Rock_Wall_ueijag3ew_2K_Normal.jpg",
+      "uid": "{54F0771E-1FA1-45C4-9144-BB0942C340DC}"
+    },
+    "opacity": {
+      "channel": "r",
+      "texture": null
+    },
+    "roughness": {
+      "channel": "r",
+      "texture": {
+        "path": "Textures/mine_rock_wall_ueijag3ew_2k/Mine_Rock_Wall_ueijag3ew_2K_Roughness.jpg",
+        "uid": "{428A726F-107C-486F-91CD-353FD978D8F5}"
+      }
+    }
+  },
+  "maskThreshold": 0.5,
+  "metallic": 0.0,
+  "name": "mine-rock-wall",
+  "opacity": 1.0,
+  "roughness": 0.5,
+  "saturation": 1.0,
+  "uid": "{1DBABA6E-6F50-48FD-A31A-702B5F515682}",
+  "version": 1
+}
