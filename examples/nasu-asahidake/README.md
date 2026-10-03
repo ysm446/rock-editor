@@ -1,7 +1,7 @@
 # 那須朝日岳の岩場（nasu-asahidake）— 刃の列 + 土の斜面 + 破片の 1 ユニット
 
 作成日時: 2026-10-03 07:15
-更新日時: 2026-10-03 10:41
+更新日時: 2026-10-03 11:05
 
 目標の風景（`docs/references/nasu-asahidake/DSC00363`。Git の対象外）を 1 ユニット（40 m 四方）として組む山グラフ。
 このフォルダをルートとして開き、`nasu.mountaingraph` を読み込む。
@@ -30,7 +30,7 @@ Rock（talus ×1）・Rock（talus ×0.45）・Rock（chips ×0.3）→ 崖錐 R
 2. `nasu.mountaingraph` を開く。尾根に刃の列が 2 つ（互いに食い込み、向き 20° ± 12° で走向をそろえる）、その根元 6 m に破片が密に（`Mask Filter` の「広げる」）、斜面全体にまばらな転石。
 3. 破片の密度は崖錐の Rock Scatter の間隔、広がりは「広げる」の半径、刃の沈み方は大の Rock Scatter の沈める量と浮きの補正で変える。
 4. `rock_cli eval examples/nasu-asahidake/nasu.mountaingraph --node 20`（Rock Scatter を指す）の `rockInstanceSets` に段ごとの数と置いた位置（8 個以下なら列挙）が出る。地面の Displace は GPU が要るので、Mesh Output を指すと評価できない。
-6. 地形は Terrain Erode（熱侵食で崖錐の斜面、流路の溝）で侵食し、岩の配置も地面もその出力から。地面側だけ Terrain Deform で刃の根元をえぐる（岩の配置は変形前の地形で決まる）。
+6. 地形は Terrain Erode（熱侵食で崖錐の斜面、流路の溝）で侵食し、岩の配置も地面もその出力から。地面側だけ Terrain Deform を 2 段（刃の根元を 0.4 m えぐる、崖錐の破片の根元を 0.15 m 盛る）。岩の配置は変形前の地形で決まる。
 7. 表示はシーンの空（大気散乱。太陽 54°・120000 lux）と手動 EV 14 にしてある。撮るときは `python tools/rock_shot.py examples/nasu-asahidake/nasu.mountaingraph out.png --lighting atmospheric --light-elevation 55 --yaw 330 --pitch 18`。
 8. 地面は Apply Material 3 段（土、Noise Mask でまだらの暗い土、刃の根元の岩屑）と Subdivide → Displace（0.3 m）で荒らしてある。岩屑はハイトが低いので根元が少しえぐれる。
 5. ハイトマップ `Heightmaps/slope.png`（16bit PNG、256²）は、奥（-Z）ほど高い斜面に中央の尾根の盛り上がりを足したもの。
