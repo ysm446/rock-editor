@@ -5,6 +5,7 @@
 // フレームレート上限の待ち時間。
 
 #include "TestSupport.h"
+#include <cctype>
 #include <cstring>
 
 void RunLayerMaterialTests();
@@ -55,61 +56,123 @@ void RunVolumeDiffMaskTests();
 void RunDepositionMaskTests();
 void RunMaskCombineTests();
 void RunMaskFilterTests();
-int main(int argc, char** argv) {
-    if (argc == 2 && std::strcmp(argv[1], "--node-params-only") == 0) {
-        RunNodeParamsTests();
-        return rock::tests::g_failures == 0 ? 0 : 1;
-    }
-    RunDisplaceTests();
-    if (argc == 2 && std::strcmp(argv[1], "--displace-only") == 0)
-        return rock::tests::g_failures == 0 ? 0 : 1;
-    RunLayerMaterialTests();
-    RunApplyMaterialTests();
-    RunShapeMaskTests();
-    RunCurvatureMaskTests();
-    RunNoiseMaskTests();
-    RunStructureMaskTests();
-    RunVolumeDiffMaskTests();
-    RunDepositionMaskTests();
-    RunMaskCombineTests();
-    RunMaskFilterTests();
-    RunPieceTests();
-    RunMeshVolumeTests();
-    RunRockTests();
-    RunBaseRockTests();
-    RunVolumeTests();
-    RunVolumeBooleanTests();
-    RunPlaneCutsTests();
-    RunVolumeCrackTests();
-    RunVolumeNoiseTests();
-    RunVolumeSmoothTests();
-    RunVolumeEdgeWearTests();
-    RunVolumeClipTests();
-    RunVolumeScatterTests();
-    RunVolumeUndercutTests();
-    RunVolumeErodeTests();
-    RunFlowMaskTests();
-    RunVolumeTerraceTests();
-    RunVolumeCloseTests();
-    RunDecimateTests();
-    RunRemeshTests();
-    RunRockAssetTests();
-    RunDetailTransferTests();
-    RunTerrainTests();
-    RunRockAssetIoTests();
-    RunRockScatterTests();
-    RunUvTests();
-    RunShadowCascadeTests();
-    RunMeshSceneTests();
-    RunUiInteractionTests();
-    RunUndoHistoryTests();
-    RunProjectWorkspaceTests();
-    RunFrameLimiterTests();
-    RunNodeGraphTests();
-    RunGraphIoTests();
-    RunRockTemplatesTests();
-    RunNodeParamsTests();
+#include <string>
+#include <vector>
 
+namespace {
+struct Group {
+    const char* name;
+    void (*run)();
+};
+// 実行の順は従来の全テストと同じ。名前はファイル名（<名前>Tests.cpp）から Tests を除いたもの。
+const Group kGroups[] = {
+    {"Displace", &RunDisplaceTests},
+    {"LayerMaterial", &RunLayerMaterialTests},
+    {"ApplyMaterial", &RunApplyMaterialTests},
+    {"ShapeMask", &RunShapeMaskTests},
+    {"CurvatureMask", &RunCurvatureMaskTests},
+    {"NoiseMask", &RunNoiseMaskTests},
+    {"StructureMask", &RunStructureMaskTests},
+    {"VolumeDiffMask", &RunVolumeDiffMaskTests},
+    {"DepositionMask", &RunDepositionMaskTests},
+    {"MaskCombine", &RunMaskCombineTests},
+    {"MaskFilter", &RunMaskFilterTests},
+    {"Piece", &RunPieceTests},
+    {"MeshVolume", &RunMeshVolumeTests},
+    {"Rock", &RunRockTests},
+    {"BaseRock", &RunBaseRockTests},
+    {"Volume", &RunVolumeTests},
+    {"VolumeBoolean", &RunVolumeBooleanTests},
+    {"PlaneCuts", &RunPlaneCutsTests},
+    {"VolumeCrack", &RunVolumeCrackTests},
+    {"VolumeNoise", &RunVolumeNoiseTests},
+    {"VolumeSmooth", &RunVolumeSmoothTests},
+    {"VolumeEdgeWear", &RunVolumeEdgeWearTests},
+    {"VolumeClip", &RunVolumeClipTests},
+    {"VolumeScatter", &RunVolumeScatterTests},
+    {"VolumeUndercut", &RunVolumeUndercutTests},
+    {"VolumeErode", &RunVolumeErodeTests},
+    {"FlowMask", &RunFlowMaskTests},
+    {"VolumeTerrace", &RunVolumeTerraceTests},
+    {"VolumeClose", &RunVolumeCloseTests},
+    {"Decimate", &RunDecimateTests},
+    {"Remesh", &RunRemeshTests},
+    {"RockAsset", &RunRockAssetTests},
+    {"DetailTransfer", &RunDetailTransferTests},
+    {"Terrain", &RunTerrainTests},
+    {"RockAssetIo", &RunRockAssetIoTests},
+    {"RockScatter", &RunRockScatterTests},
+    {"Uv", &RunUvTests},
+    {"ShadowCascade", &RunShadowCascadeTests},
+    {"MeshScene", &RunMeshSceneTests},
+    {"UiInteraction", &RunUiInteractionTests},
+    {"UndoHistory", &RunUndoHistoryTests},
+    {"ProjectWorkspace", &RunProjectWorkspaceTests},
+    {"FrameLimiter", &RunFrameLimiterTests},
+    {"NodeGraph", &RunNodeGraphTests},
+    {"GraphIo", &RunGraphIoTests},
+    {"RockTemplates", &RunRockTemplatesTests},
+    {"NodeParams", &RunNodeParamsTests},
+};
+
+std::string Lower(std::string text) {
+    for (char& c : text) c = char(std::tolower(static_cast<unsigned char>(c)));
+    return text;
+}
+
+void PrintUsage() {
+    std::printf("rock_editor_tests [--only <名前>[,<名前>...]] [--list]\n"
+                "  --only  名前（大文字小文字は区別しない。部分一致）に合う群だけを実行する。例: --only RockScatter,MaskFilter\n"
+                "  --list  群の名前を一覧する\n"
+                "  旧: --node-params-only / --displace-only も使える\n");
+}
+}  // namespace
+
+int main(int argc, char** argv) {
+    std::vector<std::string> only;
+    for (int i = 1; i < argc; ++i) {
+        const std::string argument = argv[i];
+        if (argument == "--list") {
+            for (const Group& group : kGroups) std::printf("%s\n", group.name);
+            return 0;
+        } else if (argument == "--help" || argument == "-h") {
+            PrintUsage();
+            return 0;
+        } else if (argument == "--node-params-only") {
+            only.push_back("nodeparams");
+        } else if (argument == "--displace-only") {
+            only.push_back("displace");
+        } else if (argument == "--only" && i + 1 < argc) {
+            std::string list = argv[++i];
+            size_t start = 0;
+            while (start <= list.size()) {
+                const size_t comma = list.find(',', start);
+                const std::string item = Lower(list.substr(start, comma == std::string::npos ? std::string::npos : comma - start));
+                if (!item.empty()) only.push_back(item);
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
+        } else {
+            std::printf("知らない引数: %s\n", argument.c_str());
+            PrintUsage();
+            return 2;
+        }
+    }
+    int ran = 0;
+    for (const Group& group : kGroups) {
+        bool selected = only.empty();
+        const std::string lower = Lower(group.name);
+        for (const std::string& item : only)
+            if (lower == item || lower.find(item) != std::string::npos) selected = true;
+        if (!selected) continue;
+        group.run();
+        ++ran;
+    }
+    if (ran == 0) {
+        std::printf("該当する群がありません（--list で名前を確認）\n");
+        return 2;
+    }
+    if (!only.empty()) std::printf("\n（%d 群を実行。コミット前は全テストを実行する）\n", ran);
     std::printf("\n%s\n", (rock::tests::g_failures == 0) ? "すべて成功" : "失敗あり");
     return (rock::tests::g_failures == 0) ? 0 : 1;
 }

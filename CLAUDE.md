@@ -33,6 +33,11 @@
 - `docs/design/` 配下は実装の設計ガイドを置く場所として使う。
 - `docs/plan/` 配下(goals / plan / progress)は進捗管理用の入口として保つ。
 
+## 検証
+
+- **ビルド・テスト・撮影などの重いコマンドは、必ず `python tools/run_low.py -- <コマンド>` を通して実行する**（低い優先度、24 コア中 8 コアだけ）。ユーザーが同じ PC で他の作業をしているので、全コアを占有しない。
+- C++ を変えたら、作業中は `python tools/run_low.py -- build/bin/Debug/rock_editor_tests.exe --only <群名>[,<群名>...]`（例: `--only RockScatter,MaskFilter`。`--list` で群名）で関係する群だけを確かめる。全テスト（10〜15 分）はコミット前に 1 回だけ実行する。何度も全テストを回さない。NodeParams 群は単体でも 10 分近くかかるので、項目表を触らない変更では外す。
+
 ## バージョン管理
 
 - アプリのバージョンは `CMakeLists.txt` の `project(rock_editor VERSION ...)` を基準にする(`vcpkg.json` の `version` も揃える)。

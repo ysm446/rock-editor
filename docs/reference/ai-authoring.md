@@ -139,7 +139,7 @@ rock_cli eval <graph.rockgraph> [--node <id>] [--pretty]
 ### 実装
 
 - `src/io/GraphIo.{h,cpp}`、`src/io/JsonUtil.h`、`src/cli/Main.cpp`。CMake のターゲットは `rock_cli`（GPU・ImGui にリンクしない）。
-- テストは `tests/GraphIoTests.cpp`（保存往復、捨てたノード・リンク・知らないキーの報告）と `tests/NodeParamsTests.cpp`（項目表と保存形式・評価の一致）。`rock_editor_tests --node-params-only` で後者だけを走らせる。
+- テストは `tests/GraphIoTests.cpp`（保存往復、捨てたノード・リンク・知らないキーの報告）と `tests/NodeParamsTests.cpp`（項目表と保存形式・評価の一致）。`rock_editor_tests --only NodeParams` で後者だけを走らせる（2026-10-03 に `--only <群名>[,<群名>...]` と `--list` を足した。旧 `--node-params-only` も使える）。
 
 ## L3 の設計（2026-10-01 実装）— 書きやすい表記
 

@@ -1147,7 +1147,7 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                 if (const json* v = FindMember(item, "volumeCrack"); v && v->is_object()) {
                     settings.width = ReadFloat(*v, "width", settings.width);
                     settings.depth = ReadFloat(*v, "depth", settings.depth);
-                    settings.depthGradient = std::clamp(ReadFloat(*v, "depthGradient", settings.depthGradient), -1.0f, 1.0f);
+                    settings.depthGradient = ReadFloat(*v, "depthGradient", settings.depthGradient);  // 範囲外は評価で診断する（Error）
                     settings.variation = ReadFloat(*v, "variation", settings.variation);
                     settings.noise = ReadFloat(*v, "noise", settings.noise);
                     settings.noiseScale = ReadFloat(*v, "noiseScale", settings.noiseScale);
