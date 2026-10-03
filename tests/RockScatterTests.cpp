@@ -4,6 +4,7 @@
 #include "geometry/RockScatter.h"
 #include "geometry/Terrain.h"
 #include "graph/RockEvaluator.h"
+#include "io/ModelAssetIo.h"
 #include "io/RockAssetIo.h"
 
 #include <algorithm>
@@ -388,4 +389,23 @@ void RunRockScatterTests() {
     }
     std::get<graph::RockNodeSettings>(g.FindMutableNode(rockA)->settings).scene.clear();
     Check(!graph::EvaluateRocks(g, output).error.empty(), "岩グラフを選んでいない Rock は診断する");
+
+    Section("Plant（植生のモデル資産）");
+    {
+        graph::NodeGraph p;
+        const auto plant = p.CreateNode(graph::NodeKind::Plant), terrain = p.CreateNode(graph::NodeKind::Heightmap),
+                   spread = p.CreateNode(graph::NodeKind::RockScatter), out = p.CreateNode(graph::NodeKind::MeshOutput);
+        Check(p.FindNode(plant)->outputs.size() == 1 && p.FindNode(plant)->outputs[0].valueType == graph::ValueType::Rock,
+              "Plant は Rock と同じ型（アセットの参照）を出す");
+        Check(p.CreateLink(p.FindNode(terrain)->outputs[0].id, p.FindNode(spread)->inputs[0].id) &&
+                  p.CreateLink(p.FindNode(plant)->outputs[0].id, p.FindNode(spread)->inputs[2].id) &&
+                  p.CreateLink(p.FindNode(spread)->outputs[0].id, p.FindNode(out)->inputs[0].id),
+              "Plant を Rock Scatter の Rock につなげる");
+        Check(!graph::EvaluateRocks(p, out).error.empty(), "モデル資産を選んでいない Plant は診断する");
+        std::get<graph::PlantNodeSettings>(p.FindMutableNode(plant)->settings).model = "C:/plants/missing.tgmodel";
+        Check(!graph::EvaluateRocks(p, out).error.empty(), "無いモデル資産は診断する");
+        geometry::Vec3 lo, hi;
+        Check(!io::ReadFbxBounds("C:/plants/missing.fbx", lo, hi), "無い FBX の範囲は読めない");
+        Check(io::IsModelAssetPath("a.tgmodel") && io::IsModelAssetPath("b.MODEL") && !io::IsModelAssetPath("c.rockgraph"), "モデル資産の拡張子");
+    }
 }

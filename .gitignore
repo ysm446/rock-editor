@@ -30,3 +30,5 @@ examples/**/*.rockgraph.bake/
 
 # Megascans などの再配布できないテクスチャ（例のフォルダに写して使う。data/textures/ から）
 examples/**/textures/
+# Blender で生成した植生のモデル資産（terrain-graph のスクリプトで作る。リポジトリには入れない）
+examples/**/Models/

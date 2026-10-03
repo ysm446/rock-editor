@@ -229,6 +229,9 @@ json WriteGraph(const graph::NodeGraph& graphData, const MaterialWriter& writeMa
             // 岩グラフはシーンからの相対パスで書く。
             item["rock"] = {{"scene", rockNode->scene.empty() ? std::string() : RelativePathString(FromUtf8(rockNode->scene), baseDir)},
                             {"scale", rockNode->scale}, {"weight", rockNode->weight}};
+        } else if (const auto* plant = std::get_if<graph::PlantNodeSettings>(&node.settings)) {
+            item["plant"] = {{"model", plant->model.empty() ? std::string() : RelativePathString(FromUtf8(plant->model), baseDir)},
+                             {"scale", plant->scale}, {"weight", plant->weight}};
         } else if (const auto* erode = std::get_if<geometry::TerrainErodeSettings>(&node.settings)) {
             item["terrainErode"] = {{"talusAngle", erode->talusAngle}, {"thermalIterations", erode->thermalIterations},
                                     {"thermalRate", erode->thermalRate}, {"rillDepth", erode->rillDepth},
@@ -753,6 +756,15 @@ bool ReadGraph(const json& node, graph::NodeGraph& graphData, const MaterialRead
                 if (const json* v = FindMember(item, "rock"); v && v->is_object()) {
                     const std::string scene = ReadString(*v, "scene");
                     if (!scene.empty()) settings.scene = ToUtf8Portable(ResolvePath(scene, baseDir));
+                    settings.scale = std::clamp(ReadFloat(*v, "scale", settings.scale), 0.001f, 1000.0f);
+                    settings.weight = std::clamp(ReadFloat(*v, "weight", settings.weight), 0.0f, 1000.0f);
+                }
+                created.settings = settings;
+            } else if (created.kind == graph::NodeKind::Plant) {
+                graph::PlantNodeSettings settings;
+                if (const json* v = FindMember(item, "plant"); v && v->is_object()) {
+                    const std::string model = ReadString(*v, "model");
+                    if (!model.empty()) settings.model = ToUtf8Portable(ResolvePath(model, baseDir));
                     settings.scale = std::clamp(ReadFloat(*v, "scale", settings.scale), 0.001f, 1000.0f);
                     settings.weight = std::clamp(ReadFloat(*v, "weight", settings.weight), 0.0f, 1000.0f);
                 }

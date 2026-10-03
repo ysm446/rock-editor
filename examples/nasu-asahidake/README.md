@@ -1,7 +1,7 @@
 # 那須朝日岳の岩場（nasu-asahidake）— 刃の列 + 土の斜面 + 破片の 1 ユニット
 
 作成日時: 2026-10-03 07:15
-更新日時: 2026-10-03 11:14
+更新日時: 2026-10-03 11:55
 
 目標の風景（`docs/references/nasu-asahidake/DSC00363`。Git の対象外）を 1 ユニット（40 m 四方）として組む山グラフ。
 このフォルダをルートとして開き、`nasu.mountaingraph` を読み込む。
@@ -32,7 +32,15 @@ Rock（talus ×1）・Rock（talus ×0.45）・Rock（chips ×0.3）→ 崖錐 R
 4. `rock_cli eval examples/nasu-asahidake/nasu.mountaingraph --node 20`（Rock Scatter を指す）の `rockInstanceSets` に段ごとの数と置いた位置（8 個以下なら列挙）が出る。地面の Displace は GPU が要るので、Mesh Output を指すと評価できない。
 6. 地形は Terrain Erode（熱侵食で崖錐の斜面、流路の溝）で侵食し、岩の配置も地面もその出力から。地面側だけ Terrain Deform を 2 段（刃の根元を 0.4 m えぐる、崖錐の破片の根元を 0.15 m 盛る）。岩の配置は変形前の地形で決まる。
 7. 表示はシーンの空（大気散乱。太陽 54°・120000 lux）と手動 EV 14 にしてある。撮るときは `python tools/rock_shot.py examples/nasu-asahidake/nasu.mountaingraph out.png --lighting atmospheric --light-elevation 55 --yaw 330 --pitch 18`。
-8. 地面は Apply Material 3 段（土、Noise Mask でまだらの暗い土、刃の根元の岩屑）と Subdivide → Displace（0.3 m）で荒らしてある。岩屑はハイトが低いので根元が少しえぐれる。
+8. 植生（ススキ・ハイマツ）は terrain-graph の植生アセット（`Models/Susuki/`、`Models/Haimatsu/`。Git の対象外）。Blender で作る:
+
+   ```bash
+   "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --python-exit-code 1 --python d:/GitHub/terrain-graph/tools/blender/make_susuki.py -- --out examples/nasu-asahidake/Models/Susuki --root examples/nasu-asahidake
+   "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup --python-exit-code 1 --python d:/GitHub/terrain-graph/tools/blender/make_haimatsu.py -- --out examples/nasu-asahidake/Models/Haimatsu --root examples/nasu-asahidake
+   ```
+
+   Plant ノードで `.tgmodel` を選び、Rock Scatter で撒く（ススキは刃の Coverage を 2.5 m 広げた帯 × Noise Mask、ハイマツは傾斜のマスクを薄くしてまばらに）。仕様は [植生](../../docs/reference/vegetation.md)。
+9. 地面は Apply Material 3 段（土、Noise Mask でまだらの暗い土、刃の根元の岩屑）と Subdivide → Displace（0.3 m）で荒らしてある。岩屑はハイトが低いので根元が少しえぐれる。
 5. ハイトマップ `Heightmaps/slope.png`（16bit PNG、256²）は、奥（-Z）ほど高い斜面に中央の尾根の盛り上がりを足したもの。
 
 今の形と課題は [研究ページ](../../docs/research/nasu-asahidake/README.md)。刃の列の作り方は [nasu-blades](../../docs/research/nasu-blades/README.md)。

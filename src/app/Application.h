@@ -464,6 +464,7 @@ private:
     } m_rockInstanceStats;
     void ReleaseRockAssets();
     LoadedRockAsset* RockAssetFor(const std::string& scene);
+    LoadedRockAsset* LoadPlantAsset(const std::string& scene, const std::filesystem::path& path, LoadedRockAsset& asset);
     void SyncRockInstances(const std::vector<graph::RockInstanceSet>& sets);
     void BuildRockInstanceBatches();
     void DrawRockInstances(ID3D12GraphicsCommandList* commandList, const renderer::SceneDrawContext& context);

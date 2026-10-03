@@ -10,6 +10,8 @@
 #include "core/ImageIo.h"
 #include "core/Log.h"
 #include "core/PathUtf8.h"
+#include "io/ModelAssetIo.h"
+#include "io/ProjectIo.h"
 #include "io/RockAssetIo.h"
 #include "renderer/RockMesh.h"
 
@@ -44,7 +46,9 @@ void Application::ReleaseRockAssets() {
 Application::LoadedRockAsset* Application::RockAssetFor(const std::string& scene) {
     const auto path = FromUtf8(scene);
     std::error_code fileError;
-    const auto time = std::filesystem::last_write_time(io::RockAssetFolder(path) / L"asset.json", fileError);
+    // 植生のモデル資産（.tgmodel / .model）は目録そのものの更新時刻で読み直す。
+    const bool modelAsset = io::IsModelAssetPath(path);
+    const auto time = std::filesystem::last_write_time(modelAsset ? path : io::RockAssetFolder(path) / L"asset.json", fileError);
     auto found = m_rockAssets.find(scene);
     if (found != m_rockAssets.end() && found->second.time == time && !fileError == found->second.exists) return &found->second;
     // 読み直す。前の GPU メッシュと材質は捨てる。
@@ -60,6 +64,7 @@ Application::LoadedRockAsset* Application::RockAssetFor(const std::string& scene
     LoadedRockAsset& asset = m_rockAssets[scene];
     asset.time = time;
     asset.exists = !fileError;
+    if (modelAsset) return LoadPlantAsset(scene, path, asset);
     io::RockAssetData data;
     std::string error;
     if (!io::LoadRockAsset(path, data, error)) {
@@ -138,6 +143,76 @@ Application::LoadedRockAsset* Application::RockAssetFor(const std::string& scene
     asset.radius = 0.5f * std::sqrt(extent.x * extent.x + extent.y * extent.y + extent.z * extent.z);
     asset.height = extent.y;
     asset.loaded = true;
+    return &asset;
+}
+
+// 植生のモデル資産（terrain-graph の .tgmodel）を、岩アセットと同じ LoadedRockAsset にする。
+// FBX（_LOD0〜 の段）を読み、スロットのマテリアル（.tgmat）は共有アセットとしてライブラリへ読む（葉のアルファ抜き・両面）。
+Application::LoadedRockAsset* Application::LoadPlantAsset(const std::string& scene, const std::filesystem::path& path,
+                                                           LoadedRockAsset& asset) {
+    io::ModelAssetInfo info;
+    std::string error;
+    if (!io::ReadModelAssetInfo(path, info, error)) {
+        asset.error = error;
+        return &asset;
+    }
+    asset.model = {};
+    asset.model.name = info.name;
+    if (!renderer::LoadModel(info.fbx, asset.model)) {
+        asset.error = asset.model.error.empty() ? "FBX を読めません: " + ToUtf8Display(info.fbx) : asset.model.error;
+        return &asset;
+    }
+    const auto* geometry = asset.model.geometry.get();
+    // マテリアル。ルートの中なら共有アセットとして読む（既に読んでいればそれを使う）。外や無ければ無地。
+    asset.model.materials.assign(std::max(geometry->slots.size(), info.materials.size()), compositor::kNoMaterialAsset);
+    for (size_t slot = 0; slot < info.materials.size() && slot < asset.model.materials.size(); ++slot) {
+        const auto& materialPath = info.materials[slot];
+        if (materialPath.empty()) continue;
+        compositor::MaterialAssetId id = compositor::kNoMaterialAsset;
+        const auto samePath = [](const std::filesystem::path& a, const std::filesystem::path& b) {
+            std::error_code error;
+            const auto ca = std::filesystem::weakly_canonical(a, error), cb = std::filesystem::weakly_canonical(b, error);
+            return !ca.empty() && _wcsicmp(ca.c_str(), cb.c_str()) == 0;
+        };
+        const auto findLoaded = [&]() {
+            for (const auto& entry : m_materialLibrary.Entries())
+                if (!entry.assetPath.empty() && samePath(entry.assetPath, materialPath)) return entry.id;
+            return compositor::kNoMaterialAsset;
+        };
+        id = findLoaded();
+        if (id == compositor::kNoMaterialAsset && m_workspace.Contains(materialPath) &&
+            io::LoadSharedAsset(m_workspace, materialPath, m_device, m_pipelineCache, m_textureLibrary, m_materialLibrary,
+                                m_skyLibrary, false, nullptr))
+            id = findLoaded();
+        if (id == compositor::kNoMaterialAsset) asset.error = "マテリアルを読めません（無地で描きます）: " + ToUtf8Display(materialPath);
+        asset.model.materials[slot] = id;
+    }
+    // 段の切り替え。.tgmodel の lodScreenSizes（[i] が LOD i+1 に替わる大きさ）。無ければ Rock Asset と同じ既定。
+    asset.screenSizes.clear();
+    asset.triangles.clear();
+    for (size_t lod = 0; lod < geometry->lods.size(); ++lod) {
+        float size = 1.0f;
+        if (lod > 0) {
+            static constexpr float kDefaults[] = {1.0f, 0.5f, 0.25f, 0.12f, 0.06f, 0.03f};
+            size = lod - 1 < info.lodScreenSizes.size() ? info.lodScreenSizes[lod - 1]
+                                                         : kDefaults[std::min<size_t>(lod, std::size(kDefaults) - 1)];
+        }
+        asset.screenSizes.push_back(size);
+        asset.triangles.push_back(geometry->lods[lod].triangles);
+    }
+    asset.gpu = std::make_unique<renderer::ModelPreview>(16);
+    if (!asset.gpu->PrepareAllLods(m_device, asset.model)) {
+        asset.error = "モデルを GPU へ転送できません";
+        asset.gpu.reset();
+        return &asset;
+    }
+    const XMFLOAT3 extent{geometry->maximum.x - geometry->minimum.x, geometry->maximum.y - geometry->minimum.y,
+                          geometry->maximum.z - geometry->minimum.z};
+    asset.radius = 0.5f * std::sqrt(extent.x * extent.x + extent.y * extent.y + extent.z * extent.z);
+    asset.height = extent.y;
+    asset.textured = true;
+    asset.loaded = true;
+    (void)scene;
     return &asset;
 }
 

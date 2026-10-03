@@ -55,7 +55,27 @@
       {"id": 52, "kind": "rockScatter", "note": "まばらな転石: 斜面全体に少し",
        "rockScatter": {"seed": 8, "spacing": 1.5, "maxCount": 600, "scaleMin": 0.3, "scaleMax": 1.2, "alignToNormal": 0.6, "embed": 0.35,
                        "sizeSpacing": 1.0, "settle": 1, "settleMax": 0.6, "embedVariation": 0.7}},
-      {"id": 53, "kind": "meshOutput", "note": "まばらな転石"}
+      {"id": 53, "kind": "meshOutput", "note": "まばらな転石"},
+      {"id": 70, "kind": "plant", "note": "ススキの株（terrain-graph の植生アセット。Models/Susuki）", "plant": {"model": "Models/Susuki/Susuki_Var1.tgmodel", "scale": 1.0, "weight": 1.0}},
+      {"id": 71, "kind": "plant", "plant": {"model": "Models/Susuki/Susuki_Var2.tgmodel", "scale": 1.0, "weight": 1.0}},
+      {"id": 72, "kind": "plant", "plant": {"model": "Models/Susuki/Susuki_Var3.tgmodel", "scale": 1.0, "weight": 1.0}},
+      {"id": 73, "kind": "maskFilter", "note": "刃の足元を 2.5 m 広げる（割れ目と根元の草の範囲）", "maskFilter": {"type": "expand", "radius": 2.5}},
+      {"id": 74, "kind": "maskCombine", "note": "根元の周り かつ 岩の無い所", "maskCombine": {"operation": "minimum"}},
+      {"id": 75, "kind": "noiseMask", "note": "草のまだら（2 m）", "noiseMask": {"size": 2, "contrast": 0.6, "detail": 0.4, "resolution": 512, "seed": 5}},
+      {"id": 76, "kind": "maskCombine", "note": "根元の周り × まだら", "maskCombine": {"operation": "multiply"}},
+      {"id": 77, "kind": "rockScatter", "note": "草: 刃の割れ目と根元に株を寄せる",
+       "rockScatter": {"seed": 9, "spacing": 1.2, "maxCount": 400, "scaleMin": 0.7, "scaleMax": 1.2, "alignToNormal": 0.3, "embed": 0.05,
+                       "sizeSpacing": 0.6, "settle": 1, "settleMax": 0.3}},
+      {"id": 78, "kind": "meshOutput", "note": "草"},
+      {"id": 80, "kind": "plant", "note": "ハイマツ（Models/Haimatsu）", "plant": {"model": "Models/Haimatsu/Haimatsu_Var1.tgmodel", "scale": 1.0, "weight": 1.0}},
+      {"id": 81, "kind": "plant", "plant": {"model": "Models/Haimatsu/Haimatsu_Var2.tgmodel", "scale": 1.0, "weight": 1.0}},
+      {"id": 82, "kind": "maskFilter", "note": "斜面のまばらなハイマツ（傾斜のマスクを薄く）", "maskFilter": {"type": "levels", "outputHigh": 0.12}},
+      {"id": 83, "kind": "maskCombine", "note": "岩の無い所 × まばら", "maskCombine": {"operation": "minimum"}},
+      {"id": 84, "kind": "rockScatter", "note": "ハイマツ: 斜面にまばらに",
+       "rockScatter": {"seed": 11, "spacing": 4, "maxCount": 60, "scaleMin": 0.8, "scaleMax": 1.2, "alignToNormal": 0.4, "embed": 0.05,
+                       "sizeSpacing": 0.7, "settle": 1, "settleMax": 0.3}},
+      {"id": 85, "kind": "meshOutput", "note": "ハイマツ"}
+
     ],
     "links": [
       {"from": "1", "to": "16"}, {"from": "16", "to": "17:Terrain"}, {"from": "12", "to": "17:Mask"},
@@ -79,6 +99,15 @@
       {"from": "16", "to": "52:Terrain"}, {"from": "51", "to": "52:Mask"},
       {"from": "40", "to": "52:Rock 1"}, {"from": "41", "to": "52:Rock 2"}, {"from": "44", "to": "52:Rock 3"},
       {"from": "52:Instances", "to": "53:Geometry"}
+      ,{"from": "20:Coverage", "to": "73"}, {"from": "73", "to": "74:A"}, {"from": "30", "to": "74:B"},
+      {"from": "16", "to": "75"}, {"from": "74", "to": "76:A"}, {"from": "75", "to": "76:B"},
+      {"from": "16", "to": "77:Terrain"}, {"from": "76", "to": "77:Mask"},
+      {"from": "70", "to": "77:Rock 1"}, {"from": "71", "to": "77:Rock 2"}, {"from": "72", "to": "77:Rock 3"},
+      {"from": "77:Instances", "to": "78:Geometry"},
+      {"from": "5", "to": "82"}, {"from": "30", "to": "83:A"}, {"from": "82", "to": "83:B"},
+      {"from": "16", "to": "84:Terrain"}, {"from": "83", "to": "84:Mask"},
+      {"from": "80", "to": "84:Rock 1"}, {"from": "81", "to": "84:Rock 2"},
+      {"from": "84:Instances", "to": "85:Geometry"}
     ]
   },
   "preview": {

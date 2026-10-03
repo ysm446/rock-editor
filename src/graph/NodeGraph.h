@@ -129,6 +129,8 @@ enum class NodeKind : uint32_t {
     TerrainErode = 82,
     // 山グラフの地形の変形。UV のマスク（Rock Scatter の Coverage など）で盛る・えぐる。
     TerrainDeform = 83,
+    // 山グラフの植生。モデル資産（terrain-graph と共有する .tgmodel。LOD 付きの FBX）を 1 つ選び、Rock Scatter で撒く。
+    Plant = 84,
     // 山グラフ。岩グラフ（.rockgraph）を 1 つ選び、焼いた岩アセットを読む。出力は Rock。
     Rock = 74,
     // 山グラフ。地形（Mesh）とマスクを受け、つないだ Rock を間隔を空けて撒く。出力は Instances。
@@ -256,6 +258,14 @@ struct RockNodeSettings {
     bool operator==(const RockNodeSettings&) const = default;
 };
 
+// 山グラフの植生。model はモデル資産（.tgmodel / .model）のパス（UTF-8。メモリ上は絶対パス、保存はシーンからの相対）。
+struct PlantNodeSettings {
+    std::string model;
+    float scale = 1.0f;
+    float weight = 1.0f;
+    bool operator==(const PlantNodeSettings&) const = default;
+};
+
 // モデル。model は Application のモデル一覧の ID（0 = なし）。position はモデルの底面の中心の位置（m）、
 // 倍率はモデルアセットの倍率に掛ける。
 // 回転は X・Y・Z 軸まわりの角度（度）で、Z → X → Y の順に回す（DirectX の RollPitchYaw と同じ）。
@@ -301,7 +311,7 @@ using NodeSettings = std::variant<LayerNodeSettings, MergeNodeSettings, ModelNod
                                   geometry::ShapeMaskSettings, geometry::NoiseMaskSettings, geometry::StructureMaskSettings, geometry::VolumeDiffMaskSettings, geometry::FlowMaskSettings, geometry::DepositionMaskSettings, geometry::MaskCombineSettings, geometry::MaskFilterSettings, ApplyMaterialSettings,
                                   geometry::ScatterSettings, geometry::VoronoiSettings,
                                   geometry::PieceSelectSettings, geometry::PieceFilterSettings,
-                                  geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, RockNodeSettings,
+                                  geometry::PieceTransformSettings, RockAssetSettings, geometry::HeightmapSettings, RockNodeSettings, PlantNodeSettings,
                                   geometry::RockScatterSettings, geometry::TerrainErodeSettings, geometry::TerrainDeformSettings,
                                   std::monostate>;
 

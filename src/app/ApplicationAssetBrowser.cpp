@@ -388,7 +388,7 @@ void Application::RefreshAssetBrowser() {
         if (entry.is_symlink(error) || entry.path().filename().wstring().starts_with(L".")) continue;
         const auto ext = Extension(entry.path());
         if (!entry.is_directory(error) && !IsImage(ext) && ext != ".hdr" && ext != ".rockmat" && ext != ".tglayer" && ext != ".rocksky" &&
-            ext != ".model" && ext != ".fbx" && ext != ".rockgraph" && ext != ".mountaingraph") continue;
+            ext != ".model" && ext != ".tgmodel" && ext != ".tgmat" && ext != ".fbx" && ext != ".rockgraph" && ext != ".mountaingraph") continue;
         m_assetEntries.push_back(entry);
     }
     std::sort(m_assetEntries.begin(), m_assetEntries.end(), [](const auto& a, const auto& b) {
@@ -559,7 +559,7 @@ void Application::ProcessAssetWork() {
         const auto path = m_pendingAssetOpen;
         m_pendingAssetOpen.clear();
         const auto ext = Extension(path);
-        if (ext == ".model") {
+        if (ext == ".model" || ext == ".tgmodel") {
             // シーンのモデルへ足し（読み込み済みならそれを使い）、参照するマテリアルもライブラリへ読む。
             const size_t before = m_models.size();
             if (io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache, m_textureLibrary, m_materialLibrary,
@@ -574,17 +574,18 @@ void Application::ProcessAssetWork() {
             }
         } else if (ext == ".fbx") {
             m_pendingModelImports.push_back(path);
-        } else if (ext == ".rockmat" || ext == ".tglayer" || ext == ".rocksky") {
+        } else if (ext == ".rockmat" || ext == ".tgmat" || ext == ".tglayer" || ext == ".rocksky") {
             nlohmann::json header;
             if (ext == ".rockmat" && io::ProjectWorkspace::ReadJson(path, header) &&
-                io::ProjectWorkspace::String(header, "format") != "rock-editor.material-asset") {
+                io::ProjectWorkspace::String(header, "format") != "rock-editor.material-asset" &&
+                io::ProjectWorkspace::String(header, "format") != "terrain-graph.material-asset") {
                 // 持ち出し用の旧 .rockmat は従来の読み込み（ライブラリへ 1 つ足す）。
                 m_pendingMaterialImport = path;
                 return;
             }
             if (io::LoadSharedAsset(m_workspace, path, m_device, m_pipelineCache,
                                     m_textureLibrary, m_materialLibrary, m_skyLibrary)) {
-                if (ext == ".rockmat" || ext == ".tglayer") {
+                if (ext == ".rockmat" || ext == ".tgmat" || ext == ".tglayer") {
                     const auto& entries = m_materialLibrary.Entries();
                     for (size_t i = 0; i < entries.size(); ++i)
                         if (SameFile(entries[i].assetPath, path)) m_selectedMaterial = static_cast<int>(i);

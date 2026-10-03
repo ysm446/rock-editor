@@ -1408,6 +1408,7 @@ void Application::DrawGraphEditor() {
             ImGui::Separator();
             ImGui::TextDisabled("岩の配置");
             addNodeMenuItem(graph::NodeKind::Rock, "Rock — 岩グラフ（焼いた岩アセット）を 1 つ選ぶ");
+            addNodeMenuItem(graph::NodeKind::Plant, "Plant — 植生のモデル資産（.tgmodel、terrain-graph と共有）を 1 つ選ぶ");
             addNodeMenuItem(graph::NodeKind::RockScatter, "Rock Scatter — 地形に岩を間隔を空けて撒く（マスクで場所を決める）");
             ImGui::Separator();
         } else {
@@ -2571,6 +2572,53 @@ void Application::DrawGraphPanel() {
             edited.iterations = std::clamp(edited.iterations, 1, geometry::kMaxRemeshIterations);
             edited.featureAngle = std::clamp(edited.featureAngle, 0.0f, 180.0f);
             *remesh = edited;
+            m_graph.MarkDirty();
+            MarkDocumentChanged();
+        }
+    } else if (auto* plantNode = std::get_if<graph::PlantNodeSettings>(&selected->settings)) {
+        auto edited = *plantNode;
+        bool changed = false;
+        if (ImGui::Button("モデル資産を選ぶ…")) {
+            const std::filesystem::path path = ShowOpenFileDialog(L"植生のモデル資産を選ぶ", {{L"モデル資産", L"*.tgmodel;*.model"}});
+            if (!path.empty()) {
+                edited.model = ToUtf8Portable(path);
+                changed = true;
+            }
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(edited.model.empty());
+        if (ImGui::Button("読み直す")) {
+            m_rockAssets.erase(edited.model);
+            m_graph.MarkDirty();
+        }
+        ImGui::EndDisabled();
+        drawStatusLine(edited.model.empty() ? "モデル資産: 未選択" : "モデル資産: " + ToUtf8Display(FromUtf8(edited.model)));
+        {
+            std::string state = "モデル: 未読込";
+            if (const auto found = m_rockAssets.find(edited.model); !edited.model.empty() && found != m_rockAssets.end()) {
+                const auto& asset = found->second;
+                if (!asset.loaded) {
+                    state = "モデル: " + (asset.error.empty() ? std::string("読めません") : asset.error);
+                } else {
+                    state = "モデル: " + std::to_string(asset.triangles.size()) + " 段・LOD0 " +
+                            std::to_string(asset.triangles.empty() ? 0 : asset.triangles[0]) + " 三角形";
+                    if (!asset.error.empty()) state += "（" + asset.error + "）";
+                }
+            }
+            drawStatusLine(state);
+        }
+        if (ui::BeginPropertyTable("plantRows")) {
+            changed |= ui::PropertyFloat("倍率", &edited.scale, 0.01f, 10.0f, 1.0f, "モデルに掛ける倍率です。実寸で作ったモデルなら 1 前後。", "%.2f");
+            changed |= ui::PropertyFloat("重み", &edited.weight, 0.0f, 10.0f, 1.0f,
+                                         "Rock Scatter に複数の Rock / Plant をつないだとき、これを選ぶ割合です。", "%.2f");
+            ui::EndPropertyTable();
+        }
+        ui::HintText("山グラフで撒く植生です。terrain-graph の植生アセット（.tgmodel。FBX の _LOD0〜 の段、幹 → 葉 → 芯のマテリアル、葉はアルファ抜き）を"
+                     "そのまま読みます。Rock Scatter の Rock につなぎます。アセットは Blender のスクリプトで作ります（docs/reference/vegetation.md）。");
+        if (changed) {
+            edited.scale = std::clamp(edited.scale, 0.001f, 1000.0f);
+            edited.weight = std::clamp(edited.weight, 0.0f, 1000.0f);
+            *plantNode = edited;
             m_graph.MarkDirty();
             MarkDocumentChanged();
         }

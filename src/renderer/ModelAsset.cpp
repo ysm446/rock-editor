@@ -8,6 +8,8 @@
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <cctype>
+#include <string_view>
 #include <unordered_map>
 
 namespace rock::renderer {
@@ -205,16 +207,39 @@ bool LoadModel(const fs::path& path, ModelAsset& asset) {
 
     // FBX のマテリアル（typed_id）→ スロット番号。同じ名前でも別のマテリアルは別のスロットにする。
     std::unordered_map<uint32_t, uint32_t> slotIds;
+    // 名前の末尾が _LOD<n>（大文字小文字は問わない）なら n。Blender の FBX 書き出しは LODGroup を作れないので、
+    // terrain-graph の植生アセットと同じ命名規約でも段を受け付ける。
+    const auto lodFromName = [](const ufbx_string& name) -> int {
+        const std::string_view text(name.data, name.length);
+        const size_t mark = text.rfind('_');
+        if (mark == std::string_view::npos || text.size() - mark < 5) return -1;
+        const auto tag = text.substr(mark + 1, 3);
+        if (!(std::tolower(static_cast<unsigned char>(tag[0])) == 'l' && std::tolower(static_cast<unsigned char>(tag[1])) == 'o' &&
+              std::tolower(static_cast<unsigned char>(tag[2])) == 'd'))
+            return -1;
+        int lod = 0;
+        for (const char c : text.substr(mark + 4)) {
+            if (c < '0' || c > '9' || lod > 64) return -1;
+            lod = lod * 10 + (c - '0');
+        }
+        return lod;
+    };
     for (ufbx_node* node : scene->nodes) {
         if (!node->mesh) continue;
         size_t lod = 0;
+        bool grouped = false;
         for (ufbx_node* child = node; child->parent; child = child->parent) {
             if (child->parent->attrib_type == UFBX_ELEMENT_LOD_GROUP) {
                 auto children = child->parent->children;
                 for (size_t i = 0; i < children.count; ++i)
                     if (children.data[i] == child) lod = i;
+                grouped = true;
                 break;
             }
+        }
+        if (!grouped) {
+            const int named = lodFromName(node->name);
+            if (named >= 0) lod = static_cast<size_t>(named);
         }
         geometry->lods.resize(std::max(geometry->lods.size(), lod + 1));
         auto& level = geometry->lods[lod];
@@ -317,6 +342,8 @@ bool LoadModel(const fs::path& path, ModelAsset& asset) {
             level.triangles += count;
         }
     }
+    // 番号が飛んでいても段を詰める（_LOD0 と _LOD2 だけなら 2 段）。
+    std::erase_if(geometry->lods, [](const ModelLod& level) { return level.triangles == 0; });
     for (ModelLod& level : geometry->lods) {
         for (ModelPart& part : level.parts) {
             if (part.mesh.vertices.empty()) continue;

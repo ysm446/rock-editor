@@ -459,6 +459,9 @@ constexpr ParamDefinition kParams[] = {
     {K::Heightmap, "heightmap.peak", T::Float, 0, 1, "比", "山の形", "", C::Clamp},
     {K::Heightmap, "heightmap.seed", T::Int, 0, N, "", "Seed", "", C::None},
     {K::Rock, "rock.scene", T::String, N, N, "", "岩グラフ", ".rockgraph のパス（シーンからの相対）。焼いた岩アセットを読む", C::None},
+    {K::Plant, "plant.model", T::String, N, N, "", "モデル資産", ".tgmodel（terrain-graph と共有の植生）か .model のパス（シーンからの相対）。LOD 付きの FBX とマテリアルを読む", C::None},
+    {K::Plant, "plant.scale", T::Float, 0.001, 1000, "倍", "倍率", "", C::Clamp},
+    {K::Plant, "plant.weight", T::Float, 0, 1000, "", "重み", "Rock Scatter で選ばれる相対的な重み", C::Clamp},
     {K::Rock, "rock.scale", T::Float, 0.001, 1000, "倍", "倍率", "", C::Clamp},
     {K::Rock, "rock.weight", T::Float, 0, 1000, "", "重み", "Rock Scatter で選ばれる相対的な重み", C::Clamp},
     {K::TerrainErode, "terrainErode.talusAngle", T::Float, 10, 80, "度", "安息角", "これより急な斜面の土が低い隣へ崩れる（崖錐は 30〜38）", C::Error},
@@ -558,6 +561,7 @@ constexpr NodeSummary kSummaries[] = {
     {K::TerrainDeform, "山グラフの地形の変形。UV のマスク（Rock Scatter の Coverage を広げたものなど）の白い所を盛る・えぐる（岩の根元の土）",
      "山グラフ専用。岩の配置は変形前の地形で決め、変形は地面の Mesh Output 側にだけつなぐ（置き直しの循環を避ける）"},
     {K::Rock, "山グラフ。岩グラフ（焼いた岩アセット）を 1 つ読む", "山グラフ専用。先に岩グラフで岩アセットを焼く"},
+    {K::Plant, "山グラフの植生。モデル資産（terrain-graph の .tgmodel: 幹 → 葉 → 芯のスロット、_LOD0〜 の段、葉はアルファ抜き）を 1 つ選び、Rock Scatter の Rock 入力につないで撒く", "山グラフ専用。アセットの作り方は docs/reference/vegetation.md"},
     {K::RockScatter, "山グラフ。地形に Rock を間隔を空けて撒く。Coverage 出力は置いた岩の足元の被覆マスク（次の段の Mask に反転してつなぐ）", "山グラフ専用"},
 };
 

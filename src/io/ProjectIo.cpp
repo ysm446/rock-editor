@@ -1054,8 +1054,9 @@ bool LoadSharedAsset(ProjectWorkspace& workspace, const std::filesystem::path& p
         return false;
     }
     const json reference = {{"uid", assetUid}, {"path", RelativePathString(path, workspace.Root())}};
-    const bool isMaterial = _wcsicmp(path.extension().c_str(), L".rockmat") == 0 || _wcsicmp(path.extension().c_str(), L".tglayer") == 0;
-    const bool isModel = _wcsicmp(path.extension().c_str(), L".model") == 0;
+    const bool isMaterial = _wcsicmp(path.extension().c_str(), L".rockmat") == 0 || _wcsicmp(path.extension().c_str(), L".tglayer") == 0 ||
+                            _wcsicmp(path.extension().c_str(), L".tgmat") == 0;
+    const bool isModel = _wcsicmp(path.extension().c_str(), L".model") == 0 || _wcsicmp(path.extension().c_str(), L".tgmodel") == 0;
     if (isModel && models == nullptr) {
         return false;
     }

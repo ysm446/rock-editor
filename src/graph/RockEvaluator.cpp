@@ -3,6 +3,7 @@
 #include "core/ImageIo.h"
 #include "core/PathUtf8.h"
 #include "geometry/TerrainErode.h"
+#include "io/ModelAssetIo.h"
 #include "io/RockAssetIo.h"
 
 #include <algorithm>
@@ -937,6 +938,27 @@ RockEvaluation EvaluateRocks(const NodeGraph& graph, GraphId preview, RockEvalua
             RockInstanceSet single;
             single.source = id;
             single.scene = settings->scene;
+            single.scale = settings->scale;
+            single.instances.push_back({});
+            result.rockInstances.push_back(std::move(single));
+        } else if (node->kind == NodeKind::Plant) {
+            const auto* settings = std::get_if<PlantNodeSettings>(&node->settings);
+            if (!settings) return finish(Failure(id, "Plant", "設定がありません"));
+            if (settings->model.empty()) return finish(Failure(id, "Plant", "モデル資産（.tgmodel）を選んでください"));
+            RockReference reference{id, settings->model, settings->scale, settings->weight};
+            reference.model = true;
+            // 範囲は FBX から読む（大きさの間隔・浮きの補正・被覆に使う）。
+            io::ModelAssetInfo info;
+            std::string error;
+            if (io::ReadModelAssetInfo(FromUtf8(settings->model), info, error))
+                reference.hasBounds = io::ReadFbxBounds(info.fbx, reference.minimum, reference.maximum) &&
+                                      reference.maximum.x > reference.minimum.x && reference.maximum.y > reference.minimum.y;
+            else
+                return finish(Failure(id, "Plant", error));
+            result.rockReferences.push_back(std::move(reference));
+            RockInstanceSet single;
+            single.source = id;
+            single.scene = settings->model;
             single.scale = settings->scale;
             single.instances.push_back({});
             result.rockInstances.push_back(std::move(single));

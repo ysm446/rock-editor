@@ -56,6 +56,8 @@ struct RockReference {
     // 焼いた岩アセット（LOD0）の範囲（倍率 1、m）。目録から読む。未焼成なら hasBounds が false。
     bool hasBounds = false;
     geometry::Vec3 minimum{}, maximum{};
+    // 植生（Plant）。scene はモデル資産（.tgmodel / .model）のパスで、描画側は岩アセットではなくモデルとして読む。
+    bool model = false;
 };
 // 撒いた岩。岩グラフごとにまとめる。描画する側が岩アセットを読み、段を選んで描く。
 struct RockInstanceSet {

@@ -111,7 +111,7 @@ constexpr std::array<PinDefinition, 3> kVolumeDiffMaskPins = {{{PinKind::Input, 
 // Flow Mask。UV付きの Mesh と、筋を追う格子（任意。Volume to Mesh の前の Volume）を受ける。
 constexpr std::array<PinDefinition, 3> kFlowMaskPins = {{{PinKind::Input, ValueType::Mesh, "Mesh"},
     {PinKind::Input, ValueType::Volume, "Volume"}, {PinKind::Output, ValueType::Mask, "Mask"}}};
-constexpr std::array<NodeDefinition, 52> kNodeDefinitions = {{
+constexpr std::array<NodeDefinition, 53> kNodeDefinitions = {{
     {NodeKind::TerrainErode, "terrainErode", "Terrain Erode", kTerrainErodePins},
     {NodeKind::TerrainDeform, "terrainDeform", "Terrain Deform", kTerrainDeformPins},
     {NodeKind::LayeredBoxes, "layeredBoxes", "Layered Boxes", kLayeredBoxesPins},
@@ -141,6 +141,7 @@ constexpr std::array<NodeDefinition, 52> kNodeDefinitions = {{
     {NodeKind::RockAsset, "rockAsset", "Rock Asset", kMeshFilterPins},
     {NodeKind::Heightmap, "heightmap", "Heightmap", kHeightmapPins},
     {NodeKind::Rock, "rock", "Rock", kRockPins},
+    {NodeKind::Plant, "plant", "Plant", kRockPins},
     {NodeKind::RockScatter, "rockScatter", "Rock Scatter", kRockScatterPins},
     {NodeKind::RandomBoxes, "randomBoxes", "Random Boxes", kRandomBoxesPins},
     {NodeKind::ToVolume, "toVolume", "To Volume", kToVolumePins},
@@ -205,7 +206,7 @@ bool IsMeshNodeKind(NodeKind kind) {
            kind == NodeKind::UvUnwrap || kind == NodeKind::MaterialBake || kind == NodeKind::ApplyMaterial ||
            kind == NodeKind::Decimate || kind == NodeKind::Remesh || kind == NodeKind::Subdivide || kind == NodeKind::Displace ||
            kind == NodeKind::RockAsset || kind == NodeKind::Heightmap || kind == NodeKind::Rock ||
-           kind == NodeKind::RockScatter || kind == NodeKind::TerrainErode || kind == NodeKind::TerrainDeform ||
+           kind == NodeKind::RockScatter || kind == NodeKind::TerrainErode || kind == NodeKind::TerrainDeform || kind == NodeKind::Plant ||
            // 出力は Mask だが、選ぶと入力メッシュにマスクを貼って見せる。
            IsImageMaskNodeKind(kind);
 }
@@ -246,7 +247,7 @@ bool IsVariableInputNodeKind(NodeKind kind) {
 }
 
 bool IsMountainNodeKind(NodeKind kind) {
-    return kind == NodeKind::Heightmap || kind == NodeKind::Rock || kind == NodeKind::RockScatter ||
+    return kind == NodeKind::Heightmap || kind == NodeKind::Rock || kind == NodeKind::Plant || kind == NodeKind::RockScatter ||
            kind == NodeKind::TerrainErode || kind == NodeKind::TerrainDeform;
 }
 
@@ -610,6 +611,8 @@ GraphId NodeGraph::CreateNode(NodeKind kind) {
         node.settings = RockAssetSettings{};
     } else if (kind == NodeKind::Heightmap) {
         node.settings = geometry::HeightmapSettings{};
+    } else if (kind == NodeKind::Plant) {
+        node.settings = PlantNodeSettings{};
     } else if (kind == NodeKind::Rock) {
         node.settings = RockNodeSettings{};
     } else if (kind == NodeKind::RockScatter) {

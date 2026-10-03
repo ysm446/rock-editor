@@ -39,7 +39,7 @@ fs::path Absolute(const fs::path& path) {
 
 bool IsNative(const fs::path& path) {
     const auto ext = path.extension().wstring();
-    for (const auto* native : {L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".model"})
+    for (const auto* native : {L".rockmat", L".rocksky", L".tglayer", L".tgboundary", L".model", L".tgmodel", L".tgmat"})
         if (_wcsicmp(ext.c_str(), native) == 0) return true;
     return false;
 }
@@ -329,8 +329,10 @@ std::string ProjectWorkspace::FindIdenticalAsset(const char* kind, const json& b
 }
 
 bool ProjectWorkspace::ReadAsset(const fs::path& path, const char* kind, json& body) const {
-    return Contains(path) && ReadJson(path, body) &&
-           String(body, "format") == std::string("rock-editor.") + kind &&
+    if (!Contains(path) || !ReadJson(path, body)) return false;
+    // terrain-graph のアセット（.tgmodel / .tgmat。植生を共有する）も同じ形なので受ける。
+    const std::string format = String(body, "format");
+    return (format == std::string("rock-editor.") + kind || format == std::string("terrain-graph.") + kind) &&
            body.contains("version") && body["version"] == 1;
 }
 

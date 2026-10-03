@@ -1,7 +1,7 @@
 # progress — 進捗と注意点
 
 作成日時: 2026-09-20 20:05
-更新日時: 2026-10-03 11:14
+更新日時: 2026-10-03 11:55
 
 Shape Maskに「曲率（谷）」「曲率（山）」を追加。符号で凹凸を分け、平面は両方で黒。曲率スケールと既存の下限・上限・ガンマで調整する。[仕様](../reference/shape-mask.md)。
 
@@ -10,6 +10,15 @@ Deposition Maskを追加。土が溜まる候補をメッシュの形からマ�
 岩用の共有レイヤーマテリアルを追加。terrain-graphから素材データ・検証・合成・保存の仕組みを移植し、4層の一覧編集と均一／ムラの被覆に整理。道路関連は除外。Surface経由で利用する。[仕様と操作](../reference/layer-material.md)。
 
 ## 現在地
+
+### 2026-10-03 11:55 植生（Plant）: terrain-graph と共有する植生アセットを山グラフで撒く
+
+- ユーザー判断（植生を入れる。terrain-graph と同じ仕様、最終段はインポスター、モデル扱い、アセットは共有）。段階 1 を実装した。[仕様](../reference/vegetation.md)。
+- 共有: `.tgmodel` / `.tgmat`（`terrain-graph.*` の format）を共有アセットとして読む。FBX の `_LOD<n>` 名の段（Blender の書き出し）を `renderer::LoadModel` に足した。`.tgmodel` のルート相対パスは `project.reproj` を上へ探して解く（`io/ModelAssetIo`）。
+- Plant ノード（出力は Rock と同じ型）。評価は FBX から範囲を読み、描画は岩アセットと同じ `LoadedRockAsset` の経路（`Application::LoadPlantAsset`。`.tgmat` の葉はアルファ抜き、両面）。
+- Blender（5.2）で terrain-graph のスクリプトを `--root` を rock-editor 側にして実行し、ススキとハイマツを作った。`make_haimatsu.py` は `CORE` の import 漏れで止まるので terrain-graph 側で 1 行直した（未コミット。ユーザーに伝える）。
+- 那須の例に Plant を 5 つ（ススキ 3・ハイマツ 2）と Scatter 2 段を足し、葉のアルファ抜きで描けることを確認した。
+- 残り（段階 2・3）: インポスター（terrain-graph の `Impostor.cpp` の移植）、ミップでのアルファの持ち上げ、色むら、影パスのアルファ抜き。
 
 ### 2026-10-03 10:28 地形の侵食 Terrain Erode と変形 Terrain Deform
 
