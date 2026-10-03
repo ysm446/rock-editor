@@ -32,15 +32,15 @@
       {
         "id": 19,
         "kind": "parallelPlanes",
-        "note": "主な節理: 65° に傾いた板、厚さ 1〜2 m（間隔 1.4 m、ばらつき 0.5）。写真の『刃』の 1 枚がこの板。",
+        "note": "主な節理: 65° に傾いた板、厚さ 0.7〜1.4 m（間隔 1.1 m、ばらつき 0.35）。写真の『刃』の 1 枚がこの板。",
         "parallelPlanes": {
           "rotation": [
             0,
             0,
             65
           ],
-          "spacing": 1.6,
-          "variation": 0.4,
+          "spacing": 1.1,
+          "variation": 0.35,
           "seed": 5
         }
       },
@@ -49,7 +49,7 @@
         "kind": "scatterPoints",
         "note": "板の中を横の割れ目で 1〜2 m のブロックに分ける点。上ほど密（頂が細かく欠ける）。",
         "pieces": {
-          "count": 200,
+          "count": 220,
           "seed": 3,
           "clustering": 0.6,
           "clusterScale": 2.0,
@@ -80,7 +80,7 @@
         "note": "頂の小さな片から欠く（peelSize 0.8、上ほど点が密）。刃ごとに高さが変わる。",
         "pieces": {
           "mode": "peel",
-          "fraction": 0.32,
+          "fraction": 0.34,
           "peelNoise": 1.0,
           "protectCore": true,
           "grounded": true,
@@ -137,11 +137,11 @@
       {
         "id": 20,
         "kind": "volumeCrack",
-        "note": "主な節理の面に沿って V 字の溝を彫り、板（刃）を分ける。幅 0.03 × 14 m ≈ 0.4 m。深さの勾配 1 で頂は 2 倍（0.18 ≈ 2.5 m）、根元は 0: 頂だけ刃に分かれ、根元はつながる。",
+        "note": "主な節理の面に沿って V 字の溝を彫り、板（刃）を分ける。幅 0.035 × 14 m ≈ 0.5 m。深さの勾配 1 で頂は 2 倍（0.24 ≈ 3.4 m）、根元は 0: 頂だけ深く暗い隙間で刃に分かれ、根元はつながる。",
         "volumeCrack": {
           "source": "inputs",
-          "width": 0.03,
-          "depth": 0.09,
+          "width": 0.035,
+          "depth": 0.12,
           "variation": 0.5,
           "noise": 0.5,
           "noiseScale": 3,
@@ -169,8 +169,8 @@
         "note": "板の面の角を少しなまらせる（風化の丸み）。半径 0.007 × 14 m ≈ 0.1 m、量 0.5。強くすると指のような丸い板になる",
         "volumeSmooth": {
           "mode": "smooth",
-          "radius": 0.007,
-          "amount": 0.5
+          "radius": 0.005,
+          "amount": 0.4
         }
       },
       {
