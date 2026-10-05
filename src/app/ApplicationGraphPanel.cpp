@@ -35,6 +35,10 @@ namespace {
 
 // ノードに出すメモの行数の上限。長いメモは末尾を「…」にし、全文はツールチップで見せる。
 constexpr int kNodeNoteLines = 3;
+// メモの吹き出しの内側の余白と、ノード下端との隙間（キャンバス座標）。引いたときの名前の札にも使う。
+constexpr float kNotePaddingX = 6.0f;
+constexpr float kNotePaddingY = 3.0f;
+constexpr float kNoteGap = 4.0f;
 
 // width で折り返した先頭の lines 行。収まらなければ最後の行の末尾を「…」にする。
 // **自前で文字ごとに折り返す。** ImGui の折り返しは空白や句読点を区切りに使うので、
@@ -1163,14 +1167,14 @@ void Application::DrawGraphNode(const graph::Node& node) {
     ed::PopStyleVar(4);
 }
 
-// ノードのメモの先頭を、ノードの上端のすぐ上に吹き出しとして出す（グラフパネルの「メモを表示」）。
+// ノードのメモの先頭を、ノードの下端のすぐ下に吹き出しとして出す（グラフパネルの「メモを表示」）。
+// 最初は上に出していたが、ユーザー指定で下へ移した（上は、引いたときの名前の表示に使う）。
 // **ノードの外に描く。** 中に描くとメモの有無や表示の切り替えでノードの高さが変わり、配置が崩れる。
 // ed::Begin と ed::End の間で呼ぶ（キャンバス座標で描き、マウスもキャンバス座標で判定する）。
 void Application::DrawGraphNodeNotes() {
     if (!m_settings.Display().showNodeNotes) return;
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const ImVec2 padding(6.0f, 3.0f);
-    constexpr float kGap = 4.0f;
+    const ImVec2 padding(kNotePaddingX, kNotePaddingY);
     const ImU32 background = ImGui::GetColorU32(ImGuiCol_PopupBg, 0.92f);
     const ImU32 border = ImGui::GetColorU32(ImGuiCol_Border);
     const ImU32 text = ImGui::GetColorU32(ImGuiCol_TextDisabled);
@@ -1182,12 +1186,57 @@ void Application::DrawGraphNodeNotes() {
         if (!IsValidNodePosition(position.x, position.y) || size.x <= 0.0f) continue;
         const std::string excerpt = NoteExcerpt(node.note, size.x - padding.x * 2.0f, kNodeNoteLines);
         const ImVec2 textSize = ImGui::CalcTextSize(excerpt.c_str());
-        const ImVec2 boxMax(position.x + size.x, position.y - kGap);
-        const ImVec2 boxMin(position.x, boxMax.y - textSize.y - padding.y * 2.0f);
+        const ImVec2 boxMin(position.x, position.y + size.y + kNoteGap);
+        const ImVec2 boxMax(position.x + size.x, boxMin.y + textSize.y + padding.y * 2.0f);
         drawList->AddRectFilled(boxMin, boxMax, background, 4.0f);
         drawList->AddRect(boxMin, boxMax, border, 4.0f);
         drawList->AddText(ImVec2(boxMin.x + padding.x, boxMin.y + padding.y), text, excerpt.c_str());
         if (excerpt != node.note && ImGui::IsMouseHoveringRect(boxMin, boxMax)) m_graphNoteHover = node.id;
+    }
+}
+
+// グラフを引いて見たとき、ノードの名前をノードの上に大きく出す（画面上で文字の大きさを保つ）。
+// 引くとノードの中の名前は潰れて読めなくなるので、どこに何があるかを名前で追えるようにする。
+// メモの吹き出しはノードの下に出るので、上は名前だけになる。ed::Begin と ed::End の間で呼ぶ。
+void Application::DrawGraphNodeTitles() {
+    // 画面上の 1 キャンバス単位の大きさ（1 が等倍）。これより引いたら出し始め、少し引く間に濃くする。
+    constexpr float kTitleShowScale = 0.75f;
+    constexpr float kTitleFadeRange = 0.15f;
+    const float scale = std::abs(ed::CanvasToScreen(ImVec2(1.0f, 0.0f)).x - ed::CanvasToScreen(ImVec2(0.0f, 0.0f)).x);
+    if (scale <= 0.0f || scale >= kTitleShowScale) return;
+    const float alpha = std::clamp((kTitleShowScale - scale) / kTitleFadeRange, 0.0f, 1.0f);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImFont* font = ImGui::GetFont();
+    // キャンバス座標で描くので、画面上で等倍の文字になる大きさへ戻す。余白と角の丸みも同じ。
+    const float fontSize = ImGui::GetFontSize() / scale;
+    const ImVec2 padding(kNotePaddingX / scale, kNotePaddingY / scale);
+    const ImU32 background = ImGui::GetColorU32(ImGuiCol_PopupBg, 0.85f * alpha);
+    const ImU32 text = ImGui::GetColorU32(ImGuiCol_Text, alpha);
+    // 引くほど名前どうしが重なるので、先に置いた名前と重なるものは出さない。
+    // 選んでいるノードが先に場所を取る。
+    struct Box { ImVec2 min, max; };
+    std::vector<Box> placed;
+    const auto draw = [&](const graph::Node& node) {
+        const ImVec2 position = ed::GetNodePosition(ed::NodeId(node.id));
+        const ImVec2 size = ed::GetNodeSize(ed::NodeId(node.id));
+        if (!IsValidNodePosition(position.x, position.y) || size.x <= 0.0f) return;
+        const float top = position.y - kNoteGap;
+        const char* name = NodeDisplayName(node);
+        const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, name);
+        const float centerX = position.x + size.x * 0.5f;
+        const Box box{ImVec2(centerX - textSize.x * 0.5f - padding.x, top - textSize.y - padding.y * 2.0f),
+                      ImVec2(centerX + textSize.x * 0.5f + padding.x, top)};
+        for (const Box& other : placed) {
+            if (box.min.x < other.max.x && box.max.x > other.min.x && box.min.y < other.max.y && box.max.y > other.min.y) return;
+        }
+        placed.push_back(box);
+        drawList->AddRectFilled(box.min, box.max, background, 4.0f / scale);
+        drawList->AddText(font, fontSize, ImVec2(box.min.x + padding.x, box.min.y + padding.y), text, name);
+    };
+    for (int pass = 0; pass < 2; ++pass) {
+        for (const graph::Node& node : m_graph.Nodes()) {
+            if ((ed::IsNodeSelected(ed::NodeId(node.id)) ? 0 : 1) == pass) draw(node);
+        }
     }
 }
 
@@ -1245,6 +1294,7 @@ void Application::DrawGraphEditor() {
         DrawGraphNode(node);
     }
     DrawGraphNodeNotes();
+    DrawGraphNodeTitles();
 
     // A でグラフ全体を画面に収める（ビューポートの A と同じ作法）。
     // 内容の矩形は live なノードから計算されるため、描画の後に呼ぶ。
@@ -1579,7 +1629,7 @@ void Application::DrawGraphPanel() {
         ui::PropertyValue("メッシュ数", "%zu", static_cast<size_t>(std::count_if(m_renderer.Scene().meshes.begin(),
             m_renderer.Scene().meshes.end(), [](const auto& mesh) { return !mesh.materialOnly; })));
         if (ui::PropertyBool("メモを表示", &m_settings.Display().showNodeNotes, true,
-                             "ノードのメモの先頭をノードの上に表示する。切るとメモの印だけになり、"
+                             "ノードのメモの先頭をノードの下に表示する。切るとメモの印だけになり、"
                              "印に載せると全文が出る")) {
             m_settings.Save();
         }

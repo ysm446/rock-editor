@@ -179,8 +179,10 @@ private:
     void RequestGraphNodePlacement(bool navigate = true);
     // グラフのエディタ部（imgui-node-editor）。パネルの中で呼ぶ。
     void DrawGraphEditor();
-    // ノードのメモの先頭を、ノードの上に吹き出しで描く。ed::Begin と ed::End の間で呼ぶ。
+    // ノードのメモの先頭を、ノードの下に吹き出しで描く。ed::Begin と ed::End の間で呼ぶ。
     void DrawGraphNodeNotes();
+    // 引いて見たとき、ノードの名前をノードの上に画面上の等倍で描く。ed::Begin と ed::End の間で呼ぶ。
+    void DrawGraphNodeTitles();
     // グラフのノード 1 枚。カード・ピン・リンクの当たり判定を描く。
     void DrawGraphNode(const graph::Node& node);
     // nodeId は Surface ノード（未読み込みのマテリアルを選んだとき、読み込み後に割り当てる先）。
