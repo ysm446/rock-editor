@@ -5,7 +5,9 @@
 // フレームレート上限の待ち時間。
 
 #include "TestSupport.h"
+#include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstring>
 
 void RunLayerMaterialTests();
@@ -160,6 +162,13 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    struct Timing {
+        const char* name;
+        double seconds;
+        int failures;
+    };
+    std::vector<Timing> timings;
+    const auto suiteStart = std::chrono::steady_clock::now();
     int ran = 0;
     for (const Group& group : kGroups) {
         bool selected = only.empty();
@@ -167,7 +176,17 @@ int main(int argc, char** argv) {
         for (const std::string& item : only)
             if (lower == item || lower.find(item) != std::string::npos) selected = true;
         if (!selected) continue;
+        // リダイレクト中も群の開始・完了をすぐ出し、長い評価の待ち場所を分かるようにする。
+        std::printf("\n[ RUN  ] %s\n", group.name);
+        std::fflush(stdout);
+        const int failuresBefore = rock::tests::g_failures;
+        const auto start = std::chrono::steady_clock::now();
         group.run();
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        const int failures = rock::tests::g_failures - failuresBefore;
+        timings.push_back({group.name, seconds, failures});
+        std::printf("[ DONE ] %s: %.3f s, failures=%d\n", group.name, seconds, failures);
+        std::fflush(stdout);
         ++ran;
     }
     if (ran == 0) {
@@ -175,6 +194,14 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (!only.empty()) std::printf("\n（%d 群を実行。コミット前は全テストを実行する）\n", ran);
+    const double total = std::chrono::duration<double>(std::chrono::steady_clock::now() - suiteStart).count();
+    std::stable_sort(timings.begin(), timings.end(), [](const Timing& a, const Timing& b) {
+        return a.seconds > b.seconds;
+    });
+    std::printf("\n群ごとの所要時間（遅い順）:\n");
+    for (const Timing& timing : timings)
+        std::printf("  %-20s %9.3f s  failures=%d\n", timing.name, timing.seconds, timing.failures);
+    std::printf("合計: %d 群, %.3f s\n", ran, total);
     std::printf("\n%s\n", (rock::tests::g_failures == 0) ? "すべて成功" : "失敗あり");
     return (rock::tests::g_failures == 0) ? 0 : 1;
 }

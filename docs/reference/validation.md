@@ -1,7 +1,7 @@
 # 岩生成の検証・受け入れ計画
 
 作成日時: 2026-09-20 22:06
-更新日時: 2026-09-21 01:26
+更新日時: 2026-10-03 21:01
 
 ## 実行方針
 
@@ -9,9 +9,32 @@
 
 ```powershell
 cmake --preset x64
-cmake --build --preset x64-debug
-ctest --test-dir build -C Debug --output-on-failure
+python tools/run_low.py -- cmake --build --preset x64-debug
+# 作業中は変更に関係する群だけ（下記は例）。--list で一覧、--only は部分一致。
+python tools/run_low.py -- build/bin/Debug/rock_editor_tests.exe --only RockScatter,MaskFilter
+# コミット前は最新の Release テスト実行ファイルを作り、全群を 1 回実行する。
+python tools/run_low.py -- cmake --build build --config Release --target rock_editor_tests
+python tools/run_low.py -- ctest --test-dir build -C Release --output-on-failure
 ```
+
+全テストは Release を通常の確認に使い、Debug の関連群も維持する。Debug 固有の不具合・診断を確認するときは `python tools/run_low.py -- ctest --test-dir build -C Debug --output-on-failure` で全群を実行する。Release は最適化や実行時チェックの条件が異なるため、Debug の確認をすべて置き換えるものではない。
+
+### 2026-10-03 20:59 所要時間の計測
+
+テスト実行ファイルは各群の `[ RUN ]` / `[ DONE ]`、所要秒数、失敗数を出し、最後に遅い順の一覧と合計を表示する。群の開始・完了で標準出力をフラッシュするため、ログへ保存した場合も進捗を確認できる。CTest から成功時の一覧も見る場合は `-V` を付ける。
+
+24 論理コア中 8 コア・低優先度（`run_low.py` の既定）で測定した。テスト内容と全 48 群の順番は変えていない。
+
+| 構成 | CTest の実時間 | 結果 |
+| --- | ---: | --- |
+| Debug（直前のサムネイル変更のコミット前） | 541.12 秒 | 全群成功 |
+| Release（今回、群ごとの計測を追加） | 30.09 秒 | 全群成功 |
+
+約 18 倍の差だった。Debug は直前の計測を再利用し、比較のための全群再実行は行っていない。各 1 回・別時刻の測定であり、厳密なベンチマークではない。ビルド時間は含めない。今回の計測コードは Debug でもビルドし、FrameLimiter 群（0.552 秒）で確認した。
+
+Release の主な内訳は NodeParams 9.252 秒、Volume 3.493 秒、VolumeCrack 2.580 秒、RockScatter 1.327 秒、VolumeNoise 1.325 秒。NodeParams が最大だが、Release では全体の約 31% であり、他の群にも時間が分散している。
+
+検証項目の削減や入力の簡略化は行っていない。CTest の群分割・並列化と NodeParams の評価処理の変更は今回見送る。さらに短縮が必要になったときに、この内訳を基準に改善する。
 
 本リポジトリは C++ / CMake 構成で package.json はない。フロントエンド用 npm run build は使用しない。新規テスト用の一時データは既存 data/ の内容と衝突しない専用サブディレクトリに隔離する。
 

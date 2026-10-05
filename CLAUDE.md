@@ -36,7 +36,8 @@
 ## 検証
 
 - **ビルド・テスト・撮影などの重いコマンドは、必ず `python tools/run_low.py -- <コマンド>` を通して実行する**（低い優先度、24 コア中 8 コアだけ）。ユーザーが同じ PC で他の作業をしているので、全コアを占有しない。
-- C++ を変えたら、作業中は `python tools/run_low.py -- build/bin/Debug/rock_editor_tests.exe --only <群名>[,<群名>...]`（例: `--only RockScatter,MaskFilter`。`--list` で群名）で関係する群だけを確かめる。全テスト（10〜15 分）はコミット前に 1 回だけ実行する。何度も全テストを回さない。NodeParams 群は単体でも 10 分近くかかるので、項目表を触らない変更では外す。
+- C++ を変えたら Debug ビルドを更新し、作業中は `python tools/run_low.py -- build/bin/Debug/rock_editor_tests.exe --only <群名>[,<群名>...]`（例: `--only RockScatter,MaskFilter`。`--list` で群名）で関係する群だけを確かめる。全テストはコミット前に Release で 1 回だけ実行する。`python tools/run_low.py -- cmake --build build --config Release --target rock_editor_tests` で更新してから、`python tools/run_low.py -- ctest --test-dir build -C Release --output-on-failure` を実行する。
+- Debug 固有の不具合・診断の確認が必要な場合は Debug の全テストも実行する。各群の所要時間と遅い順の一覧を表示するので、重い群を特定してから改善する。CTest から成功時も見るには `-V`。計測結果と手順は [検証計画](docs/reference/validation.md) を参照。
 
 ## バージョン管理
 

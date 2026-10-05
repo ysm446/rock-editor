@@ -65,8 +65,9 @@
 
 ## 検証
 
-- C++ やシェーダの変更後は、可能な限り `cmake --build --preset x64-debug` と `ctest --test-dir build -C Debug --output-on-failure` を実行する。
+- C++ やシェーダの変更後は、可能な限り Debug ビルドと変更に関係する群のテストを実行する。
 - ビルド・テスト・撮影などの重いコマンドは、必ず `python tools/run_low.py -- <コマンド>` を通して実行する（低い優先度、コアの 1/3 だけ）。ユーザーが同じ PC で他の作業をしているので、全コアを占有しない。
-- 作業中は全テスト（10〜15 分）を何度も回さず、`build/bin/Debug/rock_editor_tests.exe --only <群名>[,<群名>...]`（例: `--only RockScatter,MaskFilter`。`--list` で群名）で変更に関係する群だけを数秒で確かめる。全テストはコミット前に 1 回だけ実行する。
+- 作業中は `build/bin/Debug/rock_editor_tests.exe --only <群名>[,<群名>...]`（例: `--only RockScatter,MaskFilter`。`--list` で群名）で関係する群だけを確かめる。全テストはコミット前に Release で 1 回だけ実行する。先に `cmake --build build --config Release --target rock_editor_tests` で更新し、`ctest --test-dir build -C Release --output-on-failure` を使う（いずれも `run_low.py` 経由）。
+- Debug 固有の不具合・診断の確認が必要な場合は Debug の全テストも実行する。群ごとの時間と遅い順の一覧はテスト実行ファイルが出力する。CTest から成功時も見る場合は `-V` を付ける。[計測結果と手順](docs/reference/validation.md)を参照。
 - `tools/` の Python スクリプトを変更したときは、可能な限り `py_compile` などで構文確認する。
 - 検証できなかった場合は、その理由を作業報告に書く。
